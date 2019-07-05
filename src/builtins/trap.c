@@ -193,7 +193,7 @@ void trap_handler(int signum)
         executing_trap = 0;
     }
     /* make sure we reset the signal handler so no funny business happens */
-    if(signum > 0 & signum < ERR_TRAP_NUM)
+    if(signum > 0 && signum < ERR_TRAP_NUM)
     {
         signal(signum, trap_handler);
     }
