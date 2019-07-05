@@ -1,0 +1,2878 @@
+\input texinfo @c -*-texinfo-*-
+@comment $Id@w{$}
+@comment %**start of header
+@setfilename lsh.info
+@settitle Layla shell version 1.0
+@syncodeindex pg cp
+@comment %**end of header
+@copying
+This manual is for lsh - the Layla shell (version 1.0).
+
+Copyright @copyright{} 2016, 2017, 2018, 2019 Mohammed Isam.
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.7 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, with no Front-Cover Texts, and with no Back-Cover
+Texts. A copy of the license is included in the section entitled
+``GNU Free Documentation License''.
+
+@end quotation
+@end copying
+
+@dircategory Individual utilities
+@direntry
+* lsh: (Layla shell).           Using the Layla shell
+@end direntry
+
+@titlepage
+@title lsh - the Layla shell
+@subtitle for version 1.0
+@author Mohammed Isam (@email{mohammed_isam1984@@yahoo.com})
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@contents
+
+@ifnottex
+@node Top
+@top lsh
+
+This manual is for lsh - the Layla shell (version 1.0).
+
+@end ifnottex
+
+@menu
+* Introduction::
+* The Shell Command Language::
+* Expansions and Substitutions::
+* Shell Variables and Parameters::
+* The Execution Environment::
+* Command History and Editing::
+* Builtin Utilities::
+* GNU Free Documentation License::
+* Index::
+@end menu
+
+
+@node Introduction
+@chapter Introduction
+@cindex Introduction
+
+
+@section Synopsis
+@cindex Synopsis
+
+@example
+lsh [-abBCdeEfghiklLmnpqrtTuvwxy] [-o opt] [-O extopt] [arg ...]
+lsh [-abBCdeEfghiklLmnpqrtTuvwxy] [-o opt] [-O extopt] -c string [arg ...]
+lsh [-abBCdeEfghiklLmnpqrtTuvwxy] [-o opt] [-O extopt] [-is] [arg ...]
+@end example
+
+
+@section About lsh
+@cindex About lsh
+
+Layla shell is a POSIX-compliant GNU/Linux shell. It aims to implement the
+full functionality specified in the POSIX Shell & Utilities volume. This
+volume describes the Shell Command Language, the general terminal interface,
+and the builtin utilities of compliant shells. The full POSIX standard is
+freely available from The Open Group's website at:
+@url{https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/}
+@*
+
+Layla shell implements most of the POSIX-defined functionality. Specifically,
+quoting, token recognition, words expansions, I/O redirection, reponses to
+error conditions, the shell command language, the standard shell execution
+environment, signal handling, and the general and special builtin utilities
+are all implemented and behave in a way that is conforming to the POSIX
+standard. Pattern matching and pathname expansion relies on external tools,
+and thus might not behave exactly as specified in the POSIX standard. The
+shell grammar has been extended to accommodate some of the widely used non-
+POSIX words, such as the function and [[ keywords and the (( )) arithmetic
+expansion operator. In all of these situations, we followed ksh behaviour,
+as ksh is the "model" POSIX shell, the one upon which the Shell & Utilities
+volume was modeled in the first place. But ksh is not the only shell out
+there. This is why we included features from other shells, most notably bash,
+the most widely used shell nowadays.
+@*
+
+To better understand the inner workings of this (as well as any other POSIX-
+compliant shell), it would be better if you got a copy of the Linux Shell
+Internals book, published by No Starch Press. This shell and the book has been
+developed hand-in-hand. The book helps to explain the code of this shell and
+provide a walk-through for newcomers. Although the code is extensively
+commented, a lot of theoretical ground has covered in the book, not in the
+source code. If you really want to understand how and why Unix/Linux shells
+behave in the context of POSIX, I honestly advise you to get a copy of the
+book.
+@*
+
+There is still a long way to go with testing, bug-fixing and improving Layla
+shell, and your feedback is more than welcome in this regard. If you have a
+bug report, or you want to suggest adding some feature or fixing something
+with the shell, feel free to email me directly at my email address, the one
+you will find in the beginning of this file. If you have any bugfixes, patches
+or feature improvements you want to add to the code, feel free to send me your
+code at the email address above, or through the Linux Shell Internals
+repository at GitHub:
+@url{https://github.com/moisam/Linux-Shell-Internals-book/}
+
+
+@section Options
+@cindex Options
+
+@table @code
+@item --
+End of options.
+@item --help
+Print command line help and exit.
+@item --init-file, --rcfile
+Specify the startup script file to read instead of the default @code{~/.lshrc}.
+@item --login, -l
+Start a login shell (as if called by the @code{login} utility).
+@item --noprofile
+Do not read login startup scripts @code{/etc/profile} and @code{~/.profile}.
+@item --norc
+Do not read the startup script files @code{/etc/lshrc} and @code{~/.lshrc}.
+@item --restricted
+Start the shell in the restricted mode.
+@item --verbose
+Turn on the @code{-v} option, so commands are printed as they are read.
+@item --version
+Display shell version and exit.
+@item -o opt, +o opt
+Turn on '-' or off '+' shell options, as if calling the @code{set} builtin utility.
+@item -O extopt, +O extopt
+Turn on '-' or off '+' extended shell options, as if calling the @code{setx} (or the @code{shopt}) builtin utility.
+@end table
+
+
+@section Package dependencies
+@cindex Package dependencies
+
+Layla shell has very few external dependencies, in order to ease the process
+of compiling and installing it. You only need to have the GNU C library
+installed, in addition to the GNU Compiler Collection (GCC) or the Clang/LLVM
+compiler.
+@*
+
+If you are using any GNU/Linux distro, it would be better if you checked your
+distro's official repositories, as these tools are installed by default on
+most systems. If, by a sore chance, you needed to manually download and
+install them, here are the links:
+@*
+
+@itemize @bullet
+@item GNU C Library: https://www.gnu.org/software/libc/
+@item GCC: https://gcc.gnu.org/
+@item LLVM: http://releases.llvm.org/download.html
+@end itemize
+
+
+@section How to compile and install
+@cindex How to compile and install
+
+If you downloaded the shell as a source tarball, navigate to the directory
+where you downloaded the tarball:
+
+@example
+$ cd ~/Downloads
+@end example
+
+then extract the archive and enter the extracted directory:
+
+@example
+$ tar xvf lsh-1.0
+$ cd lsh-1.0/
+@end example
+
+then run:
+
+@example
+$ make && make install
+@end example
+
+and that's it! Now you can run the shell by invoking:
+
+@example
+$ lsh
+@end example
+
+
+@section Files
+@cindex Files
+
+The following files are used by the shell:
+
+@table @file
+@item /etc/profile
+The system initialization file (executed by a login shell).
+@item /etc/lshrc
+The system-wide startup file (executed by an interactive shell).
+@item $HOME/.profile
+The personal initialization file (executed by a login shell
+after executing @file{/etc/profile}).
+@item $HOME/.lshrc
+The default personal initialization file (executed after
+@file{/etc/lshrc} by an interactive shell).
+@item $HOME/.lsh_history
+The default personal initialization file (executed after @file{/etc/lshrc}).
+@item /dev/null
+The NULL device.
+@item /etc/logout
+Shell script executed on logout.
+@item $HOME/logout
+Shell script executed on logout after @file{/etc/logout}.
+@item /etc/passwd
+Default file used to perform ~user substitutions.
+@end table
+
+
+@section Features
+@cindex Features
+
+@itemize
+@item
+Shell language and interpreter are mostly POSIX-compliant
+@item
+Standard POSIX regular and special builtins conforming to POSIX
+@item
+Extended features and utilities borrowed from ksh, bash and tcsh
+@item
+Well documented source code
+@end itemize
+
+
+@section TODO
+@cindex TODO
+
+@itemize
+@item
+Add support for Unicode strings and message translation
+@item
+Implement more bash-like and ksh-like builtin utilities, such as
+@code{print} and @code{printf}
+@item
+Ensure the builtin utilities (and the shell program itself) are POSIX-compliant
+@item
+Testing, bug reporting, debugging and improving the shell
+@end itemize
+
+
+
+@node The Shell Command Language
+@chapter The Shell Command Language
+@cindex The Shell Command Language
+
+@section Commands
+@cindex Commands
+
+Commands can be either simple or compound commands, and can be grouped
+together to form pipelines and lists. Every command that executes
+returns an exit status to the shell. An exit status of zero is considered
+success (or true, when used as a value for logical testing). A
+non-zero exit status is considered failure (or false).
+@*
+
+A simple command is a list of variable assignments and words separated
+by whitespace. The first word usually specifies the name of the command
+to be executed, the remaining words are word-expanded and passed as
+arguments to the command. The command name is passed as argument number
+0. If the command exits normally, the exit status is 0-128. If it
+terminates abnormally, the exit status is 128+signum (similar to bash, but
+not ksh). The name of the signal can be obtained by passing the -l
+option to the kill builtin utility.
+@*
+
+A pipeline is a sequence of one or more commands separated by the pipe
+operator @code{|}. The standard output (stdout) of each command except the
+last is connected by a pipe to the standard input (stdin) of the next
+command. Each command is run in a separate process. The shell waits for
+all commands to terminate. The exit status of a pipeline is the exit
+status of the last command unless the pipefail @code{-l} option is enabled,
+in which case it is the exit status of the rightmost command with non-
+zero exit status. Each pipeline can be preceded by the bang reserved
+word @code{!}. This causes the exit status of the pipeline to be inverted,
+i.e. an exit status of zero becomes 1, otherwise it becomes zero.
+@*
+
+A list is a sequence of one or more pipelines separated by @code{;}, @code{&},
+@code{|&}, @code{&&}, or @code{|}. The @code{;} causes sequential (foreground) execution of
+the preceding pipeline. The shell waits for foreground pipelines to
+finish execution. The @code{&} causes asynchronous (background) execution of
+the preceding pipeline. The shell does not wait for background pipelines
+to finish execution. The @code{|&} causes asynchronous execution of
+the preceding pipeline, redirecting both stdout and stderr to the pipe.
+This is similar to bash behavior, while ksh uses this operator to
+establish a two-way pipe between the command and the parent shell. The
+symbols @code{&&} and @code{||} cause the list following it to be executed only
+if the preceding pipeline returns a zero or non-zero value, respectively.
+Semicolons @code{;} can be substituted by newlines in lists.
+@*
+
+Compound commands include @strong{for}, @strong{select}, @strong{until}
+and @strong{while} loops; @strong{case} and @strong{if} conditionals;
+subshells and brace groups. The exit status of a compound
+command is that of the last simple command executed in the compound.
+All loops conform to the POSIX standard, except when it says otherwise.
+
+@heading for name [ in word ... ]; do list; done
+Each time the @strong{for} loop is executed, @code{name} is set to the next @code{word} taken
+from the word list. If the word list is omitted, the @strong{for} loop behaves
+as if @code{in "$@@"} was provided (which loops on positional parameters,
+starting from 1). The loop exits when there are no more words in the
+list.
+
+@heading (( [expr1] ; [expr2] ; [expr3] )); do list; done
+The arithmetic expression @code{expr1} is evaluated. Arithmetic expression
+@code{expr2} is then evaluated repeatedly until it evaluates to zero. Every
+time @code{expr2} evaluates to non-zero, @code{list} is executed and arithmetic
+expression @code{expr3} is evaluated. If any expression is omitted, it behaves
+as if it evaluated to 1. This loop is a non-POSIX extension.
+
+@heading select name [ in word ... ]; do list; done
+The @strong{select} loop prints the set of words on stderr, each preceded by its
+numeric index. If the list of words is omitted, the loop behaves as if
+@code{in "$@@"} was provided (which loops on positional parameters, starting
+from 1). The @code{$PS3} prompt is printed and a single line is read from
+stdin. If the read line consists of the number of one of the listed
+words, the value of variable name is set to the word corresponding to
+this number. If the read line is empty, the selection list is printed
+again. In all other cases, variable name is set to null. The contents
+of the read line is saved in the shell variable @code{$REPLY}. The list is
+executed repeatedly until a break or @code{EOF} is encountered. If the @code{$REPLY}
+variable is set to null as a side effect of executing list, the selection
+list is printed again before displaying the @code{$PS3} prompt and waiting
+for the next selection. This loop is a non-POSIX extension used by bash
+and ksh.
+
+@heading case word in [ [(] pattern [ | pattern ] ... ) list ;; ] ... esac
+The @strong{case} conditional executes the @code{list} associated with the first pattern
+that matches the given word. The form of the patterns is the same
+as that used for file name generation (i.e. can contain the wildcards
+@code{*}, @code{?} and @code{[]}). The @code{;;} operator causes execution of
+the case to terminate. If @code{;&} is used instead, the next subsequent list, if any, is
+executed. If @code{;;&} is used, the shell tries to match and execute
+another case in the list. Both @code{;&} and @code{;;&} are non-POSIX
+extensions used by shells like ksh and bash.
+
+@heading if list1; then cmd-list1 [; elif list2; then cmd-list2 ] ... [; else cmd-list3 ]; fi
+@code{list1} is executed and if it returns zero exit status, @code{cmd-list1}
+is executed. Otherwise, @code{list2} is executed and if its value is zero,
+@code{cmd-list2} is executed. If all @strong{elif} lists fail, the @strong{else}'s
+@code{cmd-list3} is executed. If @code{list1} has non-zero exit status
+and there is no @strong{else} clause, the @strong{if} command returns zero exit status.
+
+@heading while conditional-list; do cmd-list; done
+@heading until conditional-list; do cmd-list; done
+The @strong{while} loop repeatedly executes the @code{conditional-list}
+and if the exit status of the last command in the list is zero, it executes
+@code{cmd-list}, otherwise the loop terminates. If no commands are executed from the
+@code{cmd-list}, the @strong{while} loop returns a zero exit status. @strong{until} can be used
+instead of @strong{while} to negate the loop termination test (i.e. execute
+until @code{conditional-list} has zero exit status).
+
+@heading (( expression ))
+@code{expression} is evaluated as an arithmetic expression. If the value is
+non-zero, the exit status is 0. Otherwise the exit status is 1. This is
+a non-POSIX extension.
+
+@heading ( list; )
+Execute @code{list} in a separate environment, i.e. a subshell. If two adjacent
+open parentheses are needed (for nesting subshells), a space must
+be inserted between the two open parentheses to avoid evaluation as an
+arithmetic expression. @code{@{} and @code{@}} are reserved words; they must occur
+at the beginning of a line (after a newline character) or after a @code{;}
+to be recognized.
+
+@heading [[ expression ]]
+Evaluate @code{expression} and return a zero exit status if @code{expression} evalues
+to true (zero exit status). See @xref{Conditional Expressions} for a
+description of what @code{expression} can be.
+
+@heading function funcname @{ list ; @}
+@heading funcname () @{ list ; @}
+Define a function named @code{funcname}. The body of the function is the list
+of commands between @code{@{} and @code{@}}. The body is executed when the function
+is called, not when its defined. The exit status of the function definition
+command is zero, unless an error occurs in adding the function
+to the symbol table. The exit status of a function call is that of the
+last command executed in the function, or the value passed to the
+@code{return} builtin. The first syntax using the @code{function} keyword
+is a non-POSIX extension used by bash and ksh.
+
+@heading time [ pipeline ]
+If @code{pipeline} is omitted, the user and system time for the current shell
+and completed child processes is printed on stderr. Otherwise, the
+@code{pipeline} is executed and the elapsed real time, as well as the user and
+system times are printed on stderr. The @code{$TIMEFORMAT} variable controls
+how the timing information should be displayed (See the @xref{Shell Variables}
+section for a description of @code{$TIMEFORMAT}).
+
+
+@section Reserved words
+@cindex Reserved words
+
+The following reserved words are recognized as reserved only when they are
+the first unquoted word of a command:
+
+@itemize
+@item @code{case}
+@item @code{do}
+@item @code{done}
+@item @code{else}
+@item @code{elif}
+@item @code{esac}
+@item @code{for}
+@item @code{fi}
+@item @code{function}
+@item @code{if}
+@item @code{select}
+@item @code{then}
+@item @code{until}
+@item @code{while}
+@item @code{@{} @code{@}}
+@item @code{!}
+@end itemize
+
+All reserved words (or keywords) are defined by POSIX, except @code{function} and @code{select}.
+
+
+@section Variable assignments
+@cindex Variable assignments
+
+Simple commands can start with one or more variable assignments. Variable
+assignments occurring after command names are recognized as such if the
+@code{keyword} '@code{-k}' option is set. Assignments can also be passed
+as arguments to the @code{export} or @code{readonly} special builtin utilities. The
+syntax for an assignment takes the form of:
+
+@example
+varname=value
+@end example
+
+No space is permitted between @code{varname} and the '=', or between the '='
+and @code{value}. Layla shell currently does not support the '+=' operator for variable
+assignents.
+
+
+@section Comments
+@cindex Comments
+
+The @code{#} character causes all the following characters up to the next
+newline character to be commented, or ignored. Interactive shells recognize
+comment characters when the extended option @code{interactive-comments}
+(or @code{interactive_comments}) is set by calling the @code{setx} builtin
+(which behaves similar to bash's @code{shopt}).
+
+
+@node Conditional Expressions
+@section Conditional Expressions
+@cindex Conditional Expressions
+
+Conditional expressions are used with the @code{[[} compound command to test
+files' attributes and compare strings. Field splitting and pathname
+expansion are not performed here.
+@*
+
+Conditional expressions can be formed by one or more of the following
+unary and binary expressions:
+
+@table @code
+@item -a f
+True if file @code{f} exists. This option is the same as @code{-e}.
+@item -b f
+True if file @code{f} exists and is a block special file.
+@item -c f
+True if file @code{f} exists and is a character special file.
+@item -d f
+True if file @code{f} exists and is a directory.
+@item -e f
+True if file @code{f} exists.
+@item -f f
+True if file @code{f} exists and is a regular file.
+@item -g f
+True if file @code{f} exists and it has its @code{setgid} bit set.
+@item -G f
+True if file @code{f} exists and its group id matches the effective
+group id of this process.
+@item -h f
+True if file @code{f} exists and is a symbolic link.
+@item -k f
+True if file @code{f} exists and it has its sticky bit set.
+@item -L f
+True if file @code{f} exists and is a symbolic link.
+@item -n str
+True if the length of @code{str} is non-zero.
+@item -N f
+True if file @code{f} exists and its modification time is greater than
+its last access time.
+@item -o op
+True if option named @code{op} is on.
+@item -o ?op
+True if @code{op} is a valid option name.
+@item -O f
+True if file @code{f} exists and is owned by the effective user id of
+this process.
+@item -p f
+True if file @code{f} exists and is a FIFO special file or a pipe.
+@item -r f
+True if file @code{f} exists and is readable by current process.
+@item -s f
+True if file @code{f} exists and has size greater than zero.
+@item -S f
+True if file @code{f} exists and is a socket.
+@item -t fd
+True if file descriptor @code{fd} is open and associated with a terminal device.
+@item -u f
+True if file @code{f} exists and it has its @code{setuid} bit set.
+@item -w f
+True if file @code{f} exists and is writable by current process.
+@item -x f
+True if file @code{f} exists and is executable by current process.
+@item -z str
+True if the length of @code{str} is zero.
+@item file1 -ef file2
+True if both file1 and file2 exist and refer to the same file.
+@item file1 -nt file2
+True if @code{file1} exists and @code{file2} doesn't, or if @code{file1} is newer
+than @code{file2}.
+@item file1 -ot file2
+True if @code{file2} exists and @code{file1} doesn't, or if @code{file1} is older
+than @code{file2}.
+@item string
+True if @code{string} is not null.
+@item string == pattern
+True if @code{string} matches @code{pattern}.
+@item string = pattern
+Same as @code{==}.
+@item string != pattern
+True if @code{string} does not match @code{pattern}.
+@item string =~ pattern
+True if @code{string} matches @code{pattern}.
+@item string1 < string2
+True if @code{string1} comes before @code{string2} based on the ASCII value of
+the strings' characters.
+@item string1 > string2
+True if @code{string1} comes after @code{string2} based on the ASCII value of
+the strings' characters.
+@item expr1 -eq expr2
+True if @code{expr1} is equal to @code{expr2}.
+@item expr1 -ge expr2
+True if @code{expr1} is greater than or equal to @code{expr2}.
+@item expr1 -gt expr2
+True if @code{expr1} is greater than @code{expr2}.
+@item expr1 -le expr2
+True if @code{expr1} is less than or equal to @code{expr2}.
+@item expr1 -lt expr2
+True if @code{expr1} is less than @code{expr2}.
+@item expr1 -ne expr2
+True if @code{expr1} is not equal to @code{expr2}.
+@end table
+
+Compound expressions can be constructed from these primitives by using
+any of the following operators (the brace operator is currently not
+supported in this shell):
+
+@table @code
+@item (expression)
+True if @code{expression} is true. Used to group expressions.
+@item !expression
+True if @code{expression} is false.
+@item expression1 && expression2
+True if @code{expression1} and @code{expression2} are both true.
+@item expression1 || expression2
+True if either @code{expression1} or @code{expression2} is true.
+@end table
+
+
+
+@node Expansions and Substitutions
+@chapter Expansions and Substitutions
+@cindex Expansions and Substitutions
+
+@section Aliasing
+@cindex Aliasing
+
+The first word of each simple command is replaced by the text of an alias
+if an alias for the command word has been defined. An alias name consists
+of any number of alphanumeric characters and any of @code{_}, @code{!},
+@code{%}, @code{,} and @code{@@}. The replacement string can contain any valid shell
+command. The first word of each command in the replaced text is tested
+for aliases, except when the command is the same one being aliased (to
+avoid infinite looping). If the last character of the alias value is a
+space character, the word following the alias is also checked for alias
+substitution.
+@*
+
+Aliases cannot be used to redefine shell's reserved words. Aliases can
+be created and listed using the @code{alias} command. They can be removed with
+the unalias command.
+@*
+
+Aliasing is performed when scripts are read, not while they are executed.
+The following aliases are defined by default by the shell, but
+can be unset or redefined if the user wishes:
+
+@example
+ ls="ls --color=auto"
+ ll="ls -la"
+ l.="ls -d .* --color=auto"
+ cd..="cd .."
+ ".."="cd .."
+ "..."="cd ../../../"
+ grep="grep --color=auto"
+ egrep="egrep --color=auto"
+ fgrep="fgrep --color=auto"
+ bc="bc -l"
+ vi="vim"
+ command="command "
+ nohup="nohup "
+ stop="kill -s STOP"
+ suspend="kill -s STOP $$"
+ hist="fc"
+ typeset="declare"
+ shopt="setx"
+ reboot="sudo /sbin/reboot"
+ poweroff="sudo /sbin/poweroff"
+ halt="sudo /sbin/halt"
+ shutdown="sudo /sbin/shutdown"
+ df="df -H"
+ du="du -ch"
+ r="fc -s"
+ memuse="memusage"
+@end example
+
+Some of the above aliases are defined by shells like bash and ksh,
+while others are lsh-specific, included for convenience.
+
+
+@section Tilde expansion
+@cindex Tilde expansion
+
+After alias substitution is performed, each word (or field) is checked
+to see if it begins with an unquoted tilde @code{~}. If it does, the word up
+to the first unquoted @code{/} is checked to see if it matches a user name
+in the password database (this word is known as the tilde prefix). If a
+match is found, the @code{~} and the matched user name (the tilde prefix)
+are replaced by the login (or home) directory of the matched user
+(POSIX). If no match is found, the original text is left unchanged. A
+@code{~} by itself, or in front of a @code{/} with no intervening characters, is
+replaced by the value of @code{$HOME} (POSIX). A @code{~} followed by a @code{+} or @code{-}
+is replaced by the value of @code{$PWD} and @code{$OLDPWD}, respectively (non-POSIX
+extension used by ksh and bash). A @code{~} followed by @code{~+N}, @code{~-N} or @code{~N}
+is replaced by the corresponding directory stack entry, as if by calling
+the @code{dirs} builtin with @code{+N}, @code{-N} or @code{N} (non-POSIX bash extension).
+@*
+
+Tilde expansion is also attempted during variable assignment if the
+value of the assignment begins with a @code{~}, and when a @code{~} appears after
+a colon @code{:}.
+
+
+@section Command substitution
+@cindex Command substitution
+
+Command substitution occurs when commands are enclosed in parentheses
+preceded by a dollar sign @code{$}, or when enclosed in a pair of back-
+quotes or grave accents @code{`}. In the back-quoted form, the string
+between quotes is processed for quoting characters before the command
+is executed.
+@*
+
+The special command substitution @code{$(cat file)} can be replaced by the
+equivalent but faster @code{$(<file)} (non-POSIX ksh and bash extension). The
+command substitution @code{$(n<#)} expands to the current byte offset for file
+descriptor @code{n} (non-POSIX ksh extension).
+
+
+@node Arithmetic expansion
+@section Arithmetic expansion
+@cindex Arithmetic expansion
+
+Arithmetic expressions are enclosed in double parentheses preceded by a
+dollar sign, in the form of:
+
+@example
+$(( arithmetic-expression ))
+@end example
+
+Arithmetic expressions can also be written without the preceding dollar
+sign (non-POSIX extension):
+
+@example
+(( arithmetic-expression ))
+@end example
+
+Arithmetic expressions are processed and replaced by the value of the
+expression inside the parentheses.
+@*
+
+Arithmetic valuations are performed using long integer arithmetic, the only
+format required by POSIX, although other shells (e.g. bash and ksh) perform
+double or long double precision arithmetic. Numeric constants can be of the
+form @code{[base#]n}, where @code{base} is a decimal number between 2 and 36
+(ksh and bash allow bases up to 64) representing the arithmetic base. @code{n}
+is a number in the given base. Digits greater than 9 are represented by
+lowercase or uppercase letters.
+@*
+
+Only the basic arithmetic operations are currently supported in Layla shell.
+Specifically, floating point arithmetic and braced expressions are not
+supported. Also, the use of mathmetical functions (including @code{pow()} for
+exponentiation) is not supported.
+
+
+@section Process substitution
+@cindex Process substitution
+
+ksh, bash and other shells support process substitution on some UNIX
+operating systems that support the @file{/dev/fd} directory scheme for naming
+open files. Layla shell currently doesn't support process substitution.
+
+
+@section Parameter expansion
+@cindex Parameter expansion
+
+A parameter can be a variable name, one or more digits, or any of the
+special characters @code{*}, @code{@@}, @code{#}, @code{?}, @code{-},
+@code{$}, and @code{!}. A variable is
+denoted by a name, which consists of alphanumeric characters and @code{_},
+and must begin with an alphabetic character or @code{_}. Exported variables
+are passed in the environment to child processes. Layla shell currently
+doesn't support indexed or associative arrays, or nameref variables.
+@*
+
+The value of a variable can be assigned by:
+
+@example
+name=value [name=value] ...
+@end example
+
+No space is allowed before or after the @code{=}. Positional parameters cannot
+be assigned in this way; they must be set using the @code{set} or @code{shift}
+special builtin utilities. Parameter @code{$0} is set from argument zero
+(@code{argv[0]}) when the shell is invoked. The character @code{$} is used to
+indi cate parameter expansion, which can be of the following formats:
+
+@heading $@{parameter@}
+The parameter name contains all characters from @code{$@{} to the matching
+@code{@}}. The parameter's value, if any, is substituted. The braces are
+required when parameter is followed by a letter, digit, or underscore
+that is not part of the parameter name. If @code{parameter} is one or more
+digits this indicates a positional parameter. A positional parameter of
+more than one digit must be enclosed in braces. If @code{parameter} is @code{*} or
+@code{@@}, all the positional parameters (starting with @code{$1}) are substituted
+and separated by a field separator character.
+
+@heading $@{#parameter@}
+If @code{parameter} is @code{*} or @code{@@}, the number of positional parameters is
+substituted. Otherwise, the length of parameter's value is substituted.
+
+@heading $@{!prefix*@}
+Expands to the names of the variables whose names begin with @code{prefix}
+(non-POSIX extension).
+
+@heading $@{parameter:-word@}
+If @code{parameter} is set and is non-null, its value is substituted.
+Otherwise @code{word} is substituted. @code{word} is not evaluated unless it
+is to be used as the substituted string. If the colon is omitted, the shell only
+checks whether @code{parameter} is set or not.
+
+@heading $@{parameter:offset:length@}
+@heading $@{parameter:offset@}
+Expands to the portion of the value of @code{parameter} starting at the
+character number resulting from the expansion of the @code{offset} arithmetic
+expression (counting from zero), and consisting of the number of characters
+resulting form the expansion of the @code{length} arithmetic expression.
+In the second form, all chacaters till the end of the value are
+used. A negative @code{offset} counts backwards from the end, and one or more
+spaces are required before minus sign to prevent the shell from interpreting
+the operator as @code{:-}. If @code{parameter} is @code{*} or @code{@@}, @code{offset} and
+@code{length} refer to the array index and number of elements respectively. A
+negative @code{offset} is taken relative to the number of elements in the
+array. This format is a non-POSIX extension.
+
+@heading $@{parameter#pattern@}
+@heading $@{parameter##pattern@}
+If @code{pattern} matches the beginning (prefix) of the value of @code{parameter},
+the value substituted is the value of @code{parameter} with the matched
+portion deleted. Otherwise the value of @code{parameter} is substituted. In the
+first form the shortest matching @code{pattern} is deleted and in the second
+form the longest matching @code{pattern} is deleted (POSIX). When parameter is
+@code{@@} or @code{*} the substring operation is applied to each element in
+turn (non-POSIX ksh and bash extension).
+
+@heading $@{parameter%pattern@}
+@heading $@{parameter%%pattern@}
+If @code{pattern} matches the ending (suffix) of the value of @code{parameter}, the
+value substituted is the value of @code{parameter} with the matched portion
+deleted. Otherwise the value of @code{parameter} is substituted. In the first
+form the shortest matching @code{pattern} is deleted and in the second form
+the longest matching @code{pattern} is deleted (POSIX). When @code{parameter} is
+@code{@@} or @code{*} the substring operation is applied to each element in
+turn (non-POSIX ksh and bash extension).
+
+@heading $@{parameter/pattern/string@}
+@heading $@{parameter//pattern/string@}
+@heading $@{parameter/#pattern/string@}
+@heading $@{parameter/%pattern/string@}
+
+These are non-POSIX extensions and are not currently implemented in the
+Layla shell.
+
+
+@section Field splitting
+@cindex Field splitting
+
+After parameter expansion and command substitution, the results are
+scanned for the field separator characters (as indicated by @code{$IFS}) and
+split into separate fields. Explicit null fields (those passed as "" or
+'') are retained. Implicit null fields resulting from parameters with
+no values or command substitutions with no output are removed.
+@*
+
+If the @code{braceexpand} or @code{-B} option is set, the fields are checked for
+brace patterns, such as @code{@{*,*@}}, @code{@{l1..l2@}}, and @code{@{n1..n2@}},
+where @code{*} means any character; @code{l1} and @code{l2} are letters and
+@code{n1} and @code{n2} are signed
+numbers. Fields are generated by prepending the characters before the
+opening brace and appending the characters after the closing brace to
+each of the strings generated by the characters between the braces.
+
+
+@section Pathname expansion
+@cindex Pathname expansion
+
+This is also known as File Name Generation.
+@*
+
+Following field splitting, each field is scanned for the regular
+expression (regex) characters @code{*}, @code{?}, and @code{[} (unless the
+@code{noglob} or @code{-f} option is set. If the field contains a regex character, it is
+treated as a pattern.
+@*
+
+Pathnames containing pattern characters are replaced with sets of names
+that matches the pattern. If no pathname is found that matches the pattern,
+that pathname is left unchanged. If @code{$FIGNORE} is set, each pathname
+that matches the pattern defined by the value of @code{$FIGNORE} is
+ignored when generating the list. The names @code{.} and @code{..} are also
+ignored.
+@*
+
+The following is what the pattern characters mean inside pattern strings:
+@table @code
+@item *
+Match any string including the null string.
+@item ?
+Match any single character.
+@item [...]
+Match any one of the enclosed characters. Two characters separated by
+@code{-} matches any character lexically between the pair,
+inclusive. If the first character is a bang @code{!}, any character
+not enclosed is matched. A @code{-} can be included in the character
+set by putting it as the first or last character. Character
+classes can be specified with the syntax @code{[:class:]} where class
+is one of the following ANSI-C classes: @code{alnum alpha blank cntrl
+digit graph lower print punct space upper word xdigit}.
+@end table
+
+
+@node Quoting
+@section Quoting
+@cindex Quoting
+
+Quoting can be used to remove the special meaning of the shell's
+metacharacters, which include:
+
+@example
+; & ( ) | < > newline space tab
+@end example
+
+Metacharacters are used to delimit tokens, in addition to their special
+meaning to the shell. If a character is quoted, that is, preceded with
+a backslash @code{\}, it is quoted and loses its special meaning to the
+shell. The pair @code{\newline} is removed from input. All characters enclosed
+between single quotes are considered to be quoted. Single quotes cannot
+appear within single quotes. A single quoted string preceded by an
+unquoted dollar sign @code{$} is processed as an ANSI-C string. Parameter
+expansion and command substitution does not occur inside single quotes.
+@*
+
+Inside double quotes, parameter and command substitution occur and @code{\}
+quotes the characters @code{\}, @code{'}, @code{`}, @code{"}, and @code{$}.
+If a @code{$} is found in front of a double quoted string, ksh and bash
+translate the string by a locale-specific message, but our shell currently
+ignores the dollar sign.
+@*
+
+The shell variables @code{$*} and @code{$@@} are identical when not quoted.
+However, @code{"$*"} is equivalent to @code{"$1c$2c..."}, where @code{c} is
+the first character of the @code{$IFS} variable, whereas @code{"$@@"} is
+equivalent to @code{"$1" "$2"}.
+@*
+
+Inside back-quotes (grave accents), @code{\} quotes the characters @code{\},
+@code{`}, and @code{$}.
+@*
+
+The special meaning of reserved words (keywords) and aliases can be
+removed by quoting any character of the reserved word or alias.
+
+
+@node Shell Variables and Parameters
+@chapter Shell Variables and Parameters
+@cindex Shell Variables and Parameters
+
+@section Special parameters
+@cindex Special parameters
+
+The following special parameters are automatically set by the shell.
+They are all defined by POSIX, except when it says otherwise.
+
+@table @code
+@item @@
+The positional parameters, starting from 1, producing separate
+fields for each parameter If expansion occurs inside double
+quotes, each parameter expands to a separate field
+@item *
+The positional parameters, starting from 1, producing separate
+fields for each parameter If expansion occurs inside double
+quotes, parameters are joined to form a single field
+@item #
+The decimal number of positional parameters, not counting parameter 0
+or @code{$0}.
+@item -
+Options supplied to the shell on invocation or by calling the
+@code{set} command.
+@item ?
+The decimal value returned by the last executed command.
+@item $
+The process identifier (PID) of this shell.
+@item _
+Initially, the value of @code{_} is the absolute pathname of the
+shell or script being executed (as passed in the environment at
+startup). It is subsequently assigned the last argument of the
+previous command (bash and ksh, while csh assigns the full command
+line of the last command). This parameter is not set for
+asynchronous (background) commands. It also holds the name of
+the matching @code{$MAIL} file when checking for mail. This parameter
+is a non-POSIX extension.
+@item !
+The PID of the last run background pipeline, or the most recent
+job put in the background with the bg builtin utility.
+@item 0
+The name of this shell or script.
+@end table
+
+
+@node Shell Variables
+@section Shell variables
+@cindex Shell variables
+
+Shell variables are initialized from the environment at startup. During
+the shell's lifetime, shell variables can have their values reassigned
+or unset through variable assignment. The following are the variables
+used by the shell. They are all defined by POSIX, except when it says
+otherwise.
+
+@table @code
+@item COMMAND
+ Similar to bash's @code{$BASH_COMMAND} variable, this variable contains
+the full command line of the currently executing command. This
+variable is a non-POSIX extension.
+@item COMMAND_STRING
+Similar to bash's @code{$BASH_EXECUTION_STRING} variable, this variable
+contains the value of the command string passed to the shell
+with the @code{-c} option. This variable is a non-POSIX extension.
+@item CDPATH
+This variable defines the search path for the @code{cd} builtin.
+@item COLUMNS
+This variable defines the width of the shell's window for printing
+@code{select} lists and the results of tab completions.
+@item COPROC0
+The file descriptor of the file holding the coprocess's output,
+created by the @code{coproc} builtin utility. This variable is similar
+to bash's @code{$COPROC[0]}, which is an array variable.
+@item COPROC1
+The file descriptor of the file holding the coprocess's input,
+created by the @code{coproc} builtin utility. This variable is similar
+to bash's @code{$COPROC[1]}, which is an array variable.
+@item DIRSFILE
+Similar to tcsh's @code{$dirsfile} variable, this variable contains the
+pathname of the file used to save and restore the directory
+stack. This variable is a non-POSIX extension. See also
+@code{$SAVEDIRS}.
+@item DIRSTACK
+The contents of the directory stack in the order displayed by
+the @code{dirs} builtin. Assignments to this variable change the contents
+of the directory stack. This variable is a non-POSIX bash
+extension. It is similar to tcsh's @code{dirstack} variable.
+@item EDITOR
+If the @code{$VISUAL} variable is not set, the value of @code{$EDITOR} is
+processed and the corresponding editing mode is turned on (only the
+@code{vi} editing mode is currently supported). This variable is also
+used by the @code{fc} builtin to determine the editor program to use
+for editing history commands. This variable is a non-POSIX
+extension. The default value is @code{vi}.
+@item EGID
+The effective group id of the current user. This variable is a
+non-POSIX extension.
+@item ENV
+Parameter expansion, command substitution, and arithmetic expansion
+are performed on the value of this variable to generate the
+pathname of the script that is executed when the shell is
+invoked. This file is typically used for alias and function definitions.
+The default value is @file{$HOME/.lshrc}.
+@item EPOCHREALTIME
+The number of seconds (in floating point format) since Unix
+epoch. This variable is a non-POSIX bash extension.
+@item EPOCHSECONDS
+The number of seconds (in long integer format) since Unix epoch.
+This variable is a non-POSIX bash extension.
+@item EUID
+The effective user id of the current user. This variable is a
+non-POSIX bash extension.
+@item EXECIGNORE
+This is a colon-separated list of patterns of executable file
+names to ignore when the shell is searching for executable
+files. This variable is a non-POSIX bash extension.
+@item FCEDIT
+The default editor name for the @code{fc} command. @code{$FCEDIT}
+takes precedence over @code{$HISTEDIT}, which in turn takes precedence
+over @code{$EDITOR}. The default value for @code{$FCEDIT} is @code{vi}.
+@item FIGNORE
+ pattern that defines the set of file names that is ignored
+when performing file name matching. This variable is a non-POSIX
+ksh extension.
+@item FUNCNAME
+The name of the currently executing function. The value is
+@code{main} if there is no function currently executing. This
+variable is similar to bash's @code{$FUNCNAME}, except that the latter is
+an array variable containing the names of all functions in the
+call stack. This variable is a non-POSIX bash extension.
+@item FUNCNEST
+The maximum function nesting level. Function calls cannot exceed
+this value, if it is set. This variable is a non-POSIX bash
+extension.
+@item GID
+The numeric group id of the currently logged user. This variable
+is a non-POSIX extension.
+@item GLOBIGNORE
+A colon-separated list of patterns that define the set of file
+names to be ignored when performing file name (i.e. pathname)
+expansion. This variable is a non-POSIX bash extension.
+@item GROUPS
+The list of groups of which the current user is a member. This
+variable is similar to bash's @code{$GROUPS}, except that the latter is
+an array variable containing the group names. This variable is a
+non-POSIX bash extension.
+@item HISTCMD
+The number of the current command in the history file. This
+variable is a non-POSIX extension used by ksh and bash.
+@item HISTCONTROL
+A colon-separated list that controls how history entries are
+saved in the history file. The values of this list can be:
+
+@itemize
+@item @strong{ignorespace}: Don't save lines starting with a space.
+@item @strong{ignoredups}: Don't save lines matching the previous history entry.
+@item @strong{ignoreboth}: Shorthand for ignorespace and ignoredups.
+@item @strong{erasedups}: Remove duplicate lines matching the current one.
+@end itemize
+
+This variable is a non-POSIX bash extension.
+
+@item HISTFILE
+The pathname of the file that is used to store the command history.
+@item HISTFILESIZE
+The maximum number of commands to save in the history file. This
+variable is a non-POSIX bash extension.
+@item HISTIGNORE
+A colon-separated list that tells the shell which commands to
+ignore when saving the history list. Patterns are matched
+against the history line to be saved. If they match, the line is
+not saved in the history list. This variable is a non-POSIX bash
+extension.
+@item HISTSIZE
+The number of previously entered commands that are accessible by
+this shell. The default is 512.
+@item HISTTIMEFORMAT
+If set and not null, the value of this variable is the format
+string passed to @code{strftime()} in order to print the timestamp of
+history entries, which is output by the builtin history utility.
+This variable is a non-POSIX bash extension.
+@item HISTEDIT
+The name for the default editor name for the fc command. This
+variable is a non-POSIX ksh extension. It takes precedence over
+@code{$EDITOR}.
+@item HOME
+The default argument for the cd builtin (the home directory).
+The value of @code{$HOME} is typically set by login.
+@item HOST
+@item HOSTNAME
+The name of the current host. Both variables are non-POSIX
+extensions.
+@item HOSTFILE
+The name of the file the shell reads when performing hostname
+completion. If this variable is null or not set, the default
+file @file{/etc/hosts} is used. This variable is a non-POSIX bash
+extension.
+@item HOSTTYPE
+The type of machine the shell is running on, determined at compilation
+time. Similar to @code{$MACHTYPE}. This variable is a non-POSIX
+bash extension.
+@item IGNOREEOF
+If set, indicates the count of consecutive EOFs the shell must
+read before exiting. If not set or null, the default is 10 (same
+as bash). This variable is only of use to interactive shell.
+This variable is a non-POSIX bash extension.
+@item IFS
+Internal field separators, which default to space, tab, and newline.
+Used to separate the results of command substitution or
+parameter expansion and to separate fields when using the read
+builtin utility. The first character of the @code{$IFS} variable is
+used to separate arguments for the @code{"$*"} substitution. See the
+@xref{Quoting} section. The default value is " \t\n".
+@item INSERTMODE
+The insert mode for the command line editor. If set to @code{overwrite},
+the editor overwrites characters in the command line buffer (as if the
+@key{INSERT} key was pressed. Any other value, including @code{insert},
+puts the editor in the regular mode, where characters are added without
+overwriting existing characters. This is a non-POSIX extension that
+behaves like tcsh's @code{inputmode} variable.
+@item LANG
+The locale category for any category not specifically selected
+with a variable starting with @code{LC_} or @code{LANG}. Not currently used by
+the shell.
+@item LC_ALL
+Overrides the value of the @code{LANG} variable and any other @code{LC_}
+variable. Not currently used by the shell.
+@item LC_COLLATE
+The locale category for character collation information. Not
+currently used by the shell.
+@item LC_CTYPE
+The locale category for character handling functions. Not currently
+used by the shell.
+@item LC_NUMERIC
+The locale category for the decimal point character. Not currently
+used by the shell.
+@item LINES
+The number of lines in the shell's window.
+@item LINENO
+The current line number within the script or function being executed.
+@item MACHTYPE
+The type of machine the shell is running on, determined at compilation
+time. Similar to @code{$HOSTTYPE}. This variable is a non-POSIX extension.
+@item MAIL
+The name of the mail file to check if @code{$MAILPATH} is not set.
+@code{$MAIL} is not set by the shell.
+@item MAILCHECK
+The interval (in seconds) after which the shell checks for
+changes in the modification time (mtime) of any of the files
+specified in the @code{$MAILPATH} or @code{$MAIL} variables. The default value
+is 600 seconds (ksh) or 60 seconds (bash). We use the ksh value.
+When the time has elapsed the shell checks for mail before outputting
+the next primary prompt.
+@item MAILPATH
+A colon-separated list of file names to check after @code{$MAILCHECK}
+seconds has elapsed. Each file name can be followed by a @code{?} and
+a message that is printed if the file is modified. The message
+undergoes parameter expansion, command substitution, and arithmetic
+expansion and the @code{$_} variable contains the name of the
+file that has changed. The default message is @strong{"you have mail in
+$_"} (ksh).
+@item OLDPWD
+The previous working directory set by the @code{cd} builtin.
+@item OPTARG
+The value of the last option argument processed by the @code{getopts}
+builtin utility.
+@item OPTIND
+The index of the last option argument processed by the @code{getopts}
+builtin utility.
+@item OPTERR
+If set to 1, display errors generated by the @code{getopts} builtin.
+This variable is a non-POSIX bash extension.
+@item OSTYPE
+The type of operating system the shell is running on, determined
+at compilation time. This variable is a non-POSIX extension.
+@item PATH
+The search path for commands. @code{$PATH} cannot be changed if the
+shell is in the restricted mode. The default value is
+@code{"/bin:/usr/bin:/sbin:/usr/sbin"}.
+@item PPID
+The PID of the parent of this shell.
+@item PROMPT_COMMAND
+If set, the value is a command to be executed before printing
+the primary prompt @code{$PS1}. This variable is a non-POSIX bash
+extension.
+@item PROMPTCHARS
+If set to a two-character string, this variable is used when printing
+prompt strings. The first character is used for normal users, the second
+character is used for root. The default value is @code{"$#"}. This is a
+non-POSIX extension that behaves like tcsh's @code{promptchars} variable.
+@item PS0
+The value of this variable is expanded for parameter expansion,
+command substitution, and arithmetic expansion and the result
+printed on stderr, right before each simple command is executed.
+This variable is a non-POSIX bash extension.
+@item PS1
+The primary prompt string. The value of this variable is
+expanded for parameter expansion, command substitution, and
+arithmetic expansion. The character @code{!} in @code{$PS1} is replaced by
+the history number of the current command. Two bangs produce a single @code{!}
+when the prompt string is printed. The default value is @code{"[\u \W]\$\ "}.
+@item PS2
+The secondary prompt string, defaults to @code{"> "}.
+@item PS3
+The third (selection) prompt string used within a @code{select} loop,
+defaults to @code{"#? "}.
+@item PS4
+The value of this variable is expanded for parameter evaluation,
+command substitution, and arithmetic expansion and precedes each
+line of an execution trace. The default value is @code{"+ "}.
+@item PWD
+The present (current) working directory set by the @code{cd} builtin.
+@item RANDOM
+Each time this variable is referenced, a random integer number,
+uniformly distributed between 0 and 32767, is returned. The
+sequence of random numbers can be initialized by assigning a
+numeric value to @code{$RANDOM}. This variable is a non-POSIX extension.
+@item REPLY
+This variable is set by the select statement and by the read
+builtin utility when no arguments are passed to it. This variable
+is a non-POSIX extension.
+@item SAVEDIRS
+If set, this variable means a login shell must save the directory
+stack in the file indicated by the value of @code{$DIRSFILE}. This
+variable is similar to tcsh's @code{$savedirs} variable. This variable
+is a non-POSIX extension.
+@item SECONDS
+Each time this variable is referenced, the number of seconds
+since the shell started is returned. If this variable is
+assigned a value, the value returned is the value that was
+assigned plus the number of seconds since the assignment. This
+variable is a non-POSIX extension.
+@item SHELL
+The full pathname of the shell. Upon startup, if the basename of
+this variable is @code{rsh}, @code{rlsh}, or @code{lrsh}, the shell becomes
+restricted. @code{$SHELL} is not typically set by the shell.
+@item SHELLOPTS
+A colon-separated list of enabled shell options, the ones that
+are reported as on when invoking @code{set -o}. If this variable is set
+on shell startup, each option is enabled in the shell. This
+variable is a readonly non-POSIX bash extension.
+@item SHLVL
+This variable is assigned the value of 1 the first time the
+shell is run. Its value gets incremented by 1, each time a new
+instance of the shell is started. This variable is a readonly
+non-POSIX bash extension (although bash doesn't mark it as readonly).
+@item SUBSHELL
+This variable is incremented by 1 in each subshell the shell
+invokes. This variable is a non-POSIX extension.
+@item TIMEFORMAT
+The format string specifying how the timing information for
+pipelines prefixed with the time command should be displayed.
+The possible format sequences are:
+
+@table @code
+@item %%
+A literal %.
+@item %[p][l]R
+The elapsed (real) time in seconds.
+@item %[p][l]U
+The number of CPU seconds spent in user mode.
+@item %[p][l]S
+The number of CPU seconds spent in system mode.
+@item %P
+The CPU usage percentage, computed as (U + S) / R.
+@end table
+
+In all the above format sequences, braces denote optional portions.
+The optional @code{p} is a digit specifying the precision, i.e.
+the number of fractional digits after a decimal point. A value
+of 0 means no decimal point or fraction is to be output. A maximum
+of three places after the decimal point can be displayed. If
+@code{p} is greater than 3 or is not specified, it is treated as 3. The
+optional @code{l} (ell) specifies a longer format which includes hours,
+minutes, and seconds of the form @code{HHhMMmSS.FFs}. The value of @code{l}
+determines whether or not the fraction @code{.FF} is included. All
+other characters are output without change, and a trailing newline
+is added afterwards. If @code{$TIMEFORMAT} is unset, the default
+value is @code{"\nreal\t%2lR\nuser\t%2lU\nsys\t%2lS"} (ksh and bash,
+except that bash uses a precision of 3 instead of 2). If the
+value of @code{$TIMEFORMAT} is null, no timing information is displayed.
+
+@item TMPDIR
+The pathname of the directory used to create temporary files. If
+not set, the default is @file{/tmp}. This variable is a non-POSIX bash
+extension.
+@item TMOUT
+The default time-out value for the read and select builtin utilities.
+The shell terminates if a line is not entered within the
+prescribed number of seconds while reading from a terminal. This
+variable is a non-POSIX extension used by ksh and bash.
+@item UID
+The numeric user id of the currently logged user. This variable
+is a non-POSIX extension.
+@item USER
+The username of the currently logged user. This variable is a
+non-POSIX extension.
+@item VISUAL
+If the value of this variable matches the pattern @code{*[Vv][Ii]*},
+the @code{vi} option is turned on. Currently, no other patterns are
+recognized by the Layla shell. The value of @code{$VISUAL} overrides
+the value of @code{$EDITOR}.
+@end table
+
+
+
+@node The Execution Environment
+@chapter The Execution Environment
+@cindex The Execution Environment
+
+
+@section Shell Invocation
+@cindex Shell Invocation
+
+If upon invocation, the first character of argument zero is a hyphen
+@code{-}, the shell is a login shell and commands are read from @file{/etc/profile}
+and then from @file{.profile} in the current working directory or, if this
+file is not found, from @file{$HOME/.profile}.
+@*
+
+Interactive shells read @file{/etc/lshrc}, followed by the file named by the
+result of parameter expansion, command substitution, and arithmetic
+expansion of the value of the environment variable @code{$ENV} if the file
+exists and is readable. If the @code{-s} option is not supplied and an argument
+is given which is an existing file, the shell reads and executes
+that file as a shell script.
+@*
+
+Commands are then read and executed. The following options are recognized
+by the shell upon startup:
+
+@table @code
+@item -c
+If this option is supplied, commands are read from the first
+argument after the @code{-c} option. Any remaining arguments become
+positional parameters, starting from argument number 0.
+@item -i
+If this option is supplied, or if the shell's stdin and stderr
+are attached to a terminal device (as indicated by @code{isatty()}),
+this shell is interactive. Interactive shells ignore the @code{TERM}
+signal (so that @code{kill 0} does not kill an interactive shell).
+@code{INTR} is caught and ignored (so that @code{wait} is interruptible).
+@code{QUIT} is always ignored by the shell.
+@item -r
+If this option is supplied, the shell becomes a restricted shell.
+@item -s
+If this option is supplied, or if no arguments remain, commands
+are read from stdin.
+@end table
+
+The remaining options and arguments are recognized as described for the
+@code{set} builtin utility.
+
+
+@section The restricted shell
+@cindex The restricted shell
+
+The restricted shell is used to set up and execution environment more
+controlled than that of the standard shell. The restricted shell
+behaves similar to the normal shell, except that the following actions
+are not permitted:
+
+@itemize
+@item Unsetting the restricted option
+@item Changing directory using @code{cd}
+@item Setting or unsetting the value or attributes of @code{$SHELL}, @code{$ENV} or @code{$PATH}
+@item Specifying paths or command names containing @code{/}
+@item Redirecting output using @code{>}, @code{>|}, @code{<>}, or @code{>>}
+@item Using @code{command -p} to invoke a command
+@end itemize
+
+
+@section Exit status
+@cindex Exit status
+
+The shell's exit status can be one of:
+
+@table @strong
+@item non-zero
+Returned when errors, such as syntax errors, are detected by the
+shell. Non-interactive shells exit in this case.
+@item zero
+If no commands were executed.
+@item Other values
+The exit status of last command executed is returned on exit.
+@end table
+
+
+@section Input and Output
+@cindex Input and Output
+
+Command input and output can be redirected using special shell constructs,
+which can precede or follow the command name, and which are
+not passed to the invoked command. Command substitution, parameter
+expansion, and arithmetic expansion occur and the result is used for
+redirecting input and output streams as appropriate. Field splitting is
+not performed on the results of expansion. If the redirected file is of
+the form @file{/dev/tcp/host/port} or @file{/dev/udp/host/port}, the shell attempts
+to make a tcp or udp connection to the corresponding host and port number.
+No intervening space is allowed between the redirection operator
+and its operands.
+@*
+
+@table @code
+@item <word
+Redirect stdin to read from the file indicated by @code{word}.
+@item >word
+Redirect stdout to read from the file indicated by @code{word}. If the
+file does not exist then it is created. If the file exists and
+the @code{noclobber} '@code{-C}' option is set, an error results. Otherwise,
+the file is truncated to zero length.
+@item >|word
+Similar to @code{>}, except that it overrides the @code{noclobber} '@code{-C}'
+option.
+@item >>word
+Redirect output to the file indicated by @code{word}. If the file
+exists, append output to the end-of-file. Otherwise, create the
+file.
+@item <>word
+Open the file indicated by @code{word} for read/write on stdin.
+@item <<[-]word
+Redirect stdin to read from a here-document. The shell reads up
+to the line that contains @code{word} after any quoting has been
+removed. No parameter substitution, command substitution, arithmetic
+expansion or pathname expansion is performed on @code{word}. The
+resulting document (the here-document), becomes the input. If
+any character of @code{word} is quoted, no expansion is done on the
+document. Otherwise, parameter expansion, command substitution,
+and arithmetic expansion occur, the @code{\newline} sequence is
+ignored, and @code{\} must be used to quote the characters @code{\}, @code{$},
+and @code{`}. If @code{-} is appended to the @code{<<} operator, all leading
+tabs are stripped from the document.
+@item <<<word
+Redirect stdin to read from a here-string. @code{word} becomes the contents
+of the here-document after parameter expansion, command
+substitution, and arithmetic expansion is performed.
+@item <&digit
+Duplicate stdin to read from file descriptor @code{digit}.
+@item >&digit
+Duplicate stdout to write to file descriptor @code{digit}.
+@item <&digit-
+Move file descriptor @code{digit} to stdin (i.e. duplicate and close
+the file descriptor).
+@item >&digit-
+Move file descriptor @code{digit} to stdout (i.e. duplicate and close
+the file descriptor).
+@item <&-
+Close stdin.
+@item >&-
+Close stdout.
+@item <&p
+Redirect stdin to read from the co-process start by the @code{coproc} builtin.
+@item >&p
+Redirect stdout to come from the co-process start by the @code{coproc} builtin.
+@item <#((expr))
+Evaluate arithmetic expression @code{expr} and move file descriptor 0's
+(stdin) offset to the resulting bytes from the start of the file.
+@item >#((expr))
+The same as @code{<#} for file descriptor 1 (stdout).
+@end table
+
+If a redirection operator is preceded by a digit, the file descriptor
+to be redirected is that referred to by the digit (instead of the
+default 0 or 1). If a redirection operator is preceded by @code{@{varname@}}
+with no intervening spaces, a file descriptor greater than 10 is
+selected by the shell and stored in the variable named varname.
+
+
+@section The environment
+@cindex The environment
+
+The environment is a list of name-value string pairs that is passed
+down to commands when they are being executed. On startup, the shell
+scans the environment and creates a shell variable for each entry, giving
+it the corresponding value and marking it for export. Commands executed
+by the shell inherit the environment list. If the user modifies
+the values of these variables or creates new ones by using the @code{export}
+builtin utility, these new variables become part of the environment.
+Variable assignments occurring before the command name are added to the
+command's environment, while those occuring after the command name are
+only considered if the @code{keyword} '@code{-k}' option is set.
+
+
+@section The shell prompt
+@cindex The shell prompt
+
+When running interactively, the shell prompts the user by prinintg the
+value of @code{$PS1} to stderr after expanding it for parameter expansion,
+command substitution, and arithmetic expansion, before reading the next
+command. Each command is not considered complete, the secondary prompt
+@code{$PS2} is expanded and printed to stderr.
+
+
+@node Jobs
+@section Jobs
+@cindex Jobs
+
+If the @code{monitor} '@code{-m}' option is set, an interactive shell associates a
+job with each pipeline. The shell keeps a table of current jobs, each
+one being assigned a small integer number. When a job is started
+asynchronously (in the background) by affixing it with @code{&}, the shell
+prints a line that looks like:
+
+@example
+ [1] 12345
+@end example
+
+which indicates that a job was started asynchronously with job number
+1, and that the last process in the pipeline had a @code{PID} of 12345.
+@*
+
+To suspend a running job, press @code{CTRL-Z} to send the @code{STOP} signal to the
+current job. The shell displays a message informing your of the change
+in the job's status before printing the primary prompt. The job can
+then be run in the background or foreground by invoking the @code{bg} and @code{fg}
+builtins, respectively.
+@*
+
+If a background job tries to read from the terminal, it is sent the
+@code{SIGTTIN} signal, which suspends the job by default. Background jobs can
+usually send output to the terminal, unless the stty was used to modify
+this behavior, in which case the job is sent a @code{SIGTTOU} signal when it
+tries to write to the terminal.
+@*
+
+Jobs are referred to by using the @code{PID} of any process in the job, or by
+the job id which can take the following formats:
+
+@table @code
+@item %number
+The job with the given number.
+@item %string
+Any job whose command line begins with string.
+@item %?string
+Any job whose command line contains string.
+@item %%
+The current job.
+@item %+
+The current job. Equivalent to %%.
+@item %-
+The previous job.
+@end table
+
+When a process changes state, the shell is sent a @code{CHLD} signal. The
+shell outputs the list of stopped jobs right before outputting the next
+primary string. If the @code{notify} '@code{-b}' option is set, the shell notifies
+the user of any change in job's status immediately. When a background
+job finishes and the @code{monitor} '@code{-m}' option is set, the shell executes any
+set @code{CHLD} traps.
+@*
+
+When the user tries to exit an interactive shell while there are running
+or stopped jobs, the shell prints a warning message. If another
+attempt is made at exit, the jobs are sent a @code{HUP} signal before the
+shell exits. When a login shell receives a @code{HUP} signal, it re-sends the
+@code{HUP} signal to all job that have not been disowned with the @code{disown}
+builtin utility.
+
+
+@section Signals
+@cindex Signals
+
+The interactive shell ignores the @code{TERM} and @code{QUIT} signals.
+If the @code{monitor} '@code{-m}' option is set, the @code{TSTP}, @code{TTIN},
+and @code{TTOU} signals are also ignored. The @code{CHILD}, @code{INT},
+@code{WINCH} and @code{HUP} signals are caught and handled.
+@*
+
+For background (asynchronous) pipelines, the @code{INT} and @code{QUIT} signals are
+ignored if the @code{monitor} '@code{-m}' option is not active. In all other cases,
+signals have the values inherited by the shell from its parent upon startup.
+
+
+@section Command execution
+@cindex Command execution
+
+Commands that doesn't contain slashes are looked up. If the command
+name matches the name of a special builtin utility, the utility is executed
+in the current shell. If not, the command name is checked against
+user-defined functions. If it matches a defined function, positional
+parameters are saved and then reset, before assigning them to the arguments
+passed as part of the function call. Functions are also executed
+in the current shell. Positional parameters are restored when the
+function returns. The exit status of a function call is the value of
+the last command executed in the function. If a command name is neither
+a special builtin utility nor a user-defined function, the shell
+looks for a regular builtin utility with the given name. If found, the
+regular builtin utility is executed in the current shell.
+@*
+
+If all the above fails, the shell looks for commands external to the
+shell's executable. The shell variable @code{$PATH} defines the search path
+which the shell uses to look for a directory containing the command. It
+consists of a colon-separated list of directory names. The default path
+defined by Layla shell is @code{"/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin"}.
+Each directory in the path is searched for an executable file with the given name. If
+found, a subshell is forked and the command is executed by calling @code{exec()}.
+@*
+
+One of the distinctive features of lsh's commandline interpreter is that it
+performs two passes on the input source (whether it was an interactively-entered
+command, a script file, or a command string). The first pass is in the frontend (the
+parser), which tokenizes input and forms an abstract source tree (AST) out of it.
+The second pass is in the backend (the executor), which executes the AST.
+That two-tiered (or two pass) layout simplifies the process of reading and executing
+commands within the shell, but it also has some side effects. One of these side effects
+is that syntax errors in a shell script will result in the shell refraining from
+executing the whole script. Another side effect is that functions can be defined
+anywhere in the script, and they can be called before they are defined (provided the
+definition occurs in the same script file). So for example, the following script will
+raise an error in bash, but not in lsh:
+
+@example
+# the following line will execute successfully in lsh, but not in bash
+f1
+
+# function definition can follow function call in the same script file
+f1 ()
+@{
+   echo "Inside f1"
+@}
+@end example
+
+Another side effect is that empty function bodies are permissible in lsh, while they
+are not so in bash. For example, in the following script, @code{echo} will be executed
+in lsh, while it a syntax error will result in bash:
+
+@example
+empty ()
+@{
+@}
+
+echo "Hi there!"
+@end example
+
+A third side effect is that function nesting is permissible in lsh, which is also the case
+in bash. The difference here is that because lsh parses the whole script before passing
+it to the executor, a nested function is recognized and added to the function table at the
+time its parent function is parsed. This doesn't mean that either of the two functions is being
+processed or its commands executed; just the function names are added to the global function
+table. Again, this is not the case in bash.
+
+For example, in the following script, both f1 and f2 are added to the function table by the
+time the parser finishes with the script. This is why the three function calls will work
+properly in lsh, while in bash the first call to f2 will result in a "command not found..." error;
+the second call to f2 and the call to f1 will both work, as the call to f1 resulted in the
+addition of f2 to the function table:
+
+@example
+f1 ()
+@{
+    f2 ()
+    @{
+        echo "function f1"
+    @}
+@}
+
+f2    # results in "command not found..." error in bash, but not lsh
+f1    # works in both bash and lsh
+f2    # works in both bash and lsh
+@end example
+
+
+
+@node Command History and Editing
+@chapter Command History and Editing
+@cindex Command History and Editing
+
+
+@section Command history
+@cindex Command history
+
+The last @code{$HISTSIZE} (which defaults to 512) commands entered in an
+interactive shell is saved in the history file, whose path is given by
+@code{$HISTFILE}. If @code{$HISTFILE} is unset of null, or the file is not writeable
+by the shell, @file{$HOME/.lsh_history} is used instead.
+@*
+
+The builtin utility @code{history} can be used to list the history entries,
+while the builtin @code{fc} can be used to edit the list. When calling @code{fc} to
+edit history commands, the @code{-e} option can be used to specify the editor
+program to pass the history list to. If no editor is specified, @code{fc}
+consults the @code{$FCEDIT} variable and invokes the command named in the value
+of this variable. If @code{$FCEDIT} is not set, @code{$HISTEDIT} is consulted. If
+this is also not set, @code{$EDITOR} is consulted. If all of this fails, the
+default value @file{/bin/ed} is used. The edited commands are printed and
+executed upon leaving the editor. The @code{-s} option causes @code{fc} to skip the
+editing phase and to re-execute the commands directly.
+
+
+@section Vi editing mode
+@cindex Vi editing mode
+
+The Layla shell provides builtin @code{vi} editing functionality. There are
+two default modes. When the shell starts, the user is placed in the
+@strong{input mode}. To edit commands, the user must press @key{ESC} (ASCII 033) to
+enter the @strong{control mode}. Most control commands accept an optional repeat
+count that is entered before the command character.
+
+@heading The Input Mode
+The default editor mode is the @strong{input mode}. The following edit commands
+are supported in this mode:
+
+@table @key
+@item ERASE
+The default is @key{^H} or @key{Backspace}. Deletes the previous character.
+@item ^W
+Deletes the previous blank-separated word.
+@item EOF
+If the first character in the line, it causes the shell to terminate,
+unless the @code{ignoreeof} option is set, or the @code{$IGNOREEOF}
+variable is set to a numeric value greater than zero.
+@item ^V
+Removes the next character's editing features, if any.
+@item \
+Escape the next @code{ERASE} or @code{KILL} character.
+@item ^I, TAB
+Attempts command, variable, username, hostname, or filename completion.
+@end table
+
+@heading The Control Mode
+When the user presses @key{ESC} and the @code{vi} option is set, the shell's editor
+enters the control mode. The following commands are recognized in this mode.
+
+@subheading Motion Edit Commands
+
+@table @code
+@item [count]l
+Move the cursor one character forward (to the right).
+@item [count][C
+Move the cursor one character forward (to the right).
+@item [count]w
+Move the cursor one word forward.
+@item [count]W
+Move the cursor to the beginning of the next word following a blank.
+@item [count]e
+Move the cursor to the end of this word.
+@item [count]E
+Move the cursor to the end of the current blank-delimited word.
+@item [count]h
+Move the cursor one character backwards (to the left).
+@item [count][D
+Move the cursor one character backwards (to the left).
+@item [count]b
+Move the cursor one word backwards.
+@item [count]B
+Move the cursor to the preceding blank-separated word.
+@item [count]|
+Move the cursor to column number count.
+@item [count]fc
+Find the next character c in the current line.
+@item [count]Fc
+Find the previous character c in the current line.
+@item [count]tC
+Equivalent to f followed by h.
+@item [count]Tc
+Equivalent to F followed by l.
+@item [count];
+Repeat count times the last find command (f, F, t, or T).
+@item [count],
+Reverse the last find command count times.
+@item 0
+Move the cursor to the start of line.
+@item ^
+Move the cursor to start of line.
+@item [H
+Move the cursor to the first non-blank character in line.
+@item $
+Move the cursor to the end of line.
+@item [Y
+Move the cursor to the end of line.
+@item %
+Moves to balancing brace or bracket.
+@end table
+
+@subheading Search Edit Commands
+
+@table @code
+@item [count]k
+Fetch a previous command, @code{count} entries back.
+@item [count]-
+Fetch a previous command, @code{count} entries back. Equivalent to k.
+@item [count][A
+Fetch a previous command, @code{count} entries back. Equivalent to k.
+@item [count]j
+Fetch the next command, @code{count} entries forward.
+@item [count]+
+Fetch the next command, @code{count} entries forward. Equivalent to j.
+@item [count][B
+Fetch the next command, @code{count} entries forward. Equivalent to j.
+@item [count]G
+Fetch command number @code{count}. The default is the last history entry.
+@item /string
+Search history backwards for a command containing string. If
+string start with @code{^}, the matched line must begin with @code{string}.
+If @code{string} is null, the last entered string is used.
+@item ?string
+Search history forwards for a command containing string. If
+string starts with @code{^}, the matched line must begin with @code{string}.
+If @code{string} is null, the last entered string is used.
+@item n
+Search backwards for the next match of the last pattern to @code{/}
+or @code{?}.
+@item N
+Search forwards for the next match of the last pattern to @code{/} or
+@code{?}.
+@end table
+
+@subheading Text Modification Edit Commands
+
+@table @code
+@item a
+Enter input mode and enter text after the current character.
+@item A
+Append text to the end of line.
+@item [count]cmotion
+@item c[count]motion
+Delete all characters from the current character up to the character
+that @code{motion} would move the cursor to, and then enter the
+input mode. If @code{motion} is @code{c}, the entire line is deleted and the
+input mode is entered.
+@item C
+Delete all characters from the current character up to the end
+of line and then enter the input mode.
+@item S
+Equivalent to cc.
+@item [count]s
+Replace characters under the cursor in the input mode.
+@item D[count]dmotion
+Delete all characters from the current character up to the end of line.
+@item d[count]motion
+Delete all characters from the current character up to the character
+that @code{motion} would move the cursor to. If @code{motion} is @code{d}, the
+entire line is deleted.
+@item i
+Enter the input mode and insert text before the current character.
+@item I
+Insert text before the beginning of the line.
+@item [count]P
+Yank (paste) text before the cursor.
+@item [count]p
+Yank (paste) text after the cursor.
+@item R
+Enter the input mode and replace characters on the screen with
+characters to be typed, as if the user pressed the @key{INSERT} key.
+@item [count]rc
+Replace @code{count} characters, starting at the cursor position, with
+@code{c}, then advance the cursor.
+@item [count]x
+Delete the current character.
+@item [count]X
+Delete the preceding character.
+@item [count].
+Repeat the previous text modification command.
+@item [count]~
+Invert the case of @code{count} characters, starting at the cursor
+position, then advance the cursor.
+@item [count]_
+Append the @code{count} word of the previous command to the line and
+enter the input mode. The last word is used if @code{count} is omitted.
+@item *
+Append a @code{*} to the current word and attemp file name completion.
+If no match is found, the bell is ringed. Otherwise, the
+word is replaced by the match and input mode is entered.
+@item \
+Perform command or file name completion.
+@end table
+
+@subheading Other Edit Commands
+
+@table @code
+@item [count]ymotion
+@item y[count]motion
+Yank (copy) all characters from the current character up to the
+character to which @code{motion} would move the cursor. Yanked characters
+are saved in a special buffer. The cursor position is not changed.
+
+@item yy
+Yank (copy) the current line.
+
+@item Y
+Yank (copy) the current line from the cursor position to the end
+of the line.
+
+@item U
+Undo all the text modifying commands performed on current line.
+
+@item [count]V
+Return the command:
+@example
+fc -e $@{VISUAL:-$@{EDITOR:-vi@}@} count
+@end example
+in the input buffer. If @code{count} is omitted, the current line is used.
+@item ^L
+Print a line feed and then print the current line. Works in @strong{control mode}.
+@item ^J
+Print a new line and then execute the current line. Works in both modes.
+@item ^M
+Return and execute the current line. Works in both modes.
+@item #
+Comment or uncomment the current line.
+@item @@letter
+Search for an alias by the name @code{letter}. If an alias of this name
+is found, insert its value on the input buffer.
+@item ^V
+Display the version of the shell.
+@end table
+
+
+
+
+@node Builtin Utilities
+@chapter Builtin Utilities
+@cindex Builtin Utilities
+
+The following simple commands are executed in the shell process, i.e.
+no subshell is invoked. Input and output redirection is allowed and
+affects the current shell. Except for @code{:}, @code{true}, @code{false},
+@code{echo}, @code{newgrp}, and @code{login}, all builtin utilities
+accept @code{--} to indicate the end of options and start of arguments.
+Unless otherwise stated, the @code{-h} option prints a short history and usage
+message, while the @code{-v} option prints the utility (i.e. the shell)'s version.
+
+@table @code
+@item : [arg ...]
+Expand parameters only.
+
+@item . name [arg ...]
+If @code{name} is a defined function, the function is executed in the
+current shell environment. If name refers to a file, the file is
+read and the commands are executed in the current shell environ-
+ment. If any arguments are specified, they become the positional
+parameters for the command. The exit status is the exit status
+of the last command executed.
+
+@item alias [-hv] [name[=value]] ...
+With no arguments, prints the list of aliases in the form of
+@code{name=value} on stdout. When one or more arguments are
+specified, an alias is defined for each @code{name} whose value is
+specified. For each @code{name} in the argument list for which no value
+is specified, the name and value of the alias is printed. The
+exit status is non-zero if a @code{name} is specified for which no
+alias is defined.
+
+@item bg [-hv] [job...]
+If job control is on (the @code{monitor} option is set), put each specified
+@code{job} in the background. If no @code{job} is specified, the current
+job is put in the background. See @xref{Jobs} for a description of the format of @code{job}.
+
+@item break [n]
+ Exit from the @code{n}-th enclosing @strong{for}, @strong{while}, @strong{until},
+or @strong{select} loop, if any. If @code{n} is not specified, it defaults to 1.
+
+@item bugreport
+Send bugreports to the shell's author(s).
+
+@item builtin [-hvsra] [name [args ...]]
+If @code{name} is not specified, a list of builtins is printed on
+stdout. @code{name} is the name of a shell builtin utility to invoke.
+@code{args} are the arguments to pass to the builtin utility. The @code{-s} option
+prints the special builtins, The @code{-r} option prints the regular builtins, and
+the @code{-a} option prints both.
+
+@item caller [n]
+Print the context of any active subroutine call. @code{-n} is a non-negative integer
+denoting one of the callframe in the current call stack. The current frame is 0.
+Each call to a function or dot script results in a new entry added to the call stack.
+
+@item cd [-h] [-nplv] [-L|-P] [directory]
+@item cd [-h] [-nplv] -
+In the first form @code{cd} changes the current directory to the given
+@code{directory}. If @code{directory} is a hyphen @code{-}, the directory is changed to the
+previous directory. If no @code{directory} is given, shell variable @code{$HOME} is
+used. Shell variable @code{$PWD} is set to the current directory. Shell
+variable @code{$CDPATH}, if set, gives the search path for the directory
+containing @code{directory}. It is composed of a colon-separated list of
+directory names. If @code{directory} begins with a @code{/}, @code{$CDPATH} is not used.
+@*
+
+Symbolic link names are treated literally when parsing directory
+names. This is what the @code{-P} option does (physical treatment of
+links). The @code{-L} option causes symbolic links to be resolved when
+determining the directory (logical treatment of links). If both
+options are supplied, the last instance of on the command line
+determines which option is used. Restricted shells cannot execute @code{cd}.
+@*
+
+The @code{-l}, @code{-n}, @code{-p}, and @code{-v} options have the same meaning as
+when used with the @code{dirs} builtin. They all imply @code{-p}.
+
+@item command [-hp] [arg ...]
+@item command [-hp] [-v|-V] name
+Without passing the @code{-v} or @code{-V} options, @code{command} executes @code{name} with
+@code{arg} as arguments. The @code{-p} option forces the use of a default path
+guaranteed to find all commands on the system. The @code{-v} option
+prints a description of @code{name} if used as a command name within
+the shell. The @code{-V} option prints a more verbose output.
+
+@item continue [n]
+Resume the next iteration of the @code{n}-th enclosing @strong{for}, @strong{while},
+@strong{until}, or @strong{select} loop. If @code{n} is not specified, it defaults to 1.
+
+@item coproc command [redirections]
+Execute @code{command} in a coprocess (subshell with pipe). @code{redirections} are
+optional file redirections. A pipe is opened between the shell and the coprocess
+before any redirections are performed. Shell variable @code{$COPROC_PID} contains
+the @code{PID} of the coprocess. Shell variable @code{$COPROC0} points to the
+reading end of the pipe (connected to command's stdout), while variable @code{$COPROC1}
+points to the writing end of the pipe (connected to command's stdin). You can feed
+output to the process by invoking:
+
+@example
+$ cmd >&p
+@end example
+
+Similarly, you can read the process's output by invoking:
+
+@example
+$ cmd <&p
+@end example
+
+@item declare [-hvfFgrxlut] [-p] [name=[value]...]
+Declare variables and give them attributes. @code{name} is the name of the variable
+to which an attribute or value is set, and @code{value} is the value to give to the
+variable. The @code{-f} option restricts output to shell functions. The @code{-F}
+option doesn't print function definitions. The @code{-g} option declares/modifies
+variables at the global scope. The @code{-l} option converts all characters in
+variable's value to lowercase on assignment. The @code{-p} option prints the
+attributes and values of each @code{name}. The @code{-r} option marks each
+@code{name} as readonly. The @code{-t} option gives functions the @code{trace}
+attribute (doesn't work on variables). The @code{-u} option converts all characters
+in variable's value to uppercase on assignment. The @code{-x} option marks each
+@code{name} for export.
+
+@item dirs [-hclpv] [+N | -N]
+@item dirs -S|-L [filename]
+Display the contents of the directory stack.
+The @code{+N} argument prints the N-th directory from the top (the left side
+of the printed list), counting from zero (which is the current working directory).
+The @code{-N} argument prints the N-th directory from the bottom (the right side
+of the printed list), counting from zero (which is the first dir pushed on the
+stack). @code{filename} is the file to save/load the directory stack to/from.
+The @code{-c} option clears the stack, i.e. removes all directories. The @code{-l}
+option prints full pathnames, it doesn't use ~ to indicate the home directory.
+The @code{-L} option loads the directory stack from the given filename. If no
+filename is supplied, uses @code{$DIRSFILE} or defaults to @file{~/.lshdirs}.
+The @code{-n} option wraps entries before they reach edge of the screen.
+The @code{-p} option prints each directory on a separate line. The @code{-S}
+option saves the directory stack to the given filename. If no filename is
+supplied, uses @code{$DIRSFILE} or defaults to @file{~/.lshdirs}. The @code{-v}
+option prints each directory with its index on a separate line.
+
+@item disown [-arsv] [-h] [job ...]
+Do not to send a @code{HUP} signal to each specified @code{job}, or to all
+active jobs if @code{job} is omitted, when a login shell exits.
+The @code{-a} option disown all jobs. The @code{-h} option doesn't remove jobs
+from the jobs table, only marks them as disowned. The @code{-r} option disowns
+only running jobs, while @code{-s} option disowns only stopped jobs.
+
+@item dump [-hv] [argument ...]
+Dumps memory values of the passed arguments.
+@code{argument} can be one of the following:
+@itemize
+@item @code{symtab} will print the contents of the local symbol table
+@item @code{vars} will print out the shell variable list (similar to @code{declare -p})
+@end itemize
+
+@item echo [-enE] [arg ...]
+Print each of the arguments separated by a space and terminated by a newline.
+The @code{-e} option allows escaped characters in @code{arg}s. The @code{-E}
+option doesn't allow escaped characters. The @code{-n} option suppresses
+newline echoing.
+
+@item enable [-ahnprsv] [name ...]
+Enables/disables shell builtins. @code{name} is the name of a shell builtin
+utility to enable or disable. The @code{-a} option prints a list of all builtins,
+enabled and disabled. The @code{-n} option disables each listed builtin. The @code{-p}
+option prints a list of enabled builtins. The @code{-r} option prints a list of
+enabled and disabled regular builtins. The @code{-s} option print a list of
+enabled and disabled special builtins.
+
+@item eval [arg ...]
+The arguments are read as input to the shell and the resulting
+commands are executed.
+
+@item exec [-cl] [-a arg0 ...] [arg ...]
+If one or more @code{arg} is specified, the command is executed in
+place of this shell without forking a new process. The @code{-c} option
+clears the environment before applying variable assignments
+associated with the @code{exec} invocation. The @code{-a} option causes @code{arg0},
+rather than @code{arg[0]}, to become the first argument for the new
+process. If @code{arg} is not specified, @code{exec} modifies the file
+descriptors of the shell, as indicated by the input/output redirection list.
+The @code{-l} option places a dash in front of @strong{argv[0]}, just as the
+@code{login} utility does.
+
+@item exit [n]
+Exit the shell with the exit status @code{n}. The value is the least
+significant 8 bits of @code{n}. If @code{n} is omitted, the exit status is
+that of the last command executed.
+
+@item export [-hvn] [-p] [name [=value] ] ...
+If @code{name} is not specified, the names and values of each variable
+with the @code{export} attribute are printed with the values quoted to
+allow reentry to the shell. The @code{-p} option causes the word
+@code{export} to be printed before each name. Otherwise, the specified
+names are marked for export to the environment of commands executed by the shell.
+The @code{-n} option removes the export attribute of the passed variable @code{name}s.
+
+@item false
+Return false result (non-zero exit status).
+
+@item fc [-hvr] [-e editor] [first [last]]
+@item fc -l [-hvnr] [first [last]]
+@item fc -s [-hv] [old=new] [first]
+In the first form, a range of commands from @code{first} to @code{last} is
+selected from the history list. @code{first} and @code{last} can be specified
+as numbers or strings. A string finds the most recent command
+starting with the given string. A negative number gives an offset,
+relative to the current command number. In the third form, @code{old=new}
+replaces the first occurence of @code{old} with @code{new}
+in the command. The @code{-e} option specifies the editor to use when editing
+commands, which is passed as the @code{editor} argument. @code{editor} is invoked
+on a temporary file containing the selected commands. If @code{editor} is not
+supplied, the value of @code{$FCEDIT} is used. If this is null or empty, the
+value of @code{$HISTEDIT} is used. If null or empty, the value of @code{$EDITOR} is
+used. Otherwise, the default editor (@code{/bin/ed}) is used. When
+editing finishes, the edited commands are executed. If @code{last} is
+not specified, it is set to @code{first}. If @code{first} is not specified,
+it defaults to the previous command for editing and -16 for
+listing. The @code{-l} option
+lists commands instead of invoking them. The @code{-n} option suppresses command
+numbers when listing. The @code{-r} option reverses the order of listed/edited
+commands. The @code{-s} option re-executes commands without invoking the editor.
+
+@item fg [-hv] [job ...]
+If job control is on (the @code{monitor} option is set), put each specified
+@code{job} in the foreground. If no job is specified, the current
+job is put in the foreground. See @xref{Jobs} for a
+description of the format of @code{job}.
+
+@item getopts optstring varname [arg ...]
+Check @code{arg} for legal options. If @code{arg} is omitted, positional
+parameters are used. An option argument can begin with a @code{+} or
+@code{-}. An option that does not begin with @code{+} or @code{-}, or
+the special argument @code{--}, ends the options list. Options beginning
+with @code{+} are only recognized when the @code{optstring} begins with a
+@code{+}. The @code{optstring} contains letters that @code{getopts} recognizes as
+valid options. If a letter is followed by @code{:}, that option is
+expected to have an argument. Options can be separated from
+their arguments by spaces. @code{getopts} places the next option letter
+in the variable @code{varname}. The option letter is preceded by a @code{+}
+when @code{arg} begins with a @code{+}. The index of the next @code{arg} is stored
+in the shell variable @code{$OPTIND}. The option argument, if any is
+found, is stored in @code{$OPTARG}. A leading @code{:} in @code{optstring} causes
+@code{getopts} to store the letter of an invalid option in @code{$OPTARG} and
+set the value of @code{varname} to @code{?} for an unknown option, and to
+@code{:} when a required option argument is missing. Otherwise,
+@code{getopts} prints an error message. The exit status is non-zero
+when options are finished. Options @code{:}, @code{+}, @code{-}, @code{?},
+@code{[}, and @code{]} are not allowed.
+
+@item glob [-eE] [args...]
+Echoes @code{args}, delimited by NULL characters.
+The @code{-e} option allows escaped characters in arguments. The @code{-E} option
+doesn't allow escaped characters in arguments. This utility doesn't recognize
+the @code{-n} option as does @code{echo}.
+
+@item hash [-hvld] [-p path] [-r] utility...
+@item hash -a
+Remembers/reports utility locations. @code{utility} is the name of a utility to
+search and add to the hashtable. The @code{-a} option forgets, then re-searches
+and re-hashes all utilities whose names are currently in the hashtable.
+The @code{-d} option forgets the location of each passed @code{utility}.
+The @code{-l} option prints the list of hashed utilities and their paths.
+The @code{-p} option performs utility search using @code{path} instead of
+the @code{$PATH} variable. The @code{-r} option forgets all previously
+remembered utility locations.
+
+@item help [-ds] [command]
+Shows help for builtin utilities and commands. The @code{-d} option prints a
+short description of each @code{command}. The @code{-s} option prints the
+usage or synopsis of each @code{command}.
+
+@item history [-hR] [n]
+@item history -c
+@item history -d offset
+@item history -d start-end
+@item history [-anrwSL] [filename]
+@item history -ps arg ...
+Prints command history. The @code{n} argument prints only the last @code{n} lines.
+The @code{-a} option appends the in-memory history list to @file{filename}.
+If @file{filename} is not supplied, the default history file is used. The @code{-c}
+option clears the history list. The @code{-d} option deletes the history entry at
+position @code{offset}. Negative offsets count from the end of the list; offset -1
+is the last command entered. The @code{-d} option deletes history entries between
+offsets @code{start} and @code{end}, which can be negative, as described above.
+The @code{-h} option prints history entries without leading numbers. The @code{-L}
+option is equivalent to @code{-r}. The @code{-n} option appends the entries from
+@file{filename} to the in-memory list. If @file{filename} is not supplied, the
+default history file is used. The @code{-p} option performs history substitution
+on @code{arg}s and prints the result on stdout. The @code{-r} option reads the
+history file and append the entries to the in-memory list. The @code{-R} option
+reverses the listing order (most recent entries are printed first). The @code{-s} option
+adds @code{arg}s to the end of the history list as one entry. The @code{-S} option
+is equivalent to @code{-w}. The @code{-w} option writes out the current in-memory
+list to @file{filename}. If @file{filename} is not supplied, the default history
+file is used.
+
+@item hup [command]
+Runs a command so that it can receive @code{SIGHUP} signal. Commands can override
+this by defining their own signal handlers.
+
+@item jobs [-hnrsv] [-l|-p] [job ...]
+@item jobs -x command [argument ...]
+In the first form, lists information about each @code{job}, or all active jobs if @code{job} is
+omitted. The @code{-l} option lists jobs' PIDs in addition to the normal
+information. The @code{-n} option only displays jobs that have
+stopped or exited since the last notification. The @code{-p} option
+lists only the process groups ids. The @code{-r} option reports only running jobs, while
+the @code{-s} option reports stopped jobs. See @xref{Jobs} for a
+description of the format of @code{job}.
+@*
+
+In the second form (with @code{-x}), replaces all occurences of @code{job}s
+in @code{command} and @code{argument}s with the process group ID of the
+respective job, then runs @code{command}, passing it the given @code{arguments}.
+
+@item kill [-s signame] job ...
+@item kill [-n signum] job ...
+@item kill -l|-L [sig ...]
+@item kill [-signame] job ...
+@item kill [-signum] job ...
+Send either the @code{TERM} signal or the specified signal to the given
+jobs or processes. Signals are either specified as numeric arguments
+to the @code{-n} option, or by symbolic names to the @code{-s} option,
+without the @code{SIG} prefix. The @code{-n} and @code{-s} options can be omitted
+and the signal number or name placed immediately after the @code{-}.
+See @xref{Jobs} for a description of the format of @code{job}. In
+the third form, if @code{sig} is not specified, signal names are
+listed. Otherwise, for each symbolic @code{sig}, the corresponding
+signal number is listed. For each numeric @code{sig}, the corresponding
+signal name is listed.
+
+@item let [arg ...]
+Evaluate each @code{arg} as an arithmetic expression. See
+@xref{Arithmetic expansion} for a description of arithmetic expression
+evaluation. The exit status is 0 if the value of the last
+expression is non-zero, 1 otherwise.
+
+@item local name[=word] ...
+Define local variable @code{name}, setting the local attribute to it and giving
+it the value @code{word}.
+
+@item logout [n]
+Exit a login shell, returning @code{n} as the exit status code.
+
+@item mailcheck [-hvq]
+Check for mail at specified intervals. The @code{-q} causes @code{mailcheck} not to
+output messages in case of error or no mail available.
+
+@item memusage arg...
+Show the shell's memory usage. Each @code{arg} shows the memory allocated for
+a different shell internal structure, which can be one of the following:
+
+@table @code
+@item aliases
+memory allocated for alias names and values
+@item cmdbuf, cmdbuffer
+memory allocated for the command line buffer
+@item dirstack
+memory allocated for the directory stack
+@item hash, hashtab
+memory allocated for the commands hashtable
+@item history
+memory allocated for the command line history table
+@item input
+memory allocated for the currently executing translation unit
+@item stack, symtabs
+memory allocated for the symbol table stack
+@item strbuf, strtab
+memory allocated for the internal strings buffer
+@item traps
+memory allocated for the signal traps
+@item vm
+memory usage of different segments (RSS, stack, data)
+@end table
+
+The @code{-l} option shows long output (i.e. prints more details).
+
+@item newgrp [-hv] [-l] [group]
+Create a new group and restart the shell in a new execution environment.
+@code{group} is the group name (or ID) to which the real and effective group
+IDs shall be set. The @code{-l} option changes the environment to a login environment.
+
+@item nice [+n] [command]
+@item nice [-n] [command]
+Run a command with the given priority. @code{n} can be positive or negative, specifying
+the nice priority to give to @code{command}, or the shell if no @code{command} is
+given (the plus sign can be omitted for positive nice values). On many systems, only
+@code{root} can pass negative nice values. @code{command} is the command to run under
+priority @code{n}, which must be an external command.
+
+@item nohup [command]
+Run a command, ignoring SIGHUP. As with @code{nice}, @code{command} must be an external command.
+
+@item notify [job ...]
+Notify immediately when jobs change status. @code{notify} is the job id of the job
+to mark for immediate notification. See @xref{Jobs} for a description of the format of @code{job}.
+
+@item popd [-chlnpsv] [+N | -N]
+Pop directories off the stack and @code{cd} to them. If @code{N} is positive, it removes
+the N-th directory, counting from 0 from the left. If it is negative, it removes the
+N-th directory, counting from 0 from the right. If called without arguments, @code{popd}
+removes the top directory from the stack and calls @code{cd} to change the current
+working directory to the new top directory (equivalent to @code{popd +0}.
+The @code{-c} option manipulates the stack without @code{cd}ing to the directory.
+The @code{-s} option suppresses the output the dirstack after popping off it.
+The @code{-l}, @code{-n}, @code{-v}, and @code{-p} options have the same meaning as for
+the @code{dirs} builtin.
+
+@item printenv [-hv0] [name ...]
+Print the names and values of environment variables identified by each @code{name}.
+The @code{-0} option terminates each entry with NULL instead of a newline character.
+
+@item pushd [-chlnpsv] [+N | -N | dir]
+Push directories on the stack and @code{cd} to them. If @code{N} is positive, it
+rotates the stack and bring the N-th directory, counting from 0 from the left, to
+the top of the stack. If it is negative, it rotates the stack and bring the N-th
+directory, counting from 0 from the right, to the top of the stack. If @code{dir}
+is supplied, it is pushed on the stack and @code{cd} is called to change the working
+directory to @code{dir}. If @code{dir} is dash @code{-}, this equals the previous
+working directory, as stored in the @code{$PWD} variable.
+The @code{-c} option manipulates the stack without @code{cd}ing to the directory.
+The @code{-s} option suppresses the output the dirstack after popping off it.
+The @code{-l}, @code{-n}, @code{-v}, and @code{-p} options have the same meaning as for
+the @code{dirs} builtin.
+@*
+
+If called without arguments, @code{pushd} exchanges the top two directories on the
+stack and calls @code{cd} to change the current working directory to the new top
+directory. If the @code{pushdtohome} extra option is set (by calling @code{setx -s pushdtohome}),
+@code{pushd} pushes the value of @code{$HOME} and @code{cd}'s to it instead of
+exchanging the top two directories. If the @code{dunique} extra option is set,
+@code{pushd} removes instances of @code{dir} from the stack before pushing it.
+If the @code{dextract} extra option is set, @code{pushd} extracts the N-th directory
+and pushes it on top of the stack.
+
+@item pwd [-hv] [-L|-P]
+Output the value of the current working directory. The @code{-L} option
+is the default option, which prints the logical name of the current
+working directory. If the @code{-P} option is specified, symbolic
+links are resolved. If both options are supplied, the last
+instance of @code{-L} or @code{-P} determines which option is used.
+
+@item read [-hv] [-rs] [-d delim] [-nN n] [-t timeout] [-u fd] [-p msg] [varname ...]
+Read a line and break it up into fields using @code{$IFS} characters as
+field separators. The escape character @code{\} removes the special
+meaning for the following character and for line continuation.
+The @code{-d} option causes read to continue reading input up to the
+first character of delim, rather than @code{\n}. The @code{-n} option causes
+at most @code{n} bytes to be read, rather than a complete line. The @code{-N}
+option causes exactly @code{n} bytes to be read, unless @code{EOF} has been
+reached, or the read timed out because of the @code{-t} option. The @code{-r}
+causes the @code{\} character to lose its special meaning as an
+escape character. The first field is assigned to the first @code{varname},
+the second field to the second @code{varname}, and so on. Extra
+fields are assigned to the last @code{varname}. If the @code{-s} option is
+supplied, input is saved as a command in the history list. The
+@code{-u} option specifies a one digit file descriptor to read input
+from. The @code{-t} option specifies timeout (in seconds) when reading
+from a terminal or pipe. If @code{varname} is omitted, @code{$REPLY} is used
+as the default variable name.
+The @code{-p} option prints the string @code{msg} before reading input.
+The exit status is 0 unless @code{EOF}
+is encountered or @code{read} timed out.
+
+@item readonly [-p] [name[=value]] ...
+If @code{name} is not specified, the names and values of readonly
+variables are printed with the values quoted to allow reinput to the
+shell. The @code{-p} option causes the word @code{readonly} to be inserted
+before each name. Otherwise, the specified names are marked as readonly.
+
+@item repeat [-hv] count command
+Repeat executing @code{command} for @code{count} times.
+
+@item return [n]
+Return from a shell function or script with the exit status @code{n}.
+The value returned is the least significant 8 bits of @code{n}. If @code{n} is
+omitted, the return status is that of the last command executed.
+If @code{return} is invoked while not in a function or script, it
+behaves in the same way as @code{exit}.
+
+@item set [-BCEGHTabdefhkmnoprstuvx] [-o [option]] ... [arg ...]
+@item set [+BCEGHTabdefhkmnoprstuvx] [+o [option]] ... [arg ...]
+Set or unset shell options. This utility supports the following options:
+
+@table @strong
+@item -a
+All subsequent variables that are defined are marked for export.
+@item -b
+Print job completion messages as soon as a background job changes state.
+@item -B
+Enable brace pattern field generation. This is set by default.
+@item -C
+Prevent output redirection operators from truncating existing
+files. Files created are opened with the @code{O_EXCL} mode. @code{>|} must be
+used in order to truncate a file when this option is set.
+@item -d
+Dump the parser's Abstract Syntax Tree (AST) before executing commands.
+@item -e
+If a command exits with non-zero exit status, execute the @code{ERR}
+trap, if set, and exit the shell.
+@item -E
+@code{ERR} traps are inherited by shell functions, command substitutions and subshells.
+@item -f
+Disable file name generation.
+@item -h
+Hash all command names on first encounter.
+@item -H
+Enable history substitution.
+@item -k
+All variable assignments are placed in the environment for a
+command, not just those that precede the command name.
+@item -m
+Turn on job control. Background jobs are run in separate process
+groups. Exit status of background jobs is reported in a message.
+This option is set automatically for interactive shells.
+@item -n
+Read commands but don't execute them. Ignored by interactive shells.
+@item -o
+If no option is supplied, print the list of options and their
+current settings to stdout. When invoked as @code{+o}, options are
+printed in a format that can be reinput to the shell to restore
+the settings.
+@*
+
+The following options can be passed to @code{-o}:
+@itemize
+@item @emph{allexport}: Same as -a.
+@item @emph{braceexpand}: Same as -B.
+@item @emph{errexit}: Same as -e.
+@item @emph{errtrace}: Same as -E.
+@item @emph{functrace}: Same as -T.
+@item @emph{hashall}: Same as -h.
+@item @emph{hashexpand}: Same as -H.
+@item @emph{history}: Same as -w.
+@item @emph{ignoreeof}: The shell does not exit on EOF.
+@item @emph{keyword}: Same as -k.
+@item @emph{monitor}: Same as -m.
+@item @emph{noclobber}: Same as -C.
+@item @emph{noexec}: Same as -n.
+@item @emph{noglob}: Same as -f.
+@item @emph{nolog}: Do not save function definitions in the history file.
+@item @emph{notify}: Same as -b.
+@item @emph{nounset}: Same as -u.
+@item @emph{onecmd}: Same as -t.
+@item @emph{pipefail}: Pipeline exit status is that of the rightmost command with non-zero exit status.
+@item @emph{privileged}: Same as -p.
+@item @emph{verbose}: Same as -v.
+@item @emph{vi}: Enter vi insert mode until ESC (033) is pressed, where control mode is entered.
+@item @emph{xtrace}: Same as -x.
+@end itemize
+
+If no option name is supplied, the current options settings are printed.
+
+@item -p
+Enter the privileged mode. Disable processing of the @file{$HOME/.profile}
+file. This mode is set if the effective uid (or gid) is
+not equal to the real uid (or gid). Turning this option off
+causes the effective uid and gid to be set to the real uid and gid.
+@item -r
+Enable the restricted shell. This option cannot be unset once set.
+@item -t
+Exit after reading and executing one command.
+@item -T
+@code{DEBUG} and @code{RETURN} traps are inherited by shell functions, command substitutions
+and subshells.
+@item -u
+Treat unset parameters as error when performing variable substitution.
+@item -v
+Print shell input lines as they are read.
+@item -x
+Print the command line as commands are executed.
+@item --
+Do not change any of the options. Useful when setting @code{$1} to a
+value that begins with @code{-}. If no arguments follow this option,
+positional parameters are unset.
+@end table
+
+Using @code{+} instead of @code{-} causes options to be turned off. These
+options can be passed to the shell on invocation. The current
+set of options can be viewed by reading the shell variable @code{$-}.
+The remaining arguments are treated as positional parameters and
+assigned to @code{$1}, @code{$2}, and so on. If no arguments are specified,
+the names and values of all shell variables are printed on stdout.
+
+@item setenv [-hv] [name[=value] ...]
+Set the value of environment variable @code{name} to @code{value}, or NULL if
+no @code{value} is given. This utility sets both the environment variable
+and the shell variable with the same @code{name}. If no arguments are given,
+it prints the names and values of all the set environment variables.
+
+@item setx [-hvpsuqo] option
+Set and unset optional (extra) shell options. @code{option} can be any of the
+following (the name inside brackets is the shell from which the option was
+taken/based; @strong{int} means interactive shell, while @strong{non-int}
+means non-interactive shell):
+
+@table @code
+@item addsuffix
+append space to file- and slash to dir-names on tab completion (tcsh)
+@item autocd
+dirs passed as single-word commands are passed to @code{cd} (bash int)
+@item cdable_vars
+@code{cd} arguments can be variable names (bash)
+@item cdable-vars
+same as the above
+@item checkhash
+for hashed commands, check the file exists before exec'ing (bash)
+@item checkjobs
+list stopped/running jobs and warn user before exit (bash int)
+@item checkwinsize
+check window size after external cmds, updating @code{$LINES} and @code{$COLUMNS} (bash)
+@item clearscreen
+clear the screen on shell's startup
+@item cmdhist
+save multi-line command in a single history entry (bash)
+@item complete_fullquote
+quote metacharacters in filenames during completion (bash)
+@item complete-fullquote
+same as the above
+@item dextract
+@code{pushd} extracts the given dir instead of rotating the stack (tcsh)
+@item dotglob
+files starting with @code{.} are included in filename expansion (bash)
+@item dunique
+@code{pushd} removes similar entries before pushing dir on the stack (tcsh)
+@item execfail
+failing to @code{exec} a file doesn't exit the shell (bash non-int)
+@item expand_aliases
+perform alias expansion (bash)
+@item expand-aliases
+same as the above
+@item extglob
+enable ksh-like extended pattern matching (bash)
+@item failglob
+failing to match filenames to patterns result in expansion error (bash)
+@item force_fignore
+@code{$FIGNORE} determines which words to ignore on word expansion (bash)
+@item force-fignore
+same as the above
+@item globasciiranges
+bracket pattern matching expressions use the C locale (bash)
+@item histappend
+append (don't overwrite) the history list to @code{$HISTFILE} (bash)
+@item histreedit
+enable the user to re-redit a failed history substitution (bash int)
+@item histverify
+reload (instead of directly execute) history substitution results (bash int)
+@item hostcomplete
+perform hostname completion for words containing @code{@@} (bash int)
+@item huponexit
+send @code{SIGHUP} to all jobs on exit (bash int login)
+@item inherit_errexit
+command substitution subshells inherit the @code{-e} option (bash)
+@item inherit-errexit
+same as the above
+@item interactive_comments
+recognize @code{#} as the beginning of a comment (bash int)
+@item interactive-comments
+same as the above
+@item lastpipe
+last cmd of foreground pipeline is run in the current shell (bash)
+@item lithist
+save multi-line commands with embedded newlines (bash with 'cmdhist' on)
+@item listjobs
+list jobs when a job changes status (tcsh)
+@item listjobs_long
+list jobs (detailed) when a job changes status (tcsh)
+@item listjobs-long
+same as the above
+@item localvar_inherit
+local vars inherit value/attribs from previous scopes (bash)
+@item localvar-inherit
+same as the above
+@item localvar_unset
+allow unsetting local vars in previous scopes (bash)
+@item localvar-unset
+same as the above
+@item login_shell
+indicates a login shell (cannot be changed) (bash)
+@item login-shell
+same as the above
+@item mailwarn
+warn about mail files that have already been read (bash)
+@item nocaseglob
+perform case-insensitive filename expansion (bash)
+@item nocasematch
+perform case-insensitive pattern matching (bash)
+@item nullglob
+patterns expanding to 0 filenames expand to "" (bash)
+@item printexitvalue
+output non-zero exit status for external commands (tcsh)
+@item progcomp
+enable programmable completion (not yet implemented) (bash)
+@item progcomp_alias
+allow alias expansion in completions (not yet implemented) (bash)
+@item promptvars
+perform word expansion on prompt strings (bash)
+@item pushdtohome
+pushd without arguments pushed @code{~} on the stack (tcsh)
+@item recognize_only_executables
+only executables are recognized in command completion (tcsh)
+@item recognize-only-executables
+same as the above
+@item restricted_shell
+indicates a restricted shell (cannot be changed) (bash)
+@item restricted-shell
+same as the above
+@item savedirs
+save the directory stack when login shell exits (tcsh)
+@item savehist
+save the history list when shell exits (tcsh)
+@item shift_verbose
+allow the shift builtin to output error messages (bash)
+@item shift-verbose
+same as the above
+@item sourcepath
+the source builtin uses @code{$PATH} to find files (bash)
+@item usercomplete
+perform hostname completion for words starting with @code{~}
+@item xpg_echo
+echo expands backslash escape sequences by default (bash)
+@item xpg-echo
+same as the above
+@end table
+
+The @code{-o} option restricts options to those recognized by @code{set -o}.
+The @code{-p} option prints output that can be re-input to the shell.
+The @code{-q} option suppresses normal output. the return status tells whether options are set or not.
+The @code{-s} option sets (enables) each passed option.
+The @code{-u} option unsets (disables) each passed option.
+
+@item shift [n]
+Positional parameters from @code{$n+1} onwards are renamed @code{$1 ...}. The
+default value if @code{n} is omitted is 1. @code{n} should be a non-negative
+number less than or equal to @code{$#}.
+
+@item source [-hv] file
+Execute commands in the current environment. Commands are read from @code{file}
+and then executed in the current execution environment. This command is the
+same as @code{dot} or @code{.}, except when the @code{-h} option is given, where
+@code{file} is read and the commands are added to the history list, which is
+identical to invoking @code{history -L}.
+
+@item stop [-hv] job ...
+Stop each background job specified by @code{job}.
+See @xref{Jobs} for a description of the format of @code{job}.
+
+@item suspend [-fhv]
+Suspend execution of the shell. The @code{-f} option forces the suspend, even
+if the shell is a login shell.
+
+@item test -option expression
+Test file attributes and compare strings. For the list of options and
+their meanings, see @xref{Conditional Expressions}.
+
+@item times
+Write process times.
+
+@comment @item time command
+@comment Write execution times for @code{command}.
+
+@item trap [-hvlp] [action] [sig] ...
+The @code{-p} option causes the trap action associated with each specified
+trap to be printed. Otherwise, @code{action} is processed as if
+passed to @code{eval} when the shell receives the signal @code{sig}, which can
+be a signal number or a symbolic name. Signals ingored on shell
+startup cannot be trapped or reset. If @code{action} is omitted and the
+first @code{sig} is a number, or if @code{action} is a hyphen @code{-}, traps for
+each @code{sig} are reset to their original values. If @code{action} is a null
+string, the signal is ignored by the shell and its children. If
+@code{sig} is @code{ERR}, action is executed whenever a command returns non-
+zero exit status. If sig is @code{DEBUG}, action is executed before
+each command is executed. If sig is @code{0} or @code{EXIT}, @code{action}
+is executed on exit from the shell. If no arguments are supplied, @code{trap}
+prints the traps associated with each signal number.
+The @code{-l} option lists all conditions and their signal numbers.
+The @code{-p} option prints the trap actions associated with each @code{sig}.
+
+@item true
+Return true result (zero exit status).
+
+@item type command ...
+Write a description of @code{command} type.
+
+@item ulimit [-h] [-acdflmnpstuvHS] [limit]
+Set or display resource limits. The limit for a specified
+resource is set when @code{limit} is specified. The value of @code{limit} can
+be numeric, or one of the special values @code{unlimited}, @code{soft} or
+@code{hard}. When more than one resource is specified, the limit name
+and its unit are printed before printing the limit's value. If
+no option is specified, @code{-f} is assumed.
+@*
+
+The following are the available resource limits:
+
+@table @strong
+@item -H
+Set or display the hard limit for the specified resource.
+@item -S
+Set or display the soft limit for the specified resource.
+@item -a
+List all the current resource limits.
+@item -c
+The size of core dumps (512-byte blocks).
+@item -d
+The size of the data segment (Kbytes).
+@item -f
+The max size of files written by the current process (512-byte blocks).
+@item -l
+The max size of memory a process may lock.
+@item -m
+The the size of physical memory (Kbytes).
+@item -n
+The number of file descriptors.
+@item -p
+The size of pipe buffers (512-byte blocks).
+@item -s
+The the size of the stack (Kbytes).
+@item -t
+The number of CPU seconds to be used by each process.
+@item -v
+The size of virtual memory (Kbytes).
+@end table
+
+@item umask [-hvp] [-S] [mask]
+The file creation mask (umask) is set to @code{mask}, which can be
+either an octal number or a symbolic value. If a symbolic value
+is specified, the new umask is the complement of the result of
+applying the given @code{mask} to the complement of the previous umask.
+If @code{mask} is omitted, the current value of umask is printed. The
+@code{-S} option prints umask as a symbolic value. Otherwise, umask is
+printed as an octal number.
+The @code{-p} option prints output that can be reused as shell input.
+
+@item unalias [-a] name
+Removed the aliases specified by the list of @code{name}s from the
+alias list. The @code{-a} option causes all the aliases to be removed.
+
+@item unlimit [-hHfSv] [limit ...]
+@item unlimit [-HS] -a
+Remove limits on system resource @code{limit}, which can be one of the following:
+
+@table @code
+@item core    , -c
+the maximum size of core files created
+@item data    , -d
+the maximum size of a process's data segment
+@item nice    , -e
+the maximum nice value (scheduling priority)
+@item file    , -f
+the maximum size of files written by a process
+@item signal  , -i
+the maximum number of pending signals
+@item mlock   , -l
+the maximum size of memory a process may lock
+@item rss     , -m
+the maximum resident set size (RSS)
+@item fd      , -n
+the maximum number of open file descriptors
+@item buffer  , -p
+the pipe buffer size in kbytes
+@item message , -q
+the maximum number of kbytes in POSIX message queues
+@item rtprio  , -r
+the maximum real-time priority
+@item stack   , -s
+the maximum stack size
+@item cputime , -t
+the maximum amount of cpu time (seconds)
+@item userproc, -u
+the maximum number of user processes
+@item virtmem , -v
+the size of virtual memory
+@item flock   , -x
+the maximum number of file locks
+@item all     , -a
+all the above
+@end table
+
+Options and limit names must be passed separately. To remove all hard limits, invoke
+either of the following commands:
+
+@example
+unlimit -H -a
+unlimit -H all
+@end example
+
+The @code{-a} option removes limits on all resources.
+The @code{-f} option ignores errors.
+The @code{-H} option removes hard limits (only root can do this).
+The @code{-S} option removes soft limits (the default).
+
+@item unsetenv [-hv] [name ...]
+Unset environment variable values. This utility unsets both the environment
+variable and the shell variable with the same @code{name}. If no arguments
+are given, nothing is done.
+
+@item unset [-fv] varname
+Unset the variables specified by the list of @code{varname}s. Readonly
+variables cannot be unset. If the @code{-f} option is supplied, the
+names are treated as function names. If the @code{-v} option is supplied,
+the names are treated as variable names. The default option is @code{-v}.
+
+@item wait [-hfnv] [job ...]
+Wait for the specified job or process and report its termination
+status. If @code{job} is not specified, all active child processes are
+waited for. The exit status is that of the last process waited
+for if job is specified, otherwise it is zero. See @xref{Jobs} for
+a description of the format of @code{job}.
+@*
+
+The @code{-f} option forces jobs/processes to exit.
+The @code{-n} option waits for any job or process.
+
+@item whence [-afhpv] name ...
+For each @code{name}, indicate how it would be interpreted if it was
+used as a command to the shell. The @code{-v} option produces a more
+verbose output. The @code{-f} option doesn't search for functions. The
+@code{-p} option does a path search for each @code{name} even if it was an
+alias, a function, or a reserved word. The @code{-a} option is similar
+to @code{-v}, but causes all interpretations of the specified @code{name} to
+be printed.
+@end table
+
+
+
+@node GNU Free Documentation License
+@appendix GNU Free Documentation License
+
+@include fdl.texi
+
+@node Index
+@unnumbered Index
+
+@printindex cp
+
+@bye
