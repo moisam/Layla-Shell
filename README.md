@@ -18,7 +18,7 @@ are all implemented and behave in a way that is conforming to the POSIX
 standard. Pattern matching and pathname expansion relies on external tools,
 and thus might not behave exactly as specified in the POSIX standard. The
 shell grammar has been extended to accommodate some of the widely used non-
-POSIX words, such as the function and [[ keywords and the (( )) arithmetic
+POSIX words, such as the `function` and `[[` keywords and the `(( ))` arithmetic
 expansion operator. In all of these situations, we followed ksh behaviour,
 as ksh is the "model" POSIX shell, the one upon which the Shell & Utilities
 volume was modeled in the first place. But ksh is not the only shell out
@@ -91,7 +91,7 @@ $ lsh
 ```
 
 # Help
-For more information, please read the manpage and info page in the docs/
+For more information, please read the manpage and info page in the `docs/`
 directory.
 
 Thanks!
