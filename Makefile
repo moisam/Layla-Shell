@@ -147,12 +147,12 @@ uninstall-doc:
 
 install-strip: install
 
-install: all install-man install-doc
+install: install-man install-doc
 	@echo Installing $(pkgname)
 	@cp $(BUILDDIR)/$(TARGET) $(bindir)/$(TARGET)
-	@chmod +rx $(bindir)/$(TARGET)
-	@echo "Removing build directory"
-	@rm -rf $(BUILDDIR)
+	@chmod a+rx $(bindir)/$(TARGET)
+# @echo "Removing build directory"
+# @rm -rf $(BUILDDIR)
 	@echo "*******************************************"
 	@echo "$(pkgname) installed as $(bindir)/$(TARGET)"
 	@echo "To run now, invoke: $(TARGET)"
