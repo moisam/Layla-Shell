@@ -1,1 +1,2898 @@
+.\" Manpage for lsh, the Layla shell.
+.\" Contact mohammed_isam1984@yahoo.com for feedback/suggestions.
+.TH lsh 1 "JUNE 2019" "1.0" "Layla shell man page"
+.SH NAME
+lsh \- the Layla shell
+.SH SYNOPSIS
+.B lsh
+[\fB\-abBCdeEfghiklLmnpqrtTuvwxy\fR] [\fB\-o\fR \fIopt\fR] [\fB\-O\fR \fIextopt\fR] [\fR\fIarg\fR ...]
+.br
+.B lsh
+[\fB\-abBCdeEfghiklLmnpqrtTuvwxy\fR] [\fB\-o\fR \fIopt\fR] [\fB\-O\fR \fIextopt\fR] \fB-c\fR \fIstring\fR [\fIarg\fR ...]
+.br
+.B lsh
+[\fB\-abBCdeEfghiklLmnpqrtTuvwxy\fR] [\fB\-o\fR \fIopt\fR] [\fB\-O\fR \fIextopt\fR] [\fB\-is\fR] [\fIarg\fR ...]
+.SH DESCRIPTION
+Layla shell is a POSIX-compliant GNU/Linux shell. It aims to implement the
+full functionality specified in the POSIX Shell & Utilities volume. This
+volume describes the Shell Command Language, the general terminal interface,
+and the builtin utilities of compliant shells. The full POSIX standard is
+freely available from The Open Group's website at:
+.PP
+\fIhttps://pubs.opengroup.org/onlinepubs/9699919799.2018edition/\fR
+.PP
+Layla shell implements most of the POSIX-defined functionality. Specifically,
+quoting, token recognition, words expansions, I/O redirection, reponses to
+error conditions, the shell command language, the standard shell execution
+environment, signal handling, and the general and special builtin utilities
+are all implemented and behave in a way that is conforming to the POSIX
+standard. Pattern matching and pathname expansion relies on external tools,
+and thus might not behave exactly as specified in the POSIX standard. The
+shell grammar has been extended to accommodate some of the widely used non-
+POSIX words, such as the function and [[ keywords and the (( )) arithmetic
+expansion operator. In all of these situations, we followed ksh behaviour,
+as ksh is the "model" POSIX shell, the one upon which the Shell & Utilities
+volume was modeled in the first place. But ksh is not the only shell out
+there. This is why we included features from other shells, most notably bash,
+the most widely used shell nowadays.
+.PP
+To better understand the inner workings of this (as well as any other POSIX-
+compliant shell), it would be better if you got a copy of the Linux Shell
+Internals book, published by No Starch Press. This shell and the book has been
+developed hand-in-hand. The book helps to explain the code of this shell and
+provide a walk-through for newcomers. Although the code is extensively
+commented, a lot of theoretical ground has covered in the book, not in the
+source code. If you really want to understand how and why Unix/Linux shells
+behave in the context of POSIX, I honestly advise you to get a copy of the
+book.
+.PP
+There is still a long way to go with testing, bug-fixing and improving Layla
+shell, and your feedback is more than welcome in this regard. If you have a
+bug report, or you want to suggest adding some feature or fixing something
+with the shell, feel free to email me directly at my email address, the one
+you will find in the beginning of this file. If you have any bugfixes, patches
+or feature improvements you want to add to the code, feel free to send me your
+code at the email address above, or through the Linux Shell Internals
+repository at GitHub:
+.PP
+\fIhttps://github.com/moisam/Linux-Shell-Internals-book/\fR
+.br
+.SH OPTIONS
+.TP
+.BR \-\-\fR
+End of options.
+.TP
+.BR \-\-help\fR
+Print command line help and exit.
+.TP
+.BR \-\-init-file ", " \-\-rcfile\fR
+Specify the startup script file to read instead of the default \fI~/.lshrc\fR.
+.TP
+.BR \-\-login ", " \-l\fR
+Start a login shell (as if called by the login utility).
+.TP
+.BR \-\-noprofile\fR
+Do not read login startup scripts \fI/etc/profile\fR and \fI~/.profile\fR.
+.TP
+.BR \-\-norc\fR
+Do not read the startup script files \fI/etc/lshrc\fR and \fI~/.lshrc\fR.
+.TP
+.BR \-\-restricted\fR
+Start the shell in the restricted mode.
+.TP
+.BR \-\-verbose\fR
+Turn on the \fB-v\fR option, so commands are printed as they are read.
+.TP
+.BR --version\fR
+Display shell version and exit.
+.TP
+.BR \-o " "\fIopt\fR ", " +o " "\fIopt\fR
+Turn on '-' or off '+' shell options, as if calling the \fBset\fR builtin utility.
+.TP
+.BR \-O " "\fIextopt\fR ", " +O " "\fIextopt\fR
+Turn on '-' or off '+' extended shell options, as if calling the \fIsetx\fR (or the \fIshopt\fR)
+builtin utility.
+.SH INSTALLATION
+.PP
+.B Package dependencies:
+.PP
+Layla shell has very few external dependencies, in order to ease the process
+of compiling and installing it. You only need to have the GNU C library
+installed, in addition to the GNU Compiler Collection (GCC) or the Clang/LLVM
+compiler.
+.PP
+If you are using any GNU/Linux distro, it would be better if you checked your
+distro's official repositories, as these tools are installed by default on
+most systems. If, by a sore chance, you needed to manually download and
+install them, here are the links:
+.br
+- GNU C Library: https://www.gnu.org/software/libc/
+.br
+- GCC: https://gcc.gnu.org/
+.br
+- LLVM: http://releases.llvm.org/download.html
+.PP
+.B How to compile and install:
+.PP
+If you downloaded the shell as a source tarball, navigate to the directory
+where you downloaded the tarball:
+.PP
+.nf
+.RS
+$ cd ~/Downloads
+.RE
+.fi
+.PP
+then extract the archive and enter the extracted directory:
+.PP
+.nf
+.RS
+$ tar xvf lsh-1.0
+.br
+$ cd lsh-1.0/
+.RE
+.fi
+.PP
+then run:
+.PP
+.nf
+.RS
+$ make && sudo make install
+.RE
+.fi
+.PP
+and that's it! Now you can run the shell by invoking:
+.PP
+.nf
+.RS
+$ lsh
+.RE
+.fi
+.SH COMMANDS
+.PP
+Commands can be either simple or compound commands, and can be grouped
+together to form pipelines and lists. Every command that executes returns
+an exit status to the shell. An exit status of zero is considered success
+(or true, when used as a value for logical testing). A non-zero exit
+status is considered failure (or false).
+.PP
+A simple command is a list of variable assignments and words separated by
+whitespace. The first word usually specifies the name of the command to be
+executed, the remaining words are word-expanded and passed as arguments to
+the command. The command name is passed as argument number 0. If the command
+exits normally, the exit status is 0-128. If it terminates abnormally, the
+exit status is 128+signum (similar to bash, but not ksh). The name of the
+signal can be obtained by passing the \-l option to the kill builtin utility.
+.PP
+A pipeline is a sequence of one or more commands separated by the pipe
+operator '|'. The standard output (stdout) of each command except the last is
+connected by a pipe to the standard input (stdin) of the next command. Each
+command is run in a separate process. The shell waits for all commands to
+terminate. The exit status of a pipeline is the exit status of the last
+command unless the pipefail '-l' option is enabled, in which case it is the
+exit status of the rightmost command with non-zero exit status. Each pipeline
+can be preceded by the bang reserved word '!'. This causes the exit status of
+the pipeline to be inverted, i.e. an exit status of zero becomes 1, otherwise
+it becomes zero.
+.PP
+A list is a sequence of one or more pipelines separated by ';', '&', '|&', '&&',
+or '|'. The ';' causes sequential (foreground) execution of the
+preceding pipeline. The shell waits for foreground pipelines to finish
+execution. The '&' causes asynchronous (background) execution of the preceding
+pipeline. The shell does not wait for background pipelines to finish execution.
+The '|&' causes asynchronous execution of the preceding pipeline, redirecting
+both stdout and stderr to the pipe. This is similar to bash behavior, while ksh
+uses this operator to establish a two-way pipe between the command and the
+parent shell. The symbols '&&' and '||' cause the list following it to be
+executed only if the preceding pipeline returns a zero or non-zero value,
+respectively. Semicolons ';' can be substituted by newlines in lists.
+.PP
+Compound commands include \fBfor\fR, \fBselect\fR, \fBuntil\fR and \fBwhile\fR
+loops; \fBcase\fR and \fBif\fR conditionals; subshells and brace groups. The
+exit status of a compound command is that of the last simple command executed
+in the compound. All loops conform to the POSIX standard, except when it says
+otherwise.
+.PP
+.B for name [ in word ... ]; do list; done
+.PP
+Each time the \fBfor\fR loop is executed, \fBname\fR is set to the next word
+taken from the \fBword\fR list. If the word list is omitted, the for loop
+behaves as if \fBin "$@"\fR was provided (which loops on positional parameters,
+starting from 1). The loop exits when there are no more words in the list.
+.PP
+.B (( [expr1] ; [expr2] ; [expr3] )); do list; done
+.PP
+The arithmetic expression \fBexpr1\fR is evaluated. Arithmetic expression
+\fBexpr2\fR is then evaluated repeatedly until it evaluates to zero. Every
+time \fBexpr2\fR evaluates to non-zero, \fBlist\fR is executed and arithmetic
+expression \fBexpr3\fR is evaluated. If any expression is omitted, it behaves
+as if it evaluated to 1. This loop is a non-POSIX extension.
+.PP
+.B select name [ in word ... ]; do list; done
+.PP
+The \fBselect\fR loop prints the set of \fBword\fRs on stderr, each preceded
+by its numeric index. If the list of \fBword\fRs is omitted, the loop behaves
+as if \fBin "$@"\fR was provided (which loops on positional parameters,
+starting from 1). The \fBPS3\fR prompt is printed and a single line is read
+from stdin. If the read line consists of the number of one of the listed words,
+the value of variable \fBname\fR is set to the \fBword\fR corresponding to this
+number. If the read line is empty, the selection list is printed again. In all
+other cases, variable \fBname\fR is set to null. The contents of the read line
+is saved in the shell variable \fB$REPLY\fR. The list is executed repeatedly
+until a break or EOF is encountered. If the \fB$REPLY\fR variable is set to
+null as a side effect of executing \fBlist\fR, the selection list is printed
+again before displaying the PS3 prompt and waiting for the next selection. This
+loop is a non-POSIX extension used by bash and ksh.
+.PP
+.B case word in [ [(] pattern [ | pattern ] ... ) list ;; ] ... esac
+.PP
+The \fBcase\fR conditional executes the \fBlist\fR associated with the first
+\fBpattern\fR that matches the given \fBword\fR. The form of the patterns is
+the same as that used for file name generation (i.e. can contain the wildcards
+*, ? and []). The ';;' operator causes execution of the \fBcase\fR to terminate.
+If ';&' is used instead, the next subsequent list, if any, is executed. If ';;&'
+is used, the shell tries to match and execute another \fBcase\fR in the
+list. Both ';&' and ';;&' are non-POSIX extensions used by shells like ksh and
+bash.
+.PP
+.B if list1; then cmd-list1 [; elif list2; then cmd-list2 ] ... 
+.B [; else cmd-list3 ]; fi
+.PP
+\fBlist1\fR is executed and if it returns zero exit status, \fBcmd-list1\fR is
+executed. Otherwise, \fBlist2\fR is executed and if its value is zero,
+\fBcmd-list2\fR is executed. If all \fBelif\fR lists fail, the \fBelse\fR's
+\fBcmd-list3\fR is executed. If \fBlist1\fR has non-zero exit status and there
+is no \fBelse\fR clause, the \fBif\fR command returns zero exit status.
+.PP
+.B while conditional-list; do cmd-list; done
+.br
+.B until conditional-list; do cmd-list; done
+.PP
+The \fBwhile\fR loop repeatedly executes the \fBconditional-list\fR and if the
+exit status of the last command in the list is zero, it executes \fBcmd-list\fR,
+otherwise the loop terminates. If no commands are executed from the
+\fBcmd-list\fR, the \fBwhile\fR loop returns a zero exit status. \fBuntil\fR
+can be used instead of \fBwhile\fR to negate the loop termination test (i.e.
+execute until \fBconditional-list\fR has zero exit status).
+.PP
+.B (( expression ))
+.PP
+\fBexpression\fR is evaluated as an arithmetic expression. If the value is
+non-zero, the exit status is 0. Otherwise the exit status is 1. This is a non-
+POSIX extension.
+.PP
+.B ( list; )
+.PP
+Execute \fBlist\fR in a separate environment, i.e. a subshell. If two adjacent
+open parentheses are needed (for nesting subshells), a space must be inserted
+between the two open parentheses to avoid evaluation as an arithmetic
+expression. '{' and '}' are reserved words; they must occur at the beginning
+of a line (after a newline character) or after a ';' to be recognized.
+.PP
+.B [[ expression ]]
+.PP
+Evaluate \fBexpression\fR and return a zero exit status if \fBexpression\fR
+evalues to true (zero exit status). See \fIConditional Expressions\fR for a
+description of what \fBexpression\fR can be.
+.PP
+.B function funcname { list ; }
+.br
+.B funcname () { list ; }
+.PP
+Define a function named \fIfuncname\fR. The body of the function is the list
+of commands between '{' and '}'. The body is executed when the function is
+called, not when its defined. The exit status of the function definition
+command is zero, unless an error occurs in adding the function to the symbol
+table. The exit status of a function call is that of the last command executed
+in the function, or the value passed to the \fBreturn\fR builtin. The first
+syntax using the \fBfunction\fR keyword is a non-POSIX extension used by bash
+and ksh.
+.PP
+.B time [ pipeline ]
+.PP
+If \fBpipeline\fR is omitted, the \fIuser\fR and \fIsystem\fR time for the
+current shell and completed child processes is printed on stderr. Otherwise,
+the \fBpipeline\fR is executed and the elapsed \fIreal\fR time, as well as the
+\fIuser\fR and \fIsystem\fR times are printed on stderr. The \fB$TIMEFORMAT\fR
+variable controls how the timing information should be displayed (See the
+\fIShell Variables\fR section for a description of \fB$TIMEFORMAT\fR).
+.SH RESERVED WORDS
+.PP
+The following reserved words are recognized as reserved only when they are the
+first unquoted word of a command:
+.PP
+.nf
+.RS
+case
+.br
+do
+.br
+done
+.br
+else
+.br
+elif
+.br
+esac
+.br
+for
+.br
+fi
+.br
+function
+.br
+if
+.br
+select
+.br
+then
+.br
+until
+.br
+while
+.br
+{ }
+.br
+!
+.RE
+.fi
+.PP
+All reserved words (or keywords) are defined by POSIX, except \fBfunction\fR
+and \fBselect\fR.
+.SH VARIABLE ASSIGNMENTS
+.PP
+Simple commands can start with one or more variable assignments. Variable
+assignments occurring after command names are recognized as such if the
+\fB\keyword\fR '\fB\-k\fR' option is set. Assignments can also be passed as
+arguments to the \fBexport\fR or \fBreadonly\fR special builtin utilities.
+The syntax for an assignment takes the form of:
+.PP
+.B varname=value
+.br
+No space is permitted between \fBvarname\fR and the '=', or between the '='
+and \fBvalue\fR.
+.br
+Layla shell currently does not support the '+=' operator for variable
+assignents.
+.SH COMMENTS
+.PP
+The '#' character causes all the following characters up to the next newline
+character to be commented, or ignored. Interactive shells recognize comment
+characters when the extended option \fBinteractive-comments\fR (or
+\fBinteractive_comments\fR) is set by calling the \fBsetx\fR builtin (which
+behaves similar to bash's \fBshopt\fR).
+.SH ALIASING
+.PP
+The first word of each simple command is replaced by the text of an alias if
+an alias for the command word has been defined. An alias name consists of any
+number of alphanumeric characters and any of '_', '!', '%', ',' and '@'. The
+replacement string can contain any valid shell command. The first word of each
+command in the replaced text is tested for aliases, except when the command is
+the same one being aliased (to avoid infinite looping). If the last character
+of the alias value is a space character, the word following the alias is also
+checked for alias substitution.
+.PP
+Aliases cannot be used to redefine shell's reserved words. Aliases can be
+created and listed using the \fBalias\fR command. They can be removed with
+the \fBunalias\fR command.
+.PP
+Aliasing is performed when scripts are read, not while they are executed. The
+following aliases are defined by default by the shell, but can be unset or
+redefined if the user wishes:
+.PP
+.nf
+.RS
+ls="ls --color=auto"
+.br
+ll="ls -la"
+.br
+l.="ls -d .* --color=auto"
+.br
+cd..="cd .."
+.br
+".."="cd .."
+.br
+"..."="cd ../../../"
+.br
+grep="grep --color=auto"
+.br
+egrep="egrep --color=auto"
+.br
+fgrep="fgrep --color=auto"
+.br
+bc="bc -l"
+.br
+vi="vim"
+.br
+command="command "
+.br
+nohup="nohup "
+.br
+stop="kill -s STOP"
+.br
+suspend="kill -s STOP $$"
+.br
+hist="fc"
+.br
+typeset="declare"
+.br
+shopt="setx"
+.br
+reboot="sudo /sbin/reboot"
+.br
+poweroff="sudo /sbin/poweroff"
+.br
+halt="sudo /sbin/halt"
+.br
+shutdown="sudo /sbin/shutdown"
+.br
+df="df -H"
+.br
+du="du -ch"
+.br
+r="fc -s"
+.br
+memuse="memusage"
+.RE
+.fi
+.PP
+Some of the above aliases are defined by shells like bash and ksh, while
+others are lsh-specific, included for convenience.
+.SH TILDE EXPANSION
+.PP
+After alias substitution is performed, each word (or field) is checked to see
+if it begins with an unquoted tilde '~'. If it does, the word up to the first
+unquoted '/' is checked to see if it matches a user name in the password
+database (this word is known as the \fItilde prefix\fR). If a match is found,
+the '~' and the matched user name (the \fItilde prefix\fR) are replaced by the
+login (or home) directory of the matched user (POSIX). If no match is found,
+the original text is left unchanged. A '~' by itself, or in front of a '/' with
+no intervening characters, is replaced by the value of \fB$HOME\fR (POSIX).
+A '~' followed by a '+' or '-' is replaced by the value of \fB$PWD\fR and
+\fB$OLDPWD\fR, respectively (non-POSIX extension used by ksh and bash). A '~'
+followed by '~+N', '~-N' or '~N' is replaced by the corresponding directory
+stack entry, as if by calling the \fBdirs\fR builtin with '+N', '-N' or 'N'
+(non-POSIX bash extension).
+.PP
+Tilde expansion is also attempted during variable assignment if the value of
+the assignment begins with a '~', and when a '~' appears after a colon ':'.
+.SH COMMAND SUBSTITUTION
+.PP
+Command substitution occurs when commands are enclosed in parentheses preceded
+by a dollar sign '$', or when enclosed in a pair of back-quotes or grave
+accents '`'. In the back-quoted form, the string between quotes is processed
+for quoting characters before the command is executed.
+.PP
+The special command substitution \fI$(cat file)\fR can be replaced by the
+equivalent but faster \fI$(<file)\fR (non-POSIX ksh and bash extension).
+The command substitution \fI$(n<#)\fR expands to the current byte offset for
+file descriptor \fIn\fR (non-POSIX ksh extension).
+.SH ARITHMETIC EXPANSION
+.PP
+Arithmetic expressions are enclosed in double parentheses preceded by a dollar
+sign, in the form of:
+.PP
+.nf
+.RS
+$(( arithmetic-expression ))
+.RE
+.fi
+.PP
+Arithmetic expressions can also be written without the preceding dollar sign
+(non-POSIX extension):
+.PP
+.nf
+.RS
+(( arithmetic-expression ))
+.RE
+.fi
+.PP
+Arithmetic expressions are processed and replaced by the value of the
+expression inside the parentheses.
+.PP
+Arithmetic valuations are performed using long integer arithmetic, the only
+format required by POSIX, although other shells (e.g. bash and ksh) perform
+double or long double precision arithmetic. Numeric constants can be of the
+form \fI[base#]n\fR, where \fIbase\fR is a decimal number between 2 and 36
+(ksh and bash allow bases up to 64) representing the arithmetic base. \fIn\fR
+is a number in the given base. Digits greater than 9 are represented by
+lowercase or uppercase letters.
+.PP
+Only the basic arithmetic operations are currently supported in Layla shell.
+Specifically, floating point arithmetic and braced expressions are not
+supported. Also, the use of mathmetical functions (including \fBpow()\fR for
+exponentiation) is not supported.
+.SH PROCESS SUBSTITUTION
+ksh, bash and other shells support process substitution on some UNIX operating
+systems that support the \fI/dev/fd\fR directory scheme for naming open files.
+Layla shell currently doesn't support process substitution.
+.SH PARAMETER EXPANSION
+.PP
+A parameter can be a variable name, one or more digits, or any of the special
+characters '*', '@', '#', '?', '-', '$', and '!'. A variable is denoted by a
+name, which consists of alphanumeric characters and '_', and must begin with
+an alphabetic character or '_'. Exported variables are passed in the
+environment to child processes. Layla shell currently doesn't support indexed
+or associative arrays, or nameref variables.
+.PP
+The value of a variable can be assigned by:
+.PP
+.nf
+.RS
+name=value [name=value] ...
+.RE
+.fi
+.PP
+No space is allowed before or after the '='. Positional parameters cannot be
+assigned in this way; they must be set using the \fBset\fR or \fBshift\fR
+special builtin utilities. Parameter \fB$0\fR is set from argument zero
+(\fBargv[0]\fR) when the shell is invoked. The character '$' is used to
+indicate parameter expansion, which can be of the following formats:
+.PP
+.B ${parameter}
+.PP
+The parameter name contains all characters from '${' to the matching '}'. The
+parameter's value, if any, is substituted. The braces are required when
+\fBparameter\fR is followed by a letter, digit, or underscore that is not part
+of the parameter name. If \fBparameter\fR is one or more digits this indicates
+a \fIpositional parameter\fR. A positional parameter of more than one digit
+must be enclosed in braces. If \fBparameter\fR is '*' or '@', all the
+positional parameters (starting with \fB$1\fR) are substituted and separated
+by a field separator character.
+.PP
+.B ${#parameter}
+.PP
+If \fBparameter\fR is '*' or '@', the number of positional parameters is
+substituted. Otherwise, the length of \fBparameter\fR's value is substituted.
+.PP
+.B ${!prefix*}
+.PP
+Expands to the names of the variables whose names begin with \fBprefix\fR (non-
+POSIX extension).
+.PP
+.B ${parameter:-word}
+.PP
+If \fBparameter\fR is set and is non-null, its value is substituted. Otherwise
+\fBword\fR is substituted. \fBword\fR is not evaluated unless it is to be used
+as the substituted string. If the colon is omitted, the shell only checks
+whether parameter is set or not.
+.PP
+.B ${parameter:offset:length}
+.br
+.B ${parameter:offset}
+.PP
+Expands to the portion of the value of \fBparameter\fR starting at the character
+number resulting from the expansion of the \fBoffset\fR arithmetic expression
+(counting from zero), and consisting of the number of characters resulting form
+the expansion of the \fBlength\fR arithmetic expression. In the second form,
+all chacaters till the end of the value are used. A negative offset counts
+backwards from the end, and one or more spaces are required before minus sign
+to prevent the shell from interpreting the operator as ':-'. If \fBparameter\fR
+is '*' or '@', \fBoffset\fR and \fBlength\fR refer to the array index and
+number of elements respectively. A negative offset is taken relative to the
+number of elements in the array. This format is a non-POSIX extension.
+.PP
+.B ${parameter#pattern}
+.br
+.B ${parameter##pattern}
+.PP
+If \fBpattern\fR matches the beginning (prefix) of the value of \fBparameter\fR,
+the value substituted is the value of \fBparameter\fR with the matched portion
+deleted. Otherwise the value of \fBparameter\fR is substituted. In the first
+form the shortest matching pattern is deleted and in the second form the
+longest matching pattern is deleted (POSIX). When \fBparameter\fR is '@' or '*',
+the substring operation is applied to each element in turn (non-POSIX ksh
+and bash extension).
+.PP
+.B ${parameter%pattern}
+.br
+.B ${parameter%%pattern}
+.PP
+If \fBpattern\fR matches the ending (suffix) of the value of \fBparameter\fR,
+the value substituted is the value of \fBparameter\fR with the matched portion
+deleted. Otherwise the value of \fBparameter\fR is substituted. In the first
+form the shortest matching pattern is deleted and in the second form the
+longest matching pattern is deleted (POSIX). When \fBparameter\fR is '@' or '*',
+the substring operation is applied to each element in turn (non-POSIX ksh
+and bash extension).
+.PP
+.B ${parameter/pattern/string}
+.br
+.B ${parameter//pattern/string}
+.br
+.B ${parameter/#pattern/string}
+.br
+.B ${parameter/%pattern/string}
+.PP
+These are non-POSIX extensions and are not currently implemented in the Layla
+shell.
+.SH FIELD SPLITTING
+.PP
+After parameter expansion and command substitution, the results are scanned
+for the field separator characters (as indicated by \fB$IFS\fR) and split
+into separate fields. Explicit null fields (those passed as "" or '') are
+retained. Implicit null fields resulting from parameters with no values or
+command substitutions with no output are removed.
+.PP
+If the \fBbraceexpand\fR or '\fB\-B\fR' option is set, the fields are checked
+for brace patterns, such as \fI{*,*}\fR, \fI{l1..l2}\fR, and \fI{n1..n2}\fR,
+where '*' means any character; 'l1' and 'l2' are letters and 'n1' and 'n2' are
+signed numbers. Fields are generated by prepending the characters before the
+opening brace and appending the characters after the closing brace to each of
+the strings generated by the characters between the braces.
+.SH PATHNAME EXPANSION
+.br
+.B (also known as File Name Generation)
+.PP
+Following field splitting, each field is scanned for the regular expression
+(regex) characters '*', '?', and '[' (unless the \fBnoglob\fR or '\fB\-f\fR'
+option is set. If the field contains a regex character, it is treated as a
+pattern.
+.PP
+Pathnames containing pattern characters are replaced with sets of names that
+matches the pattern. If no pathname is found that matches the pattern, that
+pathname is left unchanged. If \fB$FIGNORE\fR is set, each pathname that
+matches the pattern defined by the value of \fB$FIGNORE\fR is ignored when
+generating the list. The names '.' and '..' are also ignored.
+.PP
+The following is what the pattern characters mean inside pattern strings:
+.TP
+.BR *\fR
+Match any string including the null string.
+.TP
+.BR ?\fR
+Match any single character.
+.TP
+.BR [...]\fR
+Match any one of the enclosed characters. Two characters separated by '-'
+matches any character lexically between the pair, inclusive. If the first
+character is a bang '!', any character not enclosed is matched. A '-' can be
+included in the character set by putting it as the first or last character.
+Character classes can be specified with the syntax [:class:] where class is
+one of the following ANSI-C classes: \fBalnum alpha blank cntrl digit graph
+lower print punct space upper word xdigit\fR.
+.SH QUOTING
+.PP
+Quoting can be used to remove the special meaning of the shell's
+metacharacters, which include:
+.PP
+.nf
+.RS
+; & ( ) | < > newline space tab
+.RE
+.fi
+.PP
+Metacharacters are used to delimit tokens, in addition to their special
+meaning to the shell. If a character is quoted, that is, preceded with a
+backslash '\e', it is quoted and loses its special meaning to the shell.
+The pair \enewline is removed from input. All characters enclosed between
+single quotes are considered to be quoted. Single quotes cannot appear
+within single quotes. A single quoted string preceded by an unquoted
+dollar sign '$' is processed as an ANSI-C string. Parameter expansion
+and command substitution does not occur inside single quotes.
+.PP
+Inside double quotes, parameter and command substitution occur and '\e'
+quotes the characters '\e', '\'', '`', '"', and '$'. If a '$' is found
+in front of a double quoted string, ksh and bash translate the string
+by a locale-specific message, but our shell currently ignores the dollar
+sign.
+.PP
+The shell variables '$*' and '$@' are identical when not quoted.
+However, "$*" is equivalent to \fB"$1c$2c..."\fR, where \fBc\fR is the
+first character of the \fB$IFS\fR variable, whereas "$@" is equivalent
+to "$1" "$2".
+.PP
+Inside back-quotes (grave accents), '\e' quotes the characters '\e', '`',
+and '$'.
+.PP
+The special meaning of reserved words (keywords) and aliases can be
+removed by quoting any character of the reserved word or alias.
+.SH SPECIAL PARAMETERS
+.PP
+The following special parameters are automatically set by the shell. They are
+all defined by POSIX, except when it says otherwise.
+.PP
+.TP
+.BR @
+The positional parameters, starting from 1, producing separate fields for each
+parameter If expansion occurs inside double quotes, each parameter expands to
+a separate field
+.TP
+.BR *
+The positional parameters, starting from 1, producing separate fields for each
+parameter If expansion occurs inside double quotes, parameters are joined to
+form a single field
+.TP
+.BR #\fR
+The decimal number of positional parameters, not counting parameter 0 or
+\fB$0\fR.
+.TP
+.BR -\fR
+Options supplied to the shell on invocation or by calling the \fBset\fR command.
+.TP
+.BR ?\fR
+The decimal value returned by the last executed command.
+.TP
+.BR $\fR
+The process identifier (\fBPID\fR) of this shell.
+.TP
+.BR _\fR
+Initially, the value of '_' is the absolute pathname of the shell or script
+being executed (as passed in the environment at startup). It is subsequently
+assigned the last argument of the previous command (bash and ksh, while csh
+assigns the full command line of the last command). This parameter is not set
+for asynchronous (background) commands. It also holds the name of the matching
+\fB$MAIL\fR file when checking for mail. This parameter is a non-POSIX
+extension.
+.TP
+.BR !\fR
+The \fBPID\fR of the last run background pipeline, or the most recent job put
+in the background with the \fBbg\fR builtin utility.
+.TP
+.BR 0\fR
+The name of this shell or script.
+.SH SHELL VARIABLES
+.PP
+Shell variables are initialized from the environment at startup. During the
+shell's lifetime, shell variables can have their values reassigned or unset
+through variable assignment. The following are the variables used by the
+shell. They are all defined by POSIX, except when it says otherwise.
+.TP
+.BR COMMAND\fR
+Similar to bash's \fB$BASH_COMMAND\fR variable, this variable contains the full
+command line of the currently executing command. This variable is a non-POSIX
+extension.
+.TP
+.BR COMMAND_STRING\fR
+Similar to bash's \fB$BASH_EXECUTION_STRING\fR variable, this variable contains
+the value of the command string passed to the shell with the \fB\-c\fR option.
+This variable is a non-POSIX extension.
+.TP
+.BR CDPATH\fR
+This variable efines the search path for the \fBcd\fR builtin.
+.TP
+.BR COLUMNS\fR
+This variable defines the width of the shell's window for printing \fBselect\fR
+lists and the results of tab completions.
+.TP
+.BR COPROC0\fR
+The file descriptor of the file holding the coprocess's output, created by the
+\fBcoproc\fR builtin utility. This variable is similar to bash's \fB$COPROC[0]\fR,
+which is an array variable.
+.TP
+.BR COPROC1\fR
+The file descriptor of the file holding the coprocess's input, created by the
+\fBcoproc\fR builtin utility. This variable is similar to bash's \fB$COPROC[1]\fR,
+which is an array variable.
+.TP
+.BR DIRSFILE\fR
+Similar to tcsh's \fB$dirsfile\fR variable, this variable contains the pathname
+of the file used to save and restore the directory stack. This variable is a
+non-POSIX extension. See also \fB$SAVEDIRS\fR.
+.TP
+.BR DIRSTACK\fR
+The contents of the directory stack in the order displayed by the \fBdirs\fR
+builtin. Assignments to this variable change the contents of the directory
+stack. This variable is a non-POSIX bash extension. It is similar to tcsh's
+\fBdirstack\fR variable.
+.TP
+.BR EDITOR\fR
+If the \fB$VISUAL\fR variable is not set, the value of \fB$EDITOR\fR is
+processed and the corresponding editing mode is turned on (only the \fBvi\fR
+editing mode is currently supported). This variable is also used by the \fBfc\fR
+builtin to determine the editor program to use for editing history commands.
+This variable is a non-POSIX extension. The default value is \fBvi\fR.
+.TP
+.BR EGID\fR
+The effective group id of the current user. This variable is a non-POSIX
+extension.
+.TP
+.BR ENV\fR
+Parameter expansion, command substitution, and arithmetic expansion are
+performed on the value of this variable to generate the pathname of the script
+that is executed when the shell is invoked. This file is typically used for
+alias and function definitions. The default value is \fI$HOME/.lshrc\fR.
+.TP
+.BR EPOCHREALTIME\fR
+The number of seconds (in floating point format) since Unix epoch. This
+variable is a non-POSIX bash extension.
+.TP
+.BR EPOCHSECONDS\fR
+The number of seconds (in long integer format) since Unix epoch. This
+variable is a non-POSIX bash extension.
+.TP
+.BR EUID\fR
+The effective user id of the current user. This variable is a non-POSIX
+bash extension.
+.TP
+.BR EXECIGNORE\fR
+This is a colon-separated list of patterns of executable file names to ignore
+when the shell is searching for executable files. This variable is a non-
+POSIX bash extension.
+.TP
+.BR FCEDIT\fR
+The default editor name for the \fBfc\fR command. \fB$FCEDIT\fR takes
+precedence over \fB$HISTEDIT\fR, which in turn takes precedence over
+\fB$EDITOR\fR. The default value for \fB$FCEDIT\fR is \fBvi\fR.
+.TP
+.BR FIGNORE\fR
+A pattern that defines the set of file names that is ignored when performing
+file name matching. This variable is a non-POSIX ksh extension.
+.TP
+.BR FUNCNAME\fR
+The name of the currently executing function. The value is \fB'main'\fR if
+there is no function currently executing. This variable is similar to bash's
+\fB$FUNCNAME\fR, except that the latter is an array variable containing the
+names of all functions in the call stack. This variable is a non-POSIX bash
+extension.
+.TP
+.BR FUNCNEST\fR
+The maximum function nesting level. Function calls cannot exceed this value,
+if it is set. This variable is a non-POSIX bash extension.
+.TP
+.BR GID\fR
+The numeric group id of the currently logged user. This variable is a non-POSIX
+extension.
+.TP
+.BR GLOBIGNORE\fR
+A colon-separated list of patterns that define the set of file names to be
+ignored when performing file name (i.e. pathname) expansion. This variable
+is a non-POSIX bash extension.
+.TP
+.BR GROUPS\fR
+The list of groups of which the current user is a member. This variable is
+similar to bash's \fB$GROUPS\fR, except that the latter is an array variable
+containing the group names. This variable is a non-POSIX bash extension.
+.TP
+.BR HISTCMD\fR
+The number of the current command in the history file. This variable is a
+non-POSIX extension used by ksh and bash.
+.TP
+.BR HISTCONTROL\fR
+A colon-separated list that controls how history entries are saved in the
+history file. The values of this list can be:
+.PP
+.nf
+.RS
+.B ignorespace \t\fR Don't save lines starting with a space.
+.B ignoredups \t\fR Don't save lines matching the previous history entry.
+.B ignoreboth \t\fR Shorthand for \fBignorespace\fR and \fBignoredups\fR.
+.B erasedups \t\fR Remove duplicate lines matching the current one.
+.RE
+.fi
+.TP
+.BR
+This variable is a non-POSIX bash extension.
+.TP
+.BR HISTFILE\fR
+The pathname of the file that is used to store the command history.
+.TP
+.BR HISTFILESIZE\fR
+The maximum number of commands to save in the history file. This variable is
+a non-POSIX bash extension.
+.TP
+.BR HISTIGNORE\fR
+A colon-separated list that tells the shell which commands to ignore when
+saving the history list. Patterns are matched against the history line to
+be saved. If they match, the line is not saved in the history list. This
+variable is a non-POSIX bash extension.
+.TP
+.BR HISTSIZE\fR
+The number of previously entered commands that are accessible by this shell.
+The default is 512.
+.TP
+.BR HISTTIMEFORMAT\fR
+If set and not null, the value of this variable is the format string passed
+to \fBstrftime()\fR in order to print the timestamp of history entries,
+which is output by the builtin \fBhistory\fR utility. This variable
+is a non-POSIX bash extension.
+.TP
+.BR HISTEDIT\fR
+The name for the default editor name for the \fBfc\fR command. This variable
+is a non-POSIX ksh extension. It takes precedence over \fB$EDITOR\fR.
+.TP
+.BR HOME\fR
+The default argument for the \fBcd\fR builtin (the home directory). The value
+of \fB$HOME\fR is typically set by \fBlogin\fR.
+.TP
+.BR HOST\fR
+.TP
+.BR HOSTNAME\fR
+The name of the current host. Both variables are non-POSIX extensions.
+.TP
+.BR HOSTFILE\fR
+The name of the file the shell reads when performing hostname completion.
+If this variable is null or not set, the default file \fB/etc/hosts\fR is
+used. This variable is a non-POSIX bash extension.
+.TP
+.BR HOSTTYPE\fR
+The type of machine the shell is running on, determined at compilation
+time. Similar to \fB$MACHTYPE\fR. This variable is a non-POSIX bash extension.
+.TP
+.BR IGNOREEOF\fR
+If set, indicates the count of consecutive EOFs the shell must read before
+exiting. If not set or null, the default is 10 (same as bash). This variable
+is only of use to interactive shell. This variable is a non-POSIX bash
+extension.
+.TP
+.BR IFS\fR
+Internal field separators, which default to space, tab, and newline. Used to
+separate the results of command substitution or parameter expansion and to
+separate fields when using the \fBread\fR builtin utility. The first character
+of the \fB$IFS\fR variable is used to separate arguments for the "$*"
+substitution. See the \fIQuoting\fR section. The default value is " \et\en".
+.TP
+.BR INSERTMODE\fR
+The insert mode for the command line editor. If set to \fBoverwrite\fR,
+the editor overwrites characters in the command line buffer (as if the
+\fBINSERT\fR key was pressed. Any other value, including \fBinsert\fR,
+puts the editor in the regular mode, where characters are added without
+overwriting existing characters. This is a non-POSIX extension that
+behaves like tcsh's \fBinputmode\fR variable.
+.TP
+.BR LANG\fR
+The locale category for any category not specifically selected with a variable
+starting with LC_ or LANG. Not currently used by the shell.
+.TP
+.BR LC_ALL\fR
+Overrides the value of the LANG variable and any other LC_ variable. Not
+currently used by the shell.
+.TP
+.BR LC_COLLATE\fR
+The locale category for character collation information. Not currently used by
+the shell.
+.TP
+.BR LC_CTYPE\fR
+The locale category for character handling functions. Not currently used by
+the shell.
+.TP
+.BR LC_NUMERIC\fR
+The locale category for the decimal point character. Not currently used by the
+shell.
+.TP
+.BR LINES\fR
+The number of lines in the shell's window.
+.TP
+.BR LINENO\fR
+The current line number within the script or function being executed.
+.TP
+.BR MACHTYPE\fR
+The type of machine the shell is running on, determined at compilation
+time. Similar to \fB$HOSTTYPE\fR. This variable is a non-POSIX extension.
+.TP
+.BR MAIL\fR
+The name of the mail file to check if \fB$MAILPATH\fR is not set. \fB$MAIL\fR
+is not set by the shell.
+.TP
+.BR MAILCHECK\fR
+The interval (in seconds) after which the shell checks for changes in the
+modification time (\fBmtime\fR) of any of the files specified in the
+\fB$MAILPATH\fR or \fB$MAIL\fR variables. The default value is 600 seconds
+(ksh) or 60 seconds (bash). We use the ksh value. When the time has elapsed the
+shell checks for mail before outputting the next primary prompt.
+.TP
+.BR MAILPATH\fR
+A colon-separated list of file names to check after \fB$MAILCHECK\fR seconds has
+elapsed. Each file name can be followed by a '?' and a message that is printed
+if the file is modified. The message undergoes parameter expansion, command
+substitution, and arithmetic expansion and the \fB$_\fR variable contains the
+name of the file that has changed. The default message is \fB"you have mail in
+$_"\fR (ksh).
+.TP
+.BR OLDPWD\fR
+The previous working directory set by the \fBcd\fR builtin.
+.TP
+.BR OPTARG\fR
+The value of the last option argument processed by the \fBgetopts\fR builtin utility.
+.TP
+.BR OPTIND\fR
+The index of the last option argument processed by the \fBgetopts\fR builtin utility.
+.TP
+.BR OPTERR\fR
+If set to 1, display errors generated by the \fBgetopts\fR builtin. This
+variable is a non-POSIX bash extension.
+.TP
+.BR OSTYPE\fR
+The type of operating system the shell is running on, determined at compilation
+time. This variable is a non-POSIX extension.
+.TP
+.BR PATH\fR
+The search path for commands. \fB$PATH\fR cannot be changed if the shell is in
+the restricted mode. The default value is \fB"/bin:/usr/bin:/sbin:/usr/sbin"\fR.
+.TP
+.BR PPID\fR
+The \fBPID\fR of the parent of this shell.
+.TP
+.BR PROMPT_COMMAND\fR
+If set, the value is a command to be executed before printing the primary
+prompt \fB$PS1\fR. This variable is a non-POSIX bash extension.
+.TP
+.BR PROMPTCHARS\fR
+If set to a two-character string, this variable is used when printing
+prompt strings. The first character is used for normal users, the second
+character is used for root. The default value is \fB"$#"\fR. This is a
+non-POSIX extension that behaves like tcsh's \fBpromptchars\fR variable.
+.TP
+.BR PS0\fR
+The value of this variable is expanded for parameter expansion, command
+substitution, and arithmetic expansion and the result printed on stderr, right
+before each simple command is executed. This variable is a non-POSIX bash
+extension.
+.TP
+.BR PS1\fR
+The primary prompt string. The value of this variable is expanded for parameter
+expansion, command substitution, and arithmetic expansion. The character '!' in
+\fB$PS1\fR is replaced by the history number of the current command. Two bangs '!!'
+produce a single '!' when the prompt string is printed. The default value
+is \fB"[\eu \eW]\e$\e "\fR.
+.TP
+.BR PS2\fR
+The secondary prompt string, defaults to \fB"> "\fR.
+.TP
+.BR PS3\fR
+The third (selection) prompt string used within a select loop, defaults to
+\fB"#? "\fR.
+.TP
+.BR PS4\fR
+The value of this variable is expanded for parameter evaluation, command
+substitution, and arithmetic expansion and precedes each line of an execution
+trace. The default value is \fB"+ "\fR.
+.TP
+.BR PWD\fR
+The present (current) working directory set by the \fBcd\fR builtin.
+.TP
+.BR RANDOM\fR
+Each time this variable is referenced, a random integer number, uniformly
+distributed between 0 and 32767, is returned. The sequence of random numbers
+can be initialized by assigning a numeric value to \fB$RANDOM\fR. This
+variable is a non-POSIX extension.
+.TP
+.BR REPLY\fR
+This variable is set by the \fBselect\fR statement and by the \fBread\fR
+builtin utility when no arguments are passed to it. This variable is a
+non-POSIX extension.
+.TP
+.BR SAVEDIRS\fR
+If set, this variable means a login shell must save the directory stack
+in the file indicated by the value of \fB$DIRSFILE\fR. This variable is
+similar to tcsh's \fB$savedirs\fR variable. This variable is a non-POSIX
+extension.
+.TP
+.BR SECONDS\fR
+Each time this variable is referenced, the number of seconds since the shell
+started is returned. If this variable is assigned a value, the value returned
+is the value that was assigned plus the number of seconds since the
+assignment. This variable is a non-POSIX extension.
+.TP
+.BR SHELL\fR
+The full pathname of the shell. Upon startup, if the basename of this variable
+is rsh, rlsh, or lrsh, the shell becomes restricted. \fB$SHELL\fR is not
+typically set by the shell.
+.TP
+.BR SHELLOPTS\fR
+A colon-separated list of enabled shell options, the ones that are reported as
+\fIon\fR when invoking \fBset \-o\fR. If this variable is set on shell startup,
+each option is enabled in the shell. This variable is a readonly non-POSIX
+bash extension.
+.TP
+.BR SHLVL\fR
+This variable is assigned the value of 1 the first time the shell is run. Its
+value gets incremented by 1, each time a new instance of the shell is started.
+This variable is a readonly non-POSIX bash extension (although bash doesn't
+mark it as readonly).
+.TP
+.BR SUBSHELL\fR
+This variable is incremented by 1 in each subshell the shell invokes. This
+variable is a non-POSIX extension.
+.TP
+.BR TIMEFORMAT\fR
+The format string specifying how the timing information for pipelines prefixed
+with the \fBtime\fR command should be displayed. The possible format sequences
+are:
+.PP
+.nf
+.RS
+.B %% \t\t\fR A literal %.
+.B %[p][l]R \t\fR The elapsed (real) time in seconds.
+.B %[p][l]U \t\fR The number of CPU seconds spent in user mode.
+.B %[p][l]S \t\fR The number of CPU seconds spent in system mode.
+.B %P \t\t\fR The CPU usage percentage, computed as (U + S) / R.
+.RE
+.fi
+.TP
+.BR
+In all the above format sequences, braces denote optional portions. The
+optional \fIp\fR is a digit specifying the precision, i.e. the number of
+fractional digits after a decimal point. A value of 0 means no decimal point
+or fraction is to be output. A maximum of three places after the decimal point
+can be displayed. If \fIp\fR is greater than 3 or is not specified, it is
+treated as 3. The optional \fIl\fR (ell) specifies a longer format which
+includes hours, minutes, and seconds of the form \fBHHhMMmSS.FFs\fR. The value
+of \fBl\fR determines whether or not the fraction \fB.FF\fR is included. All
+other characters are output without change, and a trailing newline is added
+afterwards. If \fB$TIMEFORMAT\fR is unset, the default value is
+"\fI\\nreal\\t%2lR\\nuser\\t%2lU\\nsys\\t%2lS\fR" (ksh and bash, except that bash
+uses a precision of 3 instead of 2). If the value of \fB$TIMEFORMAT\fR is null,
+no timing information is displayed.
+.TP
+.BR TMPDIR\fR
+The pathname of the directory used to create temporary files. If not set, the
+default is \fB/tmp\fR. This variable is a non-POSIX bash extension.
+.TP
+.BR TMOUT\fR
+The default time-out value for the \fBread\fR and \fBselect\fR builtin utilities.
+The shell terminates if a line is not entered within the prescribed number of
+seconds while reading from a terminal. This variable is a non-POSIX extension
+used by ksh and bash.
+.TP
+.BR UID\fR
+The numeric user id of the currently logged user. This variable is a non-POSIX
+extension.
+.TP
+.BR USER\fR
+The username of the currently logged user. This variable is a non-POSIX
+extension.
+.TP
+.BR VISUAL\fR
+If the value of this variable matches the pattern *[Vv][Ii]*, the \fBvi\fR
+option is turned on. Currently, no other patterns are recognized by the Layla
+shell. The value of \fB$VISUAL\fR overrides the value of \fB$EDITOR\fR.
+.SH THE SHELL PROMPT
+.PP
+When running interactively, the shell prompts the user by prinintg the value of
+\fB$PS1\fR to stderr after expanding it for parameter expansion, command
+substitution, and arithmetic expansion, before reading the next command. Each
+'!' in the prompt is replaced by the current command history number. A pair of
+'!!' is replaced by '!' in the output prompt. If a newline is read and the
+command is not considered complete, the secondary prompt \fB$PS2\fR is expanded
+and printed to stderr.
+.SH CONDITIONAL EXPRESSIONS
+.PP
+Conditional expressions are used with the '[[' compound command to test files'
+attributes and compare strings. Field splitting and pathname expansion are not
+performed here.
+.PP
+Conditional expressions can be formed by one or more of the following unary and
+binary expressions:
+.TP
+.BR \-a " " \fIf\fR
+True if file \fIf\fR exists. This option is the same as \fB\-e\fR.
+.TP
+.BR \-b " " \fIf\fR
+True if file \fIf\fR exists and is a block special file.
+.TP
+.BR \-c " " \fIf\fR
+True if file \fIf\fR exists and is a character special file.
+.TP
+.BR \-d " " \fIf\fR
+True if file \fIf\fR exists and is a directory.
+.TP
+.BR \-e " " \fIf\fR
+True if file \fIf\fR exists.
+.TP
+.BR \-f " " \fIf\fR
+True if file \fIf\fR exists and is a regular file.
+.TP
+.BR \-g " " \fIf\fR
+True if file \fIf\fR exists and it has its \fBsetgid\fR bit set.
+.TP
+.BR \-G " " \fIf\fR
+True if file \fIf\fR exists and its group id matches the effective group id
+of this process.
+.TP
+.BR \-h " " \fIf\fR
+True if file \fIf\fR exists and is a symbolic link.
+.TP
+.BR \-k " " \fIf\fR
+True if file \fIf\fR exists and it has its sticky bit set.
+.TP
+.BR \-L " " \fIf\fR
+True if file \fIf\fR exists and is a symbolic link.
+.TP
+.BR \-n " " \fIstr\fR
+True if the length of \fIstr\fR is non-zero.
+.TP
+.BR \-N " " \fIf\fR
+True if file \fIf\fR exists and its modification time is greater than its last
+access time.
+.TP
+.BR \-o " " \fIop\fR
+True if option named \fIop\fR is on.
+.TP
+.BR \-o " " \fI?op\fR
+True if \fIop\fR is a valid option name.
+.TP
+.BR \-O " " \fIf\fR
+True if file \fIf\fR exists and is owned by the effective user id of this process.
+.TP
+.BR \-p " " \fIf\fR
+True if file \fIf\fR exists and is a FIFO special file or a pipe.
+.TP
+.BR \-r " " \fIf\fR
+True if file \fIf\fR exists and is readable by current process.
+.TP
+.BR \-s " " \fIf\fR
+True if file \fIf\fR exists and has size greater than zero.
+.TP
+.BR \-S " " \fIf\fR
+True if file \fIf\fR exists and is a socket.
+.TP
+.BR \-t " " \fIfd\fR
+True if file descriptor \fIfd\fR is open and associated with a terminal device.
+.TP
+.BR \-u " " \fIf\fR
+True if file \fIf\fR exists and it has its \fBsetuid\fR bit set.
+.TP
+.BR \-w " " \fIf\fR
+True if file \fIf\fR exists and is writable by current process.
+.TP
+.BR \-x " " \fIf\fR
+True if file \fIf\fR exists and is executable by current process.
+.TP
+.BR \-z " " \fIstr\fR
+True if the length of \fIstr\fR is zero.
+.TP
+.BR \fIfile1\fR " " \-ef " " \fIfile2\fR
+True if both \fIfile1\fR and \fIfile2\fR exist and refer to the same file.
+.TP
+.BR \fIfile1\fR " " \-nt " " \fIfile2\fR
+True if \fIfile1\fR exists and \fIfile2\fR doesn't, or if \fIfile1\fR is
+newer than \fIfile2\fR.
+.TP
+.BR \fIfile1\fR " " \-ot " " \fIfile2\fR
+True if \fIfile2\fR exists and \fIfile1\fR doesn't, or if \fIfile1\fR is
+older than \fIfile2\fR.
+.TP
+.BR \fIstring\fR
+True if \fIstring\fR is not null.
+.TP
+.BR \fIstring\fR " " == " " \fIpattern\fR
+True if \fIstring\fR matches \fIpattern\fR.
+.TP
+.BR \fIstring\fR " " = " " \fIpattern\fR
+Same as '=='.
+.TP
+.BR \fIstring\fR " " != " " \fIpattern\fR
+True if \fIstring\fR does not match \fIpattern\fR.
+.TP
+.BR \fIstring\fR " " =~ " " \fIpattern\fR
+True if \fIstring\fR matches \fIpattern\fR.
+.TP
+.BR \fIstring1\fR " " < " " \fIstring2\fR
+True if \fIstring1\fR comes before \fIstring2\fR based on the ASCII value of
+the strings' characters.
+.TP
+.BR \fIstring1\fR " " > " " \fIstring2\fR
+True if \fIstring1\fR comes after \fIstring2\fR based on the ASCII value of
+the strings' characters.
+.TP
+.BR \fIexpr1\fR " " \-eq " " \fIexpr2\fR
+True if \fIexpr1\fR is equal to \fIexpr2\fR.
+.TP
+.BR \fIexpr1\fR " " \-ge " " \fIexpr2\fR
+True if \fIexpr1\fR is greater than or equal to \fIexpr2\fR.
+.TP
+.BR \fIexpr1\fR " " \-gt " " \fIexpr2\fR
+True if \fIexpr1\fR is greater than \fIexpr2\fR.
+.TP
+.BR \fIexpr1\fR " " \-le " " \fIexpr2\fR
+True if \fIexpr1\fR is less than or equal to \fIexpr2\fR.
+.TP
+.BR \fIexpr1\fR " " \-lt " " \fIexpr2\fR
+True if \fIexpr1\fR is less than \fIexpr2\fR.
+.TP
+.BR \fIexpr1\fR " " \-ne " " \fIexpr2\fR
+True if \fIexpr1\fR is not equal to \fIexpr2\fR.
+.PP
+Compound expressions can be constructed from these primitives by using any of
+the following operators (the brace operator is currently not supported in this
+shell):
+.TP
+.BR (expression)\fR
+True if \fIexpression\fR is true. Used to group expressions.
+.TP
+.BR "!" expression\fR
+True if \fIexpression\fR is false.
+.TP
+.BR expression1 " && " expression2\fR
+True if \fIexpression1\fR and \fIexpression2\fR are both true.
+.TP
+.BR expression1 " || " expression2\fR
+True if either \fIexpression1\fR or \fIexpression2\fR is true.
+.SH INPUT AND OUTPUT
+.PP
+Command input and output can be redirected using special shell constructs,
+which can precede or follow the command name, and which are not passed to the
+invoked command. Command substitution, parameter expansion, and arithmetic
+expansion occur and the result is used for redirecting input and output
+streams as appropriate. Field splitting is not performed on the results of
+expansion. If the redirected file is of the form \fI/dev/tcp/host/port\fR or
+\fI/dev/udp/host/port\fR, the shell attempts to make a tcp or udp connection to
+the corresponding host and port number. No intervening space is allowed between
+the redirection operator and its operands.
+.TP
+.BR <word\fR
+Redirect stdin to read from the file indicated by \fBword\fR.
+.TP
+.BR >word\fR
+Redirect stdout to read from the file indicated by \fBword\fR. If the file does
+not exist then it is created. If the file exists and the \fBnoclobber\fR
+\fB'\-C'\fR option is set, an error results. Otherwise, the file is truncated
+to zero length.
+.TP
+.BR >|word\fR
+Similar to \fB>\fR, except that it overrides the \fBnoclobber\fR '\fB\-C\fR'
+option.
+.TP
+.BR >>word\fR
+Redirect output to the file indicated by \fIword\fR. If the file exists, append
+output to the end-of-file. Otherwise, create the file.
+.TP
+.BR <>word\fR
+Open the file indicated by \fIword\fR for read/write on stdin.
+.TP
+.BR <<[-]word\fR
+Redirect stdin to read from a here-document. The shell reads up to the line
+that contains \fIword\fR after any quoting has been removed. No parameter
+substitution, command substitution, arithmetic expansion or pathname expansion
+is performed on \fIword\fR. The resulting document (the here-document), becomes
+the input. If any character of \fIword\fR is quoted, no expansion is done on
+the document. Otherwise, parameter expansion, command substitution, and
+arithmetic expansion occur, the \fB\\newline\fR sequence is ignored, and '\e'
+must be used to quote the characters '\e', '$', and '`'. If '-' is appended to
+the '<<' operator, all leading tabs are stripped from the document.
+.TP
+.BR <<<word\fR
+Redirect stdin to read from a here-string. \fIword\fR becomes the contents of
+the here-document after parameter expansion, command substitution, and
+arithmetic expansion is performed.
+.TP
+.BR <&digit\fR
+Duplicate stdin to read from file descriptor \fIdigit\fR.
+.TP
+.BR >&digit\fR
+Duplicate stdout to write to file descriptor \fIdigit\fR.
+.TP
+.BR <&digit-\fR
+Move file descriptor \fIdigit\fR to stdin (i.e. duplicate and close the file
+descriptor).
+.TP
+.BR >&digit-\fR
+Move file descriptor \fIdigit\fR to stdout (i.e. duplicate and close the file
+descriptor).
+.TP
+.BR <&-\fR
+Close stdin.
+.TP
+.BR >&-\fR
+Close stdout.
+.TP
+.BR <&p\fR
+Redirect stdin to read from the co-process start by the \fBcoproc\fR builtin.
+.TP
+.BR >&p\fR
+Redirect stdout to come from the co-process start by the \fBcoproc\fR builtin.
+.TP
+.BR <#((expr))\fR
+Evaluate arithmetic expression \fIexpr\fR and move file descriptor 0's (stdin)
+offset to the resulting bytes from the start of the file.
+.TP
+.BR >#((expr))\fR
+The same as \fI<#\fR for file descriptor 1 (stdout).
+.PP
+If a redirection operator is preceded by a digit, the file descriptor to be
+redirected is that referred to by the digit (instead of the default 0 or 1).
+If a redirection operator is preceded by {\fBvarname\fR} with no intervening
+spaces, a file descriptor greater than 10 is selected by the shell and stored
+in the variable named \fBvarname\fR.
+.SH THE ENVIRONMENT
+.PP
+The environment is a list of name-value string pairs that is passed down to commands
+when they are being executed. On startup, the shell scans the environment and
+creates a shell variable for each entry, giving it the corresponding value and
+marking it for export. Commands executed by the shell inherit the environment list.
+If the user modifies the values of these variables or creates new ones by using the
+\fBexport\fR builtin utility, these new variables become part of the environment.
+Variable assignments occurring before the command name are added to the command's
+environment, while those occuring after the command name are only considered if the
+\fBkeyword\fR '\fB\-k\fR' option is set.
+.SH JOBS
+.PP
+If the \fBmonitor\fR '\fB\-m\fR' option is set, an interactive shell associates a
+job with each pipeline. The shell keeps a table of current jobs, each one being
+assigned a small integer number. When a job is started asynchronously (in the
+background) by affixing it with '&', the shell prints a line that looks like:
+.PP
+.nf
+.RS
+[1] 12345
+.RE
+.fi
+.PP
+which indicates that a job was started asynchronously with job number 1, and that
+the last process in the pipeline had a \fBPID\fR of 12345.
+.PP
+To suspend a running job, press \fBCTRL-Z\fR to send the \fBSTOP\fR signal to the
+current job. The shell displays a message informing your of the change in the
+job's status before printing the primary prompt. The job can then be run in the
+background or foreground by invoking the \fBbg\fR and \fBfg\fR builtins,
+respectively.
+.PP
+If a background job tries to read from the terminal, it is sent the \fBSIGTTIN\fR signal,
+which suspends the job by default. Background jobs can usually send output to the
+terminal, unless the \fBstty\fR was used to modify this behavior, in which case the
+job is sent a \fBSIGTTOU\fR signal when it tries to write to the terminal.
+.PP
+Jobs are referred to by using the \fBPID\fR of any process in the job, or by the
+job id which can take the following formats:
+.TP
+.BR %number\fR
+The job with the given number.
+.TP
+.BR %string\fR
+Any job whose command line begins with \fIstring\fR.
+.TP
+.BR %?string\fR
+Any job whose command line contains \fIstring\fR.
+.TP
+.BR %%\fR
+The current job.
+.TP
+.BR %+\fR
+The current job. Equivalent to %%.
+.TP
+.BR %-\fR
+The previous job.
+.PP
+When a process changes state, the shell is sent a \fBCHLD\fR signal. The shell
+outputs the list of stopped jobs right before outputting the next primary
+string. If the \fBnotify\fR '\fB\-b\fR' option is set, the shell notifies the
+user of any change in job's status immediately. When a background job finishes
+and the \fBmonitor\fR '\fB\-m\fR' option is set, the shell executes any set
+\fBCHLD\fR traps.
+.PP
+When the user tries to exit an interactive shell while there are running or
+stopped jobs, the shell prints a warning message. If another attempt is made at
+exit, the jobs are sent a HUP signal before the shell exits. When a login shell
+receives a HUP signal, it re-sends the HUP signal to all job that have not been
+disowned with the \fBdisown\fR builtin utility.
+.SH SIGNALS
+.PP
+The interactive shell ignores the \fBTERM\fR and \fBQUIT\fR signals. If the
+\fBmonitor\fR '\fB\-m\fR' option is set, the \fBTSTP\fR, \fBTTIN\fR, and
+\fBTTOU\fR signals are also ignored. The \fBCHILD\fR, \fBINT\fR, \fBWINCH\fR and
+\fBHUP\fR signals are caught and handled.
+.PP
+For background (asynchronous) pipelines, the \fBINT\fR and \fBQUIT\fR signals
+are ignored if the \fBmonitor\fR '\fB\-m\fR' option is not active. In all other
+cases, signals have the values inherited by the shell from its parent upon
+startup.
+.SH COMMAND EXECUTION
+.PP
+Commands that doesn't contain slashes are looked up. If the command name
+matches the name of a special builtin utility, the utility is executed
+in the current shell. If not, the command name is checked against user-
+defined functions. If it matches a defined function, positional parameters
+are saved and then reset, before assigning them to the arguments passed as
+part of the function call. Functions are also executed in the current shell.
+Positional parameters are restored when the function returns. The exit status
+of a function call is the value of the last command executed in the function.
+If a command name is neither a special builtin utility nor a user-defined
+function, the shell looks for a regular builtin utility with the given name.
+If found, the regular builtin utility is executed in the current shell.
+.PP
+If all the above fails, the shell looks for commands external to the shell's
+executable. The shell variable \fB$PATH\fR defines the search path which the
+shell uses to look for a directory containing the command. It consists of a
+colon-separated list of directory names. The default path defined by Layla
+shell is \fB"/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin"\fR. Each
+directory in the path is searched for an executable file with the given name.
+If found, a subshell is forked and the command is executed by calling
+\fBexec()\fR.
+.PP
+One of the distinctive features of lsh's commandline interpreter is that it
+performs two passes on the input source (whether it was an interactively-entered
+command, a script file, or a command string). The first pass is in the frontend (the
+parser), which tokenizes input and forms an abstract source tree (AST) out of it.
+The second pass is in the backend (the executor), which executes the AST.
+That two-tiered (or two pass) layout simplifies the process of reading and executing
+commands within the shell, but it also has some side effects. One of these side effects
+is that syntax errors in a shell script will result in the shell refraining from
+executing the whole script. Another side effect is that functions can be defined
+anywhere in the script, and they can be called before they are defined (provided the
+definition occurs in the same script file). So for example, the following script will
+raise an error in bash, but not in lsh:
+.PP
+.nf
+.RS
+# the following line will execute successfully in lsh, but not in bash
+f1
 
+# function definition can follow function call in the same script file
+f1 ()
+{
+   echo "Inside f1"
+}
+.RE
+.fi
+.PP
+Another side effect is that empty function bodies are permissible in lsh, while they
+are not so in bash. For example, in the following script, @code{echo} will be executed
+in lsh, while it a syntax error will result in bash:
+.PP
+.nf
+.RS
+empty ()
+{
+}
+
+echo "Hi there!"
+.RE
+.fi
+.PP
+A third side effect is that function nesting is permissible in lsh, which is also the case
+in bash. The difference here is that because lsh parses the whole script before passing
+it to the executor, a nested function is recognized and added to the function table at the
+time its parent function is parsed. This doesn't mean that either of the two functions is being
+processed or its commands executed; just the function names are added to the global function
+table. Again, this is not the case in bash.
+.PP
+For example, in the following script, both f1 and f2 are added to the function table by the
+time the parser finishes with the script. This is why the three function calls will work
+properly in lsh, while in bash the first call to f2 will result in a "command not found..." error;
+the second call to f2 and the call to f1 will both work, as the call to f1 resulted in the
+addition of f2 to the function table:
+.PP
+.nf
+.RS
+f1 ()
+{
+    f2 ()
+    {
+        echo "function f1"
+    }
+}
+
+f2    # results in "command not found..." error in bash, but not lsh
+f1    # works in both bash and lsh
+f2    # works in both bash and lsh
+.RE
+.fi
+.SH COMMAND HISTORY
+.PP
+The last \fB$HISTSIZE\fR (which defaults to 512) commands entered in an
+interactive shell is saved in the history file, whose path is given by
+\fB$HISTFILE\fR. If \fB$HISTFILE\fR is unset of null, or the file is not
+writeable by the shell, \fB$HOME/.lsh_history\fR is used instead.
+.PP
+The builtin utility \fBhistory\fR can be used to list the history entries,
+while the builtin \fBfc\fR can be used to edit the list. When calling \fBfc\fR to
+edit history commands, the \fB\-e\fR option can be used to specify the editor
+program to pass the history list to. If no editor is specified, \fBfc\fR
+consults the \fB$FCEDIT\fR variable and invokes the command named in the
+value of this variable. If \fB$FCEDIT\fR is not set, \fB$HISTEDIT\fR is
+consulted. If this is also not set, \fB$EDITOR\fR is consulted. If all of
+this fails, the default value \fB/bin/ed\fR is used. The edited commands
+are printed and executed upon leaving the editor. The \fB\-s\fR option
+causes \fBfc\fR to skip the editing phase and to re-execute the commands
+directly.
+.SH VI EDITING MODE
+.PP
+The Layla shell provides builtin \fBvi\fR editing functionality. There are two
+default modes. When the shell starts, the user is placed in the \fIinput mode\fR.
+To edit commands, the user must press \fBESC\fR (ASCII 033) to enter the
+\fIcontrol mode\fR. Most control commands accept an optional repeat count that
+is entered before the command character.
+.PP
+.B The Input Mode
+.PP
+The default editor mode is the input mode. The following edit commands are
+supported in this mode:
+.TP
+.BR ERASE\fR
+The default is \fB^H\fR or \fBBackspace\fR. Deletes the previous character.
+.TP
+.BR ^W\fR
+Deletes the previous blank-separated word.
+.TP
+.BR EOF\fR
+If the first character in the line, it causes the shell to terminate, unless
+the \fBignoreeof\fR option is set, or the \fB$IGNOREEOF\fR variable is set to
+a numeric value greater than zero.
+.TP
+.BR ^V\fR
+Removes the next character's editing features, if any.
+.TP
+.BR \e\fR
+Escape the next \fBERASE\fR or \fBKILL\fR character.
+.TP
+.BR ^I ", " TAB\fR
+Attempts command, variable, username, hostname, or filename completion.
+.PP
+.B The Control Mode
+.PP
+When the user presses \fBESC\fR and the \fBvi\fR option is set, the shell's
+editor enters the control mode. The following commands are recognized in this
+mode.
+.PP
+.B Motion Edit Commands
+.TP
+.RB [count] l\fR
+Move the cursor one character forward (to the right).
+.TP
+.RB [count] [C\fR
+Move the cursor one character forward (to the right).
+.TP
+.RB [count] w\fR
+Move the cursor one word forward.
+.TP
+.RB [count] W\fR
+Move the cursor to the beginning of the next word following a blank.
+.TP
+.RB [count] e\fR
+Move the cursor to the end of this word.
+.TP
+.RB [count] E\fR
+Move the cursor to the end of the current blank-delimited word.
+.TP
+.RB [count] h\fR
+Move the cursor one character backwards (to the left).
+.TP
+.RB [count] [D\fR
+Move the cursor one character backwards (to the left).
+.TP
+.RB [count] b\fR
+Move the cursor one word backwards.
+.TP
+.RB [count] B\fR
+Move the cursor to the preceding blank-separated word.
+.TP
+.RB [count] |\fR
+Move the cursor to column number \fBcount\fR.
+.TP
+.RB [count] fc\fR
+Find the next character \fBc\fR in the current line.
+.TP
+.RB [count] Fc\fR
+Find the previous character \fBc\fR in the current line.
+.TP
+.RB [count] tC\fR
+Equivalent to \fBf\fR followed by \fBh\fR.
+.TP
+.RB [count] Tc\fR
+Equivalent to \fBF\fR followed by \fBl\fR.
+.TP
+.RB [count] ;\fR
+Repeat \fBcount\fR times the last find command (\fBf, F, t, or T\fR).
+.TP
+.RB [count] ,\fR
+Reverse the last find command \fBcount\fR times.
+.TP
+.BR 0\fR
+Move the cursor to the start of line.
+.TP
+.BR ^\fR
+Move the cursor to start of line.
+.TP
+.BR [H\fR
+Move the cursor to the first non-blank character in line.
+.TP
+.BR $\fR
+Move the cursor to the end of line.
+.TP
+.BR [Y\fR
+Move the cursor to the end of line.
+.TP
+.BR %\fR
+Moves to balancing brace or bracket.
+.PP
+.B Search Edit Commands
+.TP
+.RB [count] k\fR
+Fetch a previous command, \fBcount\fR entries back.
+.TP
+.RB [count] -\fR
+Fetch a previous command, \fBcount\fR entries back. Equivalent to \fBk\fR.
+.TP
+.RB [count] [A\fR
+Fetch a previous command, \fBcount\fR entries back. Equivalent to \fBk\fR.
+.TP
+.RB [count] j\fR
+Fetch the next command, \fBcount\fR entries forward.
+.TP
+.RB [count] +\fR
+Fetch the next command, \fBcount\fR entries forward. Equivalent to \fBj\fR.
+.TP
+.RB [count] [B\fR
+Fetch the next command, \fBcount\fR entries forward. Equivalent to \fBj\fR.
+.TP
+.RB [count] G\fR
+Fetch command number \fBcount\fR. The default is the last history entry.
+.TP
+.BR /string\fR
+Search history backwards for a command containing \fBstring\fR. If \fBstring\fR
+start with '^', the matched line must begin with \fBstring\fR. If \fBstring\fR is
+null, the last entered \fBstring\fR is used.
+.TP
+.BR ?string\fR
+Search history forwards for a command containing \fBstring\fR. If \fBstring\fR
+starts with '^', the matched line must begin with \fBstring\fR. If \fBstring\fR is
+null, the last entered \fBstring\fR is used.
+.TP
+.BR n\fR
+Search backwards for the next match of the last pattern to '/' or '?'.
+.TP
+.BR N\fR
+Search forwards for the next match of the last pattern to '/' or '?'.
+.PP
+.B Text Modification Edit Commands
+.TP
+.BR a\fR
+Enter input mode and enter text after the current character.
+.TP
+.BR A\fR
+Append text to the end of line.
+.TP
+.RB [count] c motion\fR
+.TP
+.BR c [count] motion\fR
+Delete all characters from the current character up to the character that
+\fBmotion\fR would move the cursor to, and then enter the input mode. If \fBmotion\fR
+is \fBc\fR, the entire line is deleted and the input mode is entered.
+.TP
+.BR C\fR
+Delete all characters from the current character up to the end of line and
+then enter the input mode.
+.TP
+.BR S\fR
+Equivalent to \fBcc\fR.
+.TP
+.RB [count] s\fR
+Replace characters under the cursor in the input mode.
+.TP
+.BR D [count] d motion\fR
+Delete all characters from the current character up to the end of line.
+.TP
+.BR d [count] motion\fR
+Delete all characters from the current character up to the character that
+\fBmotion\fR would move the cursor to. If \fBmotion\fR is \fBd\fR, the entire
+line is deleted.
+.TP
+.BR i\fR
+Enter the input mode and insert text before the current character.
+.TP
+.BR I\fR
+Insert text before the beginning of the line.
+.TP
+.RB [count] P\fR
+Yank (paste) text before the cursor.
+.TP
+.RB [count] p\fR
+Yank (paste) text after the cursor.
+.TP
+.BR R\fR
+Enter the input mode and replace characters on the screen with characters to
+be typed, as if the user pressed the \fBINSERT\fR key.
+.TP
+.RB [count] r c\fR
+Replace \fBcount\fR characters, starting at the cursor position, with \fBc\fR,
+then advance the cursor.
+.TP
+.RB [count] x\fR
+Delete the current character.
+.TP
+.RB [count] X\fR
+Delete the preceding character.
+.TP
+.RB [count] .\fR
+Repeat the previous text modification command.
+.TP
+.RB [count] ~\fR
+Invert the case of \fBcount\fR characters, starting at the cursor position,
+then advance the cursor.
+.TP
+.RB [count] _\fR
+Append the \fBcount\fR word of the previous command to the line and enter the
+input mode. The last word is used if \fBcount\fR is omitted.
+.TP
+.BR *\fR
+Append a '*' to the current word and attemp file name completion. If no match
+is found, the bell is ringed. Otherwise, the word is replaced by the match
+and input mode is entered.
+.TP
+.BR \e\fR
+Perform command or file name completion.
+.PP
+.B Other Edit Commands
+.TP
+.RB [count] y motion\fR
+.TP
+.BR y [count] motion\fR
+Yank (copy) all characters from the current character up to the character to
+which \fBmotion\fR would move the cursor. Yanked characters are saved in a
+special buffer. The cursor position is not changed.
+.TP
+.BR yy\fR
+Yank (copy) the current line.
+.TP
+.BR Y\fR
+Yank (copy) the current line from the cursor position to the end of the line.
+.TP
+.BR U\fR
+Undo all the text modifying commands performed on current line.
+.TP
+.RB [count] V\fR
+Return the command:
+.PP
+.nf
+.RS
+fc -e ${VISUAL:-${EDITOR:-vi}} count
+.RE
+.fi
+.TP
+in the input buffer. If \fBcount\fR is omitted, the current line is used.
+.TP
+.BR ^L\fR
+Print a line feed and then print the current line. Works in control mode.
+.TP
+.BR ^J\fR
+Print a new line and then execute the current line. Works in both modes.
+.TP
+.BR ^M\fR
+Return and execute the current line. Works in both modes.
+.TP
+.BR #\fR
+Comment or uncomment the current line.
+.TP
+.RB @ letter\fR
+Search for an alias by the name \fBletter\fR. If an alias of this name is
+found, insert its value on the input buffer.
+.TP
+.BR ^V\fR
+Display the version of the shell.
+.SH BUILTIN UTILITIES
+.PP
+The following simple commands are executed in the shell process, i.e. no subshell
+is invoked. Input and output redirection is allowed and affects the current
+shell. Except for \fB:\fR, \fBtrue\fR, \fBfalse\fR, \fBecho\fR, \fBnewgrp\fR,
+and \fBlogin\fR, all builtin utilities accept '--' to indicate the end of
+options and start of arguments.
+Unless otherwise stated, the \fB\-h\fR option prints a short history and usage
+message, while the \fB\-v\fR option prints the utility (i.e. the shell)'s version.
+.TP
+.B : \fR[\fIarg\fR ...]
+Expand parameters only.
+.TP
+.B . name \fI[arg\fR ...]
+If \fBname\fR is a defined function, the function is executed in the current
+shell environment. If \fBname\fR refers to a file, the file is read and the
+commands are executed in the current shell environment. If any arguments are
+specified, they become the positional parameters for the command. The exit
+status is the exit status of the last command executed.
+.TP
+.B alias [\fB\-hv\fR] [\fIname\fR[\fI=value\fR]] ...
+With no arguments, prints the list of aliases in the form of
+\fB'name=value'\fR on stdout. When one or more arguments are specified, an alias
+is defined for each \fBname\fR whose \fBvalue\fR is specified. For each name in
+the argument list for which no value is specified, the name and value of the
+alias is printed. The exit status is non-zero if a \fBname\fR is specified for which
+no alias is defined.
+.TP
+.B bg [\fB\-hv\fR] \fR[\fIjob\fR ...]
+If job control is on (the \fBmonitor\fR option is set), put each specified \fIjob\fR
+in the background. If no \fIjob\fR is specified, the current job is put in the
+background. See the \fIJobs\fR section for a description of the format of \fIjob\fR.
+.TP
+.B \fBbreak\fR [\fIn\fR]
+Exit from the \fIn\fR-th enclosing \fBfor\fR, \fBwhile\fR, \fBuntil\fR, or \fBselect\fR
+loop, if any. If \fIn\fR is not specified, it defaults to 1.
+.TP
+.B bugreport
+Send bugreports to the shell's author(s).
+.TP
+.B builtin \fR[\fB-hvsra\fR] [\fIname\fR [\fIargs\fR ...]]
+If \fBname\fR is not specified, a list of builtins is printed on stdout. The \fB\-s\fR
+option prints only the special builtins. \fBname\fR is the name of a shell builtin
+utility to invoke. \fBargs\fR are the arguments to pass to the builtin utility.
+The \fB\-s\fR option prints the special builtins, The \fB\-r\fR option prints
+the regular builtins, and the \fB\-a\fR option prints both.
+.TP
+.B caller \fR[\fIn\fR]
+Print the context of any active subroutine call. \fB\-n\fR is a non-negative integer
+denoting one of the callframe in the current call stack. The current frame is 0.
+Each call to a function or dot script results in a new entry added to the call stack.
+.TP
+.B cd \fR[\fB\-h\fR] \fR[\fB\-nplv\fR] \fR[\fB\-L|-P\fR] [\fIdirectory\fR]
+.TP
+.B cd \fR[\fB\-h\fR] \fR[\fB\-nplv\fR] \fR[\fB\-L|-P\fR] [\fI-\fR]
+In the first form \fBcd\fR changes the current directory to the given \fIarg\fR. If
+\fIarg\fR is a hyphen '\-', the directory is changed to the previous directory.
+If no \fIarg\fR is given, shell variable \fB$HOME\fR is used. Shell variable \fB$PWD\fR
+is set to the current directory. Shell variable \fB$CDPATH\fR, if set, gives the
+search path for the directory containing \fBarg\fR. It is composed of a colon-separated
+list of directory names. If \fBarg\fR begins with a '/', \fB$CDPATH\fR is not used.
+.TP
+.B \fR
+Symbolic link names are treated literally when parsing directory names. This is what the
+\fB\-P\fR option does (physical treatment of links). The \fB\-L\fR option causes
+symbolic links to be resolved when determining the directory (logical treatment of links).
+If both options are supplied, the last instance of on the command line determines
+which option is used. Restricted shells cannot execute \fBcd\fR.
+.TP
+.B \fR
+The \fB\-l\fR, \fB\-n\fR, \fB\-p\fR, and \fB\-v\fR options have the same meaning as
+when used with the \fBdirs\fR builtin. They all imply \fB\-p\fR.
+.TP
+.B command\fR [\fB\-hp\fR] \fIname\fR [\fIarg\fR ...]
+.TP
+.B command\fR [\fB\-hp\fR] [\fB-v|-V\fR] \fIname\fR
+Without passing the \fB\-v\fR or \fB\-V\fR options, \fBcommand\fR executes
+\fBname\fR with \fIarg\fR as arguments. The \fB\-p\fR option forces the use
+of a default path guaranteed to find all commands on the system. The \fB\-v\fR
+option prints a description of \fBname\fR if used as a command name within
+the shell. The \fB\-V\fR option prints a more verbose output.
+.TP
+.B continue\fR [\fIn\fR]
+Resume the next iteration of the \fIn\fR-th enclosing \fBfor\fR, \fBwhile\fR,
+\fBuntil\fR, or \fBselect\fR loop. If \fIn\fR is not specified, it defaults to 1.
+.TP
+.B coproc command\fR [\fIredirections\fR]
+Execute \fIcommand\fR in a coprocess (subshell with pipe). \fIredirections\fR are
+optional file redirections. A pipe is opened between the shell and the coprocess
+before any redirections are performed. Shell variable \fB$COPROC_PID\fR contains
+the \fIPID\fR of the coprocess. Shell variable \fB$COPROC0\fR points to the
+reading end of the pipe (connected to command's stdout), while variable \fB$COPROC1\fR
+points to the writing end of the pipe (connected to command's stdin). You can feed
+output to the process by invoking:
+.PP
+.nf
+.RS
+$ cmd >&p
+.RE
+.fi
+.PP
+.RS
+Similarly, you can read the process's output by invoking:
+.RE
+.PP
+.nf
+.RS
+$ cmd <&p
+.RE
+.fi
+.TP
+.B declare\fR [\fB\-hvfFgrxlut\fR] [\fB\-p\fR] [\fIname\fR=[\fIvalue\fR]...]
+Declare variables and give them attributes. \fIname\fR is the name of the variable
+to which an attribute or value is set, and \fIvalue\fR is the value to give to the
+variable. The \fB\-f\fR option restricts output to shell functions. The \fB\-F\fR
+option doesn't print function definitions. The \fB\-g\fR option declares/modifies
+variables at the global scope. The \fB\-l\fR option converts all characters in
+variable's value to lowercase on assignment. The \fB\-p\fR option prints the
+attributes and values of each \fIname\fR. The \fB\-r\fR option marks each
+\fIname\fR as readonly. The \fB\-t\fR option gives functions the \fBtrace\fR
+attribute (doesn't work on variables). The \fB\-u\fR option converts all characters
+in variable's value to uppercase on assignment. The \fB\-x\fR option marks each
+\fIname\fR for export.
+.TP
+.B dirs\fR [\fB\-hclpv\fR] [\fI+N\fR | \fI-N\fR]
+.TP
+.B dirs\fB -S|-L\fR [\fIfilename\fR]
+Display the contents of the directory stack. The \fB+N\fR argument prints the
+N-th directory from the top (the left side of the printed list), counting from
+zero (which is the current working directory). The \fB\-N\fR argument prints
+the N-th directory from the bottom (the right side of the printed list),
+counting from zero (which is the first dir pushed on the stack). \fIfilename\fR
+is the file to save/load the directory stack to/from. The \fB\-c\fR option
+clears the stack, i.e. removes all directories. The \fB\-l\fR option prints
+full pathnames, it doesn't use ~ to indicate the home directory. The \fB\-L\fR
+option loads the directory stack from the given filename. If no filename is
+supplied, uses \fB$DIRSFILE\fR or defaults to \fI~/.lshdirs\fR. The \fB\-n\fR
+option wraps entries before they reach edge of the screen. The \fB\-p\fR option
+prints each directory on a separate line. The \fB\-S\fR option saves the
+directory stack to the given filename. If no filename is supplied, uses \fB$DIRSFILE\fR
+or defaults to \fI~/.lshdirs\fR. The \fB\-v\fR option prints each directory with
+its index on a separate line.
+.TP
+.B disown\fR [\fB\-arsv\fR] [\fB\-h\fR] [\fIjob\fR ...]
+Do not to send a HUP signal to each specified \fIjob\fR, or to all active jobs
+if \fIjob\fR is omitted, when a login shell exits. The \fB\-a\fR option disown
+all jobs. The \fB\-h\fR option doesn't remove jobs from the jobs table, only
+marks them as disowned. The \fB\-r\fR option disowns only running jobs, while
+\fB\-s\fR option disowns only stopped jobs.
+.TP
+.B dump\fR [\fB-hv\fR] [\fIargument\fR ...]
+Dumps memory values of the passed arguments. \fBargument\fR can be one of the following:
+.PP
+.nf
+.RS
+.B symtab \fR\t will print the contents of the local symbol table
+.B vars \fR\t will print out the shell variable list (similar to \`declare -p\`)
+.TP
+.RE
+.fi
+.TP
+.B echo\fR [\fB\-enE\fR] [\fIarg\fR ...]
+Print each of the arguments separated by a space and terminated by a newline.
+The \fB\-e\fR option allows escaped characters in \fBarg\fRs. The \fB\-E\fR
+option doesn't allow escaped characters. The \fB\-n\fR option suppresses
+newline echoing.
+.TP
+.B enable\fR [\fB\-ahnprsv\fR] [\fIname\fR ...]
+Enables/disables shell builtins. \fIname\fR is the name of a shell builtin
+utility to enable or disable. The \fB\-a\fR option prints a list of all builtins,
+enabled and disabled. The \fB\-n\fR option disables each listed builtin. The \fB\-p\fR
+option prints a list of enabled builtins. The \fB\-r\fR option prints a list of
+enabled and disabled regular builtins. The \fB\-s\fR option print a list of
+enabled and disabled special builtins.
+.TP
+.B eval\fR [\fIarg\fR ...]
+The arguments are read as input to the shell and the resulting commands are executed.
+.TP
+.B exec\fR [\fB\-cl\fR] [\fB\-a\fI arg0\fR ...] [\fIarg\fR ...]
+If one or more \fIarg\fR is specified, the command is executed in place of
+this shell without forking a new process. The \fB\-c\fR option clears the
+environment before applying variable assignments associated with the \fBexec\fR
+invocation. The \fB\-a\fR option causes \fBarg0\fR, rather than \fBarg[0]\fR,
+to become the first argument for the new process. If \fIarg\fR is not
+specified, \fBexec\fR modifies the file descriptors of the shell, as
+indicated by the input/output redirection list.
+The \fB\-l\fR option places a dash in front of \fBargv[0]\fR, just as the
+\fBlogin\fR utility does.
+.TP
+.B exit\fR [\fIn\fR]
+Exit the shell with the exit status \fIn\fR. The value is the least
+significant 8 bits of \fIn\fR. If \fIn\fR is omitted, the exit status is that
+of the last command executed.
+.TP
+.B export\fR [\fB\-hvn\fB] [\fB\-p\fR] [\fIname\fR[\fI=value\fR]] ...
+If \fIname\fR is not specified, the names and values of each variable with
+the export attribute are printed with the values quoted to allow reentry to
+the shell. The \fB\-p\fR option causes the word \fBexport\fR to be printed
+before each name. Otherwise, the specified names are marked for export to
+the environment of commands executed by the shell.
+The \fB\-n\fR option removes the export attribute of the passed variable \fBname\fRs.
+.TP
+.B false
+Return false result (non-zero exit status).
+.TP
+.B fc\fR [\fB\-hvr\fR] [\fB\-e\fI editor\fR] [\fIfirst\fR [\fIlast\fR]]
+.TP
+.B fc\fR \fB\-l [\fB\-hvnr\fR] [\fIfirst\fR [\fIlast\fR]]
+.TP
+.B fc\fR \fB\-s [\fB\-hv\fR] [\fIold\fR=\fInew\fR] [\fIfirst\fR]
+In the first form, a range of commands from \fIfirst\fR to \fIlast\fR is
+selected from the history list. \fIfirst\fR and \fIlast\fR can be specified
+as numbers or strings. A string finds the most recent command
+starting with the given string. A negative number gives an offset,
+relative to the current command number. In the third form, \fIold=new\fR
+replaces the first occurence of \fIold\fR with \fInew\fR
+in the command. The \fB\-e\fR option specifies the editor to use when editing
+commands, which is passed as the \fIeditor\fR argument. \fIeditor\fR is invoked
+on a temporary file containing the selected commands. If \fIeditor\fR is not
+supplied, the value of \fB$FCEDIT\fR is used. If this is null or empty, the
+value of \fB$HISTEDIT\fR is used. If null or empty, the value of \fB$EDITOR\fR is
+used. Otherwise, the default editor (\fI/bin/ed\fR) is used. When
+editing finishes, the edited commands are executed. If \fIlast\fR is
+not specified, it is set to \fIfirst\fR. If \fIfirst\fR is not specified,
+it defaults to the previous command for editing and -16 for
+listing. The \fB\-l\fR option
+lists commands instead of invoking them. The \fB\-n\fR option suppresses command
+numbers when listing. The \fB\-r\fR option reverses the order of listed/edited
+commands. The \fB\-s\fR option re-executes commands without invoking the editor.
+.TP
+.B fg\fR [\fB\-hv\fR] [\fIjob\fR ...]
+If job control is on (the \fBmonitor\fR option is set), put each specified \fIjob\fR
+in the foreground. If no \fIjob\fR is specified, the current job is put in the
+foreground. See the \fIJobs\fR section for a description of the format of \fIjob\fR.
+.TP
+.B getopts\fR \fBoptstring varname\fR [\fIarg\fR ...]
+Check \fIarg\fR for legal options. If \fIarg\fR is omitted, positional parameters
+are used. An option argument can begin with a '+' or '-'. An option that does not
+begin with '+' or '-', or the special argument '--', ends the options list.
+Options beginning with '+' are only recognized when the \fBoptstring\fR begins
+with a '+'. The \fBoptstring\fR contains letters that \fBgetopts\fR recognizes as
+valid options. If a letter is followed by ':', that option is expected to have an
+argument. Options can be separated from their arguments by spaces. \fBgetopts\fR
+places the next option letter in the variable \fBvarname\fR. The option letter
+is preceded by a '+' when \fIarg\fR begins with a '+'. The index of the next
+\fIarg\fR is stored in the shell variable \fB$OPTIND\fR. The option argument,
+if any is found, is stored in \fB$OPTARG\fR. A leading ':' in \fBoptstring\fR
+causes \fBgetopts\fR to store the letter of an invalid option in \fB$OPTARG\fR
+and set the value of \fBvarname\fR to '?' for an unknown option, and to ':' when
+a required option argument is missing. Otherwise, getopts prints an error message.
+The exit status is non-zero when options are finished. Options ':', '+', '-', '?', '[', and ']'
+are not allowed.
+.TP
+.B glob\fR [\fB\-eE\fR] [\fIargs\fR ...]
+Echoes \fIargs\fR, delimited by NULL characters.
+The \fB\-e\fR option allows escaped characters in arguments. The \fB\-E\fR option
+doesn't allow escaped characters in arguments. This utility doesn't recognize
+the \fB\-n\fR option as does \fBecho\fR.
+.TP
+.B hash\fR [\fB\-hvld\fR] [\fB\-p\fI path\fR] [\fB\-r\fR] \fIutility\fR ...
+.TP
+.B hash \-a
+Remembers/reports utility locations. \fIutility\fR is the name of a utility to
+search and add to the hashtable. The \fB\-a\fR option forgets, then re-searches
+and re-hashes all utilities whose names are currently in the hashtable.
+The \fB\-d\fR option forgets the location of each passed \fIutility\fR.
+The \fB\-l\fR option prints the list of hashed utilities and their paths.
+The \fB\-p\fR option performs utility search using \fIpath\fR instead of
+the \fB$PATH\fR variable. The \fB\-r\fR option forgets all previously
+remembered utility locations.
+.TP
+.B help\fR [\fB\-ds\fR] [\fIcommand\fR]
+Shows help for builtin utilities and commands. The \fB\-d\fR option prints a
+short description of each \fIcommand\fR. The \fB\-s\fR option prints the
+usage or synopsis of each \fIcommand\fR.
+.TP
+.B history\fR [\fB\-hR\fR] [\fIn\fR]
+.TP
+.B history \-c
+.TP
+.B history \-d \fIoffset\fR
+.TP
+.B history \-d \fIstart\fR\-\fIend\fR
+.TP
+.B history\fR [\fB\-anrwSL\fR] [\fIfilename\fR]
+.TP
+.B history \-ps \fIarg\fR ...
+Prints command history. The \fIn\fR argument prints only the last \fIn\fR lines.
+The \fB\-a\fR option appends the in-memory history list to \fIfilename\fR.
+If \fIfilename\fR is not supplied, the default history file is used. The \fB\-c\fR
+option clears the history list. The \fB\-d\fR option deletes the history entry at
+position \fIoffset\fR. Negative offsets count from the end of the list; offset -1
+is the last command entered. The \fB\-d\fR option deletes history entries between
+offsets \fIstart\fR and \fIend\fR, which can be negative, as described above.
+The \fB\-h\fR option prints history entries without leading numbers. The \fB\-L\fR
+option is equivalent to \fB\-r\fR. The \fB\-n\fR option appends the entries from
+\fIfilename\fR to the in-memory list. If \fIfilename\fR is not supplied, the
+default history file is used. The \fB\-p\fR option performs history substitution
+on \fIarg\fRs and prints the result on stdout. The \fB\-r\fR option reads the
+history file and append the entries to the in-memory list. The \fB\-R\fR option
+reverses the listing order (most recent entries are printed first). The \fB\-s\fR option
+adds \fIarg\fRs to the end of the history list as one entry. The \fB\-S\fR option
+is equivalent to \fB\-w\fR. The \fB\-w\fR option writes out the current in-memory
+list to \fIfilename\fR. If \fIfilename\fR is not supplied, the default history
+file is used.
+.TP
+.B hup\fR [\fIcommand\fR]
+Runs a command so that it can receive \fBSIGHUP\fR signal. Commands can override
+this by defining their own signal handlers.
+.TP
+.B jobs\fR [\fB\-hnrsv\fR [\fB\-l\fR | \fB\-p\fR] [\fIjob\fR ...]
+.TP
+.B jobs -x command\fR [\fIargument\fR ...]
+In the first form, lists information about each \fIjob\fR, or all active jobs if \fIjob\fR is
+omitted. The \fB\-l\fR option lists jobs' PIDs in addition to the normal
+information. The \fB\-n\fR option only displays jobs that have stopped or exited
+since the last notification. The \fB\-p\fR option lists only the process groups ids.
+The \fB\-r\fR option reports only running jobs, while the \fB\-s\fR option reports stopped jobs.
+See the \fIJobs\fR section for a description of the format of \fIjob\fR.
+.TP
+.B \fR
+In the second form (with \fB\-x\fR), replaces all occurences of \fIjob\fRs
+in \fBcommand\fR and \fBargument\fRs with the process group ID of the
+respective job, then runs \fBcommand\fR, passing it the given \fBarguments\fR.
+.TP
+.B kill\fR [\fB\-s signame\fR] \fIjob\fR ...
+.TP
+.B kill\fR [\fB\-n signum\fR] \fIjob\fR ...
+.TP
+.B kill \-l\fR | \fB\-L\fR  [\fIsig\fR ...]
+.TP
+.B kill\fR [\fB\-signame\fR] \fIjob\fR ...
+.TP
+.B kill\fR [\fB\-signum\fR] \fIjob\fR ...
+Send either the \fBTERM\fR signal or the specified signal to the given jobs or
+processes. Signals are either specified as numeric arguments to the \fB\-n\fR
+option, or by symbolic names to the \fB\-s\fR option, without the SIG prefix.
+The \fB-n\fR and \fB-s\fR options can be omitted and the signal number or name
+placed immediately after the '-'. See the \fIJobs\fR section for a description
+of the format of \fBjob\fR. In the third form, if \fIsig\fR is not specified,
+signal names are listed. Otherwise, for each symbolic \fIsig\fR, the corresponding
+signal number is listed. For each numeric \fIsig\fR, the corresponding signal name
+is listed.
+.TP
+.B let\fR [\fIarg\fR ...]
+Evaluate each \fIarg\fR as an arithmetic expression. See the \fIArithmetic
+Evaluation\fR section for a description of arithmetic expression evaluation. The
+exit status is 0 if the value of the last expression is non-zero, 1 otherwise.
+.TP
+.B local\fI name\fR[=\fIword\fR] ...
+Define local variable \fIname\fR, setting the local attribute to it and giving
+it the value \fIword\fR.
+.TP
+.B logout\fR [\fIn\fR]
+Exit a login shell, returning \fIn\fR as the exit status code.
+.TP
+.B mailcheck\fR [\fB\-hvq\fR]
+Check for mail at specified intervals. The \fB\-q\fR causes \fBmailcheck\fR not to
+output messages in case of error or no mail available.
+.TP
+.B memusage arg...
+Show the shell's memory usage. Each \fBarg\fR shows the memory allocated for
+a different shell internal structure, which can be one of the following:
+.PP
+.nf
+.RS
+.B aliases \fR\t\t memory allocated for alias names and values
+.B cmdbuf, cmdbuffer \fR\t memory allocated for the command line buffer
+.B dirstack \fR\t\t memory allocated for the directory stack
+.B hash, hashtab \fR\t memory allocated for the commands hashtable
+.B history \fR\t\t memory allocated for the command line history table
+.B input \fR\t\t memory allocated for the currently executing translation unit
+.B stack, symtabs\fR\t memory allocated for the symbol table stack
+.B strbuf, strtab \fR\t memory allocated for the internal strings buffer
+.B traps \fR\t\t memory allocated for the signal traps
+.B vm \fR\t\t\t memory usage of different segments (RSS, stack, data)
+.RE
+.fi
+.TP
+.B \fR
+The \fB\-l\fR option shows long output (i.e. prints more details).
+.TP
+.B newgrp\fR [\fB\-hv\fR] [\fB\-l\fR] [\fIgroup\fR]
+Create a new group and restart the shell in a new execution environment.
+\fIgroup\fR is the group name (or ID) to which the real and effective group
+IDs shall be set. The \fB\-l\fR option changes the environment to a login environment.
+.TP
+.B nice\fR [\fB+n\fR] [\fIcommand\fR]
+.TP
+.B nice\fR [\fB\-n\fR] [\fIcommand\fR]
+Run a command with the given priority. \fIn\fR can be positive or negative, specifying
+the nice priority to give to \fIcommand\fR, or the shell if no \fIcommand\fR is
+given (the plus sign can be omitted for positive nice values). On many systems, only
+\fBroot\fR can pass negative nice values. \fIcommand\fR is the command to run under
+priority \fIn\fR, which must be an external command.
+.TP
+.B nohup\fR [\fIcommand\fR]
+Run a command, ignoring \fBSIGHUP\fR. As with \fBnice\fR, \fBcommand\fR must be
+an external command.
+.TP
+.B notify\fR [\fIjob\fR ...]
+Notify immediately when jobs change status. \fBjob\fR is the job id of the job
+to mark for immediate notification. See the \fIJobs\fR section for a description
+of the format of \fBjob\fR.
+.TP
+.B popd\fR [\fB\-chlnpsv\fR] [\fI+N\fR | \fI\-N\fR]
+Pop directories off the stack and \fBcd\fR to them. If \fIN\fR is positive, it removes
+the N-th directory, counting from 0 from the left. If it is negative, it removes the
+N-th directory, counting from 0 from the right. If called without arguments, \fBpopd\fR
+removes the top directory from the stack and calls \fBcd\fR to change the current
+working directory to the new top directory (equivalent to \`popd +0\`.
+The \fB\-c\fR option manipulates the stack without \fBcd\fRing to the directory.
+The \fB\-s\fR option suppresses the output the dirstack after popping off it.
+The \fB\-l\fR, \fB\-n\fR, \fB-v\fR, and \fB-p\fR options have the same meaning as for
+the \fBdirs\fR builtin.
+.TP
+.B printenv\fR [\fB\-hv0\fR] [\fIname\fR ...]
+Print the names and values of environment variables identified by each \fIname\fR.
+The \fB\-0\fR option terminates each entry with NULL instead of a newline character.
+.TP
+.B pushd\fR [\fB\-chlnpsv\fR] [\fI+N\fR | \fI\-N\fR | \fIdir\fR]
+Push directories on the stack and \fBcd\fR to them. If \fIN\fR is positive, it
+rotates the stack and bring the N-th directory, counting from 0 from the left, to
+the top of the stack. If it is negative, it rotates the stack and bring the N-th
+directory, counting from 0 from the right, to the top of the stack. If \fBdir\fR
+is supplied, it is pushed on the stack and \fBcd\fR is called to change the working
+directory to \fBdir\fR. If \fBdir\fR is dash \fB\-\fR, this equals the previous
+working directory, as stored in the \fB$PWD\fR variable.
+The \fB\-c\fR option manipulates the stack without \fBcd\fRing to the directory.
+The \fB\-s\fR option suppresses the output the dirstack after popping off it.
+The \fB\-l\fR, \fB\-n\fR, \fB-v\fR, and \fB-p\fR options have the same meaning as for
+the \fBdirs\fR builtin.
+.TP
+.B \fR
+If called without arguments, \fBpushd\fR exchanges the top two directories on the
+stack and calls \fBcd\fR to change the current working directory to the new top
+directory. If the \fBpushdtohome\fR extra option is set (by calling \`setx -s pushdtohome\`),
+\fBpushd\fR pushes the value of \fB$HOME\fR and \fBcd\fR\'s to it instead of
+exchanging the top two directories. If the \fBdunique\fR extra option is set,
+\fBpushd\fR removes instances of \fBdir\fR from the stack before pushing it.
+If the \fBdextract\fR extra option is set, \fBpushd\fR extracts the N-th directory
+and pushes it on top of the stack.
+.TP
+.B pwd\fR [\fB\-hv\fR] [\fB\-L\fR | \fB\-P\fR]
+Output the value of the current working directory. The \fB\-L\fR option is the
+default option, which prints the logical name of the current working directory.
+If the \fB\-P\fR option is specified, symbolic links are resolved. If both
+options are supplied, the last instance of \fB\-L\fR or \fB\-P\fR determines
+which option is used.
+.TP
+.B read\fR [\fB\-hv\fR] [\fB\-rs\fR] [\fB\-d\fI delim\fR] [\fB\-nN\fI n\fR] [\fB\-t\fI timeout\fR] [\fB\-u\fI fd\fR] [\fB\-p\fI msg\fR] [\fIvarname\fR ...]
+Read a line and break it up into fields using \fB$IFS\fR characters as field
+separators. The escape character '\e' removes the special meaning for the
+following character and for line continuation. The \fB\-d\fR option causes
+\fBread\fR to continue reading input up to the first character of \fIdelim\fR,
+rather than '\en'. The \fB\-n\fR option causes at most \fIn\fR bytes to be
+read, rather than a complete line. The \fB\-N\fR option causes exactly \fIn\fR
+bytes to be read, unless EOF has been reached, or the read timed out because
+of the \fB\-t\fR option. The \fB\-r\fR causes the '\e' character to lose its
+special meaning as an escape character. The first field is assigned to the
+first \fIvarname\fR, the second field to the second \fIvarname\fR, and so on.
+Extra fields are assigned to the last \fIvarname\fR. If the \fB\-s\fR option
+is supplied, input is saved as a command in the history list. The \fB\-u\fR
+option specifies a one digit file descriptor to read input from. The \fB\-t\fR
+option specifies timeout (in seconds) when reading from a terminal or pipe.
+If \fIvarname\fR is omitted, \fB$REPLY\fR is used as the default variable name.
+The \fB-p\fR option prints the string \fImsg\fR before reading input.
+The exit status is 0 unless EOF is encountered or read timed out.
+.TP
+.B readonly\fR [\fB\-p\fR] [\fIname\fR[=\fIvalue\fR]] ...
+If \fBname\fR is not specified, the names and values of readonly variables
+are printed with the values quoted to allow reinput to the shell. The \fB\-p\fR
+option causes the word \fBreadonly\fR to be inserted before each name.
+Otherwise, the specified names are marked as readonly.
+.TP
+.B repeat\fR [\fB\-hv\fR] \fIcount command\fR
+Repeat executing \fIcommand\fR for \fIcount\fR times.
+.TP
+.B return\fR [\fIn\fR]
+Return from a shell function or script with the exit status \fIn\fR. The value
+returned is the least significant 8 bits of \fIn\fR. If \fIn\fR is omitted,
+the return status is that of the last command executed. If \fBreturn\fR is invoked
+while not in a function or script, it behaves in the same way as \fBexit\fR.
+.TP
+.B set\fR [\fB-BCEGHTabdefhkmnoprstuvx\fR] [\fB-o\fR [\fIoption\fR] ...] [\fIarg\fR ...]
+.TP
+.B set\fR [\fB+BCEGHTabdefhkmnoprstuvx\fR] [\fB+o\fR [\fIoption\fR] ...] [\fIarg\fR ...]
+Set or unset shell options. This utility supports the following options:
+.TP
+.BR \-a\fR
+All subsequent variables that are defined are marked for export.
+.TP
+.BR \-b\fR
+Print job completion messages as soon as a background job changes state.
+.TP
+.BR \-B\fR
+Enable brace pattern field generation. This is set by default.
+.TP
+.BR \-C\fR
+Prevent output redirection operators from truncating existing files. Files
+created are opened with the \fBO_EXCL\fR mode. \fB>|\fR must be used in order
+to truncate a file when this option is set.
+.TP
+.BR \-d\fR
+Dump the parser's Abstract Syntax Tree (AST) before executing commands.
+.TP
+.BR \-e\fR
+If a command exits with non-zero exit status, execute the \fBERR\fR trap,
+if set, and exit the shell.
+.TP
+.BR \-E\fR
+\fBERR\fR traps are inherited by shell functions, command substitutions and subshells.
+.TP
+.BR \-f\fR
+Disable file name generation.
+.TP
+.BR \-h\fR
+Hash all command names on first encounter.
+.TP
+.BR \-H\fR
+Enable history substitution.
+.TP
+.BR \-k\fR
+All variable assignments are placed in the environment for a command, not
+just those that precede the command name.
+.TP
+.BR \-m\fR
+Turn on job control. Background jobs are run in separate process groups. Exit
+status of background jobs is reported in a message. This option is set
+automatically for interactive shells.
+.TP
+.BR \-n\fR
+Read commands but don't execute them. Ignored by interactive shells.
+.TP
+.BR \-o\fR
+If no \fIoption\fR is supplied, print the list of options and their current
+settings to stdout. When invoked as '+o', options are printed in a format that
+can be reinput to the shell to restore the settings.
+.TP
+.B \fR
+The following options can be passed to \fB\-o\fR:
+.PP
+.nf
+.RS
+.B allexport \t\fR Same as \fB\-a\fR.
+.B braceexpand \t\fR Same as \fB\-B\fR.
+.B errexit \t\t\fR Same as \fB\-e\fR.
+.B errtrace \t\t\fR Same as \fB\-E\fR.
+.B functrace \t\fR Same as \fB\-T\fR.
+.B hashall \t\t\fR Same as \fB\-h\fR.
+.B hashexpand \t\fR Same as \fB\-H\fR.
+.B history \t\t\fR Same as \fB\-w\fR.
+.B ignoreeof \t\fR The shell does not exit on \fBEOF\fR.
+.B keyword \t\t\fR Same as \fB\-k\fR.
+.B monitor \t\t\fR Same as \fB\-m\fR.
+.B noclobber \t\fR Same as \fB\-C\fR.
+.B noexec \t\t\fR Same as \fB\-n\fR.
+.B noglob \t\t\fR Same as \fB\-f\fR.
+.B nolog \t\t\fR Do not save function definitions in the history file.
+.B notify \t\t\fR Same as \fB\-b\fR.
+.B nounset \t\t\fR Same as \fB\-u\fR.
+.B onecmd \t\t\fR Same as \fB\-t\fR.
+.B pipefail \t\t\fR Pipeline exit status is that of the rightmost command with non-zero exit status.
+.B privileged \t\fR Same as \fB\-p\fR.
+.B verbose \t\t\fR Same as \fB\-v\fR.
+.B vi \t\t\t\fR Enter vi insert mode until \fBESC\fR (033) is pressed, where control mode is entered.
+.B xtrace \t\t\fR Same as \fB\-x\fR.
+.TP
+.RE
+.fi
+If no option name is supplied, the current options settings are printed.
+.TP
+.BR \-p\fR
+Enter the privileged mode. Disable processing of the \fB$HOME/.profile\fR file.
+This mode is set if the effective uid (or gid) is not equal to the real uid
+(or gid). Turning this option off causes the effective uid and gid to be set
+to the real uid and gid.
+.TP
+.BR \-r\fR
+Enable the restricted shell. This option cannot be unset once set.
+.TP
+.BR \-t\fR
+Exit after reading and executing one command.
+.TP
+.BR \-T\fR
+\fBDEBUG\fR and \fBRETURN\fR traps are inherited by shell functions, command substitutions
+and subshells.
+.TP
+.BR \-u\fR
+Treat unset parameters as error when performing variable substitution.
+.TP
+.BR \-v\fR
+Print shell input lines as they are read.
+.TP
+.BR \-x\fR
+Print the command line as commands are executed.
+.TP
+.BR \-\-\fR
+Do not change any of the options. Useful when setting $1 to a value that begins
+with '-'. If no arguments follow this option, positional parameters are unset.
+.TP
+.B \fR
+Using '+' instead of '-' causes options to be turned off. These options can be
+passed to the shell on invocation. The current set of options can be viewed by
+reading the shell variable \fB$-\fR. The remaining arguments are treated as
+positional parameters and assigned to \fB$1\fR, \fB$2\fR, and so on. If no
+arguments are specified, the names and values of all shell variables are
+printed on stdout.
+.TP
+.B setenv\fR [\fB\-hv\fR] [\fIname\fR[=\fIvalue\fR] ...]
+Set the value of environment variable \fIname\fR to \fIvalue\fR, or NULL if
+no \fIvalue\fR is given. This utility sets both the environment variable
+and the shell variable with the same @code{name}. If no arguments are given,
+it prints the names and values of all the set environment variables.
+.TP
+.B setx\fR [\fB\-hvpsuqo\fR] \fIoption\fR
+Set and unset optional (extra) shell options. \fIoption\fR can be any of the
+following (the name inside brackets is the shell from which the option was
+taken/based; \fBint\fR means interactive shell, while \fBnon-int\fR
+means non-interactive shell):
+.TP
+.B \fR
+.B addsuffix\fR - append space to file- and slash to dir-names on tab completion (tcsh)
+.br
+.B autocd \fR - dirs passed as single-word commands are passed to \fBcd\fR (bash int)
+.br
+.B cdable_vars \fR - \fBcd\fR arguments can be variable names (bash)
+.br
+.B cdable-vars \fR - same as the above
+.br
+.B checkhash \fR - for hashed commands, check the file exists before exec'ing (bash)
+.br
+.B checkjobs \fR - list stopped/running jobs and warn user before exit (bash int)
+.br
+.B checkwinsize \fR - check window size after external cmds, updating \fB$LINES\fR and \fB$COLUMNS\fR (bash)
+.br
+.B clearscreen \fR - clear the screen on shell's startup
+.br
+.B cmdhist \fR - save multi-line command in a single history entry (bash)
+.br
+.B complete_fullquote \fR - quote metacharacters in filenames during completion (bash)
+.br
+.B complete-fullquote \fR - same as the above
+.br
+.B dextract \fR - \fBpushd\fR extracts the given dir instead of rotating the stack (tcsh)
+.br
+.B dotglob \fR - files starting with \fB.\fR are included in filename expansion (bash)
+.br
+.B dunique \fR - \fBpushd\fR removes similar entries before pushing dir on the stack (tcsh)
+.br
+.B execfail \fR - failing to \fBexec\fR a file doesn't exit the shell (bash non-int)
+.br
+.B expand_aliases \fR - perform alias expansion (bash)
+.br
+.B expand-aliases \fR - same as the above
+.br
+.B extglob \fR - enable ksh-like extended pattern matching (bash)
+.br
+.B failglob \fR - failing to match filenames to patterns result in expansion error (bash)
+.br
+.B force_fignore \fR - \fB$FIGNORE\fR determines which words to ignore on word expansion (bash)
+.br
+.B force-fignore \fR - same as the above
+.br
+.B globasciiranges \fR - bracket pattern matching expressions use the C locale (bash)
+.br
+.B histappend \fR - append (don't overwrite) the history list to \fB$HISTFILE\fR (bash)
+.br
+.B histreedit \fR - enable the user to re-redit a failed history substitution (bash int)
+.br
+.B histverify \fR - reload (instead of directly execute) history substitution results (bash int)
+.br
+.B hostcomplete \fR - perform hostname completion for words containing \fB@\fR (bash int)
+.br
+.B huponexit \fR - send \fBSIGHUP\fR to all jobs on exit (bash int login)
+.br
+.B inherit_errexit \fR - command substitution subshells inherit the \fB\-e\fR option (bash)
+.br
+.B inherit-errexit \fR - same as the above
+.br
+.B interactive_comments \fR - recognize \fB#\fR as the beginning of a comment (bash int)
+.br
+.B interactive-comments \fR - same as the above
+.br
+.B lastpipe \fR - last cmd of foreground pipeline is run in the current shell (bash)
+.br
+.B lithist \fR - save multi-line commands with embedded newlines (bash with 'cmdhist' on)
+.br
+.B listjobs \fR - list jobs when a job changes status (tcsh)
+.br
+.B listjobs_long \fR - list jobs (detailed) when a job changes status (tcsh)
+.br
+.B listjobs-long \fR - same as the above
+.br
+.B localvar_inherit \fR - local vars inherit value/attribs from previous scopes (bash)
+.br
+.B localvar-inherit \fR - same as the above
+.br
+.B localvar_unset \fR - allow unsetting local vars in previous scopes (bash)
+.br
+.B localvar-unset \fR - same as the above
+.br
+.B login_shell \fR - indicates a login shell (cannot be changed) (bash)
+.br
+.B login-shell \fR - same as the above
+.br
+.B mailwarn \fR - warn about mail files that have already been read (bash)
+.br
+.B nocaseglob \fR - perform case-insensitive filename expansion (bash)
+.br
+.B nocasematch \fR - perform case-insensitive pattern matching (bash)
+.br
+.B nullglob \fR - patterns expanding to 0 filenames expand to "" (bash)
+.br
+.B printexitvalue \fR - output non-zero exit status for external commands (tcsh)
+.br
+.B progcomp \fR - enable programmable completion (not yet implemented) (bash)
+.br
+.B progcomp_alias \fR - allow alias expansion in completions (not yet implemented) (bash)
+.br
+.B promptvars \fR - perform word expansion on prompt strings (bash)
+.br
+.B pushdtohome \fR - \fBpushd\fR without arguments pushed \fB~\fR on the stack (tcsh)
+.br
+.B recognize_only_executables \fR - only executables are recognized in command completion (tcsh)
+.br
+.B recognize-only-executables \fR - same as the above
+.br
+.B restricted_shell \fR - indicates a restricted shell (cannot be changed) (bash)
+.br
+.B restricted-shell \fR - same as the above
+.br
+.B savedirs \fR - save the directory stack when login shell exits (tcsh)
+.br
+.B savehist \fR - save the history list when shell exits (tcsh)
+.br
+.B shift_verbose \fR - allow the \fBshift\fR builtin to output error messages (bash)
+.br
+.B shift-verbose \fR - same as the above
+.br
+.B sourcepath \fR - the source builtin uses \fB$PATH\fR to find files (bash)
+.br
+.B usercomplete \fR - perform hostname completion for words starting with \fB~\fR
+.br
+.B xpg_echo \fR - echo expands backslash escape sequences by default (bash)
+.br
+.B xpg-echo \fR - same as the above
+.fi
+.TP
+.B \fR
+The \fB\-o\fR option restricts options to those recognized by \`set -o\`.
+The \fB\-p\fR option prints output that can be re-input to the shell.
+The \fB\-q\fR option suppresses normal output. the return status tells whether options are set or not.
+The \fB\-s\fR option sets (enables) each passed option.
+The \fB\-u\fR option unsets (disables) each passed option.
+.TP
+.B shift\fR " " [\fIn\fR]
+Positional parameters from \fI$n+1\fR onwards are renamed \fI$1\fR ... . The
+default value if \fIn\fR is omitted is 1. \fIn\fR should be a non-negative
+number less than or equal to \fB$#\fR.
+.TP
+.B source\fR [\fB\-hv\fR] \fIfile\fR
+Execute commands in the current environment. Commands are read from \fIfile\fR
+and then executed in the current execution environment. This command is the
+same as \fBdot\fR or \`.\`, except when the \fB\-h\fR option is given, where
+\fIfile\fR is read and the commands are added to the history list, which is
+identical to invoking \`history -L\`.
+.TP
+.B stop\fR [\fB\-hv\fR] \fIjob\fR ...
+Stop each background job specified by \fIjob\fR.
+See the \fIJobs\fR section for a description of the format of \fBjob\fR.
+.TP
+.B suspend\fR [\fB\-fhv\fR]
+Suspend execution of the shell. The \fB\-f\fR option forces the suspend, even
+if the shell is a login shell.
+.TP
+.B test \-option\fI expression\fR
+Test file attributes and compare strings. For the list of options and
+their meanings, see \fIConditional Expressions\fR.
+.TP
+.B times
+Write process times.
+.\" .TP
+.\" .B time \fIcommand\fR
+.\" Write execution times for \fIcommand\fR.
+.TP
+.B trap\fR [\fB\-hvlp\fR] [\fIaction\fR] [\fIsig\fR] ...
+The \fB\-p\fR option causes the trap action associated with each specified
+trap to be printed. Otherwise, \fIaction\fR is processed as if passed to
+\fBeval\fR when the shell receives the signal \fIsig\fR, which can be a
+signal number or a symbolic name. Signals ingored on shell startup cannot be
+trapped or reset. If \fIaction\fR is omitted and the first \fIsig\fR is
+a number, or if \fIaction\fR is a hyphen '-', traps for each \fIsig\fR are
+reset to their original values. If \fIaction\fR is a null string, the
+signal is ignored by the shell and its children. If \fIsig\fR is \fBERR\fR,
+\fIaction\fR is executed whenever a command returns non-zero exit status.
+If \fIsig\fR is \fIDEBUG\fR, \fIaction\fR is executed before each command is
+executed. If \fIsig\fR is \fB0\fR or \fBEXIT\fR, \fIaction\fR is executed on
+exit from the shell. If no arguments are supplied, \fBtrap\fR prints the traps
+associated with each signal number.
+The \fB\-l\fR option lists all conditions and their signal numbers.
+The \fB\-p\fR option prints the trap actions associated with each \fIsig\fR.
+.TP
+.B type\fR \fIcommand\fR ...
+Write a description of \fBcommand\fR type.
+.TP
+.B true
+Return true result (zero exit status).
+.TP
+.B ulimit\fR [\fB\-h\fR] [\fB\-acdflmnpstuvHS\fR] [\fIlimit\fR]
+Set or display resource limits. The limit for a specified resource is set when
+\fIlimit\fR is specified. The value of \fIlimit\fR can be numeric, or one of the
+special values \fBunlimited\fR, \fBsoft\fR or \fBhard\fR. When more than one
+resource is specified, the limit name and its unit are printed before printing
+the limit's value. If no option is specified, \fB\-f\fR is assumed.
+.TP
+.B \fR
+ The following are the available resource limits:
+.PP
+.nf
+.RS
+.B \-H\fR \t Set or display the hard limit for the specified resource.
+.B \-S\fR \t Set or display the soft limit for the specified resource.
+.B \-a\fR \t List all the current resource limits.
+.B \-c\fR \t The size of core dumps (512-byte blocks).
+.B \-d\fR \t The size of the data segment (Kbytes).
+.B \-f\fR \t The max size of files written by the current process (512-byte blocks).
+.B \-l\fR \t The max size of memory a process may lock.
+.B \-m\fR \t The the size of physical memory (Kbytes).
+.B \-n\fR \t The number of file descriptors.
+.B \-p\fR \t The size of pipe buffers (512-byte blocks).
+.B \-s\fR \t The the size of the stack (Kbytes).
+.B \-t\fR \t The number of CPU seconds to be used by each process.
+.B \-v\fR \t The size of virtual memory (Kbytes).
+.RE
+.fi
+.TP
+.B umask\fR [\fB\-hvp\fR] [\fB\-S\fR] [\fImask\fR]
+The file creation mask (\fBumask\fR) is set to \fImask\fR, which can be either
+an octal number or a symbolic value. If a symbolic value is specified, the new
+\fBumask\fR is the complement of the result of applying the given mask to the
+complement of the previous \fBumask\fR. If \fImask\fR is omitted, the current
+value of \fBumask\fR is printed. The \fB\-S\fR option prints \fBumask\fR as a
+symbolic value. Otherwise, \fBumask\fR is printed as an octal number.
+The \fB\-p\fR option prints output that can be reused as shell input.
+.TP
+.B unalias\fR [\fB\-a\fR] \fIname\fR
+Removed the aliases specified by the list of names from the alias list. The
+\fB\-a\fR option causes all the aliases to be removed.
+.TP
+.B unlimit\fR [\fB\-hHfSv\fR] [\fIlimit\fR ...]
+.TP
+.B unlimit\fR [\fB\-HS\fR] \fB\-a\fR
+Remove limits on system resource \fIlimit\fR, which can be one of the following:
+.PP
+.nf
+.RS
+.B core, -c \fR\t\t the maximum size of core files created
+.B data, -d \fR\t\t the maximum size of a process's data segment
+.B nice, -e \fR\t\t the maximum nice value (scheduling priority)
+.B file, -f \fR\t\t the maximum size of files written by a process
+.B signal, -i \fR\t the maximum number of pending signals
+.B mlock, -l \fR\t the maximum size of memory a process may lock
+.B rss, -m \fR\t\t the maximum resident set size (RSS)
+.B fd, -n \fR\t\t the maximum number of open file descriptors
+.B buffer, -p \fR\t the pipe buffer size in kbytes
+.B message, -q \fR\t the maximum number of kbytes in POSIX message queues
+.B rtprio, -r \fR\t the maximum real-time priority
+.B stack, -s \fR\t the maximum stack size
+.B cputime, -t \fR\t the maximum amount of cpu time (seconds)
+.B userproc, -u \fR\t the maximum number of user processes
+.B virtmem, -v \fR\t the size of virtual memory
+.B flock, -x \fR\t the maximum number of file locks
+.B all, -a \fR\t\t all the above
+.RE
+.fi
+.TP
+.B \fR
+Options and limit names must be passed separately. To remove all hard limits, invoke
+either of the following commands:
+.PP
+.nf
+.RS
+unlimit -H -a
+unlimit -H all
+.RE
+.fi
+.TP
+.B \fR
+The \fB\-a\fR option removes limits on all resources.
+The \fB\-f\fR option ignores errors.
+The \fB\-H\fR option removes hard limits (only root can do this).
+The \fB\-S\fR option removes soft limits (the default).
+.TP
+.B unsetenv\fR [\fB\-hv\fR] [\fIname\fR ...]
+Unset environment variable values. This utility unsets both the environment
+variable and the shell variable with the same \fIname\fR. If no arguments
+are given, nothing is done.
+.TP
+.B unset\fR [\fB\-fv\fR] \fIvarname\fR
+Unset the variables specified by the list of \fBvarname\fRs. Readonly
+variables cannot be unset. If the \fB\-f\fR option is supplied, the names
+are treated as function names. If the \fB\-v\fR option is supplied, the
+names are treated as variable names. The default option is \fB\-v\fR.
+.TP
+.B wait\fR [\fB\-hfnv\fR] [\fIjob\fR ...]
+Wait for the specified job or process and report its termination status.
+If \fIjob\fR is not specified, all active child processes are waited for.
+The exit status is that of the last process waited for if \fIjob\fR is
+specified, otherwise it is zero. See the \fIJobs\fR section for a
+description of the format of \fIjob\fR.
+.TP
+.B \fR
+The \fB\-f\fR option forces jobs/processes to exit.
+The \fB\-n\fR option waits for any job or process.
+.TP
+.B whence\fR [\fB\-afhpv\fR] \fIname\fR ...
+For each \fIname\fR, indicate how it would be interpreted if it was used
+as a command to the shell. The \fB\-v\fR option produces a more verbose
+output. The \fB\-f\fR option doesn't search for functions. The \fB\-p\fR
+option does a path search for each \fIname\fR even if it was an alias,
+a function, or a reserved word. The \fB\-a\fR option is similar to \fB\-v\fR,
+but causes all interpretations of the specified name to be printed.
+.SH SHELL INVOCATION
+.PP
+If upon invocation, the first character of argument zero is a hyphen '-',
+the shell is a login shell and commands are read from \fI/etc/profile\fR
+and then from \fI.profile\fR in the current working directory or, if this
+file is not found, from \fI$HOME/.profile\fR.
+.PP
+Interactive shells read \fI/etc/lshrc\fR, followed by the file named by
+the result of parameter expansion, command substitution, and arithmetic
+expansion of the value of the environment variable \fB$ENV\fR if the file
+exists and is readable. If the \fB\-s\fR option is not supplied and an
+argument is given which is an existing file, the shell reads and executes
+that file as a shell script.
+.PP
+Commands are then read and executed. The following options are recognized
+by the shell upon startup:
+.TP
+.B \-c\fR
+If this option is supplied, commands are read from the first argument after
+the \fB\-c\fR option. Any remaining arguments become positional parameters,
+starting from argument number 0.
+.TP
+.B \-i\fR
+If this option is supplied, or if the shell's stdin and stderr are attached
+to a terminal device (as indicated by \fBisatty()\fR), this shell is
+interactive. Interactive shells ignore the \fBTERM\fR signal (so that \fBkill 0\fR
+does not kill an interactive shell). \fBINTR\fR is caught and ignored
+(so that wait is interruptible). \fBQUIT\fR is always ignored by the shell.
+.TP
+.B \-r
+If this option is supplied, the shell becomes a restricted shell.
+.TP
+.B \-s
+If this option is supplied, or if no arguments remain, commands are read from
+stdin.
+.PP
+The remaining options and arguments are recognized as described for the \fBset\fR
+builtin utility.
+.SH THE RESTRICTED SHELL
+.PP
+The restricted shell is used to set up and execution environment more
+controlled than that of the standard shell. The restricted shell behaves
+similar to the normal shell, except that the following actions are not
+permitted:
+.PP
+* Unsetting the restricted option
+.br
+* Changing directory using \fBcd\fR
+.br
+* Setting or unsetting the value or attributes of \fB$SHELL\fR, \fB$ENV\fR
+or \fB$PATH\fR
+.br
+* Specifying paths or command names containing '/'
+.br
+* Redirecting output using '>', '>|', '<>', or '>>'
+.br
+* Using \fBcommand \-p\fR to invoke a command
+.SH EXIT STATUS
+.PP
+The shell's exit status can be one of:
+.TP
+.B non-zero
+Returned when errors, such as syntax errors, are detected by the shell.
+Non-interactive shells exit in this case.
+.TP
+.B zero
+If no commands were executed.
+.TP
+.B Other values
+The exit status of last command executed is returned on exit.
+.SH FILES
+.TP
+.I /etc/profile
+The system initialization file (executed by a login shell).
+.TP
+.I /etc/lshrc
+The system-wide startup file (executed by an interactive shell).
+.TP
+.I $HOME/.profile
+The personal initialization file (executed by a login shell after executing
+\fI/etc/profile\fR).
+.TP
+.I $HOME/.lshrc
+The default personal initialization file (executed after \fI/etc/lshrc\fR
+by an interactive shell).
+.TP
+.I $HOME/.lsh_history
+The default personal initialization file (executed after \fI/etc/lshrc\fR
+.TP
+.I /dev/null
+The NULL device.
+.TP
+.I /etc/logout
+Shell script executed on logout.
+.TP
+.I $HOME/logout
+Shell script executed on logout after \fI/etc/logout\fR.
+.TP
+.I /etc/passwd
+Default file used to perform ~user substitutions.
+.SH FEATURES
+.PP
+- Shell language and interpreter are mostly POSIX-compliant
+.br
+- Standard POSIX regular and special builtins conforming to POSIX
+.br
+- Extended features and utilities borrowed from ksh, bash and tcsh
+.br
+- Well documented source code
+.br
+.SH TODO
+.PP
+- Add support for Unicode strings and message translation
+.br
+- Implement more bash-like and ksh-like builtin utilities, such as print and printf
+.br
+- Ensure the builtin utilities (and the shell program itself) are POSIX-compliant
+.br
+- Testing, bug reporting, debugging and improving the shell
+.SH SEE ALSO
+\fIinfo lsh\fR
+.SH AUTHOR
+Mohammed Isam <mohammed_isam1984@yahoo.com>
