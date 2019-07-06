@@ -27,7 +27,7 @@ the most widely used shell nowadays.
 
 To better understand the inner workings of this (as well as any other POSIX-
 compliant shell), it would be better if you got a copy of the Linux Shell
-Internals book, published by No Starch Press. This shell and the book has been
+Internals book, soon to be published by No Starch Press. This shell and the book has been
 developed hand-in-hand. The book helps to explain the code of this shell and
 provide a walk-through for newcomers. Although the code is extensively
 commented, a lot of theoretical ground has covered in the book, not in the
