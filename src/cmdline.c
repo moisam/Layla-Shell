@@ -273,10 +273,44 @@ char *read_cmd()
                 break;
                 
             case LEFT_KEY:
+                if(CTRL_MASK && cmdbuf_index)
+                {
+                    int i = cmdbuf_index;
+                    if(isspace(cmdbuf[i-1])) i--;
+                    if(isspace(cmdbuf[i]) || cmdbuf[i] == '\0')
+                    {
+                        while(i &&  isspace(cmdbuf[i])) i--;    /* skip trailing spaces */
+                        while(i && !isspace(cmdbuf[i])) i--;    /* skip prev word */
+                        if(isspace(cmdbuf[i])) i++;
+                    }
+                    else
+                    {
+                        while(i && !isspace(cmdbuf[i])) i--;    /* skip prev word */
+                        while(i &&  isspace(cmdbuf[i])) i--;    /* skip trailing spaces */
+                        if(isspace(cmdbuf[i])) i++;
+                    }
+                    do_left_key(cmdbuf_index-i);
+                    break;
+                }
                 do_left_key(1);
                 break;
 
             case RIGHT_KEY:
+                if(CTRL_MASK && cmdbuf_index < cmdbuf_end)
+                {
+                    int i = cmdbuf_index;
+                    if(isspace(cmdbuf[i]))
+                    {
+                        while(i < cmdbuf_end &&  isspace(cmdbuf[i])) i++;    /* skip leading spaces */
+                        while(i < cmdbuf_end && !isspace(cmdbuf[i])) i++;    /* skip next word */
+                    }
+                    else
+                    {
+                        while(i < cmdbuf_end && !isspace(cmdbuf[i])) i++;    /* skip next word */
+                    }
+                    do_right_key(i-cmdbuf_index);
+                    break;
+                }
                 do_right_key(1);
                 break;
 
