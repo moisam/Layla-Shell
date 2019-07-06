@@ -134,6 +134,7 @@ int rawon()
 int get_next_key()
 // int get_next_key2()
 {
+    CTRL_MASK = 0;
     int nread;
     char c;
     while((nread = read(0, &c, 1)) != 1)
@@ -176,6 +177,10 @@ int get_next_key()
                     if(read(0, &seq[1], 1) != 1) return '\x1b';
                     switch(seq[1])
                     {
+                        case 'A': CTRL_MASK = 1; return UP_KEY   ;
+                        case 'B': CTRL_MASK = 1; return DOWN_KEY ;
+                        case 'C': CTRL_MASK = 1; return RIGHT_KEY;
+                        case 'D': CTRL_MASK = 1; return LEFT_KEY ;
                         case 'P': CTRL_MASK = 1; return F1_KEY;
                         case 'Q': CTRL_MASK = 1; return F2_KEY;
                         case 'R': CTRL_MASK = 1; return F3_KEY;
