@@ -176,6 +176,7 @@ _wait:
             }
             job->flags |= JOB_FLAG_NOTIFIED;
         }
+        status = job->status;
     }
     return status;
 }
@@ -692,6 +693,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
         /* reset the terminal's foreground pgid */
         if(option_set('m')) tcsetpgrp(0, tty_pid);
         PRINT_EXIT_STATUS(status);
+        set_exit_status(status, 1);
         return !status;
     }
     else
