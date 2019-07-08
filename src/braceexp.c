@@ -33,8 +33,16 @@ int remove_from_list(char **list, int i, int *list_count);
 char **brace_expand(char *str, int *count);
 
 
+/*
+ * perform brace expansion, which converts constructs such as [1..10..2] to the string list
+ * 1,3,5,7,9. Brace expansions can contain either a range (..) or a comma-separated list.
+ * we convert the brace expression into a string array, which is then parsed for the other
+ * word expansions.
+ */
 char **brace_expand(char *str, int *count)
 {
+    /* check the brace expansion option is set (bash) */
+    if(!option_set('B')) return NULL;
     size_t i;
     char *p = str;
     char **list = NULL, **list2;
@@ -47,10 +55,12 @@ loop:
     {
         switch(*p)
         {
+            /* skip single quoted strings */
             case '\'':
                 while(*(++p) && *p != '\'') ;
                 break;
                 
+            /* parse brace expression */
             case '{':
                 if(p > str && p[-1] == '\\') break;
                 i = find_closing_brace(p);
@@ -60,21 +70,32 @@ loop:
                     char *pre = "";
                     if(p > str) pre = get_malloced_strl(str, 0, p-str);
                     char *post = p+i+1;
+                    /*
+                     * affix the parts before and after the brace expression to each item in the list.
+                     */
                     for(i = 0; i < list2_count; i++)
                     {
                         list2[i] = add_pre_post(list2[i], pre, post);
                     }
+                    /*
+                     * remove the original string, containing the brace expression we've just expanded.
+                     */
                     if(list)
                     {
                         remove_from_list(list, j, &list_count);
                     }
+                    /*
+                     * add the expanded items to the list.
+                     */
                     for(i = 0; i < list2_count; i++)
                     {
                         char *item = list2[i];
                         if(!add_to_list(&list, item, item+strlen(item), &list_count, &list_size)) goto err;
                     }
+                    /* free temp memory */
                     for(i = 0; i < list2_count; i++) free_malloced_str(list2[i]);
                     free(list2);
+                    /* continue parsing from the next item, after the one we've just parsed */
                     p = list[j];
                     str = p;
                     goto loop;
@@ -101,6 +122,12 @@ err:
     return NULL;
 }
 
+/*
+ * affix the parts before and after the brace expression to each resultant string.
+ * this is because a brace expression usually comes in the middle of a string, such
+ * as "/usr/{local,include}", which gives us "/usr/local" and "/usr/include". in this
+ * case, "/usr/" is the prefix, and the suffix is an empty string.
+ */
 char *add_pre_post(char *str, char *pre, char *post)
 {
     char buf[strlen(pre)+strlen(str)+strlen(post)+1];
@@ -114,6 +141,12 @@ char *add_pre_post(char *str, char *pre, char *post)
     return str2;
 }
 
+/*
+ * parse a brace expression and return the string array that results from expanding
+ * the expression. the first char of str must be '{', and the char at str[end] must
+ * be '}'. we store the number of strings in the resultant list in count, so the caller
+ * knows how many items to process.
+ */
 char **get_brace_list(char *str, size_t end, int *count)
 {
     char *p0 = str+1;
@@ -129,6 +162,7 @@ char **get_brace_list(char *str, size_t end, int *count)
     {
         switch(*p1)
         {
+            /* brace expressions can be nested, but we don't process nested expressions here */
             case '{':
                 ob++;
                 i = find_closing_brace(p1);
@@ -138,6 +172,9 @@ char **get_brace_list(char *str, size_t end, int *count)
                 cb++;
                 break;
                 
+            /*
+             * this explicitly is the very last '}'. others should be processed in the '{' case above.
+             */
             case '}':
                 cb++;
                 /* fall through */
@@ -159,11 +196,13 @@ char **get_brace_list(char *str, size_t end, int *count)
             case '.':
                 if(p1[1] != '.') break;
                 char *x, *y, *z = NULL;
+                /* get the first number */
                 x = get_malloced_strl(p0, 0, p1-p0);
                 if(!x) goto err;
                 p0 = p1+2;
                 if(!*p0) goto err;
                 p1 = p0;
+                /* get the second number, after the '..' */
                 while(p1 < p2 && *p1 != '.')
                 {
                     if(*p1 == '{')
@@ -176,6 +215,7 @@ char **get_brace_list(char *str, size_t end, int *count)
                 if(*p1 && *p1 != '.' && *p1 != '}') goto err;
                 y = get_malloced_strl(p0, 0, p1-p0);
                 if(!y) goto err;
+                /* get the optional third number, after the '..' */
                 if(*p1 == '.')
                 {
                     p0 = p1+2;
