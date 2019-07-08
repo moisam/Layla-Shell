@@ -2131,6 +2131,11 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                  * ignore words that start with arithmetic operations if they are the first
                  * thing on the command line. the arithmetic operation itself has been performed
                  * by the calls to word_expand() above, so just discard the result here.
+                 * 
+                 * in bash, ((expr)) is equivalent to: let "expr", and bash sets the exit status
+                 * to 0 if expr evalues to non-zero, or 1 if expr evaluates to zero. in our case,
+                 * the exit status is set by __do_arithmetic() in shunt.c when word_expand() calls
+                 * it to perform arithmetic substitution.
                  */
                 if(!argc && (strncmp(s, "((", 2) == 0 || strncmp(s, "$((", 3) == 0 || strncmp(s, "$[", 2) == 0))
                 {
