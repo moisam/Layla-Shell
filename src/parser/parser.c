@@ -1323,7 +1323,8 @@ cmd_word:
     word->lineno = tok->lineno;
     /* is this a test or '[[' command? */
     add_child_node(cmd, word);
-    int istest = (strcmp(tok->text, "[[") == 0 || strcmp(tok->text, "[") == 0) ? 1 : 0;
+    int istest = (strcmp(tok->text, "[[") == 0) ? 2 :
+                 (strcmp(tok->text, "[" ) == 0) ? 1 : 0;
     if(has_prefix) tok = tokenize(tok->src);
     else           tok = get_current_token();
     if(tok->type == TOKEN_EOF) return cmd;
@@ -1414,6 +1415,15 @@ cmd_word:
         add_child_node(cmd, word);
         last = word;
         tok = tokenize(tok->src);
+        /*
+         * test command, when invoked as '[' or '[[', must end with a matching ']' or ']]'.
+         * we test this in order not to overshoot while reading tokens, so that commands like
+         * this:
+         *    [ -f $X ] && echo "X is a file" || echo "X is not a file"
+         * will work.
+         */
+        if(istest == 2 && strcmp(word->val.str, "]]") == 0) break;
+        else if(istest == 1 && strcmp(word->val.str, "]") == 0) break;
     } while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR);
 
     if(cmd)
