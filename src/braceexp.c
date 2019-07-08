@@ -332,9 +332,9 @@ char **get_letter_list(char *xs, char *ys, char *zs, int *count)
 
 char **get_num_list(char *xs, char *ys, char *zs, int *count)
 {
-    int  x = atol(xs), y = atol(ys);
-    int  z = zs ? atol(zs) : 1;
-    int  i = 0, l = x;
+    long x = atol(xs), y = atol(ys);
+    long z = zs ? atol(zs) : 1;
+    long i = 0, l = x;
     char **p;
     char buf[32];
     char **list = NULL;
