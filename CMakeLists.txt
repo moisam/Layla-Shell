@@ -26,10 +26,10 @@ project(shell)
 # don't forget to turn off in the release version!
 set(CMAKE_BUILD_TYPE Debug)
 
-add_executable(lsh   main.c cmd_args.c      cmdline.c               helpfunc.c initsh.c
+add_executable(lsh   main.c cmd_args.c      cmdline.c               helpfunc.c   initsh.c
                      jobs.c prompt.c        args.c                  params.c  signames.c tab.c
                      debug.c                kbdevent2.c             #kbdevent.c
-                     early_environ.h        cmd.h                   signames.h
+                     early_environ.h        cmd.h                   signames.h   braceexp.c
                      debug.h                kbdevent.h              cpu.h     ostype.h   vars.c
                      vi.c vi.h vi_keys.c    comptype.h  strbuf.c    popen.c   functab.c
                      scanner/lexical.c      scanner/source.c
