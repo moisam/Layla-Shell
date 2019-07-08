@@ -1,6 +1,3 @@
-# Linux-Shell-Internals-book
-Source files for the POSIX-compliant shell discussed in the Linux Shell Internals book
-
 # About
 Layla shell is a POSIX-compliant GNU/Linux shell. It aims to implement the
 full functionality specified in the POSIX Shell & Utilities volume. This
