@@ -1534,7 +1534,7 @@ void __word_expand2(struct cmd_token **head, struct cmd_token *var, size_t *i, s
 
 
 /* Step 4: Variable substitution */
-struct cmd_token *word_expand(struct cmd_token *head, struct cmd_token **tail, int in_heredoc, int strip_quotes)
+struct cmd_token *word_expand_one_word(struct cmd_token *head, struct cmd_token **tail, int in_heredoc, int strip_quotes)
 {
     struct cmd_token *res = head;
     if(!head || !head->data) return res;
@@ -1549,7 +1549,6 @@ struct cmd_token *word_expand(struct cmd_token *head, struct cmd_token **tail, i
                              */
     struct cmd_token *var;
     
-    /* some flags to help us in the loop below */
     
     /*
      * NOTE: a terrible hack is going on here. as in_heredoc == 1 indicates we
@@ -1863,6 +1862,40 @@ struct cmd_token *word_expand(struct cmd_token *head, struct cmd_token **tail, i
     head->len = len;
     if(len == 0 && !has_quotes) return NULL;
     return res;
+}
+
+struct cmd_token *word_expand(struct cmd_token *head, struct cmd_token **tail, int in_heredoc, int strip_quotes)
+{
+    int count = 0, i;
+    char **list = brace_expand(head->data, &count);
+    /* if no braces expanded, go directly to word expansion */
+    if(!list) return word_expand_one_word(head, tail, in_heredoc, strip_quotes);
+    /* expand the braces and do word expansion on each resultant field */
+    struct cmd_token *wordlist = NULL, *listtail = NULL;
+    for(i = 0; i < count; i++)
+    {
+        struct cmd_token *t = make_cmd_token(list[i]);
+        struct cmd_token *w = word_expand_one_word(t, tail, in_heredoc, strip_quotes);
+        if(w)
+        {
+            if(wordlist)
+            {
+                listtail->next = w;
+                listtail = w;
+            }
+            else
+            {
+                wordlist = w;
+                listtail = w;
+            }
+        }
+        else free_all_tokens(t);
+    }
+    /* free used memory */
+    for(i = 0; i < count; i++) free_malloced_str(list[i]);
+    free(list);
+    *tail = listtail;
+    return wordlist;
 }
 
 /*

@@ -247,6 +247,9 @@ char   *word_expand_to_str(char *word);
 char   *get_all_vars(char *prefix);
 char    get_xdigit(char c);
 
+/* braceexp.c */
+char  **brace_expand(char *str, int *count);
+
 /* tab.c */
 int do_tab(char *cmdbuf, uint16_t *cmdbuf_index, uint16_t *cmdbuf_end);
 
