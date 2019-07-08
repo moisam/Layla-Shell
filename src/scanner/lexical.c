@@ -727,7 +727,8 @@ struct token_s *tokenize(struct source_s *src)
             case '{':
             case '}':
                 /* if the word delimits the current token, delimit it */
-                if(__bufindex > 0)
+                pc = prev_char(src);
+                if(__bufindex > 0 && (isspace(pc) || pc == ';'))
                 {
                     unget_char(src);
                     goto prep_token;
@@ -738,7 +739,7 @@ struct token_s *tokenize(struct source_s *src)
                  */
                 //if(prev_type == TOKEN_EMPTY || prev_type == TOKEN_SEMI || prev_type == TOKEN_NEWLINE)
                 pc = peek_char(src);
-                if(nc == '}' || (!isalpha(pc) && pc != '_'))   /* not a {var} I/O redirection word */
+                if(nc == '}' || (!isalnum(pc) && pc != '_'))   /* not a {var} I/O redirection word */
                 {
                     /* single char delimiters */
                     add_to_buf(nc);
