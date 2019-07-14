@@ -1821,8 +1821,8 @@ int  do_function_definition(int argc, char **argv)
         else return 1;
     }
     /* check we are not exceeding the maximum function nesting level */
-    struct symtab_entry_s *param = get_symtab_entry("FUNCNEST");
-    int maxlevel = (param && param->val) ? atol(param->val) : 0;
+    int maxlevel = get_shell_varl("FUNCNEST", 0);
+    if(maxlevel < 0) maxlevel = 0;
     if(maxlevel && cur_func_level >= maxlevel)
     {
         fprintf(stderr, "%s: can't execute the call to %s: maximum function nesting reached\r\n", 
@@ -1837,7 +1837,7 @@ int  do_function_definition(int argc, char **argv)
     int  i;
     char buf[32];
     /* set param $0 (bash doesn't set $0 to the function's name) */
-    param = add_to_symtab("0");
+    struct symtab_entry_s *param = add_to_symtab("0");
     symtab_entry_setval(param, argv[0]);
     /* set arguments $1...$argc-1 */
     for(i = 1; i < argc; i++)
@@ -2223,6 +2223,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     //int  builtin =  is_builtin(argv[0]);
     int builtin  = is_enabled_builtin(argv[0]);
     int function = is_function(argv[0]);
+    struct symtab_entry_s *entry;
 
     if(total_redirects == -1 /* redir_fail */)
     {
@@ -2264,10 +2265,15 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
         }
         printf("\r\n");
     }
-    struct symtab_entry_s *entry = add_to_symtab("LINENO");
-    char buf[32];
-    sprintf(buf, "%d", node->lineno);
-    symtab_entry_setval(entry, buf);
+    
+    /* set $LINENO if we're not reading from the commandline */
+    if(src->filename != stdin_filename)
+    {
+        entry = add_to_symtab("LINENO");
+        char buf[32];
+        sprintf(buf, "%d", node->lineno);
+        symtab_entry_setval(entry, buf);
+    }
 
     if(!executing_trap)
     {
