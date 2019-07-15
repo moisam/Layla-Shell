@@ -41,7 +41,6 @@ struct symtab_entry_s
     struct  symtab_entry_s *next;
     /* for functions */
     struct  node_s *func_body;
-    struct  symtab_s *func_symtab;
 };
 
 
