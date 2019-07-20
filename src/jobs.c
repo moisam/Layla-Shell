@@ -87,10 +87,8 @@ void set_pid_exit_status(struct job *job, pid_t pid, int status)
         if(job->pids[i] == pid)
         {
             job->exit_codes[i] = status;
-            if(WIFEXITED(status))
-            {
-                job->child_exitbits |= (1 << i);
-            }
+            if(WIFEXITED(status)) job->child_exitbits |=  (1 << i);
+            else                  job->child_exitbits &= ~(1 << i);
             break;
         }
     }
@@ -611,7 +609,7 @@ void notice_termination(pid_t pid, int status)
 
 int rip_dead(pid_t pid)
 {
-    if(!listindex) return 0;
+    if(!listindex) return -1;
     int i;
     for(i = 0; i < listindex; i++)
     {
@@ -630,7 +628,7 @@ int rip_dead(pid_t pid)
             return status;
         }
     }
-    return 0;
+    return -1;
 }
 
 struct job *get_job_by_pid(pid_t pgid)
