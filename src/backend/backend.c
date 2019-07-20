@@ -130,10 +130,10 @@ _wait:
      */
     if(res < 0)
     {
-        status = rip_dead(pid);
+        if((status = rip_dead(pid)) < 0) goto _wait;
     }
     /* collect the status. if stopped, add as background job */
-    if(WIFSTOPPED(status) && option_set('m'))
+    if(option_set('m') && (WIFSTOPPED(status) || WIFSIGNALED(status)))
     {
         if(!job)
         {
@@ -175,8 +175,8 @@ _wait:
                 }
             }
             job->flags |= JOB_FLAG_NOTIFIED;
+            status = job->status;
         }
-        status = job->status;
     }
     return status;
 }
@@ -589,11 +589,9 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
             if(option_set('m'))
             {
                 setpgid(0, 0);
-                if(fg) tcsetpgrp(0, 0);
+                if(fg) tcsetpgrp(0, pid);
             }
             /* only restore tty to canonical mode if we are reading from it */
-            extern char *stdin_filename;    /* defined in cmdline.c */
-            if(src->filename == stdin_filename) term_canon(1);
             reset_nonignored_traps();
             /* 2nd command component of command line */
             close(0);   /* stdin */
@@ -609,6 +607,11 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
             BACKEND_RAISE_ERROR(FAILED_TO_FORK, strerror(errno), NULL);
             return 0;
         }
+    }
+    if(option_set('m'))
+    {
+        setpgid(pid, pid);
+        if(pid != tty_pid) tcsetpgrp(0, pid);
     }
     all_pids[count++] = pid;
     cmd = cmd->next_sibling;
@@ -665,7 +668,6 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
         }
     }
 
-    if(option_set('m')) setpgid(pid, 0);
 
     /* TODO: use correct command str */
     char *cmdstr = get_cmdstr(node);
@@ -688,7 +690,6 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     if(fg)
     {
         /* tell the terminal who's the foreground pgid now */
-        if(option_set('m')) tcsetpgrp(0, pid);
         int status = wait_on_child(pid, node, job);
         /* reset the terminal's foreground pgid */
         if(option_set('m')) tcsetpgrp(0, tty_pid);
