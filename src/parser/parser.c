@@ -1275,7 +1275,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
     else goto cmd_word;
     has_prefix = 1;
     tok = get_current_token();
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_ERROR)
+    while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
     {
         if(is_redirect_op(tok->text) || tok->type == TOKEN_IO_NUMBER)
         {
