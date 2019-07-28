@@ -97,7 +97,7 @@ $ cd lsh-1.0/
 
 then run:
 
-$ make && make install
+$ make && su -c "make install"
 
 and that's it! Now you can run the shell by invoking:
 
