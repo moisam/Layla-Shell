@@ -1107,6 +1107,7 @@ struct node_s *parse_io_redirect(struct token_s *tok)
 
 static inline int is_redirect_op(char *str)
 {
+    if(!str) return 0;
     if(*str == '>' || *str == '<') return 1;
     if(*str == '&' && str[1] == '>') return 1;
     return 0;
