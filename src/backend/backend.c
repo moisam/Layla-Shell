@@ -1655,17 +1655,6 @@ int  do_io_file(struct node_s *node, struct io_file_s *io_file)
     }
     else
     {
-        /*
-         * check for the non-POSIX redirection extensions <(cmd) and >(cmd).
-         */
-        if(str[0] == '(' && str[strlen(str)-1] == ')')
-        {
-            if     (node->val.chr == IO_FILE_LESS )
-                str = redirect_proc('<', str);
-            else if(node->val.chr == IO_FILE_GREAT)
-                str = redirect_proc('>', str);
-            if(!str) str = child->val.str;
-        }
         io_file->duplicates = -1;
         io_file->path       = str;
     }
@@ -2046,6 +2035,25 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
         switch(child->type)
         {
             case NODE_IO_REDIRECT:
+                /*
+                 * check for the non-POSIX redirection extensions <(cmd) and >(cmd).
+                 */
+                if(child->first_child && child->first_child->type == NODE_IO_FILE)
+                {
+                    struct node_s *child2 = child->first_child;
+                    s = child2->first_child->val.str;
+                    if(s[0] == '(' && s[strlen(s)-1] == ')')
+                    {
+                        char op = (child2->val.chr == IO_FILE_LESS ) ? '<' :
+                                  (child2->val.chr == IO_FILE_GREAT) ? '>' : 0;
+                        if(op && (s = redirect_proc(op, s)))
+                        {
+                            arg = get_malloced_str(s);
+                            argv[argc++] = arg;
+                            break;
+                        }
+                    }
+                }
                 if(redirect_prep_node(child, io_files) == -1) total_redirects = -1;
                 else total_redirects++;
                 break;
