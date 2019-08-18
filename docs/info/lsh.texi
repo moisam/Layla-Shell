@@ -651,6 +651,31 @@ Some of the above aliases are defined by shells like bash and ksh,
 while others are lsh-specific, included for convenience.
 
 
+@heading Special aliases
+@cindex Special aliases
+
+The tcsh shell has a useful feature where a special group of aliases contain commands which
+the shell executes at certain times. For example, the @code{beepcmd} special alias can be defined
+to contain a command line the shell executes when it wants to ring the bell. As this feature can
+be very handy to shell users, we include it here, despite the fact it is not described by POSIX.
+@*
+
+The following table describes the special aliases and their uses in lsh.
+
+@table @code
+@item beepcmd
+command to be run when the shell wants to ring the bell
+@item jobcmd
+command to be run before executing commands and when a job changes its state
+@item periodic
+command to be run every @code{$TPERIOD} minutes
+@item precmd
+command to be run before printing the next command prompt
+@item postcmd
+command to be run before executing commands
+@end table
+
+
 @section Tilde expansion
 @cindex Tilde expansion
 

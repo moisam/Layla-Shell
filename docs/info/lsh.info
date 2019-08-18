@@ -614,6 +614,31 @@ but can be unset or redefined if the user wishes:
    Some of the above aliases are defined by shells like bash and ksh,
 while others are lsh-specific, included for convenience.
 
+Special aliases
+===============
+
+The tcsh shell has a useful feature where a special group of aliases
+contain commands which the shell executes at certain times.  For
+example, the 'beepcmd' special alias can be defined to contain a command
+line the shell executes when it wants to ring the bell.  As this feature
+can be very handy to shell users, we include it here, despite the fact
+it is not described by POSIX.
+
+   The following table describes the special aliases and their uses in
+lsh.
+
+'beepcmd'
+     command to be run when the shell wants to ring the bell
+'jobcmd'
+     command to be run before executing commands and when a job changes
+     its state
+'periodic'
+     command to be run every '$TPERIOD' minutes
+'precmd'
+     command to be run before printing the next command prompt
+'postcmd'
+     command to be run before executing commands
+
 3.2 Tilde expansion
 ===================
 
@@ -3348,7 +3373,7 @@ Index
 * Command History and Editing:           Command History and Editing.
                                                               (line   5)
 * Command substitution:                  Expansions and Substitutions.
-                                                              (line  86)
+                                                              (line 111)
 * Commands:                              The Shell Command Language.
                                                               (line  13)
 * Comments:                              The Shell Command Language.
@@ -3385,6 +3410,8 @@ Index
 * Shell Variables and Parameters:        Shell Variables and Parameters.
                                                               (line   5)
 * Signals:                               Jobs.                (line  62)
+* Special aliases:                       Expansions and Substitutions.
+                                                              (line  65)
 * Special parameters:                    Shell Variables and Parameters.
                                                               (line  13)
 * Synopsis:                              Introduction.        (line   9)
@@ -3399,7 +3426,7 @@ Index
 * The shell prompt:                      The Execution Environment.
                                                               (line 172)
 * Tilde expansion:                       Expansions and Substitutions.
-                                                              (line  65)
+                                                              (line  90)
 * TODO:                                  Introduction.        (line 164)
 * Variable assignments:                  The Shell Command Language.
                                                               (line 207)
@@ -3414,15 +3441,15 @@ Node: Introduction1107
 Node: The Shell Command Language7585
 Node: Conditional Expressions17445
 Node: Expansions and Substitutions21262
-Node: Arithmetic expansion24983
-Node: Quoting33091
-Node: Shell Variables and Parameters34627
-Node: Shell Variables36420
-Node: The Execution Environment53202
-Node: Jobs60545
-Node: Command History and Editing67403
-Node: Builtin Utilities75769
-Node: GNU Free Documentation License119138
-Node: Index144286
+Node: Arithmetic expansion25833
+Node: Quoting33941
+Node: Shell Variables and Parameters35477
+Node: Shell Variables37270
+Node: The Execution Environment54052
+Node: Jobs61395
+Node: Command History and Editing68253
+Node: Builtin Utilities76619
+Node: GNU Free Documentation License119988
+Node: Index145136
 
 End Tag Table
