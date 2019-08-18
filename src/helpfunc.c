@@ -695,16 +695,23 @@ int file_exists(char *path)
 }
 
 /*
- * return the full path to a temporary filename template, to be 
- * passed to mkstemp().
+ * return the full path to a temporary filename template, to be passed to 
+ * mkstemp() or mkdtemp(). as both functions modify the string we pass
+ * them, we get an malloc'd string, instead of using a string from our string buffer.
  */
 char *get_tmp_filename()
 {
     char *tmpdir = get_shell_varp("TMPDIR", "/tmp");
     int len = strlen(tmpdir);
-    char buf[len+14];
-    sprintf(buf, "%s%clsh.fcXXXXXX", tmpdir, (tmpdir[len-1] == '/') ? '\0' : '/');
-    return get_malloced_str(buf);
+    char buf[len+18];
+    sprintf(buf, "%s%clsh/", tmpdir, '/');
+    /* try to mkdir our temp directory, so that all our tmp files reside under /tmp/lsh. */
+    if(mkdir(buf, 0700) == 0)
+        strcat(buf, "lsh.tmpXXXXXX");
+    /* if we failed, just return a normal tmp file under /tmp */
+    else
+        sprintf(buf, "%s%clsh.tmpXXXXXX", tmpdir, '/');
+    return __get_malloced_str(buf);
 }
 
 /*
