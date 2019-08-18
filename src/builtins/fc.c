@@ -361,7 +361,7 @@ check_bounds:
     if(tmp < 0)
     {
         fprintf(stderr, "%s: error creating temp file: %s\r\n", UTILITY, strerror(errno));
-        free_malloced_str(tmpname);
+        free(tmpname);
         if(editor)
         {
             if(edit_malloc) free_malloced_str(editor);
@@ -413,6 +413,6 @@ check_bounds:
         if(edit_malloc) free_malloced_str(editor);
         else free(editor);
     }
-    free_malloced_str(tmpname);
+    free(tmpname);
     return exit_status;
 }
