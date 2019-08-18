@@ -39,45 +39,76 @@
 
 char *fifo_filename = "FIFOCMD";
 
-
+#if 0
 int redirect_proc_do(char *cmdline, int fd1, int fd2)
 {
-    pid_t pid = 0;
-    if((pid = fork()) == 0)     /* child process */
+    //pid_t pid = 0;
+    //if((pid = fork()) == 0)     /* child process */
     {
-        asynchronous_prologue();
-
-        //struct source_s save_src = __src;
+        //asynchronous_prologue();
         __src.buffer   = cmdline+1;
         cmdline[strlen(cmdline)-1] = '\0';
         __src.bufsize  = strlen(cmdline);
         __src.curpos   = -2;
+        struct node_s *ionode = NULL;
 
-        close(0);   /* stdin */
         if(fd1 >= 0)
         {
+            ionode = io_file_node(0, IO_FILE_GREAT, "1", child->lineno);
             dup2(fd1, 0);
+            close(fd1);
             __src.filename = fifo_filename;
         }
         else
         {
             __src.filename = "/dev/null";
+            close(0);
             open(__src.filename, O_RDONLY);
         }
 
         if(fd2 >= 0)
         {
-            close(1);   /* stdout */
             dup2(fd2, 1);
+            close(fd2);
+        }
+        else
+        {
+            close(1);
+            open("/dev/tty", O_RDONLY);
         }
 
-        do_cmd();
-        //__src = save_src;
-        exit(exit_status);
+        struct node_s   *root   = (struct node_s *)NULL;
+        eof_token.src           = src;
+        root = parse_translation_unit();
+        if(root)
+        {
+            struct node_s *child = root;
+            if(root->type == NODE_PROGRAM) child = child->first_child;
+            while(child)
+            {
+                if(child->type != NODE_LIST)
+                {
+                    if(!do_and_or(child, NULL, 1)) break;
+                }
+                else
+                {
+                    struct node_s *cmd = child->first_child;
+                    do
+                    {
+                        if(!do_and_or(cmd, NULL, 1 /* wait */)) break;
+                        cmd = cmd->next_sibling;
+                    } while(cmd);
+                }
+                child = child->next_sibling;
+            }
+            free_node_tree(root);
+        }
+        //exit(exit_status);
     }
-    else if(pid < 0) return 0;
-    else return 1;
+    //else if(pid < 0) return 0;
+    //else return 1;
 }
+#endif
 
 char *redirect_proc(char op, char *cmdline)
 {
@@ -92,6 +123,8 @@ char *redirect_proc(char op, char *cmdline)
         if(mkfifo(tmpname, 0600) != 0)
         {
             if(errno == EEXIST) continue;
+            return NULL;
+#if 0
             /*
              * if the system doesn't support named pipes, or another error occurred, such as
              * insufficient disk space, try performing this via a regular pipe, whose path we'll
@@ -136,7 +169,9 @@ char *redirect_proc(char op, char *cmdline)
                 fprintf(stderr, "%s: error creating fifo: %s\r\n", SHELL_NAME, strerror(errno));
                 return NULL;
             }
+#endif
         }
+#if 0
         /*
          * open the fifo in read/write mode so that we won't be blocked waiting for a reader.
          */
@@ -146,11 +181,31 @@ char *redirect_proc(char op, char *cmdline)
             fprintf(stderr, "%s: error opening fifo: %s\r\n", SHELL_NAME, strerror(errno));
             return NULL;
         }
-        char *path = NULL;
-        if(op == '<' && redirect_proc_do(cmdline, -1, fd1)) path = get_malloced_str(tmpname);
-        else if(redirect_proc_do(cmdline, fd1, -1)) path = get_malloced_str(tmpname);
-        close(fd1);
-        return path;
+#endif
+        //char *path = NULL;
+        //if(op == '<' && redirect_proc_do(cmdline, -1, fd1)) path = get_malloced_str(tmpname);
+        //else if(redirect_proc_do(cmdline, fd1, -1)) path = get_malloced_str(tmpname);
+
+        if(fork() == 0)
+        {
+            int i = strlen(cmdline)-1;
+            int j = i+strlen(tmpname)+12;
+            char *buf = malloc(j);
+            if(!buf) return NULL;
+            char c = cmdline[i];
+            cmdline[i] = ' ';
+            sprintf(buf, "{ %s} %c%s", cmdline+1, (op == '>') ? '<' : '>', tmpname);
+            cmdline[i] = c;
+            __src.buffer   = buf;
+            __src.bufsize  = j;
+            __src.curpos   = -2;
+            __src.filename = fifo_filename;
+            do_cmd();
+            exit(exit_status);
+        }
+
+        //close(fd1);
+        return get_malloced_str(tmpname);
     }
     return NULL;
 }

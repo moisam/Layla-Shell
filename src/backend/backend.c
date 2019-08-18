@@ -304,6 +304,8 @@ int do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, 
     {
         i++;
     }
+
+
     if(internal_cmd)
     {
         int res = internal_cmd(argc, argv);
@@ -424,15 +426,17 @@ char *get_cmdstr(struct node_s *cmd)
 
 int  do_complete_command(struct node_s *node)
 {
-    return do_list(node);
+    return do_list(node, NULL);
 }
 
 
-int  do_list(struct node_s *node)
+int  do_list(struct node_s *node, struct node_s *redirect_list)
 {
     if(!node) return 0;
     if(node->type != NODE_LIST) return do_and_or(node, NULL, 1);
-    struct node_s *cmd = node->first_child;
+    struct node_s *cmd = last_child(node);
+    struct node_s *redirects = (cmd && cmd->type == NODE_IO_REDIRECT_LIST) ? cmd : redirect_list;
+    cmd = node->first_child;
     
     /* is this a background job? */
     int wait = 1;
@@ -442,7 +446,7 @@ int  do_list(struct node_s *node)
     }
     else if(node->val_type == VAL_STR)
     {
-        /* if it end in unquoted &, then yes */
+        /* if it ends in unquoted &, then yes */
         int c1 = strlen(node->val.str)-1;
         int c2 = c1-1;
         if(c2 < 0) c2 = 0;
@@ -459,6 +463,7 @@ int  do_list(struct node_s *node)
         }
         else if(pid > 0)
         {
+            setpgid(pid, 0);
             struct job *job;
             char *cmdstr = get_cmdstr(node);
             if(!(job = add_job(pid, (pid_t[]){pid}, 1, cmdstr, 1)))
@@ -483,16 +488,17 @@ int  do_list(struct node_s *node)
         }
         else
         {
+            setpgid(0, tty_pid);
             asynchronous_prologue();
-            int res = do_and_or(cmd, NULL, 0);
+            int res = do_and_or(cmd, redirects, 0);
             if(!res) exit(exit_status);
-            if(cmd->next_sibling) do_list(cmd->next_sibling);
+            if(cmd->next_sibling) do_list(cmd->next_sibling, redirects);
             exit(exit_status);
         }
     }
-    int res = do_and_or(cmd, NULL, 1 /* wait */);
+    int res = do_and_or(cmd, redirects, 1 /* wait */);
     if(!res) return 0;
-    if(cmd->next_sibling) return do_list(cmd->next_sibling);
+    if(cmd->next_sibling) return do_list(cmd->next_sibling, redirects);
     return res;
 }
 
@@ -581,7 +587,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     {
         pid = tty_pid;
         close(0);   /* stdin */
-        dup  (filedes[0]);
+        dup2(filedes[0], 0);
     }
     else
     {
@@ -598,7 +604,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
             reset_nonignored_traps();
             /* 2nd command component of command line */
             close(0);   /* stdin */
-            dup  (filedes[0]);
+            dup2(filedes[0], 0);
             close(filedes[0]);
             close(filedes[1]);
             /* standard input now comes from pipe */
@@ -636,12 +642,11 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
                 if(fg) tcsetpgrp(0, pid);
             }
             /* only restore tty to canonical mode if we are reading from it */
-            extern char *stdin_filename;    /* defined in cmdline.c */
-            if(src->filename == stdin_filename) term_canon(1);
+            if(isatty(0)) term_canon(1);
             reset_nonignored_traps();
             /* first command of pipeline */
             close(1);   /* stdout */
-            dup  (filedes[1]);
+            dup2(filedes[1], 1);
             close(filedes[1]);
             close(filedes[0]);
             /* stdout now goes to pipe */
@@ -649,7 +654,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
             if(next)
             {
                 close(0);   /* stdin */
-                dup  (filedes2[0]);
+                dup2(filedes2[0], 0);
                 close(filedes2[0]);
                 close(filedes2[1]);
             }
@@ -1569,7 +1574,8 @@ int  do_compound_command(struct node_s *node, struct node_s *redirect_list)
         case NODE_WHILE   : return do_while_clause (node, redirect_list);
         case NODE_UNTIL   : return do_until_clause (node, redirect_list);
         case NODE_SELECT  : return do_select_clause(node, redirect_list);
-        default           : return do_brace_group  (node, redirect_list);
+        case NODE_LIST    : return do_brace_group  (node, redirect_list);
+        default           : return 0;
     }
 }
 

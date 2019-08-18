@@ -39,7 +39,7 @@ struct io_file_s
 int  do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, char **));
 
 int  do_complete_command(struct node_s *node);
-int  do_list(struct node_s *node);
+int  do_list(struct node_s *node, struct node_s *redirect_list);
 int  do_and_or(struct node_s *node, struct node_s *redirect_list, int fg);
 int  do_pipeline(struct node_s *node, struct node_s *redirect_list, int wait);
 int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int wait);
