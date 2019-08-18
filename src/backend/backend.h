@@ -97,6 +97,7 @@ int  redirect_prep_node(struct node_s *child, struct io_file_s *io_files);
 int  redirect_prep(struct node_s *node, struct io_file_s *io_files);
 int  redirect_do(struct node_s *redirect_list);
 void redirect_restore();
+char *redirect_proc(char op, char *cmdline);
 
 /* coprocess file descriptors */
 extern int rfiledes[];

@@ -19,7 +19,7 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-#define _XOPEN_SOURCE   500     /* fdopen() */
+#define _XOPEN_SOURCE   500     /* fdopen() and mkdtemp() */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -35,6 +35,125 @@
 #include "../parser/parser.h"
 #include "../error/error.h"
 #include "../debug.h"
+
+
+char *fifo_filename = "FIFOCMD";
+
+
+int redirect_proc_do(char *cmdline, int fd1, int fd2)
+{
+    pid_t pid = 0;
+    if((pid = fork()) == 0)     /* child process */
+    {
+        asynchronous_prologue();
+
+        //struct source_s save_src = __src;
+        __src.buffer   = cmdline+1;
+        cmdline[strlen(cmdline)-1] = '\0';
+        __src.bufsize  = strlen(cmdline);
+        __src.curpos   = -2;
+
+        close(0);   /* stdin */
+        if(fd1 >= 0)
+        {
+            dup2(fd1, 0);
+            __src.filename = fifo_filename;
+        }
+        else
+        {
+            __src.filename = "/dev/null";
+            open(__src.filename, O_RDONLY);
+        }
+
+        if(fd2 >= 0)
+        {
+            close(1);   /* stdout */
+            dup2(fd2, 1);
+        }
+
+        do_cmd();
+        //__src = save_src;
+        exit(exit_status);
+    }
+    else if(pid < 0) return 0;
+    else return 1;
+}
+
+char *redirect_proc(char op, char *cmdline)
+{
+    char *tmpdir = get_shell_varp("TMPDIR", "/tmp");
+    int len = strlen(tmpdir);
+    char tmpname[len+12];
+    int tries = 100;
+    while(tries--)
+    {
+        sprintf(tmpname, "%s%clsh/fifo%d", tmpdir, '/', tries);
+        /* try to perform process substitution via using a named pipe/fifo */
+        if(mkfifo(tmpname, 0600) != 0)
+        {
+            if(errno == EEXIST) continue;
+            /*
+             * if the system doesn't support named pipes, or another error occurred, such as
+             * insufficient disk space, try performing this via a regular pipe, whose path we'll
+             * pass as /dev/fd/filedes. if the system doesn't support this scheme, we won't be able
+             * to perform process substitution.
+             */
+            int filedes[2];
+            if(pipe(filedes))
+            {
+                char buf[16];
+                sprintf(buf, "/dev/fd/%d", filedes[(op == '<') ? 0 : 1]);
+                if(file_exists(buf))
+                {
+                    char *path = NULL;
+                    if(op == '<' && redirect_proc_do(cmdline, -1, filedes[1]))
+                    {
+                        close(filedes[1]);
+                        path = get_malloced_str(buf);
+                    }
+                    else if(redirect_proc_do(cmdline, filedes[0], -1))
+                    {
+                        close(filedes[0]);
+                        path = get_malloced_str(buf);
+                    }
+                    else
+                    {
+                        close(filedes[0]);
+                        close(filedes[1]);
+                    }
+                    return path;
+                }
+                else
+                {
+                    fprintf(stderr, "%s: error creating fifo: %s\r\n", SHELL_NAME, "system doesn't support `/dev/fd` file names");
+                    close(filedes[0]);
+                    close(filedes[1]);
+                    return NULL;
+                }
+            }
+            else
+            {
+                fprintf(stderr, "%s: error creating fifo: %s\r\n", SHELL_NAME, strerror(errno));
+                return NULL;
+            }
+        }
+        /*
+         * open the fifo in read/write mode so that we won't be blocked waiting for a reader.
+         */
+        int fd1 = open(tmpname, O_RDWR);
+        if(fd1 < 0)
+        {
+            fprintf(stderr, "%s: error opening fifo: %s\r\n", SHELL_NAME, strerror(errno));
+            return NULL;
+        }
+        char *path = NULL;
+        if(op == '<' && redirect_proc_do(cmdline, -1, fd1)) path = get_malloced_str(tmpname);
+        else if(redirect_proc_do(cmdline, fd1, -1)) path = get_malloced_str(tmpname);
+        close(fd1);
+        return path;
+    }
+    return NULL;
+}
 
 /*
  * get the slot belonging to this fileno, or else the first
@@ -65,13 +184,13 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
             break;
             
         case VAL_STR:
+            s = child->val.str;
+            i = strlen(s);
             /*
              * check for the non-POSIX bash redirection extensions of {var}<&N
              * and {var}>&N. the {var} part would have been added as the previous
              * node.
              */
-            s = child->val.str;
-            i = strlen(s);
             if(s[0] == '{' && s[i-1] == '}')
             {
                 s[i-1] = '\0';

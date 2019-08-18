@@ -472,6 +472,10 @@ int  do_list(struct node_s *node)
             set_exit_status(0, 0);
             /*
              * give the child process a headstart, in case the scheduler decided to run us first.
+             * we wouldn't need to do this if we used vfork() instead of fork(), but the former has
+             * a lot of limitations and things we need to worry about if we're using it. still, it
+             * would be worth our while using vfork() instead of fork().
+             * TODO: use vfork() in this function and in do_complete_command() instead of fork().
              */
             sleep(1);
             if(cmdstr) free(cmdstr);
@@ -563,7 +567,6 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     pid_t pid;
     pid_t all_pids[node->children];
     int count = 0;
-    
     
     int filedes[2];
     /* create pipe */
@@ -1652,6 +1655,17 @@ int  do_io_file(struct node_s *node, struct io_file_s *io_file)
     }
     else
     {
+        /*
+         * check for the non-POSIX redirection extensions <(cmd) and >(cmd).
+         */
+        if(str[0] == '(' && str[strlen(str)-1] == ')')
+        {
+            if     (node->val.chr == IO_FILE_LESS )
+                str = redirect_proc('<', str);
+            else if(node->val.chr == IO_FILE_GREAT)
+                str = redirect_proc('>', str);
+            if(!str) str = child->val.str;
+        }
         io_file->duplicates = -1;
         io_file->path       = str;
     }
@@ -1986,6 +2000,22 @@ void restore_std()
 }
 
 
+static inline void free_argv(int argc, char **argv)
+{
+    while(argc--)
+    {
+        /* free the file we opened for process substitution in redirect.c */
+        if(argc && strstr(argv[argc], "/dev/fd/") == argv[argc])
+        {
+            char *p = argv[argc]+8, *strend = p;
+            int fd = strtol(p, &strend, 10);
+            if(p != strend) close(fd);
+        }
+        free_malloced_str(argv[argc]);
+    }
+}
+
+
 int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int dofork)
 {
     struct io_file_s io_files[FOPEN_MAX];
@@ -2313,7 +2343,6 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     /*
      * in tcsh, special alias jobcmd is run before running commands and when jobs.
      * change state (so why do we need 'postcmd' in the first place?).
-     * 
      */
     run_alias_cmd("jobcmd");
     
@@ -2344,7 +2373,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     if(child_pid == 0)
     {
         /* only restore tty to canonical mode if we are reading from it */
-        if(src->filename == stdin_filename && isatty(0) && getpgrp() == tcgetpgrp(0))
+        if(isatty(0) && getpgrp() == tcgetpgrp(0))
             term_canon(1);
         /* if we don't have redirects, no need for forking a subshell */
         if(argc == 0 && total_redirects) /* && !in_subshell) */
@@ -2374,7 +2403,8 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
         {
             int res = coproc(argc, argv, io_files);
             set_exit_status(res, 0);
-            while(argc--) free_malloced_str(argv[argc]);
+            //while(argc--) free_malloced_str(argv[argc]);
+            free_argv(argc, argv);
             return !res;
         }
         
@@ -2387,7 +2417,8 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
         /* perform I/O redirection, if any */
         if(total_redirects && !__redirect_do(io_files, savestd))
         {
-            while(argc-- > 0) free_malloced_str(argv[argc]);
+            //while(argc-- > 0) free_malloced_str(argv[argc]);
+            free_argv(argc, argv);
             return 0;
         }
 
@@ -2420,7 +2451,8 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                 {
                     res = fg(2, (char *[]){ "fg", argv[0], NULL });
                 }
-                while(argc--) free_malloced_str(argv[argc]);
+                //while(argc--) free_malloced_str(argv[argc]);
+                free_argv(argc, argv);
                 if(savestd && total_redirects) redirect_restore();
                 if(exit_status) EXIT_IF_NONINTERACTIVE();
                 return res;
@@ -2450,7 +2482,8 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                     }
                     i = 1;
                 }
-                while(argc--) free_malloced_str(argv[argc]);
+                //while(argc--) free_malloced_str(argv[argc]);
+                free_argv(argc, argv);
                 //restore_std();
                 if(savestd && total_redirects) redirect_restore();
                 MERGE_GLOBAL_SYMTAB();
@@ -2464,7 +2497,8 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
             /* STEP 1-B: check for internal functions             */
             if(do_function_definition(argc, argv))
             {
-                while(argc--) free_malloced_str(argv[argc]);
+                //while(argc--) free_malloced_str(argv[argc]);
+                free_argv(argc, argv);
                 //restore_std();
                 if(savestd && total_redirects) redirect_restore();
                 MERGE_GLOBAL_SYMTAB();
@@ -2474,7 +2508,8 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
             /* STEP 1-C: check for regular builtin utilities      */
             if(do_regular_builtin(argc, argv))
             {
-                while(argc--) free_malloced_str(argv[argc]);
+                //while(argc--) free_malloced_str(argv[argc]);
+                free_argv(argc, argv);
                 //restore_std();
                 if(savestd && total_redirects) redirect_restore();
                 MERGE_GLOBAL_SYMTAB();
@@ -2520,7 +2555,8 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     PRINT_EXIT_STATUS(status);
 
 
-    if(src->filename == stdin_filename)
+    //if(src->filename == stdin_filename)
+    if(isatty(0))
     {
         term_canon(0);
         update_row_col();
@@ -2555,7 +2591,8 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     if(optionx_set(OPTION_CHECK_WINSIZE)) get_screen_size();
     
     set_underscore_val(argv[argc-1], 0);    /* last argument to previous command */
-    while(argc > 0) free_malloced_str(argv[--argc]);
+    //while(argc > 0) free_malloced_str(argv[--argc]);
+    free_argv(argc, argv);
     return 1;
 }
 
