@@ -413,15 +413,15 @@ int do_cmd()
          */
         if(option_set('d'))
             dump_node_tree(root, 1);
-        
         /* -n option means read commands but don't execute them */
         int noexec = (option_set('n') && !option_set('i'));
         if(!noexec)
         {
             do_translation_unit(root);
             /* defined in initsh.c */
-            extern char *stdin_filename;
-            if(src->filename == stdin_filename) term_canon(0);
+            //extern char *stdin_filename;
+            //if(src->filename == stdin_filename) term_canon(0);
+            if(isatty(0)) term_canon(0);
         }
         free_node_tree(root);
     }

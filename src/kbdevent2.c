@@ -106,7 +106,7 @@ void rawoff()
 int rawon()
 {
     if(tcgetattr(0, &tty_attr_old) == -1) return 0;
-    atexit(rawoff);
+    //atexit(rawoff);
     /* get the special control keys */
     ERASE_KEY  = tty_attr_old.c_cc[VERASE];
     KILL_KEY   = tty_attr_old.c_cc[VKILL ];
