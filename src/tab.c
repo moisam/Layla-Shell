@@ -320,9 +320,11 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         }
     }
     /*
-     * auto-completion for user names.
+     * auto-completion for user names, which start with ~. if the ~ is followed by /,
+     * we most probably want to list the contents of our home directory, not search for a user
+     * whose name starts with /.
      */
-    else if(optionx_set(OPTION_USER_COMPLETE) && (p = strchr(tmp, '~')))
+    else if(optionx_set(OPTION_USER_COMPLETE) && (p = strchr(tmp, '~')) && p[1] != '/')
     {
         res = match_username(p+1, cmds, MAX_CMDS);
         
