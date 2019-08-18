@@ -578,19 +578,10 @@ struct token_s *tokenize(struct source_s *src)
         cur_tok = &eof_token;
         return &eof_token;
     }
-    //long line = 0, chr = 0;
     char quote, nc2, pc;
 
     do
     {
-        /*
-        if(line == 0)
-        {
-            line = src->curline;
-            chr  = src->curchar;
-        }
-        */
-
         switch(nc)
         {
             case  '"':
@@ -937,8 +928,9 @@ token_ready:
     tok->charno    = chr;
     tok->src       = src;
     tok->linestart = src->curlinestart;
-
-    if(option_set('v')) fprintf(stderr, "%s", tok->text);
+    
+    /* we do the -v option in the parse_translation_unit() function */
+    //if(option_set('v')) fprintf(stderr, "%s", tok->text);
 
     prev_type = tok->type;
     cur_tok = tok;
