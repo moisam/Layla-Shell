@@ -126,7 +126,7 @@ int __kill(int argc, char *argv[])
                     /* list all signal names */
                     for(i = 0; i < total_signames; i++)
                     {
-                        printf("%2d) %.10s", i, signames[i]);
+                        printf("%2d) %.10s ", i, signames[i]);
                         if((i % 4) == 0) printf("\r\n");
                     }
                     if(total_signames % 4) printf("\r\n");
