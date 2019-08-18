@@ -759,10 +759,15 @@ struct token_s *tokenize(struct source_s *src)
                     unget_char(src);
                     goto prep_token;
                 }
-                /* recognize ((expr)) structs */
                 if(nc == '(')
                 {
-                    if(peek_char(src) == '(')
+                    /*
+                     * recognize the ((expr)) structs (an old shorthand for arithmetic evaluation),
+                     * and the >(cmd) and <(cmd) structs, which are used for process substitution.
+                     * all of these are non-POSIX extensions.
+                     */
+                    pc = prev_char(src);
+                    if(peek_char(src) == '(' || pc == '<' || pc == '>')
                     {
 #if 0
                         next_char(src);    /* the 2nd '(' */
@@ -920,7 +925,7 @@ token_ready:
                 {
                     if(substitute_alias(tok->text, NULL))
                     {
-                        while(substitute_alias(tok->text, a)) ;
+                        substitute_alias(tok->text, a);
                     }
                     free_malloced_str(a);
                     tok->text_len = strlen(tok->text);
