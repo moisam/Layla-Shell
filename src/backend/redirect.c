@@ -39,76 +39,27 @@
 
 char *fifo_filename = "FIFOCMD";
 
-#if 0
-int redirect_proc_do(char *cmdline, int fd1, int fd2)
+void redirect_proc_do(char *cmdline, char op, char *tmpname)
 {
-    //pid_t pid = 0;
-    //if((pid = fork()) == 0)     /* child process */
+    if(fork() == 0)
     {
-        //asynchronous_prologue();
-        __src.buffer   = cmdline+1;
-        cmdline[strlen(cmdline)-1] = '\0';
-        __src.bufsize  = strlen(cmdline);
+        int i = strlen(cmdline)-1;
+        int j = i+strlen(tmpname)+12;
+        char *buf = malloc(j);
+        if(!buf) return;
+        char c = cmdline[i];
+        cmdline[i] = ' ';
+        sprintf(buf, "{ %s} %c%s", cmdline+1, (op == '>') ? '<' : '>', tmpname);
+        cmdline[i] = c;
+        __src.buffer   = buf;
+        __src.bufsize  = j;
         __src.curpos   = -2;
-        struct node_s *ionode = NULL;
-
-        if(fd1 >= 0)
-        {
-            ionode = io_file_node(0, IO_FILE_GREAT, "1", child->lineno);
-            dup2(fd1, 0);
-            close(fd1);
-            __src.filename = fifo_filename;
-        }
-        else
-        {
-            __src.filename = "/dev/null";
-            close(0);
-            open(__src.filename, O_RDONLY);
-        }
-
-        if(fd2 >= 0)
-        {
-            dup2(fd2, 1);
-            close(fd2);
-        }
-        else
-        {
-            close(1);
-            open("/dev/tty", O_RDONLY);
-        }
-
-        struct node_s   *root   = (struct node_s *)NULL;
-        eof_token.src           = src;
-        root = parse_translation_unit();
-        if(root)
-        {
-            struct node_s *child = root;
-            if(root->type == NODE_PROGRAM) child = child->first_child;
-            while(child)
-            {
-                if(child->type != NODE_LIST)
-                {
-                    if(!do_and_or(child, NULL, 1)) break;
-                }
-                else
-                {
-                    struct node_s *cmd = child->first_child;
-                    do
-                    {
-                        if(!do_and_or(cmd, NULL, 1 /* wait */)) break;
-                        cmd = cmd->next_sibling;
-                    } while(cmd);
-                }
-                child = child->next_sibling;
-            }
-            free_node_tree(root);
-        }
-        //exit(exit_status);
+        __src.filename = fifo_filename;
+        do_cmd();
+        unlink(tmpname);
+        exit(exit_status);
     }
-    //else if(pid < 0) return 0;
-    //else return 1;
 }
-#endif
 
 char *redirect_proc(char op, char *cmdline)
 {
@@ -123,8 +74,6 @@ char *redirect_proc(char op, char *cmdline)
         if(mkfifo(tmpname, 0600) != 0)
         {
             if(errno == EEXIST) continue;
-            return NULL;
-#if 0
             /*
              * if the system doesn't support named pipes, or another error occurred, such as
              * insufficient disk space, try performing this via a regular pipe, whose path we'll
@@ -132,29 +81,24 @@ char *redirect_proc(char op, char *cmdline)
              * to perform process substitution.
              */
             int filedes[2];
-            if(pipe(filedes))
+            if(pipe(filedes) == 0)
             {
                 char buf[16];
                 sprintf(buf, "/dev/fd/%d", filedes[(op == '<') ? 0 : 1]);
                 if(file_exists(buf))
                 {
-                    char *path = NULL;
-                    if(op == '<' && redirect_proc_do(cmdline, -1, filedes[1]))
+                    redirect_proc_do(cmdline, op, buf);
+                    if(op == '<')
                     {
                         close(filedes[1]);
-                        path = get_malloced_str(buf);
-                    }
-                    else if(redirect_proc_do(cmdline, filedes[0], -1))
-                    {
-                        close(filedes[0]);
-                        path = get_malloced_str(buf);
+                        return get_malloced_str(buf);
                     }
                     else
                     {
                         close(filedes[0]);
-                        close(filedes[1]);
+                        return get_malloced_str(buf);
                     }
-                    return path;
+                    return NULL;
                 }
                 else
                 {
@@ -169,42 +113,8 @@ char *redirect_proc(char op, char *cmdline)
                 fprintf(stderr, "%s: error creating fifo: %s\r\n", SHELL_NAME, strerror(errno));
                 return NULL;
             }
-#endif
         }
-#if 0
-        /*
-         * open the fifo in read/write mode so that we won't be blocked waiting for a reader.
-         */
-        int fd1 = open(tmpname, O_RDWR);
-        if(fd1 < 0)
-        {
-            fprintf(stderr, "%s: error opening fifo: %s\r\n", SHELL_NAME, strerror(errno));
-            return NULL;
-        }
-#endif
-        //char *path = NULL;
-        //if(op == '<' && redirect_proc_do(cmdline, -1, fd1)) path = get_malloced_str(tmpname);
-        //else if(redirect_proc_do(cmdline, fd1, -1)) path = get_malloced_str(tmpname);
-
-        if(fork() == 0)
-        {
-            int i = strlen(cmdline)-1;
-            int j = i+strlen(tmpname)+12;
-            char *buf = malloc(j);
-            if(!buf) return NULL;
-            char c = cmdline[i];
-            cmdline[i] = ' ';
-            sprintf(buf, "{ %s} %c%s", cmdline+1, (op == '>') ? '<' : '>', tmpname);
-            cmdline[i] = c;
-            __src.buffer   = buf;
-            __src.bufsize  = j;
-            __src.curpos   = -2;
-            __src.filename = fifo_filename;
-            do_cmd();
-            exit(exit_status);
-        }
-
-        //close(fd1);
+        redirect_proc_do(cmdline, op, tmpname);
         return get_malloced_str(tmpname);
     }
     return NULL;
