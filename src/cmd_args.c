@@ -86,11 +86,18 @@ long extract_num(char *buf, int start, int end)
  * restricted shells can't set/unset the values of SHELL, ENV, FPATH, 
  * or PATH. this function checks if the given name is one of these.
  * bash also restricts BASH_ENV.
+ * zsh also restricts EGID, EUID, GID, HISTFILE, HISTSIZE, IFS, 
+ * UID and USERNAME (among others we're not using in this shell).
  */
 int is_restrict_var(char *name)
 {
-    if(strcmp(name, "SHELL") == 0 || strcmp(name, "ENV" ) == 0 ||
-       strcmp(name, "FPATH") == 0 || strcmp(name, "PATH") == 0)
+    if(strcmp(name, "SHELL"   ) == 0 || strcmp(name, "ENV"     ) == 0 ||
+       strcmp(name, "FPATH"   ) == 0 || strcmp(name, "PATH"    ) == 0 ||
+       strcmp(name, "EUID"    ) == 0 || strcmp(name, "UID"     ) == 0 ||
+       strcmp(name, "EGID"    ) == 0 || strcmp(name, "GID"     ) == 0 ||
+       strcmp(name, "HISTFILE") == 0 || strcmp(name, "HISTSIZE") == 0 ||
+       strcmp(name, "IFS"     ) == 0 || strcmp(name, "USERNAME") == 0 ||
+       strcmp(name, "USER"    ) == 0 || strcmp(name, "LOGNAME" ) == 0)
         return 1;
     return 0;
 }
@@ -1337,6 +1344,7 @@ char *tilde_expand(char *s, size_t *_i, int in_var_assign)
         /* null tilde prefix */
         else if(i == 1)
         {
+#if 0
             entry = get_symtab_entry("HOME");
             char *home = entry ? entry->val : NULL;
             if(home && home[0] != '\0')
@@ -1359,6 +1367,14 @@ char *tilde_expand(char *s, size_t *_i, int in_var_assign)
                 }
                 else i = 0;
             }
+#endif
+            char *home = get_home();
+            if(home)
+            {
+                s2 = __substitute(s, home, 0, 0);
+                i  = strlen(home);
+            }
+            else i = 0;
         }
         else
         {

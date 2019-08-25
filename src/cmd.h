@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <termios.h>
 #include <sys/types.h>
 #include "scanner/source.h"
 
@@ -84,20 +85,21 @@ struct _stream
 /* job structure */
 struct job
 {
-    int    job_num;
-    int    proc_count;
-    int    pgid;
-    int    status;
-    char  *commandstr;
-    pid_t *pids;
-    int   *exit_codes;
-    int    child_exits;
-    long   child_exitbits;
+    int     job_num;
+    int     proc_count;
+    int     pgid;
+    int     status;
+    char   *commandstr;
+    pid_t  *pids;
+    int    *exit_codes;
+    int     child_exits;
+    long    child_exitbits;
 #define JOB_FLAG_FORGROUND      (1 << 0)
 #define JOB_FLAG_DISOWNED       (1 << 1)
 #define JOB_FLAG_NOTIFIED       (1 << 2)
 #define JOB_FLAG_NOTIFY         (1 << 3)    /* set by the notify builtin to notify individual jobs */
-    int    flags;
+    int     flags;
+    struct  termios *tty_attr;              /* terminal state when job is suspended */
 };
 // extern char job_run_status[MAX_JOBS];
 #define flag_set(flags, which)      (((flags) & (which)) == (which))
@@ -145,6 +147,7 @@ FILE   *popenr(char *cmd);
 
 /* initsh.c */
 extern  int  null_environ_index;
+extern  int  startup_finished;
 void    initsh(int argc, char **argv, int init_tty);
 void    init_login();
 void    init_rc();
@@ -425,6 +428,7 @@ int    bg(int argc, char **argv);
 /* builtins/cd.c */
 extern char *cwd;
 int    cd(int argc, char *argv[]);
+char  *get_home();
 
 /* builtins/command.c */
 int    command(int argc, char *argv[]);

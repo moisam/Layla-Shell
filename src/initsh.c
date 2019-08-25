@@ -58,6 +58,12 @@ int   null_environ_index = 0;
 char *rcfile = "~/.lshrc";
 int   noprofile = 0;        /* do not load login scripts */
 int   norc      = 0;        /* do not load rc scripts */
+int   startup_finished = 0; /*
+                             * flag set after we've finished loading the startup scripts 
+                             * and the shell is up and running. useful to allow us to enable
+                             * things such as the restricted mode, which should become effective
+                             * only when the shell is fully operational.
+                             */
 
 /* defined in main.c */
 extern char  *cmdstr_filename;
@@ -77,13 +83,12 @@ extern int    read_stdin     ;
  */
 int check_env_file()
 {
-    if((getuid() != geteuid()) || (getgid() != getegid()))
-        return 0;
-    struct symtab_entry_s *ENV = get_symtab_entry("ENV");
-    if(!ENV || !ENV->val || !ENV->val[0]) return 0;
-    if(!read_file(ENV->val, src))
+    if((getuid() != geteuid()) || (getgid() != getegid())) return 0;
+    char *ENV = get_shell_varp("ENV", NULL);
+    if(!ENV) return 0;
+    if(!read_file(ENV, src))
     {
-        fprintf(stderr, "%s: failed to read '%s': %s\r\n", SHELL_NAME, ENV->val, strerror(errno));
+        fprintf(stderr, "%s: failed to read '%s': %s\r\n", SHELL_NAME, ENV, strerror(errno));
         return 0;
     }
     do_cmd();
@@ -354,7 +359,7 @@ void initsh(int argc, char **argv, int init_tty)
                 break;
                 
             case INDEX_PATH:
-                if(option_set('r')) flags |= FLAG_READONLY;
+                if(startup_finished && option_set('r')) flags |= FLAG_READONLY;
                 
             default:
                 e = getenv(name);
@@ -503,20 +508,32 @@ void init_login()
         do_cmd();
         free(src->buffer);
     }
-    /* then the local init script, if any */
-    if(read_file(".profile", src))
+    /* ksh disables processing of ~/.profile in the privileged mode */
+    if(!option_set('p'))
     {
-        do_cmd();
-        free(src->buffer);
-    }
-    else
-    {
-        /* ksh disables processing of ~/.profile in the privileged mode */
-        if(!option_set('p') && read_file("~/.profile", src))
+        /* read the local init scripts, if any */
+        if(read_file(".profile", src))
         {
             do_cmd();
             free(src->buffer);
         }
+        if(read_file("~/.profile", src))
+        {
+            do_cmd();
+            free(src->buffer);
+        }
+    }
+
+    /* finally, read our lsh login scripts */
+    if(read_file("/etc/lshlogin", src))
+    {
+        do_cmd();
+        free(src->buffer);
+    }
+    if(read_file("~/.lshlogin", src))
+    {
+        do_cmd();
+        free(src->buffer);
     }
 }
 
@@ -531,16 +548,25 @@ void init_rc()
         do_cmd();
         free(src->buffer);
     }
+    /* read the local init script */
+    if(!norc && read_file(rcfile, src))
+    {
+        do_cmd();
+        free(src->buffer);
+    }
+    /* ksh disables executing the $ENV file in the privileged mode */
     if(!option_set('p'))
     {
         if(!check_env_file())
         {
             /* similar to what ksh does for login shells -- see init_login() */
+            /*
             if(!norc && read_file(rcfile, src))
             {
                 do_cmd();
                 free(src->buffer);
             }
+            */
         }
     }
 }
@@ -641,13 +667,7 @@ char parse_options(int argc, char **argv)
         switch(arg[0])
         {
             case '-':
-                if(arg[1] == '\0')
-                {
-                    end_loop = 1;
-                    i++;
-                    break;
-                }
-                if(strcmp(arg, "--") == 0)
+                if(arg[1] == '\0' || strcmp(arg, "--") == 0)    /* the -- and - special options */
                 {
                     end_loop = 1;
                     i++;
@@ -672,19 +692,21 @@ char parse_options(int argc, char **argv)
                 if(strcmp(arg, "--help") == 0)                                          /* bash, csh */
                 {
                     help(1, (char *[]){ "help", NULL });
-                    exit_gracefully(EXIT_SUCCESS, NULL);
+                    //exit_gracefully(EXIT_SUCCESS, NULL);
+                    exit(EXIT_SUCCESS);
                 }
-                if(strcmp(arg, "--init-file") == 0 || strcmp(arg, "--rcfile") == 0) /* bash */
+                if(strcmp(arg, "--init-file") == 0 || strcmp(arg, "--rcfile") == 0)     /* bash */
                 {
                     if(argv[++i] == NULL)
                     {
                         fprintf(stderr, "%s: missing argument: init/rc file name\n", SHELL_NAME);
-                        exit_gracefully(EXIT_FAILURE, NULL);
+                        //exit_gracefully(EXIT_FAILURE, NULL);
+                        exit(EXIT_SUCCESS);
                     }
                     rcfile = argv[i];
                     break;
                 }
-                if(strcmp(arg, "--login") == 0 || strcmp(arg, "-l") == 0)           /* bash, csh */
+                if(strcmp(arg, "--login") == 0 || strcmp(arg, "-l") == 0)               /* bash, csh */
                 {
                     islogin = 1;
                     break;
@@ -697,6 +719,15 @@ char parse_options(int argc, char **argv)
                 if(strcmp(arg, "--norc") == 0)                                          /* bash */
                 {
                     norc = 1;
+                    break;
+                }
+                if(strcmp(arg, "--posix") == 0)
+                {
+                    /* enable POSIX strict behavior */
+                    set_option('P', 1);
+                    /* stop parsing the other options */
+                    end_loop = 1;
+                    i++;
                     break;
                 }
                 if(strcmp(arg, "--restricted") == 0)                                    /* bash */
@@ -712,8 +743,9 @@ char parse_options(int argc, char **argv)
                 }
                 if(strcmp(arg, "--version") == 0)                                       /* bash, csh */
                 {
-                    printf("%s on %s\r\n", OS_TYPE, CPU_ARCH);
-                    exit_gracefully(EXIT_SUCCESS, NULL);
+                    printf("version %s running on %s %s\r\n", shell_ver, CPU_ARCH, OS_TYPE);
+                    //exit_gracefully(EXIT_SUCCESS, NULL);
+                    exit(EXIT_SUCCESS);
                 }
                 /* fall through to the next case */
                 
@@ -737,6 +769,12 @@ char parse_options(int argc, char **argv)
                     {
                         fprintf(stderr, "%s: error setting: %s\r\n", SHELL_NAME, arg);
                     }
+                    break;
+                }
+                if(strcmp(arg, "+-") == 0)    /* the +- special option behaves like -- (zsh extension) */
+                {
+                    end_loop = 1;
+                    i++;
                     break;
                 }
                 /* normal, set-like options */
@@ -848,10 +886,11 @@ init:
     
     /* is it a restricted shell? the basename of $SHELL determines this */
     entry = get_symtab_entry("SHELL");
-    if(entry)
+    if(entry && entry->val)
     {
         char *b = basename(entry->val);
-        if(strcmp(b, "rsh") == 0 || strcmp(b, "rlsh") == 0 || strcmp(b, "lrsh") == 0)
+        //if(strcmp(b, "rsh") == 0 || strcmp(b, "rlsh") == 0 || strcmp(b, "lrsh") == 0)
+        if(b && b[0] == 'r')
         {
             set_option('r', 1);
             set_optionx(OPTION_RESTRICTED_SHELL, 1);
@@ -861,7 +900,7 @@ init:
     /* check the $VISUAL editor */
     entry = get_symtab_entry("VISUAL");
     if(!entry) entry = get_symtab_entry("EDITOR");
-    if(entry)
+    if(entry && entry->val)
     {
         if(match_filename("*[Vv][Ii]*", entry->val, 0, 0))
             set_option('y', 1);

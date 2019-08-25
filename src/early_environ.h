@@ -59,7 +59,7 @@ struct early_env_item_s
 #define INDEX_USERNAME      34
 #define INDEX_UID           35
 /* everything after this one will be readonly -- just out of laziness */
-#define INDEX_MACHTYPE      37
+#define INDEX_MACHTYPE      38
 // #define INDEX_COLUMNS   5
 // #define INDEX_EGID      10
 // #define INDEX_EUID      11
@@ -127,6 +127,7 @@ struct early_env_item_s early_environ[] =
   { "USERNAME"    , ""                      },
   { "UID"         , ""                      },
   { "VISUAL"      , "vi"                    },
+  { "NULLCMD"     , "cat"                   },
   
   /*
    * TODO: $MACHTYPE should be in the standard gnu cpu-company-system format

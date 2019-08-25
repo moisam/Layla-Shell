@@ -47,7 +47,7 @@ FILE *popenr(char *cmd)
     /* create new pipe */
     pipe(filedes);
     
-    if((pid = fork()) == 0)     /* child process */
+    if((pid = fork_child()) == 0)     /* child process */
     {
         
         /* reset the -dumpast option if set */

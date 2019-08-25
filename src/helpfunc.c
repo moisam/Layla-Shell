@@ -582,7 +582,7 @@ int is_regular_builtin(char *cmd)
 int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags, int flagarg)
 {
     pid_t child_pid;
-    if((child_pid = fork()) == 0)
+    if((child_pid = fork_child()) == 0)
     {
         if(option_set('m'))
         {

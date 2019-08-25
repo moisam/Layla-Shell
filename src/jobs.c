@@ -585,8 +585,18 @@ void notice_termination(pid_t pid, int status)
     struct job *job = get_job_by_any_pid(pid);
     if(job)
     {
+        /* if the job is stopped, save the terminal state so we can restore it later with fg or wait */
+        if(WIFSTOPPED(status) && isatty(0))
+        {
+            if((job->tty_attr = malloc(sizeof(struct termios))))
+                tcgetattr(0, job->tty_attr);
+        }
+        else
+        {
+            if(job->tty_attr) free(job->tty_attr);
+            job->tty_attr = NULL;
+        }
         set_pid_exit_status(job, pid, status);
-        //if(pid == job->pgid) set_job_exit_status(job, status);
         set_job_exit_status(job, pid, status);
         /*
          * tcsh has a notify builtin that allows us to select to notify indiviual jobs.
@@ -597,12 +607,12 @@ void notice_termination(pid_t pid, int status)
             __output_status(pid, status, 0, stderr, 1);
         }
         /*
-         * ksh executes the CHLD trap handler when background
+         * ksh and zsh execute the CHLD trap handler when background
          * jobs exit and the -m option is set.
          */
         if(WIFEXITED(status) && !flag_set(job->flags, JOB_FLAG_FORGROUND) && option_set('m'))
         {
-            trap_handler(CHLD_TRAP_NUM);
+            if(job->child_exits == job->proc_count) trap_handler(CHLD_TRAP_NUM);
         }
     }
 }
@@ -706,6 +716,7 @@ struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, i
             job->child_exits = 0;
             job->child_exitbits = 0;
             job->proc_count  = 0;
+            job->tty_attr    = NULL;
             job->pids        = get_malloced_pids(pids, pid_count);
             if(job->pids)
             {
@@ -742,12 +753,14 @@ int kill_job(struct job *job)
         if(job->commandstr) free_malloced_str(job->commandstr);
         if(job->pids      ) free(job->pids      );
         if(job->exit_codes) free(job->exit_codes);
+        if(job->tty_attr  ) free(job->tty_attr  );
         job->job_num     = 0;
         job->commandstr  = NULL;
         job->pids        = NULL;
         job->exit_codes  = NULL;
         job->proc_count  = 0;
         job->child_exits = 0;
+        job->tty_attr    = NULL;
         /* if this is the current job, bring on the prev job to be current */
         if(res == cur_job)
         {
@@ -765,6 +778,7 @@ int kill_job(struct job *job)
             job2->commandstr = 0;
             job2->proc_count = 0;
             job->child_exits = 0;
+            job->tty_attr    = NULL;
             if(job->job_num > last_job) last_job = job->job_num;
             if(WIFSTOPPED(job->status) && job->job_num > last_suspended)
                 last_suspended = job->job_num;
