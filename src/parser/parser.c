@@ -544,7 +544,7 @@ struct node_s *parse_for_clause(struct token_s *tok)
          *    for((expr1; expr2; expr3)); do commands; done
          * this is a non-POSIX extension used by all major shells.
          */
-        if(tok->text && tok->text[0] == '(' && tok->text[1] == '(')
+        if(tok->text && tok->text[0] == '(' && tok->text[1] == '(' && !option_set('P'))
         //if(tok->type == TOKEN_OPENBRACE)
             return parse_for_clause2(tok);
         //fprintf(stderr, "shell: expected name after 'for'\n");
@@ -745,14 +745,27 @@ struct node_s *parse_case_item(struct token_s *tok)
     tok = tokenize(tok->src);
     while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
         tok = tokenize(tok->src);
-    if(!is_token_of_type(tok, TOKEN_DSEMI_ESAC_SEMIAND))
+    if(option_set('P'))
     {
-        struct node_s *compound = parse_compound_list(tok, TOKEN_DSEMI_ESAC_SEMIAND);
-        if(compound) add_child_node(item, compound);
+        if(!is_token_of_type(tok, TOKEN_DSEMI_ESAC))
+        {
+            struct node_s *compound = parse_compound_list(tok, TOKEN_DSEMI_ESAC);
+            if(compound) add_child_node(item, compound);
+        }
+    }
+    else
+    {
+        if(!is_token_of_type(tok, TOKEN_DSEMI_ESAC_SEMIAND_SEMIOR))
+        {
+            struct node_s *compound = parse_compound_list(tok, TOKEN_DSEMI_ESAC_SEMIAND_SEMIOR);
+            if(compound) add_child_node(item, compound);
+        }
     }
     tok = get_current_token();
-    if     (tok->type == TOKEN_SEMI_AND) set_node_val_chr(item, '&');
-    else if(tok->type == TOKEN_SEMI_SEMI_AND) set_node_val_chr(item, ';');
+
+    if(tok->type == TOKEN_SEMI_AND) set_node_val_chr(item, '&');
+    else if(tok->type == TOKEN_SEMI_OR || tok->type == TOKEN_SEMI_SEMI_AND) set_node_val_chr(item, ';');
+
     while(tok->type == TOKEN_DSEMI || tok->type == TOKEN_SEMI_AND)
         tok = tokenize(tok->src);
     while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
@@ -991,13 +1004,14 @@ struct node_s *parse_io_file(struct token_s *tok)
             case '\0': set_node_val_chr(file, IO_FILE_LESS     ); break;
             case  '&': set_node_val_chr(file, IO_FILE_LESSAND  ); break;
             case  '>': set_node_val_chr(file, IO_FILE_LESSGREAT); break;
-            case  '|': set_node_val_chr(file, IO_FILE_CLOBBER  ); break;
         }
     }
     else if(tok->text[0] == '>')
     {
         switch(tok->text[1])
         {
+            case  '!':      /* zsh extension, equivalent to >| */
+            case  '|': set_node_val_chr(file, IO_FILE_CLOBBER  ); break;
             case '\0': set_node_val_chr(file, IO_FILE_GREAT    ); break;
             case  '&': set_node_val_chr(file, IO_FILE_GREATAND ); break;
             case  '>': set_node_val_chr(file, IO_FILE_DGREAT   ); break;
@@ -1009,6 +1023,8 @@ struct node_s *parse_io_file(struct token_s *tok)
             set_node_val_chr(file, IO_FILE_AND_GREAT_GREAT);
         else if(strcmp(tok->text, "&>") == 0)               /* redirect stdout/stderr */
             set_node_val_chr(file, IO_FILE_GREATAND);       /* treat '&>' as '>&'     */
+        else if(strcmp(tok->text, "&<") == 0)
+            set_node_val_chr(file, IO_FILE_LESSAND );       /* treat '&<' as '<&'     */
     }
     tok = tokenize(tok->src);
     struct node_s *name = new_node(NODE_VAR);
@@ -1021,6 +1037,23 @@ struct node_s *parse_io_file(struct token_s *tok)
     name->lineno = tok->lineno;
     add_child_node(file, name);
     tok = tokenize(tok->src);
+    /*
+     * zsh says r-shell can't redirect output to files. if the token that comes after
+     * the output redirection operator is not a number, we treat it as a filename and 
+     * raise an error (if the shell is restricted, of course).
+     */
+    if(startup_finished && option_set('r') && name->val.str &&
+       file->val.chr >= IO_FILE_LESSGREAT && file->val.chr <= IO_FILE_DGREAT)
+    {
+        char *strend;
+        strtol(name->val.str , &strend, 10);
+        if(strend == name->val.str)     /* error parsing number means we've got a file name */
+        {
+            fprintf(stderr, "%s: cannot redirect output to file `%s`: restricted shell\r\n", SHELL_NAME, name->val.str);
+            free_node_tree(file);
+            return NULL;
+        }
+    }
     return file;
 }
 
@@ -1136,12 +1169,15 @@ static inline int is_compound_keyword(struct token_s *tok)
     if((tok->type == TOKEN_KEYWORD_LBRACE) ||
        (tok->type == TOKEN_OPENBRACE     ) ||
        (tok->type == TOKEN_KEYWORD_FOR   ) ||
-       (tok->type == TOKEN_KEYWORD_SELECT) ||
        (tok->type == TOKEN_KEYWORD_CASE  ) ||
        (tok->type == TOKEN_KEYWORD_IF    ) ||
        (tok->type == TOKEN_KEYWORD_WHILE ) ||
        (tok->type == TOKEN_KEYWORD_UNTIL ))
         return 1;
+     
+    if((tok->type == TOKEN_KEYWORD_SELECT) && !option_set('P'))
+        return 1;
+     
     return 0;
 }
 
@@ -1457,24 +1493,20 @@ struct node_s *parse_command(struct token_s *tok)
     /* 'time' special keyword */
     else if(tok->type == TOKEN_KEYWORD_TIME)
     {
+        struct node_s *t = new_node(NODE_TIME);
+        if(!t) return NULL;
         tok->src->wstart = tok->src->curpos;
         tok = tokenize(tok->src);
         if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
         {
-            PARSER_RAISE_ERROR_DESC(EXPECTED_TOKEN, tok, "expression");
-            return NULL;
+            return t;
         }
         struct node_s *cmd = parse_command(tok);
         if(cmd)
         {
-            struct node_s *t = new_node(NODE_TIME);
-            if(t)
-            {
-                add_child_node(t, cmd);
-                cmd = t;
-            }
+            add_child_node(t, cmd);
         }
-        return cmd;
+        return t;
     }
     struct token_s *tok2 = dup_token(tok);
     if(!tok2) return NULL;
@@ -1489,7 +1521,7 @@ struct node_s *parse_command(struct token_s *tok)
      * alternative, non-POSIX function definition using the
      * 'function' keyword.
      */
-    else if(tok2->type == TOKEN_KEYWORD_FUNCTION)
+    else if(tok2->type == TOKEN_KEYWORD_FUNCTION && !option_set('P'))
     {
         /* get rid of the (optional) opening brace */
         free(tok2);
@@ -1574,14 +1606,20 @@ struct node_s *parse_translation_unit()
             switch(cmd->type)
             {
                 case NODE_TIME:
-                    cmd = cmd->first_child;
+                    if(cmd->first_child) cmd = cmd->first_child;
+                    else
+                    {
+                        if(save_hist) save_to_history("time");
+                        if(option_set('v')) fprintf(stderr, "time\r\n");
+                        break;
+                    }
                     
                 case NODE_COMMAND:
                 case NODE_LIST:
                     if(cmd->val.str)
                     {
                         if(save_hist) save_to_history(cmd->val.str);
-                        if(option_set('v')) fprintf(stderr, "%s\n", cmd->val.str);
+                        if(option_set('v')) fprintf(stderr, "%s\r\n", cmd->val.str);
                         break;
                     }
                     
