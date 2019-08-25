@@ -717,22 +717,32 @@ long get_num(char *s, int *chars)
     char  max_digit = '9';
     if(*s2 == '0')
     {
-        if(s2[1] == 'x' || s2[1] == 'X')
+        switch(s2[1])
         {
-            base  = 16;
-            s2   += 2 ;
-            while(isxdigit(*s2))
-            {
-                char c = get_xdigit(*s2);
-                num = num*base + c;
+            case 'x':
+            case 'X':
+                base  = 16;
+                s2   += 2 ;
+                while(isxdigit(*s2))
+                {
+                    char c = get_xdigit(*s2);
+                    num = num*base + c;
+                    s2++;
+                }
+                break;
+
+            case 'b':
+            case 'B':
+                base  = 2;
+                max_digit = '1';
+                s2   += 2 ;
+                break;
+                
+            default:
+                base = 8;
+                max_digit = '7';
                 s2++;
-            }
-        }
-        else
-        {
-            base = 8;
-            max_digit = '7';
-            s2++;
+                break;
         }
     }
     if(*s2 >= '0' && *s2 <= max_digit)

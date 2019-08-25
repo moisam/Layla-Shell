@@ -41,7 +41,7 @@ char *fifo_filename = "FIFOCMD";
 
 void redirect_proc_do(char *cmdline, char op, char *tmpname)
 {
-    if(fork() == 0)
+    if(fork_child() == 0)
     {
         int i = strlen(cmdline)-1;
         int j = i+strlen(tmpname)+12;
@@ -152,13 +152,35 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
             s = child->val.str;
             i = strlen(s);
             /*
-             * check for the non-POSIX bash redirection extensions of {var}<&N
+             * check for the non-POSIX bash and zsh redirection extensions of {var}<&N
              * and {var}>&N. the {var} part would have been added as the previous
              * node.
              */
             if(s[0] == '{' && s[i-1] == '}')
             {
                 s[i-1] = '\0';
+                struct node_s *child2 = child->first_child;
+                if(child2) child2 = child2->first_child;
+                if(child2->val_type != VAL_STR) child2 = NULL;
+                /*
+                 * if the path is '-', it means we need to close the fd, so we'll get the fd number
+                 * from the shell variable where it was saved before.
+                 */
+                if(child2 && child2->val.str && strcmp(child2->val.str, "-") == 0)
+                {
+                    char *s2 = get_shell_varp(s+1, NULL);
+                    if(!s2)
+                    {
+                        s[i-1] = '}';
+                        break;
+                    }
+                    char *strend;
+                    fileno = strtol(s2, &strend, 10);
+                    s[i-1] = '}';
+                    if(strend == s2) fileno = -1;
+                    break;
+                }
+                /* search for an available slot for the new file descriptor, starting with #10 */
                 for(fileno = 10; fileno < FOPEN_MAX; fileno++)
                 {
                     /* get a vacant file descriptor */
@@ -263,6 +285,15 @@ int redirect_prep(struct node_s *node, struct io_file_s *io_files)
     return total_redirects;
 }
 
+#define OPEN_SPECIAL_ERROR()                            \
+do {                                                    \
+    fprintf(stderr,                                     \
+            "%s: error opening %s: "                    \
+            "use of invalid redirection operator\r\n",  \
+            SHELL_NAME, path);                          \
+    errno = EINVAL;                                     \
+    return -1;                                          \
+} while(0)
 
 int open_special(char *path, int flags, int mask)
 {
@@ -275,14 +306,17 @@ int open_special(char *path, int flags, int mask)
     }
     else if(strcmp(path, "/dev/stdin") == 0)
     {
+        if(!flag_set(flags, R_FLAG)) OPEN_SPECIAL_ERROR();
         fd = dup(0);
     }
     else if(strcmp(path, "/dev/stdout") == 0)
     {
+        if(!flag_set(flags, R_FLAG)) OPEN_SPECIAL_ERROR();
         fd = dup(1);
     }
     else if(strcmp(path, "/dev/stderr") == 0)
     {
+        if(!flag_set(flags, R_FLAG)) OPEN_SPECIAL_ERROR();
         fd = dup(2);
     }
     else if(strstr(path, "/dev/tcp/") == path)
@@ -358,7 +392,7 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
             if(path[0] == '-' && path[1] == '\0')
             {
                 if(j <= 2 && do_savestd) save_std(j);
-                close(i);
+                close(j);
                 /* POSIX says we can open an "unspecified file" in this case */
                 if(j == 0) open("/dev/null", O_RDONLY);
                 if(j == 1 || j == 2) open("/dev/null", O_WRONLY);

@@ -36,67 +36,68 @@ struct io_file_s
     int   flags;
 };
 
-int  do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, char **));
+int   do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, char **));
+pid_t fork_child();
 
-int  do_complete_command(struct node_s *node);
-int  do_list(struct node_s *node, struct node_s *redirect_list);
-int  do_and_or(struct node_s *node, struct node_s *redirect_list, int fg);
-int  do_pipeline(struct node_s *node, struct node_s *redirect_list, int wait);
-int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int wait);
-void do_separator(struct node_s *node);
-int  do_term(struct node_s *node, struct node_s *redirect_list);
-int  do_compound_list(struct node_s *node, struct node_s *redirect_list);
-int  do_subshell(struct node_s *node, struct node_s *redirect_list);
-//int  get_wordlist(struct node_s *node);
-int  do_do_group(struct node_s *node, struct node_s *redirect_list);
-int  do_for_clause2(struct node_s *node, struct node_s *redirect_list);
-int  do_for_clause(struct node_s *node, struct node_s *redirect_list);
-int  do_case_item(struct node_s *node, char *word, struct node_s *redirect_list);
-int  do_case_clause(struct node_s *node, struct node_s *redirect_list);
-int  do_if_clause(struct node_s *node, struct node_s *redirect_list);
-int  do_while_clause(struct node_s *node, struct node_s *redirect_list);
-int  do_until_clause(struct node_s *node, struct node_s *redirect_list);
-int  do_brace_group(struct node_s *node, struct node_s *redirect_list);
-int  do_compound_command(struct node_s *node, struct node_s *redirect_list);
-int  do_io_file(struct node_s *node, struct io_file_s *io_file);
-int  do_io_here(struct node_s *node, struct io_file_s *io_file);
-int  do_io_redirect(struct node_s *node, struct io_file_s *io_file);
-int  do_redirect_list(struct node_s *node, struct io_file_s *io_file);
-int  do_function_body(struct node_s *node);
-int  do_function_definition(int argc, char **argv);
-int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int fork);
-int  do_command(struct node_s *node, struct node_s *redirect_list, int fork);
-int  do_translation_unit(struct node_s *node);
+int   do_complete_command(struct node_s *node);
+int   do_list(struct node_s *node, struct node_s *redirect_list);
+int   do_and_or(struct node_s *node, struct node_s *redirect_list, int fg);
+int   do_pipeline(struct node_s *node, struct node_s *redirect_list, int wait);
+int   do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int wait);
+void  do_separator(struct node_s *node);
+int   do_term(struct node_s *node, struct node_s *redirect_list);
+int   do_compound_list(struct node_s *node, struct node_s *redirect_list);
+int   do_subshell(struct node_s *node, struct node_s *redirect_list);
+// int  get_wordlist(struct node_s *node);
+int   do_do_group(struct node_s *node, struct node_s *redirect_list);
+int   do_for_clause2(struct node_s *node, struct node_s *redirect_list);
+int   do_for_clause(struct node_s *node, struct node_s *redirect_list);
+int   do_case_item(struct node_s *node, char *word, struct node_s *redirect_list);
+int   do_case_clause(struct node_s *node, struct node_s *redirect_list);
+int   do_if_clause(struct node_s *node, struct node_s *redirect_list);
+int   do_while_clause(struct node_s *node, struct node_s *redirect_list);
+int   do_until_clause(struct node_s *node, struct node_s *redirect_list);
+int   do_brace_group(struct node_s *node, struct node_s *redirect_list);
+int   do_compound_command(struct node_s *node, struct node_s *redirect_list);
+int   do_io_file(struct node_s *node, struct io_file_s *io_file);
+int   do_io_here(struct node_s *node, struct io_file_s *io_file);
+int   do_io_redirect(struct node_s *node, struct io_file_s *io_file);
+int   do_redirect_list(struct node_s *node, struct io_file_s *io_file);
+int   do_function_body(struct node_s *node);
+int   do_function_definition(int argc, char **argv);
+int   do_simple_command(struct node_s *node, struct node_s *redirect_list, int fork);
+int   do_command(struct node_s *node, struct node_s *redirect_list, int fork);
+int   do_translation_unit(struct node_s *node);
 char *__tok_to_str(struct cmd_token *tok);
 char **__make_list(struct cmd_token *first_tok, int *token_count);
-void asynchronous_prologue();
-void inc_subshell_var();
+void  asynchronous_prologue();
+void  inc_subshell_var();
 
-int  do_special_builtin(int argc, char **argv);
-int  do_regular_builtin(int argc, char **argv);
+int   do_special_builtin(int argc, char **argv);
+int   do_regular_builtin(int argc, char **argv);
 
-int  __break(int argc, char **argv);
-int  __continue(int argc, char **argv);
-//void SIGCHLD_handler(int signum);
+int   __break(int argc, char **argv);
+int   __continue(int argc, char **argv);
+// void SIGCHLD_handler(int signum);
 
 /* pattern.c */
-int  match_filename(char *pattern, char *str, int print_err, int ignore);
-//int  __match_pattern(char *pattern, char *str);
+int   match_filename(char *pattern, char *str, int print_err, int ignore);
+// int  __match_pattern(char *pattern, char *str);
 char **filename_expand(char *dir, char *path, glob_t *matches);
-int  match_prefix(char *pattern, char *str, int longest);
-int  match_suffix(char *pattern, char *str, int longest);
-int  has_regex_chars(char *p, size_t len);
-int  match_ignore(char *pattern, char *filename);
+int   match_prefix(char *pattern, char *str, int longest);
+int   match_suffix(char *pattern, char *str, int longest);
+int   has_regex_chars(char *p, size_t len);
+int   match_ignore(char *pattern, char *filename);
 
-void save_std(int fd);
-void restore_std();
+void  save_std(int fd);
+void  restore_std();
 
 extern int do_restore_std;
 /* redirect.c */
-int  redirect_prep_node(struct node_s *child, struct io_file_s *io_files);
-int  redirect_prep(struct node_s *node, struct io_file_s *io_files);
-int  redirect_do(struct node_s *redirect_list);
-void redirect_restore();
+int   redirect_prep_node(struct node_s *child, struct io_file_s *io_files);
+int   redirect_prep(struct node_s *node, struct io_file_s *io_files);
+int   redirect_do(struct node_s *redirect_list);
+void  redirect_restore();
 char *redirect_proc(char op, char *cmdline);
 
 /* coprocess file descriptors */
@@ -104,4 +105,3 @@ extern int rfiledes[];
 extern int wfiledes[];
 
 #endif
-

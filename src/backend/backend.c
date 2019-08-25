@@ -21,6 +21,8 @@
 
 /* macro definitions needed to use sig*() and setenv() */
 #define _POSIX_C_SOURCE 200112L
+/* for uslepp(), but also _POSIX_C_SOURCE shouldn't be >= 200809L */
+#define _XOPEN_SOURCE   500
 
 #include <ctype.h>
 #include <stdio.h>
@@ -112,6 +114,34 @@ void inc_subshell_var()
     struct symtab_entry_s *entry = get_symtab_entry("SUBSHELL");
     if(!entry) entry = add_to_symtab("SUBSHELL");
     symtab_entry_setval(entry, buf);
+}
+
+
+/*
+ * try to fork a child process. if failed, try to a maximum number of retries, then return.
+ * if successful, the function returns the pid of the new child process (in the parent), or
+ * zero (in the child), or a negative value in case of error.
+ */
+pid_t fork_child()
+{
+    int tries = 5;
+    useconds_t usecs = 1;
+    pid_t pid;
+    while(tries--)
+    {
+        if((pid = fork()) < 0)
+        {
+            /* if we reached the system's limit on child process count, retry after a little nap */
+            if(errno == EAGAIN)
+            {
+                if(usleep(usecs << 1) != 0) break;
+                continue;
+            }
+            break;
+        }
+        break;
+    }
+    return pid;
 }
 
 
@@ -247,7 +277,7 @@ void do_exec_script(char *path, int argc, char **argv)
     int i = 0, lsh = 0;
     if(!first) lsh = 1;     /* use our shell */
     /* does the first line contain interpreter name with an optional argument? */
-    char *space = strchr(first, ' ');
+    char *space = first ? strchr(first, ' ') : NULL;
     if(lsh)
     {
         /* in tcsh, special alias 'shell' give the full pathname of the shell to use */
@@ -273,7 +303,7 @@ void do_exec_script(char *path, int argc, char **argv)
     while((*v2++ = *v1++)) ;
     /* fork a subshell to execute the script */
     pid_t pid;
-    if((pid = fork()) < 0)
+    if((pid = fork_child()) < 0)
     {
         fprintf(stderr, "%s: failed to fork subshell to execute script: %s\r\n", SHELL_NAME, strerror(errno));
         return;
@@ -295,16 +325,11 @@ void do_exec_script(char *path, int argc, char **argv)
 }
 
 /*
- * POSIX algorithm for command search and execution.
+ * last part of the POSIX algorithm for command search and execution.
  */
 int do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, char **))
 {
     int i = 0;
-    while(i < argc)
-    {
-        i++;
-    }
-
 
     if(internal_cmd)
     {
@@ -312,21 +337,39 @@ int do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, 
         set_underscore_val(argv[argc-1], 0);
         return res;
     }
+    /*
+     * zsh has a useful builtin extension called the precommand modifier, where a special word
+     * preceding the command name changes how the command interprets that name. in this case,
+     * the - modifier causes the shell to add - to the beginning of argv[0] of the command.
+     * this is similar to calling exec with the -l option in bash (and in this shell too).
+     */
+    char  *cmdname = argv[0];
+    char **cmdargs = argv;
+    if(cmdname[0] == '-' && cmdname[1] == '\0' && !option_set('P'))
+    {
+        if(argc < 2) return 0;
+        cmdname = argv[1];
+        char buf[strlen(cmdname)+2];
+        sprintf(buf, "-%s", cmdname);
+        argv[1] = get_malloced_str(buf);
+        if(!argv[1]) return 0;
+        cmdargs = &argv[1];
+    }
     /* STEP 1-D: search for command using $PATH if there is no slash in the command name */
-    if(strchr(argv[0], '/'))
+    if(strchr(cmdname, '/'))
     {
         /* is this shell restricted? */
-        if(option_set('r'))
+        if(startup_finished && option_set('r'))
         {
             /* r-shells can't specify commands with '/' in their names */
-            fprintf(stderr, "%s: can't execute '%s': restricted shell\r\n", SHELL_NAME, argv[0]);
-            return 0;
+            fprintf(stderr, "%s: can't execute '%s': restricted shell\r\n", SHELL_NAME, cmdname);
+            goto err;
         }
-        set_underscore_val(argv[0], 1);    /* absolute pathname of command exe */
-        execv(argv[0], argv);
+        set_underscore_val(cmdname, 1);    /* absolute pathname of command exe */
+        execv(cmdname, cmdargs);
         if(errno == ENOEXEC)
         {
-            do_exec_script(argv[0], argc, argv);
+            do_exec_script(cmdname, argc-1, cmdargs);
         }
     }
     else
@@ -335,7 +378,7 @@ int do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, 
         char *path;
         if(option_set('h'))
         {
-            path = get_hashed_path(argv[0]);
+            path = get_hashed_path(cmdname);
             if(path)
             {
                 int go = 1;
@@ -344,29 +387,33 @@ int do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, 
                 if(go)
                 {
                     set_underscore_val(path, 1);    /* absolute pathname of command exe */
-                    execv(path, argv);
+                    execv(path, cmdargs);
                 }
             }
         }
         
-        /* if we came back, we failed to execute the utility.
+        /*
+         * if we came back, we failed to execute the utility.
          * try searching for another utility using the given path.
          */
-        path = search_path(argv[0], use_path, 1);
-        if(!path) return 0;
-        if(option_set('h')) hash_utility(argv[0], path);
+        path = search_path(cmdname, use_path, 1);
+        if(!path) goto err;
+        if(option_set('h')) hash_utility(cmdname, path);
         set_underscore_val(path, 1);    /* absolute pathname of command exe */
-        execv(path, argv);
+        execv(path, cmdargs);
         
         /* we hashed the wrong utility. remove it. */
-        if(option_set('h')) unhash_utility(argv[0]);
+        if(option_set('h')) unhash_utility(cmdname);
         
         if(errno == ENOEXEC)
         {
-            do_exec_script(path, argc, argv);
+            do_exec_script(path, argc-1, cmdargs);
         }
         free_malloced_str(path);
     }
+    
+err:
+    if(cmdname != argv[0]) free_malloced_str(cmdname);
     return 0;
 }
 
@@ -456,7 +503,7 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
     if(!wait)
     {
         pid_t pid;
-        if((pid = fork()) < 0)
+        if((pid = fork_child()) < 0)
         {
             BACKEND_RAISE_ERROR(FAILED_TO_FORK, strerror(errno), NULL);
             return 0;
@@ -592,7 +639,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     else
     {
         /* fork the last command */
-        if((pid = fork()) == 0)
+        if((pid = fork_child()) == 0)
         {
             /* tell the terminal who's the foreground pgid now */
             if(option_set('m'))
@@ -634,7 +681,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
             pipe(filedes2);
         }
         /* fork the first command */
-        if((pid2 = fork()) == 0)
+        if((pid2 = fork_child()) == 0)
         {
             if(option_set('m'))
             {
@@ -721,7 +768,7 @@ int  do_term(struct node_s *node, struct node_s *redirect_list)
     if(!wait)
     {
         pid_t pid;
-        if((pid = fork()) < 0)
+        if((pid = fork_child()) < 0)
         {
             BACKEND_RAISE_ERROR(FAILED_TO_FORK, strerror(errno), NULL);
             return 0;
@@ -781,7 +828,7 @@ int  do_subshell(struct node_s *node, struct node_s *redirect_list)
     struct node_s *local_redirects = subshell ? subshell->next_sibling : NULL;
     if(local_redirects) redirect_list = local_redirects;
     pid_t pid;
-    if((pid = fork()) < 0)
+    if((pid = fork_child()) < 0)
     {
         BACKEND_RAISE_ERROR(FAILED_TO_FORK, strerror(errno), NULL);
         return 0;
@@ -793,6 +840,7 @@ int  do_subshell(struct node_s *node, struct node_s *redirect_list)
         if(option_set('m')) tcsetpgrp(0, tty_pid);
         return 1;
     }
+    setpgid(0, tty_pid);
     /*
      * POSIX says we should restore non-ignored signals to their
      * default actions.
@@ -1220,7 +1268,7 @@ int  do_select_clause(struct node_s *node, struct node_s *redirect_list)
         char *strend;
         struct symtab_entry_s *entry = get_symtab_entry("REPLY");
         /*
-         * empty response. ksh prints PS3, while bash reprints the select list.
+         * empty response. ksh prints PS3, while bash and zsh reprint the select list.
          * the second approach seems more appropriate, so we follow it.
          */
         if(!entry->val || !entry->val[0])
@@ -1376,7 +1424,7 @@ int  do_case_clause(struct node_s *node, struct node_s *redirect_list)
                     ERR_TRAP_OR_EXIT();
                 }
             }
-            /* check for case items ending in ';;&' */
+            /* check for case items ending in ';;&' (or ';|') */
             else if(item->val_type == VAL_CHR && item->val.chr == ';')
             {
                 /* try to match the next item */
@@ -1590,7 +1638,7 @@ int  do_io_file(struct node_s *node, struct io_file_s *io_file)
     char buf[32];
 
     /* r-shells can't redirect output */
-    if(option_set('r'))
+    if(startup_finished && option_set('r'))
     {
         char c = node->val.chr;
         if(c == IO_FILE_LESSGREAT || c == IO_FILE_CLOBBER || c == IO_FILE_GREAT ||
@@ -1642,6 +1690,18 @@ int  do_io_file(struct node_s *node, struct io_file_s *io_file)
         }
         else
         {
+            char *str2 = NULL;
+            /* get the file number from the shell variable in the >{$var} type of redirection */
+            if(str[0] == '$')
+            {
+                str2 = word_expand_to_str(str);
+                if(str2)
+                {
+                    str = get_malloced_str(str2);
+                    if(!str) return 0;
+                    free(str2);
+                }
+            }
             char *strend;
             fileno = strtol(str, &strend, 10);
             if(strend == str)
@@ -1652,7 +1712,7 @@ int  do_io_file(struct node_s *node, struct io_file_s *io_file)
             }
         }
         if(fileno < 0 || fileno >= FOPEN_MAX) goto invalid;
-        if(str[strlen(str)-1] == '-')   /* >&n- and <&n- */
+        if(str[strlen(str)-1] == '-' && strcmp(str, "p-"))   /* >&n- and <&n-, but don't close coproc files */
         {
             io_file->flags |= CLOOPEN;
         }
@@ -1765,15 +1825,11 @@ int  do_function_body(struct node_s *func)
         child->prev_sibling->next_sibling = NULL;
     }
     int res = do_compound_command(func, redirect);
-    /*
-     * the redirect tree is now disconnected from the root tree,
-     * so we need to explicitly free it.
-     */
     if(redirect)
     {
-        //free_node_tree(redirect);
-        /* actually, restore the redirect list as we will need
-         * to use it if the function is later invoked.
+        /* 
+         * restore the redirect list as we will need
+         * to use it if the function is later invoked again.
          */
         child->prev_sibling->next_sibling = redirect;
     }
@@ -1868,24 +1924,34 @@ int  do_function_definition(int argc, char **argv)
      * if -o errtrace (-E) is not set. traced functions inherit both traps
      * from the calling shell (bash).
      */
-    struct trap_item_s *debug = NULL, *err = NULL, *ret = NULL;
+    int exttrap_saved = 0;
+    struct trap_item_s *debug = NULL, *err = NULL, *ret = NULL, *ext = NULL;
     if(!flag_set(func->flags, FLAG_FUNCTRACE))
     {
         if(!option_set('T'))
         {
             debug = save_trap("DEBUG" );
             ret   = save_trap("RETURN");
+            ext   = save_trap("EXIT"  );
+            exttrap_saved = 1;
         }
-        if(!option_set('E')) err   = save_trap("ERR"  );
+        if(!option_set('E')) err = save_trap("ERR");
     }
     do_function_body(func->func_body);
     /*
+     * execute any EXIT trap set by the function, before restoring our shell's 
+     * EXIT trap to its original value.
+     */
+    if(exttrap_saved) trap_handler(0);
+    /*
      * restore saved traps. struct trap_item_s * memory is freed in the call.
-     * if either struct is null, nothing happens to the trap.
+     * if the struct is null, nothing happens to the trap, so the following calls
+     * are safe, even NULL trap structs.
      */
     restore_trap("DEBUG" , debug);
     restore_trap("RETURN", ret  );
     restore_trap("ERR"   , err  );
+    restore_trap("EXIT"  , ext  );
     //struct symtab_s *symtab = symtab_stack_pop();
     //free_symtab(symtab);
     /* restore pos parameters - similar to what we do in dot.c */
@@ -2033,6 +2099,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     char *const root = "/";
     char *arg;
     char *s;
+    int saved_noglob = option_set('f');
     
     symtab_stack_push();
 
@@ -2092,7 +2159,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                         len--;
                     }
                     /* is this shell restricted? */
-                    if(option_set('r') && is_restrict_var(name))
+                    if(startup_finished && option_set('r') && is_restrict_var(name))
                     {
                         /* r-shells can't set/unset SHELL, ENV, FPATH, or PATH */
                         fprintf(stderr, "%s: restricted shells can't set %s\r\n", SHELL_NAME, name);
@@ -2179,10 +2246,10 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                  * thing on the command line. the arithmetic operation itself has been performed
                  * by the calls to word_expand() above, so just discard the result here.
                  * 
-                 * in bash, ((expr)) is equivalent to: let "expr", and bash sets the exit status
+                 * in bash and zsh, ((expr)) is equivalent to: let "expr", and bash sets the exit status
                  * to 0 if expr evalues to non-zero, or 1 if expr evaluates to zero. in our case,
                  * the exit status is set by __do_arithmetic() in shunt.c when word_expand() calls
-                 * it to perform arithmetic substitution.
+                 * it to perform arithmetic expansion.
                  */
                 if(!argc && (strncmp(s, "((", 2) == 0 || strncmp(s, "$((", 3) == 0 || strncmp(s, "$[", 2) == 0))
                 {
@@ -2197,6 +2264,18 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                     char *p;
                     char *dir = NULL;
                     p = s;
+                    /*
+                     * in zsh, if the first word in the command is 'noglob', filename globbing is not performed.
+                     * we mimic this behavior by temporarily setting the noglob '-f' option, which we'll reset
+                     * later after we finish parsing the command's arguments.
+                     */
+                    if(!argc && strcmp(s, "noglob") == 0 && !option_set('P'))
+                    {
+                        set_option('f', 1);
+                        t2 = t2->next;
+                        continue;
+                    }
+                    /* for other arguments, check if we should perform filename globbing */
                     if(option_set('f') || !has_regex_chars(p, strlen(p)))
                     {
                         arg = get_malloced_str(s);
@@ -2221,6 +2300,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                             fprintf(stderr, "%s: file globbing failed for %s\n", SHELL_NAME, s);
                             for(i = 0; i < argc; i++) free_malloced_str(argv[i]);
                             free_all_tokens(t);
+                            set_option('f', saved_noglob);
                             return 0;
                         }
                     }
@@ -2245,6 +2325,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     }
     argv[argc] = NULL;
     //free(cwd);
+    set_option('f', saved_noglob);
     
     /*
      * interactive shells check for a directory passed as the command word (bash).
@@ -2262,6 +2343,33 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                 for(i = argc; i > 0; i--) argv[i] = argv[i-1];
                 argv[0] = get_malloced_str("cd");
             }
+        }
+    }
+    
+    /*
+     * if we have redirections with no command name, zsh inserts the name specified in the
+     * $NULLCMD shell variable as the command name (it also uses $READNULLCMD for input
+     * redirections, but we won't use this here). as with zsh, the default $NULLCMD is cat.
+     * zsh has other options when dealing with redirections that have empty commands names,
+     * which can be found under the "Redirections with no command" section of zsh manpage.
+     */
+    if(!argc && total_redirects > 1)
+    {
+        char *nullcmd = get_shell_varp("NULLCMD", NULL);
+        if(nullcmd && *nullcmd)
+        {
+            s = word_expand_to_str(nullcmd);
+            if(s)
+            {
+                argv[0] = get_malloced_str(s);
+                if(argv[0]) argc++;
+                free(s);
+            }
+        }
+        else
+        {
+            argv[0] = get_malloced_str("cat");
+            if(argv[0]) argc++;
         }
     }
     
@@ -2349,19 +2457,19 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     
     extern char *stdin_filename;    /* defined in cmdline.c */
     
-    trap_handler(DEBUG_TRAP_NUM);    
-    
-    /* in tcsh, special alias postcmd is run before running each command */
-    run_alias_cmd("postcmd");
-    
     /*
-     * in tcsh, special alias jobcmd is run before running commands and when jobs.
-     * change state (so why do we need 'postcmd' in the first place?).
+     * in tcsh, special alias jobcmd is run before running commands and when jobs
+     * change state, or a job is brought to the foreground.
      */
     run_alias_cmd("jobcmd");
     
+    /* in zsh, hook function preexec is run before running each command (similar to a tcsh's special alias) */
+    run_alias_cmd("preexec");
+
+    trap_handler(DEBUG_TRAP_NUM);    
+    
     pid_t child_pid = 0;
-    if(dofork && (child_pid = fork()) == 0)
+    if(dofork && (child_pid = fork_child()) == 0)
     {
         if(option_set('m'))
         {
@@ -2389,11 +2497,13 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
         /* only restore tty to canonical mode if we are reading from it */
         if(isatty(0) && getpgrp() == tcgetpgrp(0))
             term_canon(1);
+#if 0
+        /* NOTE: we don't need this, as we added the $NULLCMD command name above (thus argc can't be 0) */
         /* if we don't have redirects, no need for forking a subshell */
         if(argc == 0 && total_redirects) /* && !in_subshell) */
         {
             pid_t pid;
-            if((pid = fork()) < 0)
+            if((pid = fork_child()) < 0)
             {
                 BACKEND_RAISE_ERROR(FAILED_TO_FORK, NULL, NULL);
                 return 0;    
@@ -2405,6 +2515,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                 return 1;    
             }
         }
+#endif
         
         /*
          * we need to handle the special case of coproc, as this command opens
@@ -2436,12 +2547,15 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
             return 0;
         }
 
+#if 0
+        /* NOTE: we don't need this, as we added the $NULLCMD command name above (thus argc can't be 0) */
         if(argc == 0)
         {
             if(total_redirects) exit(EXIT_SUCCESS);
             MERGE_GLOBAL_SYMTAB();
             return 1;
         }
+#endif
 
         /*
          * bash/tcsh have a useful non-POSIX extension where '%n' equals 'fg %n'
@@ -2600,6 +2714,9 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
 
     struct symtab_s *symtab = symtab_stack_pop();
     free(symtab);
+
+    /* in tcsh, special alias postcmd is run after running each command */
+    run_alias_cmd("postcmd");
     
     /* check winsize and update $LINES and $COLUMNS (bash) after running external cmds */
     if(optionx_set(OPTION_CHECK_WINSIZE)) get_screen_size();
@@ -2614,7 +2731,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
 int  do_command(struct node_s *node, struct node_s *redirect_list, int fork)
 {
     if(!node) return 0;
-    else if(node->type == NODE_COMMAND )
+    else if(node->type == NODE_COMMAND)
     {
         int res = do_simple_command(node, redirect_list, fork);
         return res;
