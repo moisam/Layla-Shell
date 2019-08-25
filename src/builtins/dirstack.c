@@ -350,8 +350,9 @@ void purge_dirstack(int flags)
 
     while(ds)
     {
-        struct passwd *pw = getpwuid(geteuid());
-        char *home = pw ? pw->pw_dir : NULL;
+        //struct passwd *pw = getpwuid(geteuid());
+        //char *home = pw ? pw->pw_dir : NULL;
+        char *home = get_home();
         /* wrap if needed */
         int len = strlen(ds->path);
         if(wrap && n+len >= VGA_WIDTH)
@@ -533,8 +534,9 @@ int dirs(int argc, char **argv)
         return 0;
     }
   
-    struct passwd *pw = getpwuid(geteuid());
-    char *home = pw ? pw->pw_dir : NULL;
+    //struct passwd *pw = getpwuid(geteuid());
+    //char *home = pw ? pw->pw_dir : NULL;
+    char *home = get_home();
     int chars = 0;
     
     for( ; v < argc; v++)

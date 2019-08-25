@@ -65,6 +65,16 @@ char *get_hashed_path(char *utility)
 }
 
 
+#define RESTRICTED_SHELL_NOHASH(msg)                    \
+do {                                                    \
+    if(startup_finished && option_set('r'))             \
+    {                                                   \
+        fprintf(stderr, "%s: %s\r\n", UTILITY, (msg));  \
+        return 2;                                       \
+    }                                                   \
+} while(0)
+
+
 int hash(int argc, char **argv)
 {
     if(argc == 1)
@@ -123,13 +133,12 @@ int hash(int argc, char **argv)
                     fprintf(stderr, "%s: missing argument to option -%c\r\n", UTILITY, c);
                     return 2;
                 }
-                /* is this shell restricted? */
-                if(option_set('r'))
-                {
-                    /* bash says r-shells can't specify commands with '/' in their names */
-                    fprintf(stderr, "%s: can't hash command containing '/': restricted shell\r\n", UTILITY);
-                    return 2;
-                }
+                /*
+                 * is this shell restricted?
+                 * bash says r-shells can't specify commands with '/' in their names.
+                 * zsh doesn't allow r-shells to use hash, period.
+                 */
+                RESTRICTED_SHELL_NOHASH("can't hash command containing '/': restricted shell");
                 pathlen = strlen(path);
                 break;                
         }
@@ -155,6 +164,7 @@ int hash(int argc, char **argv)
             char cmd[pathlen+strlen(arg)+2];    /* 2 for '\0' and possible '/' */
             if(path[pathlen-1] == '/') sprintf(cmd, "%s%s" , path, arg);
             else                       sprintf(cmd, "%s/%s", path, arg);
+            RESTRICTED_SHELL_NOHASH("can't use the hash command: restricted shell");
             if(!hash_utility(arg, cmd))
             {
                 fprintf(stderr, "%s: failed to hash utility '%s'\r\n", SHELL_NAME, arg);
@@ -172,6 +182,7 @@ int hash(int argc, char **argv)
             }
             else
             {
+                RESTRICTED_SHELL_NOHASH("can't use the hash command: restricted shell");
                 if(!hash_utility(arg, p))
                 {
                     fprintf(stderr, "%s: failed to hash utility '%s'\r\n", SHELL_NAME, arg);

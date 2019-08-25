@@ -19,6 +19,7 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
+#include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/wait.h>
@@ -89,6 +90,8 @@ int __wait(int argc, char **argv)
             if(job->job_num != 0)
             {
                 if(WIFEXITED(job->status) || WIFSTOPPED(job->status)) continue;
+                /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
+                if(job->tty_attr && isatty(0)) tcsetattr(0, TCSANOW, job->tty_attr);
                 if(force)
                 {
                     kill(-job->pgid, SIGCONT);
@@ -146,6 +149,8 @@ read_next2:
         }
         /* wait for all processes in job to exit */
         j = 1;
+        /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
+        if(job->tty_attr && isatty(0)) tcsetattr(0, TCSANOW, job->tty_attr);
         if(force)
         {
             kill(-job->pgid, SIGCONT);
@@ -175,6 +180,8 @@ read_next2:
     else
     {
         pid = atoi(arg);
+        /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
+        if(job->tty_attr && isatty(0)) tcsetattr(0, TCSANOW, job->tty_attr);
         if(force)
         {
             kill(pid, SIGCONT);

@@ -48,7 +48,7 @@ void start_clock()
     st_time = get_cur_time();
 }
 
-int __times(int argc, char *argv[])
+int __times(int argc, char *argv[] __attribute__((unused)))
 {
     if(argc > 1)
     {

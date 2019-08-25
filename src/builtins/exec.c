@@ -81,9 +81,9 @@ int exec(int argc, char **argv)
     if(v >= argc) return 0;
 
     /* is this shell restricted? */
-    if(option_set('r'))
+    if(startup_finished && option_set('r'))
     {
-        /* bash says r-shells can't use exec to replace the shell */
+        /* bash & zsh say r-shells can't use exec to replace the shell */
         fprintf(stderr, "%s: can't execute command: restricted shell\r\n", UTILITY);
         return 2;
     }

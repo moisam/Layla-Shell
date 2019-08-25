@@ -79,7 +79,7 @@ int __exit(int argc, char **argv)
         {
             if(!tried_exit)
             {
-                fprintf(stderr, "You have pending jobs.\r\n");
+                fprintf(stderr, "You have suspended (running) jobs.\r\n");
                 tried_exit = 1;
                 return 1;
             }
@@ -148,7 +148,7 @@ void exit_gracefully(int stat, char *errmsg)
     if(!executing_trap) trap_handler(0);
     
     /* flush history list to the history file */
-    if(optionx_set(OPTION_SAVE_HIST)) flush_history();
+    if(option_set('i') && optionx_set(OPTION_SAVE_HIST)) flush_history();
     
     /* 
      * don't interrupt us while we perform logout actions. this is
@@ -162,15 +162,27 @@ void exit_gracefully(int stat, char *errmsg)
     sigaddset(&intmask, SIGTERM);
     sigprocmask(SIG_BLOCK, &intmask, NULL);
     
-    /* perform logout script on login shell's exit */
+    /* perform logout scripts on login shell's exit */
     if(option_set('L'))
     {
-        if(read_file("/etc/logout", src))
+        /* local logout scripts */
+        if(read_file("~/.lshlogout", src))
         {
             do_cmd();
             free(src->buffer);
         }
-        if(read_file("~/.logout", src))
+        else if(read_file("~/.logout", src))
+        {
+            do_cmd();
+            free(src->buffer);
+        }
+        /* global logout scripts */
+        if(read_file("/etc/lshlogout", src))
+        {
+            do_cmd();
+            free(src->buffer);
+        }
+        else if(read_file("/etc/logout", src))
         {
             do_cmd();
             free(src->buffer);

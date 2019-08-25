@@ -111,14 +111,40 @@ int cd_hyphen()
 char *get_home()
 {
     char *home = get_shell_varp("HOME", NULL);
-    /* In this case, behaviour is implementation-defined, as per POSIX.
+    /*
+     * in this case, behaviour is implementation-defined, as per POSIX.
      * we try to read home directory from the user database.
      */
-    if(!home || home[0] == '\0')
+    if(!home || !*home)
     {
-        struct passwd *pw = getpwuid(getpid());
-        if(!pw) return 0;
-        home = pw->pw_dir;
+        static struct passwd pwd;
+        static char *buf;
+        struct passwd *result;
+        size_t bufsize = sysconf(_SC_GETPW_R_SIZE_MAX);
+        int s;
+        uid_t euid = geteuid();
+        if(bufsize == -1) bufsize = 1024;        /* NOTE: is this enough? */
+
+        buf = malloc(bufsize);
+        if(buf == NULL)
+        {
+            fprintf(stderr, "%s: failed to get passwd struct: %s\r\n", SHELL_NAME, strerror(errno));
+            return NULL;
+        }
+        s = getpwuid_r(euid, &pwd, buf, bufsize, &result);
+        if(result == NULL)
+        {
+            if (s == 0)
+                fprintf(stderr, "%s: user %d not found in the passwd database\r\n", SHELL_NAME, euid);
+            else
+                fprintf(stderr, "%s: failed to get passwd struct: %s\r\n", SHELL_NAME, strerror(s));
+            return NULL;
+        }
+        home = pwd.pw_dir;
+        //struct passwd *pw = getpwuid(geteuid());
+        //if(!pw) return 0;
+        //home = pw->pw_dir;
+        set_shell_varp("HOME", home);
     }
     return home;
 }
@@ -153,7 +179,7 @@ int cd(int argc, char *argv[])
     int flags = 0;
    
     /* is this shell restricted? */
-    if(option_set('r'))
+    if(startup_finished && option_set('r'))
     {
         fprintf(stderr, "%s: can't change directory in a restricted shell", UTILITY);
         return 3;

@@ -44,16 +44,17 @@ struct
     int errtrace   :1;    /* -E */
     int noglob     :1;    /* -f */
     int nolog      :1;    /* -g (short option is our non-POSIX extension) */
-    int keyword    :1;    /* -k -- non-POSIX, ignored in our shell */
     int hashall    :1;    /* -h */
     int histexpand :1;    /* -H */
     int interactive:1;    /* -i */
+    int keyword    :1;    /* -k -- borrowed from ksh */
     int login      :1;    /* -L */
     int pipefail   :1;    /* -l (short option is our non-POSIX extension) */
     int monitor    :1;    /* -m */
     int noexec     :1;    /* -n */
     int ignoreeof  :1;    /* -o (short option is our non-POSIX extension) */
     int privileged :1;    /* -p */
+    int posix      :1;    /* -P (short option is our non-POSIX extension) */
     int quit       :1;    /* -q -- borrowed from tcsh */
     int restricted :1;    /* -r */
     int onecmd     :1;    /* -t */
@@ -86,6 +87,7 @@ char short_option(char *long_option)
     if(strcmp(long_option, "noexec"     ) == 0) return 'n';
     if(strcmp(long_option, "ignoreeof"  ) == 0) return 'o';
     if(strcmp(long_option, "privileged" ) == 0) return 'p';
+    if(strcmp(long_option, "posix"      ) == 0) return 'P';
     if(strcmp(long_option, "quit"       ) == 0) return 'q';
     if(strcmp(long_option, "restricted" ) == 0) return 'r';
     if(strcmp(long_option, "onecmd"     ) == 0) return 't';
@@ -121,6 +123,7 @@ char *long_option(char short_opt)
         case 'n': return "noexec"     ;
         case 'o': return "ignoreeof"  ;
         case 'p': return "privileged" ;
+        case 'P': return "posix"      ;
         case 'q': return "quit"       ;
         case 'r': return "restricted" ;
         case 't': return "onecmd"     ;
@@ -157,6 +160,7 @@ int is_short_option(char which)
         case 'n':
         case 'o':
         case 'p':
+        case 'P':
         case 'q':
         case 'r':
         case 't':
@@ -194,6 +198,7 @@ int option_set(char which)
         case 'n': return options.noexec     ;
         case 'o': return options.ignoreeof  ;
         case 'p': return options.privileged ;
+        case 'P': return options.posix      ;
         case 'q': return options.quit       ;
         case 'r': return options.restricted ;
         case 't': return options.onecmd     ;
@@ -237,6 +242,7 @@ void symtab_save_options()
     if(options.noexec     ) *b++ = 'n';
     if(options.ignoreeof  ) *b++ = 'o';
     if(options.privileged ) *b++ = 'p';
+    if(options.posix      ) *b++ = 'P';
     if(options.quit       ) *b++ = 'q';
     if(options.restricted ) *b++ = 'r';
     if(options.onecmd     ) *b++ = 't';
@@ -293,6 +299,7 @@ void set_option(char option, int set)
         case 'n': options.noexec      = set; break;
         case 'o': options.ignoreeof   = set; break;
         case 'p': options.privileged  = set; break;
+        case 'P': options.posix       = set; break;
         case 'q': options.quit        = set; break;
         case 'r': options.restricted  = set; break;
         case 't': options.onecmd      = set; break;
@@ -333,6 +340,7 @@ void purge_options(char onoff)
         printf("nounset    \t%s\r\n", options.nounset     ? "on" : "off");
         printf("pipefail   \t%s\r\n", options.pipefail    ? "on" : "off");
         printf("privileged \t%s\r\n", options.privileged  ? "on" : "off");
+        printf("posix      \t%s\r\n", options.posix       ? "on" : "off");
         printf("quit       \t%s\r\n", options.quit        ? "on" : "off");
         printf("restricted \t%s\r\n", options.restricted  ? "on" : "off");
         printf("verbose    \t%s\r\n", options.verbose     ? "on" : "off");
@@ -364,6 +372,7 @@ void purge_options(char onoff)
         printf("set %co nounset\r\n"    , options.nounset     ? '-' : '+');
         printf("set %co pipefail\r\n"   , options.pipefail    ? '-' : '+');
         printf("set %co privileged\r\n" , options.privileged  ? '-' : '+');
+        printf("set %co posix\r\n"      , options.posix       ? '-' : '+');
         printf("set %co quit\r\n"       , options.quit        ? '-' : '+');
         printf("set %co restricted\r\n" , options.restricted  ? '-' : '+');
         printf("set %co verbose\r\n"    , options.verbose     ? '-' : '+');
@@ -418,13 +427,17 @@ int do_options(char *ops, char *extra)
             case 'h': options.hashall    = onoff; break;
             case 'H': options.histexpand = onoff; break;
             case 'L':
-                fprintf(stderr, "%s: cannot change the login option when the shell is running\n", SHELL_NAME);
+                fprintf(stderr, "%s: cannot change the %s option when the shell is running\n", SHELL_NAME, "--login");
                 return -1;
                 
             case 'k': options.keyword    = onoff; break;
             case 'm': options.monitor    = onoff; break;
             case 'n': options.noexec     = onoff; break;
             case 'p': __do_privileged(onoff); break;
+            case 'P':
+                fprintf(stderr, "%s: cannot change the %s option when the shell is running\n", SHELL_NAME, "--posix");
+                return -1;
+                
             case 'q': options.quit       = onoff; break;
             case 'r': if(!__do_restricted(onoff)) return -1; break;
             case 't': options.onecmd     = onoff; break;
@@ -463,7 +476,7 @@ int do_options(char *ops, char *extra)
                 else if(strcmp(extra, "ignoreeof"  ) == 0) options.ignoreeof   = onoff;
                 else if(strcmp(extra, "login"  ) == 0)
                 {
-                    fprintf(stderr, "%s: cannot change the login option when the shell is running\n", SHELL_NAME);
+                    fprintf(stderr, "%s: cannot change the %s option when the shell is running\n", SHELL_NAME, "--login");
                     return -1;
                 }
                 else if(strcmp(extra, "keyword"    ) == 0) options.keyword     = onoff;
@@ -477,6 +490,11 @@ int do_options(char *ops, char *extra)
                 else if(strcmp(extra, "nounset"    ) == 0) options.nounset     = onoff;
                 else if(strcmp(extra, "pipefail"   ) == 0) options.pipefail    = onoff;
                 else if(strcmp(extra, "privileged" ) == 0) __do_privileged(onoff);
+                else if(strcmp(extra, "posix"  ) == 0)
+                {
+                    fprintf(stderr, "%s: cannot change the %s option when the shell is running\n", SHELL_NAME, "--posix");
+                    return -1;
+                }
                 else if(strcmp(extra, "quit"       ) == 0) options.quit        = onoff;
                 else if(strcmp(extra, "restricted" ) == 0)
                 {
@@ -642,7 +660,7 @@ int __set(char* name_buf, char* val_buf, int set_global, int set_flags, int unse
     if(set_special_var(name_buf, val_buf)) return 1;
     
     /* is this shell restricted? */
-    if(option_set('r') && is_restrict_var(name_buf))
+    if(startup_finished && option_set('r') && is_restrict_var(name_buf))
     {
         /* r-shells can't set/unset SHELL, ENV, FPATH, or PATH */
         fprintf(stderr, "%s: restricted shells can't set %s\r\n", SHELL_NAME, name_buf);

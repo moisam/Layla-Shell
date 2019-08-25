@@ -35,12 +35,20 @@ extern int prev_job;
 void __fg(struct job *job)
 {
     /*
+     * in tcsh, special alias jobcmd is run before running commands and when jobs
+     * change state, or a job is brought to the foreground.
+     */
+    run_alias_cmd("jobcmd");
+    
+    /*
      * no need to check for option_set('m') here because it must be set,
      * otherwise this function would have never been called.
      */
     int   status;
     printf("%s\r\n", job->commandstr);
     tcsetpgrp(0, job->pgid);
+    /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
+    if(job->tty_attr && isatty(0)) tcsetattr(0, TCSANOW, job->tty_attr);
     kill(-(job->pgid), SIGCONT);
     //resid = waitpid(job->pgid, &status, WAIT_FLAG);
     waitpid(job->pgid, &status, WAIT_FLAG);

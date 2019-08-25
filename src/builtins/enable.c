@@ -120,6 +120,8 @@ int enable(int argc, char **argv)
     /* unknown option */
     if(c == -1) return 2;
 
+    if(print_all) spec_only = 0, reg_only = 0;
+
     if(v >= argc)
     {
         enable_list(print_all ? 'a' :
@@ -135,22 +137,28 @@ int enable(int argc, char **argv)
     for( ; v < argc; v++, builtin = NULL)
     {
         char *arg = argv[v];
-        for(i = 0; i < special_builtin_count; i++)
+        if(print_all || spec_only)
         {
-            if(strcmp(special_builtins[i].name, arg) == 0)
+            for(i = 0; i < special_builtin_count; i++)
             {
-                builtin = &special_builtins[i];
-                break;
+                if(strcmp(special_builtins[i].name, arg) == 0)
+                {
+                    builtin = &special_builtins[i];
+                    break;
+                }
             }
         }
         if(!builtin)
         {
-            for(i = 0; i < regular_builtin_count; i++)
+            if(print_all || reg_only)
             {
-                if(strcmp(regular_builtins[i].name, arg) == 0)
+                for(i = 0; i < regular_builtin_count; i++)
                 {
-                    builtin = &regular_builtins[i];
-                    break;
+                    if(strcmp(regular_builtins[i].name, arg) == 0)
+                    {
+                        builtin = &regular_builtins[i];
+                        break;
+                    }
                 }
             }
         }
@@ -168,7 +176,7 @@ int enable(int argc, char **argv)
             else
             {
                 /* is this shell restricted? */
-                if(option_set('r'))
+                if(startup_finished && option_set('r'))
                 {
                     /* bash says r-shells can't enable disabled builtins */
                     fprintf(stderr, "%s: can't enable builtin: restricted shell\r\n", UTILITY);

@@ -32,6 +32,7 @@
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
 #include "../backend/backend.h"
+#include "../debug.h"
 
 #define UTILITY     "time"
 
@@ -80,6 +81,9 @@ int __time(struct node_s *cmd)
     struct  tms st_cpu;
     struct  tms en_cpu;
     double  rstart, rend;     /* real clock time diff in secs */
+    
+    /* if time is called with no arguments, we print the shell's times information (zsh) */
+    if(!cmd) return __times(1, NULL);
     
     /* get start time */
     st_time = times(&st_cpu);
@@ -173,6 +177,10 @@ int __time(struct node_s *cmd)
     char *format = DEFAULT_FMT;
     if(!use_posix_fmt)
     {
+        /*
+         * ksh and bash use the $TIMEFORMAT variable to determine the format of time's output.
+         * zsh uses the value of the $TIMEFMT variable. we'll follow the first.
+         */
         struct symtab_entry_s *entry = get_symtab_entry("TIMEFORMAT");
         if(entry)
         {

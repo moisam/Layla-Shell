@@ -53,7 +53,7 @@ int dot(int argc, char **argv)
     if(strchr(file, '/'))
     {
         /* is this shell restricted? */
-        if(option_set('r'))
+        if(startup_finished && option_set('r'))
         {
             /* bash says r-shells can't specify commands with '/' in their names */
             fprintf(stderr, "%s: can't execute dot script: restricted shell\r\n", UTILITY);

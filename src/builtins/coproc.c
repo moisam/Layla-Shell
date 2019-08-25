@@ -59,7 +59,7 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
     pipe(rfiledes);
     pipe(wfiledes);
     
-    if((pid = fork()) == 0)     /* child process */
+    if((pid = fork_child()) == 0)     /* child process */
     {
         asynchronous_prologue();
         close(0);   /* stdin */

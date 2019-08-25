@@ -66,7 +66,7 @@ int type(int argc, char **argv)
                         
                     case 'p':
                         print_path = 1;
-                        if(option_set('r'))
+                        if(startup_finished && option_set('r'))
                         {
                             /* r-shells can't use this option */
                             fprintf(stderr, "%s: restricted shells can't use the -%c option\r\n", SHELL_NAME, *p);

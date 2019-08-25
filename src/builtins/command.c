@@ -104,7 +104,7 @@ int command(int argc, char **argv)
                         break;
                         
                     case 'p':
-                        if(option_set('r'))
+                        if(startup_finished && option_set('r'))
                         {
                             /* r-shells can't use this option */
                             fprintf(stderr, "%s: restricted shells can't use the -p option\r\n", SHELL_NAME);
