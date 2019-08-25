@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <wait.h>
 #include <signal.h>
+#include <errno.h>
 #include <sys/types.h>
 #include "../cmd.h"
 #include "../debug.h"
@@ -29,6 +30,9 @@
 /* defined in jobs.c */
 extern int cur_job ;
 extern int prev_job;
+
+/* defined in ../backend/backend.c */
+int wait_on_child(pid_t pid, struct node_s *cmd, struct job *job);
 
 #define UTILITY         "fg"
 
@@ -45,24 +49,39 @@ void __fg(struct job *job)
      * otherwise this function would have never been called.
      */
     int   status;
+    int   tty = isatty(0);
     printf("%s\r\n", job->commandstr);
-    tcsetpgrp(0, job->pgid);
-    /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-    if(job->tty_attr && isatty(0)) tcsetattr(0, TCSANOW, job->tty_attr);
-    kill(-(job->pgid), SIGCONT);
-    //resid = waitpid(job->pgid, &status, WAIT_FLAG);
-    waitpid(job->pgid, &status, WAIT_FLAG);
-    if(WIFSTOPPED(status) && option_set('m'))
+    if(tty)
     {
-        if(cur_job != job->job_num) set_cur_job(job);
-        notice_termination(job->pgid, status);
+        tcsetpgrp(0, job->pgid);
+        /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
+        if(job->tty_attr) tcsetattr(0, TCSANOW, job->tty_attr);
+    }
+    kill(-(job->pgid), SIGCONT);
+    wait_on_child(job->pgid, NULL, job);
+    if(tty) tcsetpgrp(0, tty_pid);
+#if 0
+    int res = waitpid(job->pgid, &status, WAIT_FLAG);
+    if(tty) tcsetpgrp(0, tty_pid);
+    if(res < 0)
+    {
+        fprintf(stderr, "%s: failed to get child status (%d): %s\r\n", UTILITY, errno, strerror(errno));
+        return;
+    }
+    if(WIFSTOPPED(status) || WIFSIGNALED(status))
+    {
+        if(option_set('m'))
+        {
+            if(cur_job != job->job_num) set_cur_job(job);
+            notice_termination(job->pgid, status);
+        }
     }
     else
     {
         set_exit_status(status, 1);
         kill_job(job);
     }
-    tcsetpgrp(0, tty_pid);
+#endif
 }
 
 
