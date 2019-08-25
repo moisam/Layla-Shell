@@ -127,6 +127,7 @@ char *get_token_description(enum token_type type)
             case TOKEN_KEYWORD_TIME    : return "'time'"         ;
             case TOKEN_SEMI_AND        : return "';&'"           ;
             case TOKEN_SEMI_SEMI_AND   : return "';;&'"          ;
+            case TOKEN_SEMI_OR         : return "';|'"           ;
             case TOKEN_PIPE_AND        : return "'|&'"           ;
             case TOKEN_TRIPLELESS      : return "'<<<'"          ;
             case TOKEN_ANDGREAT        : return "'&>'"           ;
@@ -142,10 +143,11 @@ char *get_token_description(enum token_type type)
             case TOKEN_SEMI            : return "';'"            ;
             case TOKEN_AND             : return "'&'"            ;
             case TOKEN_INTEGER         : return "integer number" ;
+            case TOKEN_DSEMI_ESAC      : return "'esac' or ';;'" ;
             case TOKEN_KEYWORDS_ELIF_ELSE_FI:
                                          return "'elif', 'else' or 'fi'";
-            case TOKEN_DSEMI_ESAC_SEMIAND:
-                                         return "'esac', ';;', ';&' or ';;&'";
+            case TOKEN_DSEMI_ESAC_SEMIAND_SEMIOR:
+                                         return "'esac', ';;', ';&', ';;&' or ';|'";
             case TOKEN_ERROR           : return "'error'"        ;
     }
     return "unknown token";
@@ -180,6 +182,7 @@ int is_separator_tok(enum token_type type)
         case TOKEN_NEWLINE        :
         case TOKEN_SEMI           :
         case TOKEN_SEMI_AND       :
+        case TOKEN_SEMI_OR        :
         case TOKEN_SEMI_SEMI_AND  :
         case TOKEN_DSEMI          :
         case TOKEN_AND_IF         :
@@ -240,6 +243,7 @@ void set_token_type(struct token_s *tok)
                 
             case ';':
                 if(tok->text[1] == '&')      t = TOKEN_SEMI_AND ;
+                else if(tok->text[1] == '|') t = TOKEN_SEMI_OR  ;
                 else                         t = TOKEN_DSEMI    ;
                 break;
                 
@@ -665,6 +669,7 @@ struct token_s *tokenize(struct source_s *src)
                 }
                 if((nc == '<' && pc == '>') ||
                    (nc == '>' && pc == '|') ||
+                   (nc == '>' && pc == '!') ||
                    (nc == '<' && pc == '&') ||
                    (nc == '>' && pc == '&') ||
                    (nc == '|' && pc == '&'))
@@ -697,8 +702,8 @@ struct token_s *tokenize(struct source_s *src)
                     }
                     goto prep_token;
                 }
-                /* identify ';&' */
-                if(nc == ';' && pc == '&')
+                /* identify ';&' and ';|' */
+                if(nc == ';' && (pc == '&' || pc == '|'))
                 {
                     add_to_buf(next_char(src));
                     goto prep_token;
@@ -852,7 +857,7 @@ struct token_s *tokenize(struct source_s *src)
                     }
                 }
                 /* 
-                 * bash identifies # comments in non-interactive shells and interactive
+                 * bash and zsh identify # comments in non-interactive shells and interactive
                  * shells with the interactive_comments option.
                  */
                 if(option_set('i') && !optionx_set(OPTION_INTERACTIVE_COMMENTS))
@@ -982,12 +987,18 @@ int is_token_of_type(struct token_s *tok, int type)
      * item might end in 'esac'. non-POSIX extensions include
      * ';&' and ';;&' which are used by bash, ksh, zsh et al.
      */
-    if(type == TOKEN_DSEMI_ESAC_SEMIAND)
+    if(type == TOKEN_DSEMI_ESAC_SEMIAND_SEMIOR)
     {
         if(tok->type == TOKEN_KEYWORD_ESAC ||
            tok->type == TOKEN_DSEMI        ||
            tok->type == TOKEN_SEMI_AND     ||
+           tok->type == TOKEN_SEMI_OR      ||
            tok->type == TOKEN_SEMI_SEMI_AND)
+            return 1;
+    }
+    if(type == TOKEN_DSEMI_ESAC)
+    {
+        if(tok->type == TOKEN_KEYWORD_ESAC || tok->type == TOKEN_DSEMI)
             return 1;
     }
     return 0;

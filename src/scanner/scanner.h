@@ -67,6 +67,7 @@ enum token_type
         TOKEN_KEYWORD_TIME,
         TOKEN_SEMI_AND,         /* ';&'  */
         TOKEN_SEMI_SEMI_AND,    /* ';;&' */
+        TOKEN_SEMI_OR,          /* ';|', equivalent in function to ';;&'  */
         TOKEN_PIPE_AND,         /* '|&'  */
         TOKEN_TRIPLELESS,       /* '<<<' */
         TOKEN_ANDGREAT,         /* '&>'  */
@@ -80,8 +81,10 @@ enum token_type
         TOKEN_INTEGER,
         /* special case for ElIf-Else-Fi keywords, used by the parser */
         TOKEN_KEYWORDS_ELIF_ELSE_FI,
-        /* special case for Esac/;;/;& keywords, used by the parser */
-        TOKEN_DSEMI_ESAC_SEMIAND,
+        /* special case for Esac/;; keywords, used by the parser in POSIX mode */
+        TOKEN_DSEMI_ESAC,
+        /* special case for Esac/;;/;&/;| keywords, used by the parser in non-POSIX mode */
+        TOKEN_DSEMI_ESAC_SEMIAND_SEMIOR,
         /* unknown keyword */
         TOKEN_KEYWORD_NA
 };

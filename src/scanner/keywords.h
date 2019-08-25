@@ -67,6 +67,7 @@ char *operators[] =
     "<>" ,
     //"<<-",
     ">|" ,
+    ">!" ,  /* zsh extension, equivalent to >| */
 };
 
 //static int operator_count = sizeof(operators)/sizeof(char *);
