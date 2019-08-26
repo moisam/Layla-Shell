@@ -15,22 +15,13 @@ are all implemented and behave in a way that is conforming to the POSIX
 standard. Pattern matching and pathname expansion relies on external tools,
 and thus might not behave exactly as specified in the POSIX standard. The
 shell grammar has been extended to accommodate some of the widely used non-
-POSIX words, such as the `function` and `[[` keywords and the `(( ))` arithmetic
-expansion operator. In all of these situations, we followed ksh behaviour,
+POSIX words, such as the `function` and `[[` keywords, and the `(( ))` arithmetic
+expansion operator. In all of these situations, if one or more of the major Unix
+shells disagreed in some aspect of their behaviour, we opted to follow ksh,
 as ksh is the "model" POSIX shell, the one upon which the Shell & Utilities
 volume was modeled in the first place. But ksh is not the only shell out
 there. This is why we included features from other shells, most notably bash,
 the most widely used shell nowadays.
-
-To better understand the inner workings of this (as well as any other POSIX-
-compliant shell), it would be better if you got a copy of the Linux Shell
-Internals book, soon to be published by No Starch Press. This shell and the book has been
-developed hand-in-hand. The book helps to explain the code of this shell and
-provide a walk-through for newcomers. Although the code is extensively
-commented, a lot of theoretical ground has covered in the book, not in the
-source code. If you really want to understand how and why Unix/Linux shells
-behave in the context of POSIX, I honestly advise you to get a copy of the
-book.
 
 There is still a long way to go with testing, bug-fixing and improving Layla
 shell, and your feedback is more than welcome in this regard. If you have a
