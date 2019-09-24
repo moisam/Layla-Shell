@@ -26,20 +26,20 @@
 #include "../symtab/symtab.h"
 
 /* constants used by parse_io_file() and parse_io_here() */
-#define IO_FILE_LESS            1
-#define IO_FILE_LESSAND         2
-#define IO_FILE_LESSGREAT       3
-#define IO_FILE_CLOBBER         4
-#define IO_FILE_GREAT           5
-#define IO_FILE_GREATAND        6
-#define IO_FILE_AND_GREAT_GREAT 7
-#define IO_FILE_DGREAT          8
+#define IO_FILE_LESS            1       /* '<' input redirection operator */
+#define IO_FILE_LESSAND         2       /* '<&' input redirection operator */
+#define IO_FILE_LESSGREAT       3       /* '<>' input/output redirection operator */
+#define IO_FILE_CLOBBER         4       /* '>|' output redirection operator */
+#define IO_FILE_GREAT           5       /* '>' output redirection operator */
+#define IO_FILE_GREATAND        6       /* '>&' output redirection operator */
+#define IO_FILE_AND_GREAT_GREAT 7       /* '&>>' append redirection operator */
+#define IO_FILE_DGREAT          8       /* '>>' append redirection operator */
 // #define IO_HERE_DLESS       8
 // #define IO_HERE_DLESSDASH   9
-#define IO_HERE_EXPAND          9
-#define IO_HERE_NOEXPAND        10
+#define IO_HERE_EXPAND          9       /* expandable heredoc (without quoted heredoc word) */
+#define IO_HERE_NOEXPAND        10      /* nonexpandable heredoc (with quoted heredoc word) */
 
-
+/* parser functions */
 struct node_s *parse_complete_command(struct token_s *tok);
 struct node_s *parse_list(struct token_s *tok);
 struct node_s *parse_and_or(struct token_s *tok);
@@ -53,6 +53,7 @@ struct node_s *get_wordlist(struct token_s *tok);
 struct node_s *parse_do_group(struct token_s *tok);
 struct node_s *parse_for_clause2(struct token_s *tok);
 struct node_s *parse_for_clause(struct token_s *tok);
+struct node_s *parse_select_clause(struct token_s *tok);
 struct node_s *parse_case_item(struct token_s *tok);
 struct node_s *parse_case_clause(struct token_s *tok);
 struct node_s *parse_if_clause(struct token_s *tok);
@@ -63,15 +64,22 @@ struct node_s *parse_compound_command(struct token_s *tok);
 struct node_s *parse_io_file(struct token_s *tok);
 struct node_s *parse_io_here(struct token_s *tok);
 struct node_s *parse_io_redirect(struct token_s *tok);
+int            is_redirect_op(char *str);
 struct node_s *parse_redirect_list(struct token_s *tok);
 struct node_s *parse_function_body(struct token_s *tok);
 struct node_s *parse_function_definition(struct token_s *tok, int using_keyword);
 struct node_s *parse_simple_command(struct token_s *tok);
 struct node_s *parse_command(struct token_s *tok);
 struct node_s *parse_translation_unit();
-char          *__parse_alias(char *cmd);
+char          *parse_alias(char *cmd);
 struct node_s *io_file_node(int fd, char type, char *namestr, int lineno);
+struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip);
+int            is_name(char *str);
 
+/* pointer to the current function definition we're parsing */
 extern struct symtab_entry_s *current_func;
+
+/* flag to indicate a parsing error */
+extern int parser_err;
 
 #endif

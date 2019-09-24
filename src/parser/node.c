@@ -26,106 +26,173 @@
 #include "../cmd.h"
 #include "node.h"
 #include "parser.h"
-//#include "error.h"
 #include "../debug.h"
 
-// struct node_s array_auto_bounds = { };
 
-
+/*
+ * create a new node and assign it the given type.
+ * 
+ * returns the new node's struct, or NULL on error (we can also take the extreme
+ * approach and exit the shell if there's not enough memory for the node struct).
+ */
 struct node_s *new_node(enum node_type_e type)
 {
     struct node_s *node = (struct node_s *)malloc(sizeof(struct node_s));
     if(!node)
     {
-        exit_gracefully(EXIT_FAILURE, "fatal error: Not enough memory for parser node struct");
+        //exit_gracefully(EXIT_FAILURE, "fatal error: Not enough memory for parser node struct");
+        return NULL;
     }
+    /* initialize the struct */
     memset((void *)node, 0, sizeof(struct node_s));
+    /* set the node type */
     node->type = type;
+    /* return the node struct */
     return node;
 }
 
+
+/*
+ * add a child node to a parent node.. the child is added as the last child
+ * in the parent's children list.
+ * 
+ * returns nothing.
+ */
 void add_child_node(struct node_s *parent, struct node_s *child)
 {
-    if(!parent || !child) return;
+    /* sanity checks */
+    if(!parent || !child)
+    {
+        return;
+    }
     if(!parent->first_child)
     {
+        /* parent has no children. add as the first child */
         parent->first_child = child;
     }
     else
     {
-        struct node_s *sibling = parent->first_child;
-        while(sibling->next_sibling) sibling = sibling->next_sibling;
+        /* parent has no children. add at the end of the list */
+        struct node_s *sibling = last_child(parent);
         sibling->next_sibling = child;
         child->prev_sibling = sibling;
     }
+    /* increment parent's child count */
     parent->children++;
 }
 
+
+/*
+ * get the last child in the parent's children list.
+ * 
+ * returns the last child node, or NULL if the parent has no children.
+ */
 struct node_s *last_child(struct node_s *parent)
 {
-    if(!parent) return NULL;
-    if(!parent->first_child) return NULL;
+    /* sanity check */
+    if(!parent)
+    {
+        return NULL;
+    }
+    /* parent has no children */
+    if(!parent->first_child)
+    {
+        return NULL;
+    }
+    /* find the last child */
     struct node_s *child = parent->first_child;
-    while(child->next_sibling) child = child->next_sibling;
+    while(child->next_sibling)
+    {
+        child = child->next_sibling;
+    }
+    /* and return it */
     return child;
 }
 
-/*
-void set_node_val_ptr(struct node_s *node, struct symtab_entry_s *val)
-{
-    node->val_type = VAL_VARPTR;
-    node->val.ptr = val;
-}
-*/
 
+/*
+ * set the node's value to the given integer value.
+ */
 void set_node_val_sint(struct node_s *node, int val)
 {
     node->val_type = VAL_SINT;
     node->val.sint = val;
 }
 
+
+/*
+ * set the node's value to the given unsigned integer value.
+ */
 void set_node_val_uint(struct node_s *node, unsigned int val)
 {
     node->val_type = VAL_UINT;
     node->val.uint = val;
 }
 
+
+/*
+ * set the node's value to the given long long integer value.
+ */
 void set_node_val_sllong(struct node_s *node, long long val)
 {
     node->val_type = VAL_SLLONG;
     node->val.sllong = val;
 }
 
+
+/*
+ * set the node's value to the given unsigned long long integer value.
+ */
 void set_node_val_ullong(struct node_s *node, unsigned long long val)
 {
     node->val_type = VAL_ULLONG;
     node->val.ullong = val;
 }
 
+
+/*
+ * set the node's value to the given double value.
+ */
 void set_node_val_sfloat(struct node_s *node, double val)
 {
     node->val_type = VAL_FLOAT;
     node->val.sfloat = val;
 }
 
+
+/*
+ * set the node's value to the given double value.
+ */
 void set_node_val_sdouble(struct node_s *node, double val)
 {
     node->val_type = VAL_FLOAT;
     node->val.sfloat = val;
 }
 
+
+/*
+ * set the node's value to the given long double value.
+ */
 void set_node_val_ldouble(struct node_s *node, long double val)
 {
     node->val_type = VAL_LDOUBLE;
     node->val.ldouble = val;
 }
 
+
+/*
+ * set the node's value to the given char value.
+ */
 void set_node_val_chr(struct node_s *node, char val)
 {
     node->val_type = VAL_CHR;
     node->val.chr = val;
 }
 
+
+/*
+ * set the node's value to the given string value.
+ */
 void set_node_val_str(struct node_s *node, char *val)
 {
     node->val_type = VAL_STR;
@@ -133,20 +200,12 @@ void set_node_val_str(struct node_s *node, char *val)
 }
 
 /*
-struct node_s *add_node_tree(struct node_s *parent, struct node_s *child)
-{
-    if(parent->children < 2) add_child_node(parent, child);
-    else
-    {
-        struct node_s *newp = new_node(parent->type);
-        add_child_node(newp, parent);
-        add_child_node(newp, child);
-        parent = newp;
-    }
-    return parent;
-}
-*/
-
+ * return a string that describes the given node type.. this is useful when we
+ * are debugging the shell, or dumping the Abstract Source Tree (AST) of a parsed
+ * translation unit (which the shell does when the dumpast '-d' option is set).
+ * 
+ * returns a string describing the given node type.
+ */
 char *get_node_type_str(enum node_type_e type)
 {
     switch(type)
@@ -182,11 +241,19 @@ char *get_node_type_str(enum node_type_e type)
     return "UNKNOWN";
 }
 
+
+/*
+ * similar to get_node_type_str(), this function returns a string that describes
+ * the given node's val type.. this is useful when we are debugging the shell,
+ * or dumping the Abstract Source Tree (AST) of a parsed translation unit
+ * (which the shell does when the dumpast '-d' option is set).
+ * 
+ * returns a string describing the given node type.
+ */
 char *get_node_val_type_str(enum val_type_e type)
 {
     switch(type)
     {
-        case VAL_VARPTR : return "VAL_VARPTR" ;
         case VAL_SINT   : return "VAL_SINT"   ;
         case VAL_UINT   : return "VAL_UINT"   ;
         case VAL_SLLONG : return "VAL_SLLONG" ;
@@ -199,25 +266,56 @@ char *get_node_val_type_str(enum val_type_e type)
     return "UNKNOWN";
 }
 
+
+/*
+ * dump the contents of all the nodes in the given node tree.
+ */
 void dump_node_tree(struct node_s *root, int level)
 {
-    if(!root) return;
+    if(!root)
+    {
+        return;
+    }
     int indent = level << 2;
     printf("%*sNODE: type '%s', val_type '%s', val '", indent, " ", get_node_type_str(root->type), get_node_val_type_str(root->val_type));
     switch(root->val_type)
     {
-        case VAL_VARPTR : printf("pointer"                ); break;
-        case VAL_SINT   : printf("%ld" , root->val.sint   ); break;
-        case VAL_UINT   : printf("%lu" , root->val.uint   ); break;
-        case VAL_SLLONG : printf("%lld", root->val.sllong ); break;
-        case VAL_ULLONG : printf("%llu", root->val.ullong ); break;
-        case VAL_FLOAT  : printf("%f"  , root->val.sfloat ); break;
-        case VAL_LDOUBLE: printf("%Lg" , root->val.ldouble); break;
-        case VAL_CHR    : printf("%c"  , root->val.chr    ); break;
-        case VAL_STR    : printf("%s"  , root->val.str    ); break;
-        default:                                             break;
+        case VAL_SINT   :
+            printf("%ld" , root->val.sint   );
+            break;
+            
+        case VAL_UINT   :
+            printf("%lu" , root->val.uint   );
+            break;
+            
+        case VAL_SLLONG :
+            printf("%lld", root->val.sllong );
+            break;
+            
+        case VAL_ULLONG :
+            printf("%llu", root->val.ullong );
+            break;
+            
+        case VAL_FLOAT  :
+            printf("%f"  , root->val.sfloat );
+            break;
+            
+        case VAL_LDOUBLE:
+            printf("%Lg" , root->val.ldouble);
+            break;
+            
+        case VAL_CHR    :
+            printf("%c"  , root->val.chr    );
+            break;
+            
+        case VAL_STR    :
+            printf("%s"  , root->val.str    );
+            break;
+            
+        default:
+            break;
     }
-    printf("'\r\n");
+    printf("'\n");
     struct node_s *child = root->first_child;
     while(child)
     {
@@ -227,88 +325,127 @@ void dump_node_tree(struct node_s *root, int level)
     fflush(stdout);
 }
 
+
+/*
+ * free the memory used by the given nodetree.
+ */
 void free_node_tree(struct node_s *node)
 {
-        if(!node) return;
-        struct node_s *child = node->first_child;
-        while(child)
+    if(!node)
+    {
+        return;
+    }
+    struct node_s *child = node->first_child;
+    /* free all children */
+    while(child)
+    {
+        struct node_s *next = child->next_sibling;
+        free_node_tree(child);
+        child = next;
+    }
+    /* if the node's value is a string, free it */
+    if(node->val_type == VAL_STR)
+    {
+        if(node->val.str)
         {
-            struct node_s *next = child->next_sibling;
-            free_node_tree(child);
-            child = next;
+            free_malloced_str(node->val.str);
         }
-        
-        if(node->val_type == VAL_STR)
-        {
-            if(node->val.str)
-                free_malloced_str(node->val.str);
-        }
-        free(node);
+    }
+    /* free the node iteself */
+    free(node);
 }
 
 
+/*
+ * get the length of the node's value field, i.e. how much memory we need to alloc
+ * if we wanted to make a copy of the value field.
+ */
 size_t get_node_len(struct node_s *root)
 {
-    if(!root) return 0;
+    if(!root)
+    {
+        return 0;
+    }
     size_t len = 0;
     struct node_s *child = root->first_child;
+    /* special handling of redirection nodes */
     if(child->type == NODE_IO_REDIRECT)
     {
         struct node_s *io = child->first_child;
         struct node_s *file = io->first_child;
         return strlen(file->val.str)+7;
     }
-    /*
-    if(root->type == NODE_AND_IF || root->type == NODE_OR_IF)
-        return 3;
-    if(root->type == NODE_PIPE   || root->type == NODE_SUBSHELL
-    )
-        return 2;
-    if(root->type == NODE_LIST || root->type == NODE_BANG ||
-       root->type == NODE_TERM
-    )
-        return 1;
-    if(root->type == NODE_FOR)
-        return 11;
-    */
+    /* determine value length according to value type */
     switch(root->val_type)
     {
-        case VAL_CHR :  len = 1                    ; break;
-        case VAL_STR :  len = strlen(root->val.str); break;
+        case VAL_CHR:
+            len = 1;
+            break;
+            
+        case VAL_STR:
+            len = strlen(root->val.str);
+            break;
+            
         case VAL_SINT:
-        case VAL_UINT:  len = 10                   ; break;
-        default      :  len = 1;
+        case VAL_UINT:
+            len = 10;
+            break;
+            
+        default:
+            len = 1;
     }
     return len;
 }
 
+
+/*
+ * get the collective length of the string values of all the nodes in the
+ * given nodetree.. useful when we want to reconstruct a command string out
+ * of the command's parsed nodetree.
+ */
 size_t get_nodetree_len(struct node_s *root)
 {
-    if(!root) return 0;
+    if(!root)
+    {
+        return 0;
+    }
     size_t len = root->val_type == VAL_STR ? strlen(root->val.str) : 0;
     struct node_s *child = root->first_child;
+    /* get lengths of the string values of all children */
     while(child)
     {
         len += get_nodetree_len(child)+1;
         child = child->next_sibling;
     }
+    /* return collective length */
     return len+1;
 }
 
 /*
- * WARNING:
- * this function is severely defective. it can't process many commands, such as loops
- * and if/case conditionals. as a matter of fact, we should forget this function altogether
- * and find a better way to store the original command in the node structure itself.
+ * convert a nodetree to a string, i.e. reconstruct the original command line from
+ * the parsed nodetree.
+ * 
+ * WARNING: this function is severely defective. it can't process many commands, such
+ *          as loops and if/case conditionals. as a matter of fact, we should forget
+ *          this function altogether and find a better way to store the original
+ *          command in the node structure itself.
  */
-
 char *cmd_nodetree_to_str(struct node_s *root)
 {
-    if(!root) return NULL;
+    if(!root)
+    {
+        return NULL;
+    }
     size_t len = get_nodetree_len(root);
-    if(!len ) return NULL;
-    char  *str = (char *)malloc(len+1);
-    if(!str ) return NULL;
+    if(!len)
+    {
+        return NULL;
+    }
+    char *str = (char *)malloc(len+1);
+    if(!str)
+    {
+        return NULL;
+    }
     *str = '\0';
     char buf[32];
     char *tmp;
@@ -319,14 +456,23 @@ char *cmd_nodetree_to_str(struct node_s *root)
     int ispipe = root->type == NODE_PIPE;
     struct node_s *child = ispipe ? last_child(root) : root->first_child;
     char *separator = " ";
-    if(ispipe) separator = " | ";
+    if(ispipe)
+    {
+        separator = " | ";
+    }
     else
     {
         switch(child->type)
         {
             case NODE_LIST:
-                if(child->val.chr == '&') separator = "& ";
-                else separator = "; ";
+                if(child->val.chr == '&')
+                {
+                    separator = "& ";
+                }
+                else
+                {
+                    separator = "; ";
+                }
                 break;
                 
             case NODE_COMMAND:
@@ -401,19 +547,28 @@ char *cmd_nodetree_to_str(struct node_s *root)
                     if(child2->val_type == VAL_STR && child2->val.str)
                     {
                         strcat(str, child2->val.str);
-                        if(child2->next_sibling) strcat(str, " ");
+                        if(child2->next_sibling)
+                        {
+                            strcat(str, " ");
+                        }
                     }
                     child2 = child2->next_sibling;
                 }
                 break;
         
             default:
-                if(child->val_type == VAL_STR && child->val.str) strcat(str, child->val.str);
+                if(child->val_type == VAL_STR && child->val.str)
+                {
+                    strcat(str, child->val.str);
+                }
                 break;
         
         }
         child = ispipe ? child->prev_sibling : child->next_sibling;
-        if(child) strcat(str, separator);
+        if(child)
+        {
+            strcat(str, separator);
+        }
     }
     return str;
 }
