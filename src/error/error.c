@@ -42,44 +42,83 @@
  * ===========================   ================     ===============
  */
 
-char err_format[] = "%s [%d, %d]: Error: %s\r\n%s\r\n";
+/* general format of the shell's error messages */
+char err_format[] = "%s [%d, %d]: error: %s\n%s\n";
 
+/*
+ * get the full text of the line where the error occurred, so that we can
+ * print the whole line to show the user where the error occurred.
+ * 
+ * returns the malloc'd string, or NULL if malloc failed.
+ */
 char *get_line(struct source_s *src, long linestart, int *tabs)
 {
+    /* start from the given position in the input string and find the next newline */
     char *buffer = src->buffer;
     long i = linestart;
     *tabs = 0;
     do
     {
-        if(buffer[i] == NL ) break;
-        if(buffer[i] == TAB) (*tabs)++;
+        if(buffer[i] == NL)     /* break at the first newline */
+        {
+            break;
+        }
+        else if(buffer[i] == TAB)   /* keep the count of tabs */
+        {
+            (*tabs)++;
+        }
     } while(++i < src->bufsize);
+    /* allocate memory for the string */
     size_t sz = (size_t)(i-linestart);
     char *tmp = (char *)malloc(sz+1);
     if(!tmp)
     {
         return (char *)NULL;
     }
+    /* copy the line */
     strncpy(tmp, buffer+linestart, sz);
     tmp[sz] = '\0';
+    /* return it */
     return tmp;
 }
 
+
+/*
+ * print an error message given the error details in the error_s struct.
+ * the errstr contains the body of the error message, which will be printed
+ * after the "error:" prompt (see the err_format field at the top of this file).
+ */
 void print_err(struct error_s *err, char *errstr)
 {
     long spaces = err->charno-1;
-    int tabs = 0;
+    int  tabs = 0;
+    /* get the line where the error occurred */
     char *line = get_line(err->src, err->linestart, &tabs);
-    if(!line) return;
+    if(!line)
+    {
+        return;
+    }
+    /* print the error message */
     fprintf(stderr, err_format, SHELL_NAME, err->lineno, err->charno, errstr, line);
+    /* print a caret pointer '^' that points at the error token */
     spaces -= tabs;
-    //spaces -= err->linestart;
-    while(tabs--) fprintf(stderr, "\t");
-    if(spaces) fprintf(stderr, "%*s", (int)spaces, " ");
-    fprintf(stderr, "^\r\n");
+    while(tabs--)
+    {
+        fprintf(stderr, "\t");
+    }
+    if(spaces)
+    {
+        fprintf(stderr, "%*s", (int)spaces, " ");
+    }
+    fprintf(stderr, "^\n");
     free(line);
 }
 
+
+/*
+ * raise a parsing or execution error and print a well-formatted error message
+ * according to the error whose details are passed in the error_s struct.
+ */
 void raise_error(struct error_s err)
 {
     char err_str[256];
@@ -113,21 +152,21 @@ void raise_error(struct error_s err)
                         
         case HEREDOC_MISSING_NEWLINE:
             fprintf(stderr,
-                        "%s: Error: Missing newline at beginning of heredoc\r\n",
+                        "%s: error: Missing newline at beginning of heredoc\n",
                             SHELL_NAME);
             break;
             
         case HEREDOC_MISSING_DELIM:
-            fprintf(stderr, "%s: Error: Missing heredoc delimiter '%s'\r\n", 
+            fprintf(stderr, "%s: error: Missing heredoc delimiter '%s'\n", 
                         SHELL_NAME, err.desc);
             break;
             
         case HEREDOC_EXPECTED_DELIM:
-            fprintf(stderr, "%s: Error: Expected heredoc delimiter\r\n", SHELL_NAME);
+            fprintf(stderr, "%s: error: Expected heredoc delimiter\n", SHELL_NAME);
             break;
             
         case INVALID_FUNC_NAME:
-            fprintf(stderr, "%s: Error: Invalid function name: %s\r\n", SHELL_NAME, err.desc);
+            fprintf(stderr, "%s: error: Invalid function name: %s\n", SHELL_NAME, err.desc);
             break;
                         
         /**************************************/
@@ -135,96 +174,94 @@ void raise_error(struct error_s err)
         /**************************************/
         case BREAK_OUTSIDE_LOOP:
             fprintf(stderr,
-                            "%s: Error: break clause outside a loop\r\n", SHELL_NAME);
+                            "%s: error: break clause outside a loop\n", SHELL_NAME);
             break;
             
         case CONTINUE_OUTSIDE_LOOP:
             fprintf(stderr,
-                            "%s: Error: continue clause outside a loop\r\n", SHELL_NAME);
+                            "%s: error: continue clause outside a loop\n", SHELL_NAME);
             break;
             
         case FAILED_TO_FORK:
             fprintf(stderr,
-                            "%s: Error: failed to fork: %s\r\n", SHELL_NAME, err.desc);
+                            "%s: error: failed to fork: %s\n", SHELL_NAME, err.desc);
             break;
             
         case FAILED_TO_ADD_JOB:
-            fprintf(stderr, "%s: Error: failed to add job\r\n", SHELL_NAME);
+            fprintf(stderr, "%s: error: failed to add job\n", SHELL_NAME);
             break;
             
         case FAILED_TO_OPEN_FILE:
-            fprintf(stderr,
-                            "%s: Error: failed to open %s: %s\r\n",
+            fprintf(stderr, "%s: error: failed to open %s: %s\n",
                             SHELL_NAME, err.desc, err.extra);
             break;
             
         case FAILED_TO_OPEN_PIPE:
-            fprintf(stderr, "%s: Error: failed to open pipe: %s\r\n", SHELL_NAME, err.desc);
+            fprintf(stderr, "%s: error: failed to open pipe: %s\n", SHELL_NAME, err.desc);
             break;
             
         case FAILED_TO_EXEC:
-            fprintf(stderr,
-                            "%s: Error: failed to exec %s: %s\r\n",
+            fprintf(stderr, "%s: error: failed to exec %s: %s\n",
                             SHELL_NAME, err.desc, err.extra);
             break;
             
         case FAILED_REDIRECT:
             if(err.desc && err.extra)
             {
-                fprintf(stderr, "%s: Error: %s: %s\r\n", SHELL_NAME, err.desc, err.extra);
+                fprintf(stderr, "%s: error: %s: %s\n", SHELL_NAME, err.desc, err.extra);
             }
             else
             {
-                fprintf(stderr, "%s: Error: failed redirection: "
-                                "incorrect file permissions\r\n", SHELL_NAME);
+                fprintf(stderr, "%s: error: failed redirection: "
+                                "incorrect file permissions\n", SHELL_NAME);
             }
             break;
             
         case EMPTY_CASE_WORD:
-            fprintf(stderr, "%s: Error: empty case word\r\n", SHELL_NAME);
+            fprintf(stderr, "%s: error: empty case word\n", SHELL_NAME);
             break;
             
         case INVALID_REDIRECT_FILENO:
             fprintf(stderr,
-                            "%s: Error: invalid redirection file number: %s\r\n",
+                            "%s: error: invalid redirection file number: %s\n",
                             SHELL_NAME, err.desc);
             break;
             
         case INSUFFICIENT_MEMORY:
             if(err.desc)
                 fprintf(stderr,
-                            "%s: Error: insufficient memory for %s\r\n",
+                            "%s: error: insufficient memory for %s\n",
                             SHELL_NAME, err.desc);
             else
                 fprintf(stderr,
-                            "%s: Error: insufficient memory\r\n", SHELL_NAME);
+                            "%s: error: insufficient memory\n", SHELL_NAME);
             break;
             
         case INVALID_ARITHMETIC:
-            fprintf(stderr, "%s: Error: invalid arithmetic substitution at: '%s'\r\n",
+            fprintf(stderr, "%s: error: invalid arithmetic substitution at: '%s'\n",
                             SHELL_NAME, err.desc);
             break;
             
         case INVALID_SUBSTITUTION:
-            fprintf(stderr, "%s: Error: invalid substitution at: '%s'\r\n",
+            fprintf(stderr, "%s: error: invalid substitution at: '%s'\n",
                             SHELL_NAME, err.desc);
             break;
             
         case UNSET_VARIABLE:
-            fprintf(stderr, "%s: %s: %s\r\n", SHELL_NAME, err.desc, err.extra);
+            fprintf(stderr, "%s: %s: %s\n", SHELL_NAME, err.desc, err.extra);
             break;
             
         case INVALID_ASSIGNMENT:
-            fprintf(stderr, "%s: Error: invalid variable assignment: %s\r\n",
+            fprintf(stderr, "%s: error: invalid variable assignment: %s\n",
                             SHELL_NAME, err.desc);
             break;
             
         case EXPANSION_ERROR:
-            fprintf(stderr, "%s: Expansion error at: '%s'\r\n", SHELL_NAME, err.desc);
+            fprintf(stderr, "%s: Expansion error at: '%s'\n", SHELL_NAME, err.desc);
             break;
             
         case ASSIGNMENT_TO_READONLY:
-            fprintf(stderr, "%s: Error: assignment to readonly variable: %s\r\n",
+            fprintf(stderr, "%s: error: assignment to readonly variable: %s\n",
                             SHELL_NAME, err.desc);
             break;
             

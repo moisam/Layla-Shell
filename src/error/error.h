@@ -26,6 +26,7 @@
 #include "../scanner/scanner.h"
 #include "../scanner/source.h"
 
+/* types of errors */
 enum error_code
 {
     /* Parser errors */
@@ -59,18 +60,25 @@ enum error_code
     ASSIGNMENT_TO_READONLY,
 };
 
+/* structure for error reporting */
 struct error_s
 {
-    enum error_code errcode;
-    long lineno, charno, linestart;
-    struct source_s *src;
-    char *desc;
-    char *extra;   /* used by the backend */
+    enum error_code errcode;        /* type of error */
+    long lineno, charno, linestart; /* where was the error token encountered */
+    struct source_s *src;           /* source input where error token appeared */
+    char *desc;                     /* description of the error */
+    char *extra;                    /* extra description -- used by the backend */
 };
 
+/* functions to report errors */
 void print_err(struct error_s *err, char *errstr);
 void raise_error(struct error_s err);
 
+/*
+ * marco to raise parsing errors given the error code, the error token and
+ * the string description of the error, e.g. if the error is an unexpected token,
+ * the tdesc field contains the type of token that was expected, and so on.
+ */
 #define __PARSER_RAISE_ERROR(code, tok, tdesc)        \
 do                                                    \
 {                                                     \
@@ -86,6 +94,10 @@ do                                                    \
     });                                               \
 } while(0)
 
+/*
+ * marco to raise parsing errors given the error code, the error token and
+ * the type of token that was expected instead of the error token.
+ */
 #define PARSER_RAISE_ERROR(code, tok, type)           \
 do                                                    \
 {                                                     \
@@ -93,6 +105,9 @@ do                                                    \
     __PARSER_RAISE_ERROR((code), (tok), (tdesc));     \
 } while(0)
 
+/*
+ * wrapper for the PARSER_RAISE_ERROR() macro above.
+ */
 #define PARSER_RAISE_ERROR_DESC(code, tok, tdesc)     \
 do                                                    \
 {                                                     \
@@ -100,6 +115,11 @@ do                                                    \
 } while(0)
 
 
+/*
+ * marco to raise execution errors given the error code, the string description
+ * of the error, and an optional extra string description that depends on the
+ * type of error we are reporting.
+ */
 #define BACKEND_RAISE_ERROR(code, edesc, xdesc)       \
 do {                                                  \
     raise_error((struct error_s)                      \
