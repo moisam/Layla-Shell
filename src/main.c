@@ -89,8 +89,6 @@ void SIGINT_handler(int signum __attribute__((unused)))
     {
         req_break = 1;
     }
-    /* make sure we're the signal handler so no funny business happens */
-    signal(SIGINT, SIGINT_handler);
 }
 
 
@@ -100,8 +98,6 @@ void SIGINT_handler(int signum __attribute__((unused)))
 void SIGQUIT_handler(int signum)
 {
     fprintf(stderr, "%s: received signal %d\n", SHELL_NAME, signum);
-    /* make sure we're the signal handler so no funny business happens */
-    signal(SIGQUIT, SIGQUIT_handler);
 }
 
 
@@ -112,8 +108,6 @@ void SIGWINCH_handler(int signum)
 {
     fprintf(stderr, "%s: received signal %d\n", SHELL_NAME, signum);
     get_screen_size();
-    /* make sure we're the signal handler so no funny business happens */
-    signal(SIGWINCH, SIGWINCH_handler);
 }
 
 
@@ -147,8 +141,6 @@ void SIGCHLD_handler(int signum __attribute__((unused)))
         run_alias_cmd("jobcmd");
     }
     errno = save_errno;
-    /* make sure we're the signal handler so no funny business happens */
-    signal(SIGCHLD, SIGCHLD_handler);
 }
 
 
@@ -163,6 +155,19 @@ void SIGHUP_handler(int signum)
         kill_all_jobs(SIGHUP, JOB_FLAG_DISOWNED);
     }
     exit_gracefully(signum+128, NULL);
+}
+
+
+/*
+ * set the signal handler function for signal number signum to sa_handler().
+ */
+int set_signal_handler(int signum, void (handler)(int))
+{
+    struct sigaction sigact;
+    sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = 0;
+    sigact.sa_handler = handler;
+    return sigaction(signum, &sigact, NULL);
 }
 
 
@@ -259,9 +264,9 @@ int main(int argc, char **argv)
             signal(SIGTTIN, SIG_IGN);
             signal(SIGTTOU, SIG_IGN);
         }
-        signal(SIGCHLD , SIGCHLD_handler );
-        signal(SIGINT  , SIGINT_handler  );
-        signal(SIGWINCH, SIGWINCH_handler);
+        set_signal_handler(SIGCHLD , SIGCHLD_handler );
+        set_signal_handler(SIGINT  , SIGINT_handler  );
+        set_signal_handler(SIGWINCH, SIGWINCH_handler);
         set_optionx(OPTION_INTERACTIVE_COMMENTS, 1);
         
         /*
@@ -304,7 +309,7 @@ int main(int argc, char **argv)
             }
         }
     }
-    signal(SIGHUP , SIGHUP_handler);
+    set_signal_handler(SIGHUP, SIGHUP_handler);
 
     /* not in privileged mode? reset ids (bash) */
     if(!option_set('p'))
@@ -358,7 +363,7 @@ int main(int argc, char **argv)
      */
     if(option_set('q'))
     {
-        signal(SIGQUIT, SIGQUIT_handler);
+        set_signal_handler(SIGQUIT, SIGQUIT_handler);
         set_option('m', 0);
     }
   
