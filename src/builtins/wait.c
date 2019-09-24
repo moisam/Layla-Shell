@@ -32,6 +32,14 @@ int rip_dead(pid_t pid);
 extern struct job __jobs[];
 
 
+/*
+ * the wait builtin utility (POSIX).. used to wait for a process or job to complete and
+ * returns the exit status of the completed process or job.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help wait` or `wait -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
 int __wait(int argc, char **argv)
 {
     int    res      = 0;
@@ -40,12 +48,12 @@ int __wait(int argc, char **argv)
     int    wait_any = 0;
     int    force    = 0;
     struct job *job;
+    int    v = 1, c;
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
     /****************************
-     * process the arguments
+     * process the options
      ****************************/
-    int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
     while((c = parse_args(argc, argv, "hvnf", &v, 1)) > 0)
     {
         switch(c)
@@ -68,20 +76,23 @@ int __wait(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 1;
+    if(c == -1)
+    {
+        return 1;
+    }
     
     int i, j;
-    /* no pid perands -- wait for all children */
+    /* no pid operands -- wait for all children */
     if(v >= argc)
     {
         /*
-         * bash says we can't kill jobs if job control is not active, which makes sense.
+         * bash says we can't kill jobs if job control is not active, which makes sense..
          * of course, wait should wait for shell's child processes to exit, but we don't
          * keep a list of our child process, the thing which we should fix!
          */
         if(!option_set('m'))
         {
-            fprintf(stderr, "%s: can't wait on jobs: job control is not active\r\n", UTILITY);
+            fprintf(stderr, "%s: can't wait on jobs: job control is not active\n", UTILITY);
             return 2;
         }
         
@@ -89,9 +100,15 @@ int __wait(int argc, char **argv)
         {
             if(job->job_num != 0)
             {
-                if(WIFEXITED(job->status) || WIFSTOPPED(job->status)) continue;
+                if(WIFEXITED(job->status) || WIFSTOPPED(job->status))
+                {
+                    continue;
+                }
                 /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-                if(job->tty_attr && isatty(0)) tcsetattr(0, TCSANOW, job->tty_attr);
+                if(job->tty_attr && isatty(0))
+                {
+                    tcsetattr(0, TCSANOW, job->tty_attr);
+                }
                 if(force)
                 {
                     kill(-job->pgid, SIGCONT);
@@ -101,14 +118,20 @@ int __wait(int argc, char **argv)
                 j = 1;
                 for(i = 0; i < job->proc_count; i++, j <<= 1)
                 {
-                    if(job->child_exitbits & j) continue;
+                    if(job->child_exitbits & j)
+                    {
+                        continue;
+                    }
                     pid = job->pids[i];
                     if(waitpid(pid, &res, 0) < 0)
                     {
                         if(errno == EINTR)
                         {
                             /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
-                            if(option_set('i')) jobs(1, (char *[]){ "jobs", NULL });
+                            if(option_set('i'))
+                            {
+                                jobs(1, (char *[]){ "jobs", NULL });
+                            }
                             /* return 128 to indicate we were interrupted by a signal */
                             return 128;
                         }
@@ -119,7 +142,10 @@ int __wait(int argc, char **argv)
                 set_job_exit_status(job, job->pgid, job->status);
                 set_exit_status(res, 1);
                 notice_termination(pid, res);
-                if(wait_any) return job->status;
+                if(wait_any)
+                {
+                    return job->status;
+                }
             }
         }
         return 0;
@@ -127,7 +153,10 @@ int __wait(int argc, char **argv)
     v--;
     
 read_next2:
-    if(++v >= argc) return res;
+    if(++v >= argc)
+    {
+        return res;
+    }
     arg = argv[v];
     /* (a) argument is a job ID number */
     if(*arg == '%')
@@ -135,7 +164,7 @@ read_next2:
         /* bash says we can't wait on jobs if job control is not active, which makes sense */
         if(!option_set('m'))
         {
-            fprintf(stderr, "%s: can't kill job %s: job control is not active\r\n", UTILITY, arg);
+            fprintf(stderr, "%s: can't kill job %s: job control is not active\n", UTILITY, arg);
             return 2;
         }
 
@@ -143,14 +172,17 @@ read_next2:
         job = get_job_by_jobid(pid);
         if(pid == 0 || !job)
         {
-            fprintf(stderr, "%s: invalid job id: %s\r\n", UTILITY, arg);
+            fprintf(stderr, "%s: invalid job id: %s\n", UTILITY, arg);
             res = 127;
             goto read_next2;
         }
         /* wait for all processes in job to exit */
         j = 1;
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(job->tty_attr && isatty(0)) tcsetattr(0, TCSANOW, job->tty_attr);
+        if(job->tty_attr && isatty(0))
+        {
+            tcsetattr(0, TCSANOW, job->tty_attr);
+        }
         if(force)
         {
             kill(-job->pgid, SIGCONT);
@@ -158,14 +190,20 @@ read_next2:
         }
         for(i = 0; i < job->proc_count; i++, j <<= 1)
         {
-            if(job->child_exitbits & j) continue;
+            if(job->child_exitbits & j)
+            {
+                continue;
+            }
             pid = job->pids[i];
             if(waitpid(pid, &res, 0) < 0)
             {
                 if(errno == EINTR)
                 {
                     /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
-                    if(option_set('i')) jobs(1, (char *[]){ "jobs", NULL });
+                    if(option_set('i'))
+                    {
+                        jobs(1, (char *[]){ "jobs", NULL });
+                    }
                     /* return 128 to indicate we were interrupted by a signal */
                     return 128;
                 }
@@ -181,7 +219,10 @@ read_next2:
     {
         pid = atoi(arg);
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(job->tty_attr && isatty(0)) tcsetattr(0, TCSANOW, job->tty_attr);
+        if(job->tty_attr && isatty(0))
+        {
+            tcsetattr(0, TCSANOW, job->tty_attr);
+        }
         if(force)
         {
             kill(pid, SIGCONT);
@@ -198,7 +239,10 @@ read_next2:
             if(errno == EINTR)
             {
                 /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
-                if(option_set('i')) jobs(1, (char *[]){ "jobs", NULL });
+                if(option_set('i'))
+                {
+                    jobs(1, (char *[]){ "jobs", NULL });
+                }
                 /* return 128 to indicate we were interrupted by a signal */
                 return 128;
             }
@@ -207,6 +251,9 @@ read_next2:
     }
     set_exit_status(res, 1);
     notice_termination(pid, res);
-    if(wait_any) return res;
+    if(wait_any)
+    {
+        return res;
+    }
     goto read_next2;
 }

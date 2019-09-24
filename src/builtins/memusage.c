@@ -59,16 +59,25 @@ extern struct trap_item_s trap_table[];
 extern struct hashtab_s *str_hashes;
 
 
+/*
+ * the memusage utility (non-POSIX extension).. used to print a (rather crude)
+ * breakdown of the dynamic memory used by different shell structures, such as
+ * the symbol table stack and hashed utilities table.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help memusage` or `memusage -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int memusage(int argc, char **argv)
 {
     int lengthy = 0;
-
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hvl", &v, 1)) > 0)
     {
         switch(c)
@@ -87,18 +96,22 @@ int memusage(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
+    /* no arguments. print all memory usage stats */
     if(v >= argc)
     {
-        printf("This utility shows the shell's dynamic memory usage. It reports the current usage\r\n"
-               "and size of shell buffers, symbol table stack, hash tables, and so on.\r\n"
-               "It is important to understand that this information does not include statically\r\n"
-               "allocated memory, nor does it include dynamic memory allocated by different functions\r\n"
-               "as part of their call stack. It doesn't also include memory allocated by different parts\r\n"
-               "of the shell to store and process strings.\r\n\n"
-               "This data is only provided for general information and experimental purposes. Please\r\n"
-               "don't draw any conclusions whatsoever from the numbers provided in here!\r\n\n"
+        printf("This utility shows the shell's dynamic memory usage. It reports the current usage\n"
+               "and size of shell buffers, symbol table stack, hash tables, and so on.\n"
+               "It is important to understand that this information does not include statically\n"
+               "allocated memory, nor does it include dynamic memory allocated by different functions\n"
+               "as part of their call stack. It doesn't also include memory allocated by different parts\n"
+               "of the shell to store and process strings.\n\n"
+               "This data is only provided for general information and experimental purposes. Please\n"
+               "don't draw any conclusions whatsoever from the numbers provided in here!\n\n"
               );
         printf("Shell memory usage:\n");
         printf("===================\n");
@@ -115,38 +128,62 @@ int memusage(int argc, char **argv)
         return 0;
     }
     
+    /* process arguments and print the selected memory usage stats */
     for( ; v < argc; v++)
     {
         char *arg = argv[v];
         if(strcmp(arg, "stack") == 0 || strcmp(arg, "symtabs") == 0)
+        {
             print_mu_stack(lengthy);
+        }
         else if(strcmp(arg, "hash") == 0 || strcmp(arg, "hashtab") == 0)
+        {
             print_mu_hashtab(lengthy);
+        }
         else if(strcmp(arg, "strbuf") == 0 || strcmp(arg, "strtab") == 0)
+        {
             print_mu_str_hashtab(lengthy);
+        }
         else if(strcmp(arg, "traps") == 0)
+        {
             print_mu_traps();
+        }
         else if(strcmp(arg, "input") == 0)
+        {
             print_mu_inputbuf();
+        }
         else if(strcmp(arg, "history") == 0)
+        {
             print_mu_history();
+        }
         else if(strcmp(arg, "cmdbuf") == 0 || strcmp(arg, "cmdbuffer") == 0)
+        {
             print_mu_cmdbuf();
+        }
         else if(strcmp(arg, "dirstack") == 0)
+        {
             print_mu_dirstack(lengthy);
+        }
         else if(strcmp(arg, "vm") == 0)
+        {
             print_mu_vm(lengthy);
+        }
         else if(strcmp(arg, "aliases") == 0)
+        {
             print_mu_aliases();
+        }
     }
-    
+    /* return success */
     return 0;
 }
 
-/*
- * functions to print out pretty and formatted results.
- */
+/*****************************************************************
+ * functions to print out pretty and formatted memory usage stats.
+ *****************************************************************/
 
+/*
+ * print the shell's general memory usage.
+ */
 void print_mu_vm(int lengthy)
 {
     struct rusage rusage;
@@ -171,6 +208,10 @@ void print_mu_vm(int lengthy)
     }
 }
 
+
+/*
+ * print the memory used for the directory stack.
+ */
 void print_mu_dirstack(int lengthy)
 {
     long long res[2];
@@ -190,6 +231,9 @@ void print_mu_dirstack(int lengthy)
 }
 
 
+/*
+ * print the memory used for the symbol table stack.
+ */
 void print_mu_stack(int lengthy)
 {
     long long res[3];
@@ -210,6 +254,9 @@ void print_mu_stack(int lengthy)
 }
 
 
+/*
+ * print the memory used for the hashed utilities table.
+ */
 void print_mu_hashtab(int lengthy)
 {
     long long res[2];
@@ -229,6 +276,9 @@ void print_mu_hashtab(int lengthy)
 }
 
 
+/*
+ * print the memory used for the strings buffer entries.
+ */
 void print_mu_str_hashtab(int lengthy)
 {
     long long res[2];
@@ -248,6 +298,9 @@ void print_mu_str_hashtab(int lengthy)
 }
 
 
+/*
+ * print the memory used for the trap strings.
+ */
 void print_mu_traps()
 {
     long long i = memusage_traps(NULL);
@@ -257,6 +310,9 @@ void print_mu_traps()
 }
 
 
+/*
+ * print the memory used for the input buffer.
+ */
 void print_mu_inputbuf()
 {
     printf("* Input buffer: ");
@@ -265,6 +321,9 @@ void print_mu_inputbuf()
 }
 
 
+/*
+ * print the memory used for the alias strings.
+ */
 void print_mu_aliases()
 {
     long long i = memusage_aliases(NULL);
@@ -274,6 +333,9 @@ void print_mu_aliases()
 }
 
 
+/*
+ * print the memory used for the history list.
+ */
 void print_mu_history()
 {
     long long i = memusage_history(NULL);
@@ -283,6 +345,9 @@ void print_mu_history()
 }
 
 
+/*
+ * print the memory used for the command buffer.
+ */
 void print_mu_cmdbuf()
 {
     long long sz = (long long)cmdbuf_size;
@@ -292,11 +357,14 @@ void print_mu_cmdbuf()
 }
 
 
-/*
+/*****************************************************************
  * functions to do the actual work of calculating memory usage of
  * different shell components.
- */
+ *****************************************************************/
 
+/*
+ * calculate the memory used for the directory stack.
+ */
 long long memusage_dirstack(long long *res)
 {
     res[0] = 0;
@@ -307,13 +375,18 @@ long long memusage_dirstack(long long *res)
     {
         res[0] += sizeof(struct dirstack_ent_s);      /* memory used by the struct */
         if(ds->path)
+        {
             res[1] += strlen(ds->path)+1;             /* memory used by the strings */
+        }
         ds = ds->next;
     }
     return res[0]+res[1];
 }
 
 
+/*
+ * calculate the memory used for the symbol table stack.
+ */
 long long memusage_symtab_stack(long long *res)
 {
     int i;
@@ -335,6 +408,9 @@ long long memusage_symtab_stack(long long *res)
 }
 
 
+/*
+ * calculate the memory used for the symbol table stack.
+ */
 long long memusage_symtab(struct symtab_s *symtab, long long *__res)
 {
     if(!symtab) return 0;
@@ -363,9 +439,18 @@ long long memusage_symtab(struct symtab_s *symtab, long long *__res)
             while(entry)
             {
                 res[0] += sizeof(struct symtab_entry_s);
-                if(entry->val ) res[1] += strlen(entry->val )+1;
-                if(entry->name) res[1] += strlen(entry->name)+1;
-                if(entry->func_body) res[2] += memusage_node(entry->func_body, NULL);
+                if(entry->val )
+                {
+                    res[1] += strlen(entry->val )+1;
+                }
+                if(entry->name)
+                {
+                    res[1] += strlen(entry->name)+1;
+                }
+                if(entry->func_body)
+                {
+                    res[2] += memusage_node(entry->func_body, NULL);
+                }
                 entry = entry->next;
             }
                 
@@ -376,16 +461,28 @@ long long memusage_symtab(struct symtab_s *symtab, long long *__res)
         
 #endif
 
-    if(__res) __res[0] = res[0], __res[1] = res[1], __res[2] = res[2];
+    if(__res)
+    {
+        __res[0] = res[0];
+        __res[1] = res[1];
+        __res[2] = res[2];
+    }
     return res[0]+res[1]+res[2];
 }
 
 
+/*
+ * calculate the memory used for the hashed utilities table.
+ */
 long long memusage_hashtab(struct hashtab_s *hashtab, long long *__res, int addvals)
 {
     if(!hashtab)
     {
-        if(__res) __res[0] = 0, __res[1] = 0;
+        if(__res)
+        {
+            __res[0] = 0;
+            __res[1] = 0;
+        }
         return 0;
     }
     long long res[3];
@@ -403,21 +500,37 @@ long long memusage_hashtab(struct hashtab_s *hashtab, long long *__res, int addv
             while(entry)
             {
                 res[0] += sizeof(struct hashitem_s);
-                if(addvals && entry->val) res[1] += strlen(entry->val)+1;
-                if(entry->name) res[1] += strlen(entry->name)+1;
+                if(addvals && entry->val)
+                {
+                    res[1] += strlen(entry->val)+1;
+                }
+                if(entry->name)
+                {
+                    res[1] += strlen(entry->name)+1;
+                }
                 entry = entry->next;
             }
         }
     }
 
-    if(__res) __res[0] = res[0], __res[1] = res[1];
+    if(__res)
+    {
+        __res[0] = res[0];
+        __res[1] = res[1];
+    }
     return res[0]+res[1];
 }
 
 
+/*
+ * calculate the memory used for the given nodetree.
+ */
 long long memusage_node(struct node_s *node, long long *__res)
 {
-    if(!node) return 0;
+    if(!node)
+    {
+        return 0;
+    }
     long long res[2];
     res[0] = sizeof(struct node_s);
     res[1] = 0;
@@ -434,14 +547,24 @@ long long memusage_node(struct node_s *node, long long *__res)
     
     if(node->val_type == VAL_STR)
     {
-        if(node->val.str) res[1] += strlen(node->val.str)+1;
+        if(node->val.str)
+        {
+            res[1] += strlen(node->val.str)+1;
+        }
     }
 
-    if(__res) __res[0] = res[0], __res[1] = res[1];
+    if(__res)
+    {
+        __res[0] = res[0];
+        __res[1] = res[1];
+    }
     return res[0]+res[1];
 }
 
 
+/*
+ * calculate the memory used for the trap strings.
+ */
 long long memusage_traps(long long *__res)
 {
     long long res = 0;
@@ -453,34 +576,58 @@ long long memusage_traps(long long *__res)
             res += strlen(trap_table[i].action_str)+1;
         }
     }
-    if(__res) __res[0] = res;
+    if(__res)
+    {
+        __res[0] = res;
+    }
     return res;
 }
 
 
+/*
+ * calculate the memory used for the alias strings.
+ */
 long long memusage_aliases(long long *__res)
 {
     long long res = 0;
     int i;
     for(i = 0; i < MAX_ALIASES; i++)
     {
-        if(__aliases[i].name) res += strlen(__aliases[i].name);
-        if(__aliases[i].val ) res += strlen(__aliases[i].val );
+        if(__aliases[i].name)
+        {
+            res += strlen(__aliases[i].name);
+        }
+        if(__aliases[i].val )
+        {
+            res += strlen(__aliases[i].val );
+        }
     }
-    if(__res) __res[0] = res;
+    if(__res)
+    {
+        __res[0] = res;
+    }
     return res;
 }
 
 
+/*
+ * calculate the memory used for the history list.
+ */
 long long memusage_history(long long *__res)
 {
     long long res = 0;
     int i;
     for(i = 0; i < cmd_history_end; i++)
     {
-        if(cmd_history[i].cmd) res += strlen(cmd_history[i].cmd);
+        if(cmd_history[i].cmd)
+        {
+            res += strlen(cmd_history[i].cmd);
+        }
     }
-    if(__res) __res[0] = res;
+    if(__res)
+    {
+        __res[0] = res;
+    }
     return res;
 }
 

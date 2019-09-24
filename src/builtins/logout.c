@@ -24,12 +24,21 @@
 #include "../debug.h"
 
 
+/*
+ * the logout builtin utility (non-POSIX).. used to logout (or exit) from a login shell.
+ *
+ * shouldn't return unless we have pending jobs.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help logout` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int logout(int argc, char **argv)
 {
     /*
      * NOTE: we perform proper logout in the exit_gracefully() function
      *       of exit.c.
      */
-    __exit(argc, argv);
-    __builtin_unreachable();
+    return __exit(argc, argv);
 }

@@ -54,28 +54,40 @@
 #include "../debug.h"
 
 #define UTILITY             "test"
-#define MAXOPSTACK          64
-#define MAXTESTSTACK        64
+
+#define MAXOPSTACK          64      /* max operators allowed on the stack */
+#define MAXTESTSTACK        64      /* max operands allowed on the stack */
 #define ZERO                "0"
 #define ONE                 "1"
 
+/* the operators stack */
 struct test_op_s *test_opstack[MAXOPSTACK];
+
+/* the count of operators pushed on the operators stack */
 int    test_nopstack  = 0;
 
+/* the operands stack */
 char  *teststack[MAXTESTSTACK];
+
+/* the count of operands pushed on the operands stack */
 int    nteststack     = 0;
+
+/* flag to set when there is an error pushing, popping or performing some other operation */
 int    test_err       = 0;
+
+/* empty string to push/pop from the stack when we don't have anything else to use */
 char  *test_empty_str = "";
 
 /* fnmatch() flags */
 static int flags = FNM_NOESCAPE | FNM_PATHNAME | FNM_PERIOD;
 
+/* buffers we will use to stat files when comparing their status */
 struct stat statbuf ;
 struct stat statbuf2;
 
-#define FILES_EQUAL     1
-#define FILE_NEWER_THAN 2
-#define FILE_OLDER_THAN 3
+#define FILES_EQUAL     1   /* the -eq file comparison operator */
+#define FILE_NEWER_THAN 2   /* the -nt file comparison operator */
+#define FILE_OLDER_THAN 3   /* the -ot file comparison operator */
 
 /*
  * NOTE: in all of the upcoming comparisons in this file, remember that
@@ -83,43 +95,91 @@ struct stat statbuf2;
  *       zero will indicate success and non-zero will indicate failure.
  */
 
+/*
+ * compare two files, f1 and f2, using the operator op, which can be the
+ * newer-than operator (FILE_NEWER_THAN), the older-than operator
+ * (FILE_OLDER_THAN), or the equality operator (FILE_EQUAL).
+ *
+ * returns "0" if the result of comparison is true, "1" if it is false.
+ */
 char *compare_files(char *f1, char *f2, int op)
 {
+    /* stat the two files */
     memset((void *)&statbuf , 0, sizeof(struct stat));
     memset((void *)&statbuf2, 0, sizeof(struct stat));
     int res1 = lstat(f1, &statbuf );
     int res2 = lstat(f2, &statbuf2);
+    /* perform the comparison operator */
     switch(op)
     {
+        /* check if f1 and f2 refer to the same file */
         case FILES_EQUAL:
-            if(!res1 || !res2) return ONE;
+            /* one file does not exist, so f1 != f2 */
+            if(!res1 || !res2)
+            {
+                return ONE;
+            }
+            /* compare f1 and f2's inode, device and rdev numbers */
             if(statbuf.st_ino == statbuf2.st_ino && 
                statbuf.st_dev == statbuf2.st_dev &&
                statbuf.st_rdev == statbuf2.st_rdev)
+            {
+                /* f1 and f2 match */
                 return ZERO;
+            }
+            /* f1 and f2 do not match */
             return ONE;
             
+        /* check if f1 is newer than f2 */
         case FILE_NEWER_THAN:
-            if(!res1) return ONE;
-            if(!res2) return ZERO;
+            /* f1 does not exist, so the result is false */
+            if(!res1)
+            {
+                return ONE;
+            }
+            /* f2 does not exist, so the result is true */
+            if(!res2)
+            {
+                return ZERO;
+            }
+            /* both exist. compare their modification times */
             return (statbuf.st_mtime <= statbuf2.st_mtime) ? ONE : ZERO;
-            
+
+        /* check if f1 is older than f2 */
         case FILE_OLDER_THAN:
-            if(!res2) return ONE;
-            if(!res1) return ZERO;
+            /* f2 does not exist, so the result is false */
+            if(!res2)
+            {
+                return ONE;
+            }
+            /* f1 does not exist, so the result is true */
+            if(!res1)
+            {
+                return ZERO;
+            }
+            /* both exist. compare their modification times */
             return (statbuf.st_mtime >= statbuf2.st_mtime) ? ONE : ZERO;
     }
+    /* unknown operator. return false */
     return ONE;
 }
 
 
-#define ARITHM_EQ       1
-#define ARITHM_GE       2
-#define ARITHM_GT       3
-#define ARITHM_LE       4
-#define ARITHM_LT       5
-#define ARITHM_NE       6
+#define ARITHM_EQ       1   /* -eq */
+#define ARITHM_GE       2   /* -ge */
+#define ARITHM_GT       3   /* -gt */
+#define ARITHM_LE       4   /* -le */
+#define ARITHM_LT       5   /* -lt */
+#define ARITHM_NE       6   /* -ne */
 
+
+/*
+ * compare the two arithmetic expressions given as __e1 and __e2, using the
+ * comparsion operator op, which can be one of the six operator we defined as
+ * macros above (ARITHM_EQ et al).
+ *
+ * returns "0" if the result of comparison is true, "1" if it is false.
+ */
 char *compare_exprs(char *__e1, char *__e2, int op)
 {
     /*
@@ -127,18 +187,38 @@ char *compare_exprs(char *__e1, char *__e2, int op)
      *       as any other arithmetic expr enclosed in $(( )) or (( )).
      */
     char *strend = NULL, *err = NULL;
-    char *e1 = __do_arithmetic(__e1), *e2 = NULL;
-    if(!e1) { err = __e1; goto bailout; }
-
+    char *e1 = arithm_expand(__e1), *e2 = NULL;
+    /* failed to perform arithmetic expansion on e1 */
+    if(!e1)
+    {
+        err = __e1;
+        goto bailout;
+    }
+    /* get the numeric value of e1 */
     long res1 = strtol(e1, &strend, 10);
-    if(strend == e1) { err = __e1; goto bailout; }
+    if(strend == e1)
+    {
+        err = __e1;
+        goto bailout;
+    }
 
-    e2 = __do_arithmetic(__e2);
-    if(!e2) { err = __e2; goto bailout; }
+    e2 = arithm_expand(__e2);
+    /* failed to perform arithmetic expansion on e2 */
+    if(!e2)
+    {
+        err = __e2;
+        goto bailout;
+    }
+    /* get the numeric value of e2 */
     long res2 = strtol(e2, &strend, 10);
-    if(strend == e2) { err = __e2; goto bailout; }
+    if(strend == e2)
+    {
+        err = __e2;
+        goto bailout;
+    }
 
-    int res = 2;    /* 2 means invalid operator (general bash test_err code) */
+    /* perform the comparison */
+    int res = 2;    /* 2 means invalid operator (general bash error code for internal errors) */
     switch(op)
     {
         case ARITHM_EQ  : res = !(res1 == res2); break;
@@ -153,157 +233,489 @@ char *compare_exprs(char *__e1, char *__e2, int op)
     return res ? ONE : ZERO;
     
 bailout:
-    fprintf(stderr, "%s: invalid arithmetic expression: %s\r\n", UTILITY, err);
-    if(e1) free(e1);
-    if(e2) free(e2);
+    fprintf(stderr, "%s: invalid arithmetic expression: %s\n", UTILITY, err);
+    if(e1)
+    {
+        free(e1);
+    }
+    if(e2)
+    {
+        free(e2);
+    }
     test_err = 1;
     return NULL;
 }
 
-char *test_gt(char *a1, char *a2) { return compare_exprs(a1, a2, ARITHM_GT); }
-char *test_lt(char *a1, char *a2) { return compare_exprs(a1, a2, ARITHM_LT); }
-char *test_ge(char *a1, char *a2) { return compare_exprs(a1, a2, ARITHM_GE); }
-char *test_le(char *a1, char *a2) { return compare_exprs(a1, a2, ARITHM_LE); }
-char *test_eq(char *a1, char *a2) { return compare_exprs(a1, a2, ARITHM_EQ); }
-char *test_ne(char *a1, char *a2) { return compare_exprs(a1, a2, ARITHM_NE); }
+/*
+ * test if a1 is greater-than a2 and return "0" if true, "1" if false.
+ */
+char *test_gt(char *a1, char *a2)
+{
+    return compare_exprs(a1, a2, ARITHM_GT);
+}
 
-char *test_str_eq(char *a1, char *a2) { return fnmatch(a1, a2, flags) ? ONE : ZERO; }
-char *test_str_ne(char *a1, char *a2) { return fnmatch(a1, a2, flags) ? ZERO : ONE; }
-char *test_str_lt(char *a1, char *a2) { return (strcmp(a1, a2)   < 0) ? ZERO : ONE; }
-char *test_str_gt(char *a1, char *a2) { return (strcmp(a1, a2)   > 0) ? ZERO : ONE; }
+/*
+ * test if a1 is less-than a2 and return "0" if true, "1" if false.
+ */
+char *test_lt(char *a1, char *a2)
+{
+    return compare_exprs(a1, a2, ARITHM_LT);
+}
 
-char *test_file_ef(char *a1, char *a2) { return compare_files(a1, a2, FILES_EQUAL    ); }
-char *test_file_nt(char *a1, char *a2) { return compare_files(a1, a2, FILE_NEWER_THAN); }
-char *test_file_ot(char *a1, char *a2) { return compare_files(a1, a2, FILE_OLDER_THAN); }
+/*
+ * test if a1 is greater-than-or-equal-to a2 and return "0" if true, "1" if false.
+ */
+char *test_ge(char *a1, char *a2)
+{
+    return compare_exprs(a1, a2, ARITHM_GE);
+}
 
+/*
+ * test if a1 is less-than-or-equal-to a2 and return "0" if true, "1" if false.
+ */
+char *test_le(char *a1, char *a2)
+{
+    return compare_exprs(a1, a2, ARITHM_LE);
+}
+
+/*
+ * test if a1 is equal-to a2 and return "0" if true, "1" if false.
+ */
+char *test_eq(char *a1, char *a2)
+{
+    return compare_exprs(a1, a2, ARITHM_EQ);
+}
+
+/*
+ * test if a1 is not-equal-to a2 and return "0" if true, "1" if false.
+ */
+char *test_ne(char *a1, char *a2)
+{
+    return compare_exprs(a1, a2, ARITHM_NE);
+}
+
+/*
+ * test if string a1 is equal to a2 and return "0" if true, "1" if false.
+ */
+char *test_str_eq(char *a1, char *a2)
+{
+    return fnmatch(a1, a2, flags) ? ONE : ZERO;
+}
+
+/*
+ * test if string a1 is not-equal-to a2 and return "0" if true, "1" if false.
+ */
+char *test_str_ne(char *a1, char *a2)
+{
+    return fnmatch(a1, a2, flags) ? ZERO : ONE;
+}
+
+/*
+ * test if string a1 is less-than a2 and return "0" if true, "1" if false.
+ */
+char *test_str_lt(char *a1, char *a2)
+{
+    return (strcmp(a1, a2) < 0) ? ZERO : ONE;
+}
+
+/*
+ * test if string a1 is greater-than a2 and return "0" if true, "1" if false.
+ */
+char *test_str_gt(char *a1, char *a2)
+{
+    return (strcmp(a1, a2) > 0) ? ZERO : ONE;
+}
+
+/*
+ * test if file a1 is the same as a2 and return "0" if true, "1" if false.
+ */
+char *test_file_ef(char *a1, char *a2)
+{
+    return compare_files(a1, a2, FILES_EQUAL);
+}
+
+/*
+ * test if file a1 is newer-than a2 and return "0" if true, "1" if false.
+ */
+char *test_file_nt(char *a1, char *a2)
+{
+    return compare_files(a1, a2, FILE_NEWER_THAN);
+}
+
+/*
+ * test if file a1 is older-than a2 and return "0" if true, "1" if false.
+ */
+char *test_file_ot(char *a1, char *a2)
+{
+    return compare_files(a1, a2, FILE_OLDER_THAN);
+}
+
+/*
+ * perform the logical NOT operation on a1 and return the result.
+ */
 char *test_not(char *a1, char *a2 __attribute__ ((unused)) )
 {
     return strcmp(a1, ZERO) == 0 ? ONE : ZERO;
 }
 
+/*
+ * perform the logical AND operation on a1 and a2 and return the result.
+ */
 char *test_and(char *a1, char *a2)
 {
-    if(strcmp(a1, ZERO) != 0 || strcmp(a2, ZERO) != 0) return ONE;
+    if(strcmp(a1, ZERO) != 0 || strcmp(a2, ZERO) != 0)
+    {
+        return ONE;
+    }
     return ZERO;
 }
 
+/*
+ * perform the logical OR operation on a1 and a2 and return the result.
+ */
 char *test_or(char *a1, char *a2)
 {
-    if(strcmp(a1, ZERO) == 0 || strcmp(a2, ZERO) == 0) return ZERO;
+    if(strcmp(a1, ZERO) == 0 || strcmp(a2, ZERO) == 0)
+    {
+        return ZERO;
+    }
     return ONE;
 }
 
+/*
+ * check if a file is readable, writeable or executable by the current process.
+ *
+ * if running in --posix mode, tcsh doesn't use access() call to test r/w/x
+ * permissions, it uses the file permission bits.
+ *
+ * returns 0 if we have the requested r/w/x permission on the file, -1 otherwise.
+ */
+int test_file_permission(char *path, struct stat *statbuf, char which)
+{
+    /* check if we are running in --posix mode */
+    if(option_set('P'))
+    {
+        /* determine the permission argument we will pass to access() */
+        int uperm, gperm, operm;
+        switch(which)
+        {
+            case 'r':
+                uperm = S_IRUSR;
+                gperm = S_IRGRP;
+                operm = S_IROTH;
+                break;
+
+            case 'w':
+                uperm = S_IWUSR;
+                gperm = S_IWGRP;
+                operm = S_IWOTH;
+                break;
+
+            case 'x':
+                uperm = S_IXUSR;
+                gperm = S_IXGRP;
+                operm = S_IXOTH;
+                break;
+        }
+
+        /*
+         *  now check the permissions without calling access().
+         */
+        /* if the user is the file's owner, check for user permissions */
+        if((statbuf->st_uid == geteuid()) && (statbuf->st_mode & uperm))
+        {
+            return 0;
+        }
+        /* if the user is in the file's group, check for group permissions */
+        if((statbuf->st_gid == getegid()) && (statbuf->st_mode & gperm))
+        {
+            return 0;
+        }
+        /* check for other users' permissions */
+        if(statbuf->st_mode & operm)
+        {
+            return 0;
+        }
+        /* we don't have permissions to r/w/x that file */
+        return -1;
+    }
+    else
+    {
+        /* determine the permission argument we will pass to access() */
+        int perm;
+        switch(which)
+        {
+            case 'r':
+                perm = R_OK;
+                break;
+
+            case 'w':
+                perm = W_OK;
+                break;
+
+            case 'x':
+                perm = X_OK;
+                break;
+        }
+        return access(path, perm);
+    }
+}
+
+/*
+ * perform different tests on arg, which represents a filename.
+ *
+ * returns "0" if the result of the test is true, "1" if it is false.
+ */
 char *test_file(char *arg, int op)
 {
     uid_t euid = geteuid();
     gid_t egid = getegid();
     memset((void *)&statbuf, 0, sizeof(struct stat));
+    /* stat the file */
     int res = lstat(arg, &statbuf);
+    /* perform the test */
     switch(op)
     {
+        /* test if the file exists */
         case 'a':
         case 'e':
-            if(res != 0) res = 1;
-            res = 0;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else
+            {
+                res = 0;
+            }
             break;
         
+        /* is it a block device */
         case 'b':
-            if(res != 0) res = 1;
-            else if(S_ISBLK(statbuf.st_mode)) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(S_ISBLK(statbuf.st_mode))
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* is it a char device */
         case 'c':
-            if(res != 0) res = 1;
-            else if(S_ISCHR(statbuf.st_mode)) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(S_ISCHR(statbuf.st_mode))
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* is it a directory */
         case 'd':
-            if(res != 0) res = 1;
-            else if(S_ISDIR(statbuf.st_mode)) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(S_ISDIR(statbuf.st_mode))
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* is it a regular file */
         case 'f':
-            if(res != 0) res = 1;
-            else if(S_ISREG(statbuf.st_mode)) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(S_ISREG(statbuf.st_mode))
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* check if the setgid bit is set */
         case 'g':
-            if(res != 0) res = 1;
-            else if(statbuf.st_mode & S_ISGID) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(statbuf.st_mode & S_ISGID)
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* check if our egid == creator's gid */
         case 'G':
-            if(res != 0) res = 1;
-            else if(statbuf.st_gid == egid) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(statbuf.st_gid == egid)
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* is it a soft link */
         case 'h':
         case 'L':
-            if(res != 0) res = 1;
-            else if(S_ISLNK(statbuf.st_mode)) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(S_ISLNK(statbuf.st_mode))
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* check if the sticky bit is set */
         case 'k':
-            if(res != 0) res = 1;
-            else if(statbuf.st_mode & S_ISVTX) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(statbuf.st_mode & S_ISVTX)
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* is f1 newer than f2 */
         case 'N':
-            if(res != 0) res = 1;
-            else if(statbuf.st_mtime > statbuf.st_atime) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(statbuf.st_mtime > statbuf.st_atime)
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* check if our euid == creator's uid */
         case 'O':
-            if(res != 0) res = 1;
-            else if(statbuf.st_uid == euid) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(statbuf.st_uid == euid)
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* is it a FIFO/named-pipe */
         case 'p':
-            if(res != 0) res = 1;
-            else if(S_ISFIFO(statbuf.st_mode)) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(S_ISFIFO(statbuf.st_mode))
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
         
-        /*
-         * if running in POSIX mode, tcsh doesn't use access() call to test rwx 
-         * permissions, it uses the file permission bits.
-         */
+        /* check if the file is readable */
         case 'r':
-            res = access(arg, R_OK);
+            res = test_file_permission(arg, &statbuf, 'r');
             break;
             
+        /* check if the file size > 0 */
         case 's':
             res = (statbuf.st_size) ? 0 : 1;
             break;
             
+        /* is it a socket */
         case 'S':
-            if(res != 0) res = 1;
-            else if(S_ISSOCK(statbuf.st_mode)) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(S_ISSOCK(statbuf.st_mode))
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
             
+        /* check if the setuid bit is set */
         case 'u':
-            if(res != 0) res = 1;
-            else if(statbuf.st_mode & S_ISUID) res = 0;
-            else res = 1;
+            if(res != 0)
+            {
+                res = 1;
+            }
+            else if(statbuf.st_mode & S_ISUID)
+            {
+                res = 0;
+            }
+            else
+            {
+                res = 1;
+            }
             break;
                 
+        /* check if the file is writeable */
         case 'w':
-            res = access(arg, W_OK);
+            res = test_file_permission(arg, &statbuf, 'w');
             break;
                 
+        /* check if the file is executable */
         case 'x':
-            res = access(arg, X_OK);
+            res = test_file_permission(arg, &statbuf, 'x');
             break;
             
         /*
@@ -312,7 +724,10 @@ char *test_file(char *arg, int op)
          * don't have this option.
          */
         case 'X':
-            if(is_enabled_builtin(arg)) res = 0;
+            if(is_enabled_builtin(arg))
+            {
+                res = 0;
+            }
             else
             {
                 char *path = search_path(arg, NULL, 1);
@@ -321,20 +736,26 @@ char *test_file(char *arg, int op)
                     free_malloced_str(path);
                     res = 0;
                 }
-                else res = 1;
+                else
+                {
+                    res = 1;
+                }
             }
             break;
     }
+    /* return the result */
     return res ? ONE : ZERO;
 }
 
-char *test_file_term(char *a1, char *a2)
+/*
+ * check if the file descriptor specified in a1 refers to a terminal device.
+ */
+char *test_file_term(char *a1, char *a2 __attribute__((unused)))
 {
     char *s = a1;
     int res = strtol(a1, &s, 10);
     if(s == a1)
     {
-        //fprintf(stderr, "%s: invalid file descriptor: %s\r\n", UTILITY, arg);
         res = 1;
     }
     else
@@ -344,69 +765,222 @@ char *test_file_term(char *a1, char *a2)
     return res ? ONE : ZERO;
 }
 
-char *test_file_exist (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'e'); }
-char *test_file_blk   (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'b'); }
-char *test_file_char  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'c'); }
-char *test_file_dir   (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'd'); }
-char *test_file_reg   (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'f'); }
-char *test_file_sgid  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'g'); }
-char *test_file_link  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'L'); }
-char *test_file_sticky(char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'k'); }
-char *test_file_pipe  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'p'); }
-char *test_file_r     (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'r'); }
-char *test_file_size  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 's'); }
-char *test_file_suid  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'u'); }
-char *test_file_w     (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'w'); }
-char *test_file_x     (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'x'); }
-char *test_file_gown  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'G'); }
-char *test_file_new   (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'N'); }
-char *test_file_uown  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'O'); }
-char *test_file_sock  (char *a1, char *a2 __attribute__ ((unused)) ) { return test_file(a1, 'S'); }
+/*
+ * test if file a1 exists and return "0" if true, "1" if false.
+ */
+char *test_file_exist (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'e');
+}
 
+/*
+ * test if file a1 is a block device and return "0" if true, "1" if false.
+ */
+char *test_file_blk   (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'b');
+}
+
+/*
+ * test if file a1 is a char device and return "0" if true, "1" if false.
+ */
+char *test_file_char  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'c');
+}
+
+/*
+ * test if file a1 is a directory and return "0" if true, "1" if false.
+ */
+char *test_file_dir   (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'd');
+}
+
+/*
+ * test if file a1 is a regular file and return "0" if true, "1" if false.
+ */
+char *test_file_reg   (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'f');
+}
+
+/*
+ * test if file a1 has its setgid bit set and return "0" if true, "1" if false.
+ */
+char *test_file_sgid  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'g');
+}
+
+/*
+ * test if file a1 is a soft link and return "0" if true, "1" if false.
+ */
+char *test_file_link  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'L');
+}
+
+/*
+ * test if file a1 has its sticky bit set and return "0" if true, "1" if false.
+ */
+char *test_file_sticky(char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'k');
+}
+
+/*
+ * test if file a1 is a FIFO (named pipe) and return "0" if true, "1" if false.
+ */
+char *test_file_pipe  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'p');
+}
+
+/*
+ * test if file a1 is readable and return "0" if true, "1" if false.
+ */
+char *test_file_r     (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'r');
+}
+
+/*
+ * test if file a1 has a size > 0 and return "0" if true, "1" if false.
+ */
+char *test_file_size  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 's');
+}
+
+/*
+ * test if file a1 has its setuid bit set and return "0" if true, "1" if false.
+ */
+char *test_file_suid  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'u');
+}
+
+/*
+ * test if file a1 is writeable and return "0" if true, "1" if false.
+ */
+char *test_file_w     (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'w');
+}
+
+/*
+ * test if file a1 is executable and return "0" if true, "1" if false.
+ */
+char *test_file_x     (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'x');
+}
+
+/*
+ * test if file a1 is owned by this process's group and return "0" if true, "1" if false.
+ */
+char *test_file_gown  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'G');
+}
+
+/*
+ * test if file a1 exists and has been modified since its creation and return "0" if true, "1" if false.
+ */
+char *test_file_new   (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'N');
+}
+
+/*
+ * test if file a1 is owned by this process's user and return "0" if true, "1" if false.
+ */
+char *test_file_uown  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'O');
+}
+
+/*
+ * test if file a1 is a socket and return "0" if true, "1" if false.
+ */
+char *test_file_sock  (char *a1, char *a2 __attribute__ ((unused)) )
+{
+    return test_file(a1, 'S');
+}
+
+/*
+ * check if an option is enabled (the -o test).
+ * csh uses this option (-o) to test file ownership, while ksh and bash use it to
+ * test set options. we follow the latter.
+ */
 char *test_opt_en(char *a1, char *a2 __attribute__ ((unused)) )
 {
-    /*
-     * csh uses this option to test file ownership, while ksh and bash uses it to
-     * test set options. we follow the latter.
-     */
     int res = 1;
     if(*a1 == '?')
     {
         a1++;
-        if(strlen(a1) == 1) res = !is_short_option(*a1);
-        else res = !short_option(a1);
+        if(strlen(a1) == 1)
+        {
+            res = !is_short_option(*a1);
+        }
+        else
+        {
+            res = !short_option(a1);
+        }
     }
     else
     {
-        if(strlen(a1) == 1) res = !option_set(*a1);
-        else res = !option_set(short_option(a1));
+        if(strlen(a1) == 1)
+        {
+            res = !option_set(*a1);
+        }
+        else
+        {
+            res = !option_set(short_option(a1));
+        }
     }
     return res ? ONE : ZERO;
 }
 
+/*
+ * test if the length of string a1 is zero and return "0" if true, "1" if false.
+ */
 char *test_str_zero(char *a1, char *a2 __attribute__ ((unused)) )
 {
     return (strlen(a1) == 0) ? ZERO : ONE;
 }
 
+/*
+ * test if the length of string a1 is not zero and return "0" if true, "1" if false.
+ */
 char *test_str_nz(char *a1, char *a2 __attribute__ ((unused)) )
 {
     return strlen(a1) ? ZERO : ONE;
 }
 
+/*
+ *  test if the shell varariable a1 has been set and has been given a value (bash).
+ */
 char *test_var_def(char *a1, char *a2 __attribute__ ((unused)) )
 {
-    /* check if a shell var has been set and given a value (bash) */
     int res = 1;
     struct symtab_entry_s *entry = get_symtab_entry(a1);
-    if(entry && entry->val) res = 0;
-    else res = 1;
+    if(entry && entry->val)
+    {
+        res = 0;
+    }
+    else
+    {
+        res = 1;
+    }
     return res ? ONE : ZERO;
 }
 
 
 /*
- * extended operator list. here we need to skip ASCII numbers for !, (, )
+ * extended operator list. here we need to skip the numbers referring to ASCII
+ * chars !, (, and ).
  */
 #define TEST_GT                1       /* arithm greater than */
 #define TEST_LT                2       /* arithm lesser than */
@@ -451,14 +1025,17 @@ char *test_var_def(char *a1, char *a2 __attribute__ ((unused)) )
 
 enum { ASSOC_NONE = 0, ASSOC_LEFT, ASSOC_RIGHT };
 
+/*
+ * structure to represent the test operators we recognize.
+ */
 struct test_op_s
 {
-	char op;
-	int  prec;
-	int  assoc;
-	char unary;
-	char chars;
-	char *(*test)(char *a1, char *a2);
+	char op;        /* unique number we assign to each operator */
+	int  prec;      /* the operator's precedence (see below) */
+	int  assoc;     /* the operator's associativity */
+	char unary;     /* is it unary or binary operator */
+	char chars;     /* how many chars are in the operator (e.g. -eq has 3 chars) */
+	char *(*test)(char *a1, char *a2);  /* the function that implements the operator (see above) */
 } test_ops[] =
 {
 	{ '!'               , 1, ASSOC_RIGHT, 1, 1, test_not           },
@@ -506,6 +1083,7 @@ struct test_op_s
 	{ TEST_FILE_BLK     , 3, ASSOC_RIGHT, 1, 2, test_file_blk      },
 };
 
+/* pointers to the operators' structs (see above) */
 struct test_op_s *TEST_OP_NOT         = &test_ops[0 ];
 struct test_op_s *TEST_OP_LBRACE      = &test_ops[1 ];
 struct test_op_s *TEST_OP_RBRACE      = &test_ops[2 ];
@@ -551,6 +1129,9 @@ struct test_op_s *TEST_OP_FILE_CHAR   = &test_ops[40];
 struct test_op_s *TEST_OP_FILE_BLK    = &test_ops[41];
 
 
+/*
+ * return 1 if the operator op is a string operator, i.e. >, <, =, == or !=.
+ */
 int is_str_op(struct test_op_s *op)
 {
     switch(op->op)
@@ -567,8 +1148,13 @@ int is_str_op(struct test_op_s *op)
 
 
 /*
+ * test the first chars of 'expr' to see if they represent one of the test operators
+ * listed above.. if that is the case, return the operator struct representing that
+ * operator.. otherwise, return NULL.
+ *
  * in the 'old' test command (invoked as either 'test' or '[', but not '[['), these operators
  * work differently than when the 'new' test command (invoked as '[[') is used:
+ *
  *    -a means logical AND (&&), not test if file is available.
  *    -o means logical OR  (||), not test if option is set.
  * 
@@ -585,8 +1171,12 @@ struct test_op_s *test_getop(char *expr, int oldtest)
                 switch(expr[1])
                 {
                     case 'a':
-                        if(oldtest) return TEST_OP_AND;
+                        if(oldtest)
+                        {
+                            return TEST_OP_AND;
+                        }
                         /* fall through */
+                        __attribute__((fallthrough));
                         
                     case 'e':
                         return TEST_OP_FILE_EXIST;
@@ -595,95 +1185,193 @@ struct test_op_s *test_getop(char *expr, int oldtest)
                     case 'L':
                         return TEST_OP_FILE_LINK;
                     
-                    case 'b': return TEST_OP_FILE_BLK;
-                    case 'c': return TEST_OP_FILE_CHAR;
-                    case 'd': return TEST_OP_FILE_DIR;
-                    case 'f': return TEST_OP_FILE_REG;
-                    case 'g': return TEST_OP_FILE_SGID;
-                    case 'G': return TEST_OP_FILE_GOWN;
-                    case 'k': return TEST_OP_FILE_STICKY;
-                    case 'n': return TEST_OP_STR_NZ;
-                    case 'N': return TEST_OP_FILE_NEW;
+                    case 'b':
+                        return TEST_OP_FILE_BLK;
+
+                    case 'c':
+                        return TEST_OP_FILE_CHAR;
+
+                    case 'd':
+                        return TEST_OP_FILE_DIR;
+
+                    case 'f':
+                        return TEST_OP_FILE_REG;
+
+                    case 'g':
+                        return TEST_OP_FILE_SGID;
+
+                    case 'G':
+                        return TEST_OP_FILE_GOWN;
+
+                    case 'k':
+                        return TEST_OP_FILE_STICKY;
+
+                    case 'n':
+                        return TEST_OP_STR_NZ;
+
+                    case 'N':
+                        return TEST_OP_FILE_NEW;
                     
                     case 'o':
-                        if(oldtest) return TEST_OP_OR;
+                        if(oldtest)
+                        {
+                            return TEST_OP_OR;
+                        }
                         return TEST_OP_OPT_EN;
                         
-                    case 'O': return TEST_OP_FILE_UOWN;
-                    case 'p': return TEST_OP_FILE_PIPE;
-                    case 'r': return TEST_OP_FILE_R;
+                    case 'O':
+                        return TEST_OP_FILE_UOWN;
+
+                    case 'p':
+                        return TEST_OP_FILE_PIPE;
+
+                    case 'r':
+                        return TEST_OP_FILE_R;
+
                     //case 'R': return TEST_OP_VAR_REF;
-                    case 's': return TEST_OP_FILE_SIZE;
-                    case 'S': return TEST_OP_FILE_SOCK;
-                    case 't': return TEST_OP_FILE_TERM;
-                    case 'u': return TEST_OP_FILE_SUID;
-                    case 'w': return TEST_OP_FILE_W;
-                    case 'x': return TEST_OP_FILE_EXE;
-                    case 'v': return TEST_OP_VAR_DEF;
-                    case 'z': return TEST_OP_STR_ZERO;
+
+                    case 's':
+                        return TEST_OP_FILE_SIZE;
+
+                    case 'S':
+                        return TEST_OP_FILE_SOCK;
+
+                    case 't':
+                        return TEST_OP_FILE_TERM;
+
+                    case 'u':
+                        return TEST_OP_FILE_SUID;
+
+                    case 'w':
+                        return TEST_OP_FILE_W;
+
+                    case 'x':
+                        return TEST_OP_FILE_EXE;
+
+                    case 'v':
+                        return TEST_OP_VAR_DEF;
+
+                    case 'z':
+                        return TEST_OP_STR_ZERO;
                 }
             }
             else
             {
-                if(strcmp(expr, "-ef") == 0) return TEST_OP_FILE_EF;
-                if(strcmp(expr, "-nt") == 0) return TEST_OP_FILE_NT;
-                if(strcmp(expr, "-ot") == 0) return TEST_OP_FILE_OT;
-                if(strcmp(expr, "-eq") == 0) return TEST_OP_EQ;
-                if(strcmp(expr, "-ne") == 0) return TEST_OP_NE;
-                if(strcmp(expr, "-lt") == 0) return TEST_OP_LT;
-                if(strcmp(expr, "-le") == 0) return TEST_OP_LE;
-                if(strcmp(expr, "-gt") == 0) return TEST_OP_GT;
-                if(strcmp(expr, "-ge") == 0) return TEST_OP_GE;
+                if(strcmp(expr, "-ef") == 0)
+                {
+                    return TEST_OP_FILE_EF;
+                }
+                if(strcmp(expr, "-nt") == 0)
+                {
+                    return TEST_OP_FILE_NT;
+                }
+                if(strcmp(expr, "-ot") == 0)
+                {
+                    return TEST_OP_FILE_OT;
+                }
+                if(strcmp(expr, "-eq") == 0)
+                {
+                    return TEST_OP_EQ;
+                }
+                if(strcmp(expr, "-ne") == 0)
+                {
+                    return TEST_OP_NE;
+                }
+                if(strcmp(expr, "-lt") == 0)
+                {
+                    return TEST_OP_LT;
+                }
+                if(strcmp(expr, "-le") == 0)
+                {
+                    return TEST_OP_LE;
+                }
+                if(strcmp(expr, "-gt") == 0)
+                {
+                    return TEST_OP_GT;
+                }
+                if(strcmp(expr, "-ge") == 0)
+                {
+                    return TEST_OP_GE;
+                }
             }
             return NULL;
             
-        case '>': return TEST_OP_STR_GT;
-        case '<': return TEST_OP_STR_LT;
+        case '>':
+            return TEST_OP_STR_GT;
+
+        case '<':
+            return TEST_OP_STR_LT;
 
         case '!':
-            if(expr[1] == '=') return TEST_OP_STR_NE;
+            if(expr[1] == '=')
+            {
+                return TEST_OP_STR_NE;
+            }
             return TEST_OP_NOT;
 
         case '=':
-            if(expr[1] == '=') return TEST_OP_STR_EQ1;
+            if(expr[1] == '=')
+            {
+                return TEST_OP_STR_EQ1;
+            }
             return TEST_OP_STR_EQ2;
             
         case '&':
-            if(expr[1] == '&') return TEST_OP_AND;
+            if(expr[1] == '&')
+            {
+                return TEST_OP_AND;
+            }
             break;
             
         case '|':
-            if(expr[1] == '|') return TEST_OP_OR;
+            if(expr[1] == '|')
+            {
+                return TEST_OP_OR;
+            }
             break;
         
-        case '(': return TEST_OP_LBRACE;
-        case ')': return TEST_OP_RBRACE;
+        case '(':
+            return TEST_OP_LBRACE;
+
+        case ')':
+            return TEST_OP_RBRACE;
     }
     return NULL;
 }
 
+/*
+ * push the operator op on the operator stack.
+ */
 void test_push_opstack(struct test_op_s *op)
 {
     if(test_nopstack > MAXOPSTACK-1)
     {
-        fprintf(stderr, "%s: Operator stack overflow\n", SHELL_NAME);
+        fprintf(stderr, "%s: operator stack overflow\n", SHELL_NAME);
         test_err = 1;
         return;
     }
     test_opstack[test_nopstack++] = op;
 }
 
+
+/*
+ * pop the last operator off the operator stack.
+ */
 struct test_op_s *test_pop_opstack()
 {
     if(!test_nopstack)
     {
-        fprintf(stderr, "%s: Operator stack empty\n", SHELL_NAME);
+        fprintf(stderr, "%s: operator stack empty\n", SHELL_NAME);
         test_err = 1;
         return NULL;
     }
     return test_opstack[--test_nopstack];
 }
 
+
+/*
+ * push the value val on the operands stack.
+ */
 void test_push_stack(char *val)
 {
     if(!val)
@@ -701,6 +1389,10 @@ void test_push_stack(char *val)
     teststack[nteststack++] = val;
 }
 
+
+/*
+ * pop the last operator off the operands stack.
+ */
 char *test_pop_stack()
 {
     if(!nteststack)
@@ -713,30 +1405,52 @@ char *test_pop_stack()
 }
 
 
+/*
+ * perform the shunt operation (see the Wikipedia link on top of this page for
+ * details on what this entails).
+ */
 void test_shunt_op(struct test_op_s *op)
 {
     struct test_op_s *pop;
     test_err = 0;
+    /* operator is an opening brace */
     if(op->op == '(')
     {
         test_push_opstack(op);
         return;
     }
+    /* operator is a closing brace */
     else if(op->op == ')')
     {
         while(test_nopstack > 0 && test_opstack[test_nopstack-1]->op != '(')
         {
             pop = test_pop_opstack();
-            if(test_err) return;
+            if(test_err)
+            {
+                return;
+            }
             char *n1 = test_pop_stack();
-            if(test_err) return;
-            if(pop->unary) test_push_stack(pop->test(n1, 0));
+            if(test_err)
+            {
+                return;
+            }
+            /* check if its unary or binary operator */
+            if(pop->unary)
+            {
+                test_push_stack(pop->test(n1, 0));
+            }
             else
             {
                 char *n2 = test_pop_stack();
-                if(test_err) return;
+                if(test_err)
+                {
+                    return;
+                }
                 test_push_stack(pop->test(n2, n1));
-                if(test_err) return;
+                if(test_err)
+                {
+                    return;
+                }
             }
         }
         if(!(pop = test_pop_opstack()) || pop->op != '(')
@@ -746,23 +1460,39 @@ void test_shunt_op(struct test_op_s *op)
         }
         return;
     }
-
+    /* check for operators with right-associativity */
     if(op->assoc == ASSOC_RIGHT)
     {
         while(test_nopstack && op->prec < test_opstack[test_nopstack-1]->prec)
         {
             pop = test_pop_opstack();
-            if(test_err) return;
+            if(test_err)
+            {
+                return;
+            }
             char *n1 = test_pop_stack();
-            if(test_err) return;
-            if(pop->unary) test_push_stack(pop->test(n1, 0));
+            if(test_err)
+            {
+                return;
+            }
+            /* check if its unary or binary operator */
+            if(pop->unary)
+            {
+                test_push_stack(pop->test(n1, 0));
+            }
             else
             {
                 char *n2 = test_pop_stack();
-                if(test_err) return;
+                if(test_err)
+                {
+                    return;
+                }
                 test_push_stack(pop->test(n2, n1));
             }
-            if(test_err) return;
+            if(test_err)
+            {
+                return;
+            }
         }
     }
     else
@@ -770,17 +1500,29 @@ void test_shunt_op(struct test_op_s *op)
         while(test_nopstack && op->prec <= test_opstack[test_nopstack-1]->prec)
         {
             pop = test_pop_opstack();
-            if(test_err) return;
+            if(test_err)
+            {
+                return;
+            }
             char *n1 = test_pop_stack();
-            if(test_err) return;
+            if(test_err)
+            {
+                return;
+            }
             if(pop->unary) test_push_stack(pop->test(n1, 0));
             else
             {
                 char *n2 = test_pop_stack();
-                if(test_err) return;
+                if(test_err)
+                {
+                    return;
+                }
                 test_push_stack(pop->test(n2, n1));
             }
-            if(test_err) return;
+            if(test_err)
+            {
+                return;
+            }
         }
     }
     test_push_opstack(op);
@@ -788,26 +1530,41 @@ void test_shunt_op(struct test_op_s *op)
 
 
 /*
- * the test (or '[') builtin utility.
+ * the test (or '[') builtin utility (non-POSIX).. used to test conditional expressions.
+ *
+ * returns 0 if all conditions evaluated as true, 1 otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help test` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
 
 int test(int argc, char **argv)
 {
     char   *expr;
     char   *tstart       = NULL;
-    struct  test_op_s startop = { 'X', 0, ASSOC_NONE, 0, 0, NULL };  /* Dummy operator to mark start */
-    struct  test_op_s *op     = NULL;
     int     i = 1;
     int     oldtest = 1;
+    /* dummy operator to mark start */
+    struct  test_op_s startop = { 'X', 0, ASSOC_NONE, 0, 0, NULL };
+    /* current operator being parsed */
+    struct  test_op_s *op     = NULL;
+    /* last operator parsed */
     struct  test_op_s *lastop = &startop;
-    test_nopstack = 0; nteststack = 0; test_err = 0;
+
+    /* empty the stacks */
+    test_nopstack = 0;
+    nteststack = 0;
+
+    /* reset the error flag */
+    test_err = 0;
 
     /* the '[' and '[[' versions of test need closing ']' and ']]' respectively */
     if(strcmp(argv[0], "[") == 0)
     {
         if(strcmp(argv[argc-1], "]"))
         {
-            fprintf(stderr, "%s: missing closing bracket: ']'\r\n", UTILITY);
+            fprintf(stderr, "%s: missing closing bracket: ']'\n", UTILITY);
             return 2;
         }
         argc--;
@@ -816,17 +1573,22 @@ int test(int argc, char **argv)
     {
         if(strcmp(argv[argc-1], "]]"))
         {
-            fprintf(stderr, "%s: missing closing bracket: ']]'\r\n", UTILITY);
+            fprintf(stderr, "%s: missing closing bracket: ']]'\n", UTILITY);
             return 2;
         }
         argc--;
         oldtest = 0;
     }
     
+    /* parse the arguments */
     for( ; i < argc; i++)
     {
         expr = argv[i];
-        while(*expr && isspace(*expr)) expr++;
+        /* skip leading whitespaces */
+        while(*expr && isspace(*expr))
+        {
+            expr++;
+        }
         if(!tstart)
         {
             if((op = test_getop(expr, oldtest)))
@@ -835,7 +1597,10 @@ int test(int argc, char **argv)
                 {
                     if(op->op != '(' && !op->unary)
                     {
-                        if(is_str_op(op)) test_push_stack(test_empty_str);
+                        if(is_str_op(op))
+                        {
+                            test_push_stack(test_empty_str);
+                        }
                         else
                         {
                             fprintf(stderr, "%s: illegal use of binary operator (%c)\n", SHELL_NAME, op->op);
@@ -845,10 +1610,16 @@ int test(int argc, char **argv)
                 }
                 test_err = 0;
                 test_shunt_op(op);
-                if(test_err) return 2;
+                if(test_err)
+                {
+                    return 2;
+                }
                 lastop = op;
             }
-            else tstart = expr;
+            else
+            {
+                tstart = expr;
+            }
         }
         else
         {
@@ -856,55 +1627,88 @@ int test(int argc, char **argv)
             {
                 test_err = 0;
                 test_push_stack(tstart);
-                if(test_err) return 2;
+                if(test_err)
+                {
+                    return 2;
+                }
                 tstart = NULL;
                 test_shunt_op(op);
-                if(test_err) return 2;
+                if(test_err)
+                {
+                    return 2;
+                }
                 lastop = op;
             }
             else
             {
                 test_err = 0;
                 test_push_stack(tstart);
-                if(test_err) return 2;
+                if(test_err)
+                {
+                    return 2;
+                }
                 tstart = NULL;
                 lastop = NULL;
             }
         }
     }
 
+    /* we have one last operand */
     if(tstart)
     {
         test_err = 0;
         if(i == 2)
         {
             test_shunt_op(TEST_OP_STR_NZ);
-            if(test_err) return 2;
+            if(test_err)
+            {
+                return 2;
+            }
         }
         test_push_stack(tstart);
-        if(test_err) return 2;
+        if(test_err)
+        {
+            return 2;
+        }
     }
 
+    /* now pop the operators off the stack and perform each one of them */
     while(test_nopstack)
     {
         test_err = 0;
         op = test_pop_opstack();
-        if(test_err) return 2;
+        if(test_err)
+        {
+            return 2;
+        }
         char *n1 = test_pop_stack();
-        if(test_err) return 2;
-        if(op->unary) test_push_stack(op->test(n1, 0));
+        if(test_err)
+        {
+            return 2;
+        }
+        if(op->unary)
+        {
+            test_push_stack(op->test(n1, 0));
+        }
         else
         {
             char *n2 = test_pop_stack();
-            if(test_err) return 2;
+            if(test_err)
+            {
+                return 2;
+            }
             test_push_stack(op->test(n2, n1));
         }
-        if(test_err) return 2;
+        if(test_err)
+        {
+            return 2;
+        }
     }
 
+    /* at the end, we should have only one value remaining on the operands stack */
     if(nteststack != 1)
     {
-        fprintf(stderr, "%s: Test stack has %d elements after evaluation. Should be 1.\n", SHELL_NAME, nteststack);
+        fprintf(stderr, "%s: test stack has %d elements after evaluation. Should be 1.\n", SHELL_NAME, nteststack);
         return 2;
     }
 

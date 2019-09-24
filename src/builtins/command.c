@@ -29,9 +29,18 @@
 #include "../debug.h"
 
 #define UTILITY         "command"
+
+/* default path to use if $PATH is NULL or undefined */
 char *default_path = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin";
 
 
+/*
+ * follow POSIX's command search and execution, by checking first if the
+ * command to be executed is a special builtin, a function, a regular builtin,
+ * or an external command (in that order).. the first match is executed.
+ * if the command name contains a slash '/', we treat it as the pathname of
+ * the external command we should execute.
+ */
 int search_and_exec(int cargc, char **cargv, char *PATH, int flags)
 {
     int dofork = flag_set(flags, SEARCH_AND_EXEC_DOFORK);
@@ -40,20 +49,20 @@ int search_and_exec(int cargc, char **cargv, char *PATH, int flags)
     /* STEP 1: The command has no slash(es) in its name   */
     if(!strchr(cargv[0], '/'))
     {
-        symtab_stack_push();
         /* STEP 1-A: check for special builtin utilities      */
         if(do_special_builtin(cargc, cargv))
         {
-            free_symtab(symtab_stack_pop());
+            //free_symtab(symtab_stack_pop());
             return 0;
         }
+
         /* STEP 1-B: check for internal functions             */
         /* NOTE: Step 1-B is suppressed under 'command' invocation */
         if(dofunc)
         {
             if(do_function_definition(cargc, cargv))
             {
-                free_symtab(symtab_stack_pop());
+                //free_symtab(symtab_stack_pop());
                 return 0;
             }
         }
@@ -61,31 +70,55 @@ int search_and_exec(int cargc, char **cargv, char *PATH, int flags)
         /* STEP 1-C: check for regular builtin utilities      */
         if(do_regular_builtin(cargc, cargv))
         {
-            free_symtab(symtab_stack_pop());
+            //free_symtab(symtab_stack_pop());
             return 0;
         }
         /* STEP 1-D: checked for in exec_cmd()                */
     }
 
+    /* fork a new child process, if the caller asked for it */
     if(dofork)
+    {
         return fork_command(cargc, cargv, PATH, UTILITY, 0, 0);
+    }
     else
+    {
         return  do_exec_cmd(cargc, cargv, PATH, NULL);
+    }
 }
 
 
+/*
+ * the command builtin utility (POSIX).. used to execute a builtin or external command,
+ * ignoring shell functions declared with the same name.. used also to print information
+ * about the type (and path) of commands, functions and utilities.. returns 0 if the
+ * command was found and executed, non-zero otherwise.
+ * 
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help command` or `command -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
 int command(int argc, char **argv)
 {
     int i;
     int print_path       = 0;
     int print_interp     = 0;
     int use_default_path = 0;
+
+    /* loop on the arguments and parse the options, if any */
     for(i = 1; i < argc; i++)
     { 
+        /* options start with '-' */
         if(argv[i][0] == '-')
         {
             char *p = argv[i];
-            if(strcmp(p, "-") == 0 || strcmp(p, "--") == 0) { i++; break; }
+            /* stop patsing options if we hit special option '-' or '--' */
+            if(strcmp(p, "-") == 0 || strcmp(p, "--") == 0)
+            {
+                i++;
+                break;
+            }
+            /* skip the '-' and parse the options string */
             p++;
             while(*p)
             {
@@ -107,94 +140,124 @@ int command(int argc, char **argv)
                         if(startup_finished && option_set('r'))
                         {
                             /* r-shells can't use this option */
-                            fprintf(stderr, "%s: restricted shells can't use the -p option\r\n", SHELL_NAME);
+                            fprintf(stderr, "%s: restricted shells can't use the -p option\n", SHELL_NAME);
                             return 3;
                         }
                         use_default_path = 1;
                         break;
                         
                     default:
-                        fprintf(stderr, "%s: unknown option: %s\r\n", UTILITY, argv[i]);
+                        fprintf(stderr, "%s: unknown option: %s\n", UTILITY, argv[i]);
                         return 2;
                 }
                 p++;
             }
         }
-        else break;
+        else
+        {
+            /* first argument, stop paring options */
+            break;
+        }
     }
+    
+    /* missing argument(s) */
     if(i >= argc)
     {
-        fprintf(stderr, "%s: missing argument: command name\r\n", UTILITY);
+        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
         return 2;
     }
     
+    /* if the caller provided a path, use it. otherwise use the default path */
     char *PATH = use_default_path ? default_path : NULL;
     
+    /* the -v option was used: print the command's path */
     if(print_path)
     {
-        if(strchr (argv[i], '/'))  { printf("%s\r\n", argv[i]); return 0; }
-        char *alias = __parse_alias(argv[i]);
-        if(alias != argv[i])
+        /* if the command name contains '/', print it as-is */
+        if(strchr(argv[i], '/'))
         {
-            printf("alias %s='%s'\r\n", argv[i], alias);
+            printf("%s\n", argv[i]);
             return 0;
         }
+        /* check if the command name is a defined alias */
+        char *alias = parse_alias(argv[i]);
+        if(alias != argv[i])
+        {
+            printf("alias %s='%s'\n", argv[i], alias);
+            return 0;
+        }
+        /* check if the command name is a shell keyword, function, or builtin */
         if(is_keyword (argv[i]) >= 0 || is_builtin (argv[i]) || is_function(argv[i]))
         {
-            printf("%s\r\n", argv[i]);
+            printf("%s\n", argv[i]);
             return 0;
         }
+        /* search the command name in the executable path */
         char *path = search_path(argv[i], PATH, 1);
         if(!path)
         {
-            printf("%s is unknown\r\n", argv[i]);
+            /* we don't know what this command is */
+            printf("%s is unknown\n", argv[i]);
             return 3;
         }
-        printf("%s\r\n", path);
+        /* print the external command's path */
+        printf("%s\n", path);
         free_malloced_str(path);
         return 0;
     }
     
+    /* the -V option was used: print our interpretation of the command */
     if(print_interp)
     {
+        /* if the command name contains '/', print it as-is */
         if(strchr (argv[i], '/'))
         {
-            printf("%s is %s\r\n", argv[i], argv[i]);
+            printf("%s is %s\n", argv[i], argv[i]);
             return 0;
         }
-        char *alias = __parse_alias(argv[i]);
+        /* check if the command name is a defined alias */
+        char *alias = parse_alias(argv[i]);
         if(alias != argv[i])
         {
-            printf("%s is aliased to '%s'\r\n", argv[i], alias);
+            printf("%s is aliased to '%s'\n", argv[i], alias);
             return 0;
         }
+        /* check if the command name is a shell keyword */
         if(is_keyword (argv[i]) >= 0)
         {
-            printf("%s is a shell keyword\r\n", argv[i]);
+            printf("%s is a shell keyword\n", argv[i]);
             return 0;
         }
+        /* check if the command name is a shell builtin */
         if(is_builtin (argv[i]) )
         {
-            printf("%s is a shell builtin\r\n", argv[i]);
+            printf("%s is a shell builtin\n", argv[i]);
             return 0;
         }
+        /* check if the command name is a shell function */
         if(is_function(argv[i]) )
         {
-            printf("%s is a shell function\r\n", argv[i]);
+            printf("%s is a shell function\n", argv[i]);
             return 0;
         }
+        /* search the command name in the executable path */
         char *path = search_path(argv[i], PATH, 1);
         if(!path)
         {
-            printf("%s is unknown\r\n", argv[i]);
+            /* we don't know what this command is */
+            printf("%s is unknown\n", argv[i]);
             return 3;
         }
-        printf("%s is %s\r\n", argv[i], path);
+        /* print the external command's path */
+        printf("%s is %s\n", argv[i], path);
         free_malloced_str(path);
         return 0;
     }
     
-
+    /*
+     * neither -v nor -V was supplied. run the command using POSIX search and
+     * execution Algorithm.
+     */
     int    cargc = argc-i;
     char **cargv = &argv[i];
     return search_and_exec(cargc, cargv, PATH, SEARCH_AND_EXEC_DOFORK);

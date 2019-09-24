@@ -35,15 +35,33 @@
 /* defined in ../backend/redirect.c */
 int __redirect_do(struct io_file_s *io_files);
 
+/*
+ * the coprocess uses two pipes: one for reading by the coprocess (written to
+ * by the shell), the other for writing by the coprocess (read by the shell).
+ * we save each pipe's file descriptors in the following global arrays.
+ */
 int rfiledes[2] = { -1, -1 };
 int wfiledes[2] = { -1, -1 };
 
 
+/*
+ * the coproc builtin utility (non-POSIX).. used to fork a subshell (coprocess)
+ * which we can assign tasks to. the coprocess runs in the background and we interact
+ * with it using two pipes: one for reading, the other for writing. this utility is
+ * special among the other builtin utilities in that we let it handle its own I/O
+ * redirections, so that the redirections affect the coprocess only.
+ * returns 0 if the coprocess was started successfully, 0 otherwise.
+ * 
+ * see the manpage, or run: `help coproc` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int coproc(int argc, char **argv, struct io_file_s *io_files)
 {
+    /* should have at least one argument */
     if(argc == 1)
     {
-        fprintf(stderr, "%s: missing arguments\r\n", UTILITY);
+        fprintf(stderr, "%s: missing arguments\n", UTILITY);
         return 2;
     }
     
@@ -52,24 +70,35 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
     pid_t pid;
 
     /* close old pipes */
-    if(rfiledes[1] != -1) { close(rfiledes[1]); rfiledes[1] = -1; }
-    if(wfiledes[0] != -1) { close(wfiledes[0]); wfiledes[0] = -1; }
+    if(rfiledes[1] != -1)
+    {
+        close(rfiledes[1]);
+        rfiledes[1] = -1;
+    }
+    if(wfiledes[0] != -1)
+    {
+        close(wfiledes[0]);
+        wfiledes[0] = -1;
+    }
     
     /* create two pipes */
     pipe(rfiledes);
     pipe(wfiledes);
     
+    /* then start the coprocess */
     if((pid = fork_child()) == 0)     /* child process */
     {
         asynchronous_prologue();
         close(0);   /* stdin */
-        dup  (rfiledes[0]);
+        dup  (rfiledes[0]);     /* read from the reading pipe */
         close(1);   /* stdout */
-        dup  (wfiledes[1]);
+        dup  (wfiledes[1]);     /* write to the writing pipe */
+        /* close unused file descriptors */
         close(rfiledes[0]);
         close(rfiledes[1]);
         close(wfiledes[0]);
         close(wfiledes[1]);
+        /* perform any I/O redirections */
         __redirect_do(io_files);
         errno = 0;
         /*
@@ -82,19 +111,28 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
             save_trap("DEBUG" );
             save_trap("RETURN");
         }
-        if(!option_set('E')) save_trap("ERR");
+        if(!option_set('E'))
+        {
+            save_trap("ERR");
+        }
         /*
          * the -e (errexit) option is reset in subshells if inherit_errexit
          * is not set (bash).
          */
-        if(!optionx_set(OPTION_INHERIT_ERREXIT)) set_option('e', 0);
-        
+        if(!optionx_set(OPTION_INHERIT_ERREXIT))
+        {
+            set_option('e', 0);
+        }
+        /* increment the $SUBSHELL variable so we know we're in a subshell */
         inc_subshell_var();
         /* execute the command */
         int res = search_and_exec(argc-1, &argv[1], NULL, SEARCH_AND_EXEC_DOFUNC);
+        /* if we returned, the command was not executed */
         if(errno)
-            fprintf(stderr, "%s: failed to exec '%s': %s\r\n", UTILITY, argv[1], strerror(errno));
-
+        {
+            fprintf(stderr, "%s: failed to exec '%s': %s\n", UTILITY, argv[1], strerror(errno));
+        }
+        /* exit with an appropriate exit code */
         if(errno == ENOEXEC)
         {
             exit(EXIT_ERROR_NOEXEC);
@@ -103,20 +141,23 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
         {
             exit(EXIT_ERROR_NOENT);
         }
-        else exit(res);
+        else
+        {
+            exit(res);
+        }
     }
     else if(pid < 0)            /* error */
     {
-        fprintf(stderr, "%s: failed to fork: %s\r\n", UTILITY, strerror(errno));
+        fprintf(stderr, "%s: failed to fork: %s\n", UTILITY, strerror(errno));
         return 1;
     }
-    else
+    else                        /* parent process */
     {
         /*
          * save the file descriptors to the symtab.
          * TODO: these file descriptors should not be available in subshells.
          */
-        /* $COPROC1, command input , shell output. similar to bash's $COPROC[1] */
+        /* $COPROC1 - command input, shell output. similar to bash's $COPROC[1] */
         sprintf(buf, "%s1", pname);
         struct symtab_entry_s *entry = add_to_symtab(buf);
         sprintf(buf, "%d", rfiledes[1]);
@@ -130,7 +171,7 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
          */
         fcntl(rfiledes[1], F_SETFD, FD_CLOEXEC);
 
-        /* $COPROC0, command output, shell input. similar to bash's $COPROC[0] */
+        /* $COPROC0 - command output, shell input. similar to bash's $COPROC[0] */
         sprintf(buf, "%s0", pname);
         entry = add_to_symtab(buf);
         sprintf(buf, "%d", wfiledes[0]);
@@ -150,7 +191,10 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
         /* $! will be set in add_job() */
         struct job *job = add_job(pid, (pid_t[]){ pid }, 1, cmdstr, 1);
         set_cur_job(job);
-        if(cmdstr) free(cmdstr);
+        if(cmdstr)
+        {
+            free(cmdstr);
+        }
         return 0;
     }
 }

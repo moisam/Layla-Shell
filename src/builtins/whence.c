@@ -29,18 +29,25 @@
 
 
 /*
- * whence is a type/command-like ksh extension with a slightly different
- * set of options than both commands.
+ * the whence builtin utility (non-POSIX).. it is a type/command-like ksh extension
+ * with a slightly different set of options than both commands.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help whence` or `whence -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
+
 int whence(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
     int res = 0, /* verbose = 0, */ skipfunc = 0, print_path = 0, print_all = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "afhpv", &v, 1)) > 0)
     {
         switch(c)
@@ -68,57 +75,71 @@ int whence(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
+    /* missing arguments */
     if(v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: command name\r\n", UTILITY);
+        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
         return 2;
     }
     
+    /* parse the arguments */
     for( ; v < argc; v++)
     {
         char *arg = argv[v];
         if(strchr (arg, '/'))
         {
-            printf("%s is %s\r\n", arg, arg);
+            /* argument contains slashes. treat as a pathname and print as-is */
+            printf("%s is %s\n", arg, arg);
         }
         else
         {
+            /* argument has no slashes. process it */
             if(!print_path)
             {
-                char *alias = __parse_alias(arg);
+                /* check if it is a defined alias */
+                char *alias = parse_alias(arg);
                 if(alias != arg)
                 {
                     printf("%s is aliased to ", arg);
                     purge_quoted_val(alias);
-                    printf("\r\n");
+                    printf("\n");
                     if(!print_all) continue;
                 }
+                /* check if it is a keyword */
                 if(is_keyword (arg) >= 0)
                 {
-                    printf("%s is a shell keyword\r\n", arg);
+                    printf("%s is a shell keyword\n", arg);
                     if(!print_all) continue;
                 }
+                /* check if it is a builtin utility */
                 if(is_builtin (arg))
                 {
-                    printf("%s is a shell builtin\r\n", arg);
+                    printf("%s is a shell builtin\n", arg);
                     if(!print_all) continue;
                 }
+                /* check if it is a defined shell function */
                 if(!skipfunc && is_function(arg))
                 {
-                    printf("%s is a shell function\r\n", arg);
+                    printf("%s is a shell function\n", arg);
                     if(!print_all) continue;
                 }
             }
+            /* now search for an external command with the given name */
             char *path = search_path(arg, NULL, 1);
             if(!path)
             {
-                printf("%s is unknown\r\n", arg);
+                /* path not found */
+                printf("%s is unknown\n", arg);
                 res = 3;
                 continue;
             }
-            printf("%s is %s\r\n", arg, path);
+            /* path found */
+            printf("%s is %s\n", arg, path);
             free_malloced_str(path);
         }
     }

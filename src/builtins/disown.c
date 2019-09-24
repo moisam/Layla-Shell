@@ -29,44 +29,57 @@
 /* defined in ../jobs.c */
 extern struct job __jobs[];
 
-// int disown_all = 0;
-
 void disown_job(struct job *job, int nohup);
 
 
+/*
+ * the disown builtin utility (non-POSIX).. used to disown a job, so it is not sent
+ * a SIGHUP when the shell exits.
+ * returns 0 on success, non-zero otherwise.
+ * 
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help disown` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int disown(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     struct job *job;
     int v = 1, c;
     int all_jobs     = 0;
     int running_only = 0;
     int stopped_only = 0;
     int nohup        = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "ahrsv", &v, 1)) > 0)
     {
         switch(c)
         {
+            /* -h : keep job in the jobs list */
             case 'h':
                 nohup = 1;
                 break;
                 
+            /* -v : print shell version */
             case 'v':
                 printf("%s", shell_ver);
                 return 0;
                 
+            /* -a : disown all jobs */
             case 'a':
                 all_jobs = 1;
                 break;
                 
+            /* -r : disown only running jobs */
             case 'r':
                 running_only = 1;
                 break;
                 
+            /* -s : disown only stopped jobs */
             case 's':
                 stopped_only = 1;
                 break;
@@ -90,7 +103,7 @@ int disown(int argc, char **argv)
             job = get_job_by_jobid(get_jobid("%%"));
             if(!job)
             {
-                fprintf(stderr, "%s: unknown job: %%%%\r\n", UTILITY);
+                fprintf(stderr, "%s: unknown job: %%%%\n", UTILITY);
                 return 1;
             }
             disown_job(job, nohup);
@@ -101,14 +114,22 @@ int disown(int argc, char **argv)
         {
             if(job->job_num != 0)
             {
-                if(running_only && NOT_RUNNING(job->status)) continue;
-                if(stopped_only && !WIFSTOPPED(job->status)) continue;
+                /* disown only running jobs */
+                if(running_only && NOT_RUNNING(job->status))
+                {
+                    continue;
+                }
+                /* disown only stopped jobs */
+                if(stopped_only && !WIFSTOPPED(job->status))
+                {
+                    continue;
+                }
                 disown_job(job, nohup);
             }
         }
         return 0;
     }
-
+    /* process the arguments */
     for( ; v < argc; v++)
     {
         /* first try POSIX-style job ids */
@@ -118,23 +139,36 @@ int disown(int argc, char **argv)
         {
             char *strend;
             long pgid = strtol(argv[v], &strend, 10);
-            if(strend != argv[v]) job = get_job_by_any_pid(pgid);
+            if(strend != argv[v])
+            {
+                job = get_job_by_any_pid(pgid);
+            }
         }
         /* still nothing? */
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\r\n", UTILITY, argv[v]);
+            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
             return 1;
         }
-
-        if(running_only && NOT_RUNNING(job->status)) continue;
-        if(stopped_only && !WIFSTOPPED(job->status)) continue;
+        /* disown only running jobs */
+        if(running_only && NOT_RUNNING(job->status))
+        {
+            continue;
+        }
+        /* disown only stopped jobs */
+        if(stopped_only && !WIFSTOPPED(job->status))
+        {
+            continue;
+        }
         disown_job(job, nohup);
     }
     return 1;
 }
 
 
+/*
+ * disown the given job.
+ */
 void disown_job(struct job *job, int nohup)
 {
     if(nohup)

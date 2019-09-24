@@ -34,34 +34,25 @@
 #define UTILITY             "export"
 
 
+/*
+ * return 1 if c is a capital letter, 0 otherwise.
+ */
 int is_capital(char c)
 {
   if(c >= 'A' && c <= 'Z') return 1;
   return 0;
 }
 
-int is_legitimate(char c)
-{
-  if(c >= 'A' && c <= 'Z') return 1;
-  if(c >= 'a' && c <= 'z') return 1;
-  if(c == '_') return 1;
-  return 0;
-}
-
-int is_shell_var(char *var)
-{
-    struct symtab_entry_s *entry = get_symtab_entry(var);
-    if(entry) return 1;
-    return -1;
-}
 
 /*
  * find the proper quoting character for the given string value.
  * then print the quoted string to stdout.
- * used by export, readonly and trap utilities.
+ *
+ * this function is called by the export, readonly and trap utilities.
  */
 void purge_quoted_val(char *val)
 {
+    /* null string */
     if(!val)
     {
         printf("\"\"");
@@ -78,6 +69,8 @@ void purge_quoted_val(char *val)
             case  '$':
             case  '"':
                 putchar('\\');
+                putchar(*v++);
+                break;
 
             default:
                 putchar(*v++);
@@ -87,20 +80,37 @@ void purge_quoted_val(char *val)
     putchar('"');
 }
 
+
+/*
+ * print the name=val string, preceded by the prefix word, which is
+ * usually export, readonly or trap.
+ */
 void purge_quoted(char *prefix, char *name, char *val)
 {
-    if(!val) printf("%s %s\r\n", prefix, name);
+    if(!val)
+    {
+        /* no val, print only the name */
+        printf("%s %s\n", prefix, name);
+    }
     else
     {
+        /* print the name=val string */
         printf("%s %s=", prefix, name);
         purge_quoted_val(val);
-        printf("\r\n");
+        printf("\n");
     }
 }
 
 
+/*
+ * print all the exported variables and/or functions.
+ */
 void purge_exports(struct symtab_s *symtab)
-{    
+{
+    /* use an alpha list to sort variables alphabetically */
+    struct alpha_list_s list;
+    init_alpha_list(&list);
+
 #ifdef USE_HASH_TABLES
     
     if(symtab->used)
@@ -119,7 +129,26 @@ void purge_exports(struct symtab_s *symtab)
         
             while(entry)
             {
-                purge_quoted((entry->val_type == SYM_FUNC) ? "declare -x -f" : "export", entry->name, entry->val);
+                char *prefix = (entry->val_type == SYM_FUNC) ? "declare -x -f" : "export";
+                char *str = NULL;
+                if(entry->val == NULL)
+                {
+                    str = alpha_list_make_str("%s %s", prefix, entry->name);
+                }
+                else
+                {
+                    char *val = quote_val(entry->val, 1);
+                    if(val)
+                    {
+                        str = alpha_list_make_str("%s %s=%s", prefix, entry->name, val);
+                        free(val);
+                    }
+                    else
+                    {
+                        str = alpha_list_make_str("%s %s=", prefix, entry->name);
+                    }
+                }
+                add_to_alpha_list(&list, str);
                 entry = entry->next;
             }
     
@@ -129,20 +158,44 @@ void purge_exports(struct symtab_s *symtab)
     }
         
 #endif
+
+    print_alpha_list(&list);
+    free_alpha_list(&list);
 }
 
 
+/*
+ * the export builtin utility (POSIX).. exports variables and functions so that they
+ * are accessible from the environment of invoked commands and subshells.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help export` or `export -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int export(int argc, char *argv[])
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c, unexport = 0;
-    int funcs = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    int funcs = 0;      /* if set, work on the functions table */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hfvpn", &v, 1)) > 0)
     {
+        /*
+         * when in --posix mode, we recognize only the options defined by POSIX: -p.
+         */
+        if(option_set('P') && c != 'p')
+        {
+            fprintf(stderr, "%s: option -%c unrecognized in --posix mode\n", UTILITY, c);
+            c = -1;
+            break;
+        }
+        /* parse the option */
         switch(c)
         {
             case 'h':
@@ -153,39 +206,64 @@ int export(int argc, char *argv[])
                 printf("%s", shell_ver);
                 return 0;
                 
+            /* -p : print the list of exported functions or variables and return */
             case 'p':
-                if(funcs) purge_exports(func_table);
-                else      purge_exports(get_global_symtab());
+                if(funcs)
+                {
+                    purge_exports(func_table);
+                }
+                else
+                {
+                    purge_exports(get_global_symtab());
+                }
                 return 0;
                 
+            /* -n: unexport a function or variable */
             case 'n':
                 unexport = 1;
                 break;
                 
+            /* -f: treat arguments as function (not variable) names */
             case 'f':
                 funcs = 1;
                 break;
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
+    /* no arguments. print all the exports and return */
     if(v >= argc)
     {
-        if(funcs) purge_exports(func_table);
-        else      purge_exports(get_global_symtab());
+        if(funcs)
+        {
+            purge_exports(func_table);
+        }
+        else
+        {
+            purge_exports(get_global_symtab());
+        }
         return 0;
     }
     
+    /* process the argument list */
     int res = 0;
     int flags = unexport ? 0 : FLAG_EXPORT;
     struct symtab_s *globsymtab = get_global_symtab();
     for( ; v < argc; v++)
     {
         char *arg = argv[v];
+        /* check if arg contains an equal sign */
         char *equals  = strchr(arg, '=');
-        //char *val     = equals ? equals+1 : NULL;
-        int  name_len = equals ? (equals-arg) : strlen(arg);
+        /*
+         *  get the variable/function name.. if there is an equal sign, the
+         *  name is the part before the equal sign, otherwise it is the whole
+         *  string.
+         */
+        size_t name_len = equals ? (size_t)(equals-arg) : strlen(arg);
         char name_buf[name_len+1];
         strncpy(name_buf, arg, name_len);
         name_buf[name_len] = '\0';
@@ -193,14 +271,29 @@ int export(int argc, char *argv[])
         {
             /* remove the export flag if -n option was supplied */
             struct symtab_entry_s *entry = NULL;
-            if(funcs) entry = get_func(name_buf);
-            else      entry = __do_lookup(name_buf, globsymtab);
-            if(entry) entry->flags &= ~FLAG_EXPORT;
+            if(funcs)
+            {
+                /* search for name in the functions table */
+                entry = get_func(name_buf);
+            }
+            else
+            {
+                /* search for name in the global symbol table */
+                entry = __do_lookup(name_buf, globsymtab);
+            }
+            /* unexport the entry */
+            if(entry)
+            {
+                entry->flags &= ~FLAG_EXPORT;
+            }
         }
         else
         {
+            /* the -n option is not supplied.. export name */
+            /* search for name in the functions table */
             if(funcs)
             {
+                /* can't define functions this way */
                 if(equals)
                 {
                     fprintf(stderr, "%s: cannot use the '-f' option to define functions\n", UTILITY);
@@ -211,21 +304,41 @@ int export(int argc, char *argv[])
                     struct symtab_entry_s *entry = get_func(name_buf);
                     if(!entry)
                     {
+                        /* can't export an undefined function */
                         fprintf(stderr, "%s: unknown function name: %s\n", UTILITY, name_buf);
                         res = 2;
                     }
-                    else entry->flags |= FLAG_EXPORT;
+                    else
+                    {
+                        /* export the function */
+                        entry->flags |= FLAG_EXPORT;
+                    }
                 }
             }
-            else if(do_declare_var(arg, 1, flags, 0, SPECIAL_BUILTIN_EXPORT) != 0) res = 1;
+            /* name is a variable */
+            else if(do_declare_var(arg, 1, flags, 0, SPECIAL_BUILTIN_EXPORT) != 0)
+            {
+                res = 1;
+            }
         }
     }
     return res;
 }
 
+
+/*
+ * export the contents of the given symbol table to the enviroment of a newly
+ * forked process.. we export only the variables and functions that have the
+ * export flag on, or those which are declared locally (if the command is run
+ * from inside a function), or variables declared as part of the command prefix.
+ */
 void do_export_table(struct symtab_s *symtab)
 {
-    if(!symtab) return;
+    /* sanity check */
+    if(!symtab)
+    {
+        return;
+    }
     
 #ifdef USE_HASH_TABLES
     
@@ -258,16 +371,20 @@ void do_export_table(struct symtab_s *symtab)
                 {
                     if(!entry->val)
                     {
+                        /* entry is an exported function */
                         if(entry->val_type == SYM_FUNC)
                         {
                             char *f = cmd_nodetree_to_str(entry->func_body);
                             if(f)
                             {
                                 char *s = malloc(strlen(f)+10);
-                                if(!s) setenv(entry->name, "", 1);
+                                if(!s)
+                                {
+                                    setenv(entry->name, "", 1);
+                                }
                                 else
                                 {
-                                    sprintf(s, "() {\r\n%s\r\n}", f);
+                                    sprintf(s, "() {\n%s\n}", f);
                                     setenv(entry->name, s, 1);
                                     //exit_gracefully(0, 0);
                                     free(s);
@@ -275,10 +392,19 @@ void do_export_table(struct symtab_s *symtab)
                                 free(f);
                             }
                         }
-                        else setenv(entry->name, "", 1);
+                        else
+                        {
+                            /* function has an empty body */
+                            setenv(entry->name, "", 1);
+                        }
                     }
-                    else setenv(entry->name, entry->val, 1);
+                    else
+                    {
+                        /* entry is an exported variable */
+                        setenv(entry->name, entry->val, 1);
+                    }
                 }
+                /* check the next entry */
                 entry = entry->next;
             }
                 
@@ -290,6 +416,7 @@ void do_export_table(struct symtab_s *symtab)
 #endif
 
 }
+
 
 /*
  * this function is called after a new command process is forked,

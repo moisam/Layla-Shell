@@ -29,50 +29,78 @@
 #define UTILITY         "notify"
 
 
+/*
+ * the notify builtin utility (non-POSIX).. prints the status of running jobs.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help notify` or `notify -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int notify(int argc, char **argv)
 {
+    /* job control must be on */
     if(!option_set('m'))
     {
-        fprintf(stderr, "%s: job control is not enabled\r\n", UTILITY);
+        fprintf(stderr, "%s: job control is not enabled\n", UTILITY);
         return 2;
     }
     
     struct job *job;
+    /* called with no job arguments. use the current job */
     if(argc == 1)
     {
         job = get_job_by_jobid(get_jobid("%%"));
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %%%%\r\n", UTILITY);
+            fprintf(stderr, "%s: unknown job: %%%%\n", UTILITY);
             return 3;
         }
+        /* mark the job as notified */
         job->flags |= JOB_FLAG_NOTIFY;
         return 0;
     }
 
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /************************************
+     * process the options and arguments
+     ************************************/
     while((c = parse_args(argc, argv, "hv", &v, 0)) > 0)
     {
-        if     (c == 'h') { print_help(argv[0], REGULAR_BUILTIN_NOTIFY, 1, 0); }
-        else if(c == 'v') { printf("%s", shell_ver)     ; }
+        if     (c == 'h')
+        {
+            print_help(argv[0], REGULAR_BUILTIN_NOTIFY, 1, 0);
+        }
+        else if(c == 'v')
+        {
+            printf("%s", shell_ver);
+        }
     }
     /* unknown option */
-    if(c == -1) return 1;
-    if(v >= argc) return 0;
+    if(c == -1)
+    {
+        return 1;
+    }
+
+    /* no job arguments */
+    if(v >= argc)
+    {
+        return 0;
+    }
     
     for( ; v < argc; v++)
     {
         job = get_job_by_jobid(get_jobid(argv[v]));
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\r\n", UTILITY, argv[v]);
+            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
             return 3;
         }
+        /* mark the job as notified */
         job->flags |= JOB_FLAG_NOTIFY;
     }
     return 0;

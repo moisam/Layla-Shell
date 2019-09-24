@@ -25,14 +25,25 @@
 
 #define UTILITY             "local"
 
+
+/*
+ * the local builtin utility (non-POSIX).. used to declare local variables.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help local` or `local -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int local(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hv", &v, 1)) > 0)
     {
         switch(c)
@@ -47,8 +58,12 @@ int local(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
+    /* no arguments to process */
     if(v >= argc)
     {
         return 0;
@@ -67,7 +82,7 @@ int local(int argc, char **argv)
     struct symtab_s *symtab = symtab_stack_pop();
     if(get_local_symtab()->level == 0)
     {
-        fprintf(stderr, "%s: cannot declare local variables at the global scope\r\n", UTILITY);
+        fprintf(stderr, "%s: cannot declare local variables at the global scope\n", UTILITY);
         symtab_stack_push(symtab);
         return 2;
     }
@@ -76,7 +91,9 @@ int local(int argc, char **argv)
     for( ; v < argc; v++)
     {
         if(do_declare_var(argv[v], 0, FLAG_LOCAL, 0, SPECIAL_BUILTIN_LOCAL) != 0)
+        {
             res = 1;
+        }
     }  
     symtab_stack_push(symtab);
     return res;

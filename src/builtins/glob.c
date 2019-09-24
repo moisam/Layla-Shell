@@ -34,17 +34,39 @@
 #define UTILITY             "glob"
 
 
+/*
+ * the glob builtin utility (non-POSIX).. prints its arguments list in a way similar
+ * to what echo does, except that glob null-terminates each argument.
+ *
+ * returns 0.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help glob` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int __glob(int argc, char **argv)
 {
+    /*
+     * in bash, shopt option 'xpg_echo' is used to indicate whether escape
+     * sequences are enabled by echo by default.. this behavior can be overriden
+     * by use of the -e and -E options (see below).
+     */
     int v, allow_escaped = optionx_set(OPTION_XPG_ECHO);
     char *p;
-    
-    for(v = 1; v < argc; v++)
+    /* process options and arguments */
+    for( ; v < argc; v++)
     { 
+        /* options start with '-' */
         if(argv[v][0] == '-')
         {
             p = argv[v]+1;
             int op = 1;
+            /*
+             * check the validity of the options string.. we only accept
+             * three options: e, n and E.. if the string contains any other
+             * letter, we treat it as an argument to be printed, not an option.
+             */
             while(*p)
             {
                 if(*p != 'e' && *p != 'n' && *p != 'E')
@@ -54,17 +76,22 @@ int __glob(int argc, char **argv)
                 }
                 p++;
             }
-            if(!op) break;
-            
+            if(!op)
+            {
+                break;
+            }
+            /* now process the options */
             p = argv[v]+1;
             while(*p)
             {
                 switch(*p)
                 {
+                    /* -e: allow escape characters (see the manpage for the details) */
                     case 'e':
                         allow_escaped = 1;
                         break;
                         
+                    /* -E: don't allow escape characters (see the manpage for the details) */
                     case 'E':
                         allow_escaped = 0;
                         break;

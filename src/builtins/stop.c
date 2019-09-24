@@ -32,24 +32,33 @@
 
 
 /*
+ * the stop builtin utility (non-POSIX).. used to stop background jobs.
+ *
  * the stop utility is a tcsh non-POSIX extension. bash doesn't have it.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help stop` or `stop -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
 
 int stop(int argc, char **argv)
 {
+    /* job control must be on */
     if(!option_set('m'))
     {
-        fprintf(stderr, "%s: job control is not enabled\r\n", UTILITY);
+        fprintf(stderr, "%s: job control is not enabled\n", UTILITY);
         return 2;
     }
     
-    /****************************
-     * process the arguments
-     ****************************/
     struct job *job;
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hv", &v, 0)) > 0)
     {
         switch(c)
@@ -64,14 +73,19 @@ int stop(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 1;
+    if(c == -1)
+    {
+        return 1;
+    }
 
+    /* missing job argument */
     if(v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: job id\r\n", UTILITY);
+        fprintf(stderr, "%s: missing argument: job id\n", UTILITY);
         return 2;
     }
     
+    /* process the job arguments */
     c = 0;
     for( ; v < argc; v++)
     {
@@ -82,18 +96,21 @@ int stop(int argc, char **argv)
         {
             char *strend;
             long pgid = strtol(argv[v], &strend, 10);
-            if(strend != argv[v]) job = get_job_by_any_pid(pgid);
+            if(strend != argv[v])
+            {
+                job = get_job_by_any_pid(pgid);
+            }
         }
         /* still nothing? */
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\r\n", UTILITY, argv[v]);
+            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
             return 3;
         }
         /* make sure it is a background job */
         if(flag_set(job->flags, JOB_FLAG_FORGROUND))
         {
-            fprintf(stderr, "%s: not a background job: %s\r\n", UTILITY, argv[v]);
+            fprintf(stderr, "%s: not a background job: %s\n", UTILITY, argv[v]);
             c = 3;
             continue;
         }
@@ -106,8 +123,8 @@ int stop(int argc, char **argv)
         kill(pid, SIGCONT);
         if(kill(pid, SIGSTOP) != 0)
         {
-                fprintf(stderr, "%s: failed to send signal %s to process %d: %s\r\n", 
-                        UTILITY, "SIGSTOP", pid, strerror(errno));
+            fprintf(stderr, "%s: failed to send signal %s to process %d: %s\n",
+                    UTILITY, "SIGSTOP", pid, strerror(errno));
             c = 3;
         }
     }

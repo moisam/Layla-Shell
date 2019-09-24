@@ -25,20 +25,31 @@
 
 int return_set = 0;
 
+
+/*
+ * the return builtin utility (non-POSIX).. used to return from functions and
+ * dot scripts.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help return` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int __return(int argc, char **argv)
 {
     /*
-     * NOTE: if there are more than two args, we will just ignore the extra ones.
+     * NOTE: if we are not running in --posix mode and there are more than two args,
+     *       we will just ignore the extra ones.
      */
     
-    /*
-    if(argc > 2)
+    if(option_set('P') && argc > 2)
     {
-        fprintf(stderr, "return: too many arguments\r\n");
+        fprintf(stderr, "return: too many arguments\n");
         return_set = 1;
         return 2;
     }
-    */
 
     int res = 0;
     if(argc > 1)
@@ -47,12 +58,21 @@ int __return(int argc, char **argv)
         res = strtol(argv[1], &strend, 10);
         if(strend == argv[1])
         {
-            fprintf(stderr, "return: invalid return code: %s\r\n", argv[1]);
+            fprintf(stderr, "return: invalid return code: %s\n", argv[1]);
             res = 2;
         }
-        else res &= 0xff;
+        else
+        {
+            res &= 0xff;
+        }
     }
-    else res = exit_status;
+    else
+    {
+        res = exit_status;
+    }
+    /* POSIX says we should set $? to the return value */
+    set_exit_status(res, 0);
+    /* set the return flag so the other functions will know we've encountered return */
     return_set = 1;
     return res;
 }

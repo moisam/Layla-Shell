@@ -33,7 +33,7 @@
 char *rlim_option(char *name);
 
 /* 
- * the list of all ulimit resource limit options. if any resources are
+ * the list of all ulimit resource limit options.. if any resources are
  * added/removed in ulimit, they should be updated here also.
  */
 static char *all_rlim[] =
@@ -43,6 +43,14 @@ static char *all_rlim[] =
 };
 
 
+/*
+ * set all rlimit to 'unlimited'.. if 'ishard' is non-zero, the hard limits
+ * are removed, otherwise the soft limits are removed.. if 'ignore_err' is
+ * zero, the function stops at the first error, otherwise it tries to remove
+ * all limits.
+ *
+ * returns 0 on success, non-zero otherwise.
+ */
 int unlimit_all(int ishard, int ignore_err)
 {
     int j, i = sizeof(all_rlim)/sizeof(char *);
@@ -53,25 +61,37 @@ int unlimit_all(int ishard, int ignore_err)
     {
         argv[2] = all_rlim[i];
         j = __ulimit(4, argv);
-        if(j && !ignore_err) break;
+        if(j && !ignore_err)
+        {
+            break;
+        }
     }
     return j;
 }
 
 
 /*
+ * the unlimit builtin utility (non-POSIX).. used to set rlimits to unlimited (don't
+ * confuse this with ulimit).
+ *
  * the unlimit utility is a tcsh non-POSIX extension. bash doesn't have it.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help unlimit` or `unlimit -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
 
 int unlimit(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
     int ignore_err = 0, ishard = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hvHfSa", &v, 0)) > 0)
     {
         switch(c)
@@ -93,6 +113,7 @@ int unlimit(int argc, char **argv)
                 ishard = 1;
                 break;
                 
+            /* remove soft limits */
             case 'S':
                 ishard = 0;
                 break;
@@ -105,12 +126,14 @@ int unlimit(int argc, char **argv)
     /* we accept unknown options, as they might be ulimit options passed to us */
     //if(c == -1) return 2;
 
+    /* missing arguments */
     if(v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: resource name\r\n", UTILITY);
+        fprintf(stderr, "%s: missing argument: resource name\n", UTILITY);
         return 2;
     }
-    
+
+    /* process the arguments */
     char *op = ishard ? "-H" : "-S";
     c = 0;
     for( ; v < argc; v++)
@@ -118,26 +141,38 @@ int unlimit(int argc, char **argv)
         char *op2 = rlim_option(argv[v]);
         if(!op2)
         {
-            fprintf(stderr, "%s: unknown resource name: %s\r\n", UTILITY, argv[v]);
-            if(ignore_err) continue;
-            else return 2;
+            fprintf(stderr, "%s: unknown resource name: %s\n", UTILITY, argv[v]);
+            if(ignore_err)
+            {
+                continue;
+            }
+            else
+            {
+                return 2;
+            }
         }
         
-        if(op2[1] == 'a') c = unlimit_all(ishard, ignore_err);
+        if(op2[1] == 'a')
+        {
+            c = unlimit_all(ishard, ignore_err);
+        }
         else
         {
             char *argv2[] = { "ulimit", op, op2, "unlimited", NULL };
             c = __ulimit(4, argv2);
         }
-        if(c && !ignore_err) return 2;
+        if(c && !ignore_err)
+        {
+            return 2;
+        }
     }
     return c;
 }
 
+
 /*
  * get the ulimit utility option corresponding to the given resource name.
  */
-
 char *rlim_option(char *name)
 {
     if(strcmp(name, "core"    ) == 0 || strcmp(name, "-c") == 0) return "-c";

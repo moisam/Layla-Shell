@@ -37,25 +37,40 @@ extern char **environ;
 #define UTILITY             "unsetenv"
 
 
+/*
+ * when we unset the value of an environment variable, we unset
+ * the value of the corresponding shell variable too.
+ */
 static inline void unset_entry(char *name)
 {
     struct symtab_entry_s *entry = get_symtab_entry(name);
-    if(name) symtab_entry_setval(entry, NULL);
+    if(name)
+    {
+        symtab_entry_setval(entry, NULL);
+    }
 }
 
 
 /*
+ * the unsetenv builtin utility (non-POSIX).. used to remove environment variables.
+ *
  * the unsetenv utility is a tcsh non-POSIX extension. bash doesn't have it.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help unsetenv` or `unsetenv -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
 
 int __unsetenv(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hv", &v, 1)) > 0)
     {
         switch(c)
@@ -70,7 +85,10 @@ int __unsetenv(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
     if(v >= argc)
     {

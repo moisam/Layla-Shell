@@ -36,29 +36,45 @@ static   struct tms en_cpu;
 long int CLK_TCK = 60;
 double   st_time;
 
+/*
+ * start the shell internal clock.. called on shell startup.
+ */
 void start_clock()
 {
     CLK_TCK = sysconf(_SC_CLK_TCK);
     /* can't do without the clock */
     if(CLK_TCK <= 0)
     {
-        fprintf(stderr, "%s: failed to init internal clock\r\n", UTILITY);
+        fprintf(stderr, "%s: failed to init internal clock\n", UTILITY);
         exit(EXIT_FAILURE);
     }
     st_time = get_cur_time();
 }
 
+/*
+ * the times builtin utility (non-POSIX).. prints the process usage times for the
+ * shell and its children.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help times` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int __times(int argc, char *argv[] __attribute__((unused)))
 {
+    /* we accept no arguments */
     if(argc > 1)
     {
-        fprintf(stderr, "%s: should be called with no arguments\r\n", UTILITY);
+        fprintf(stderr, "%s: should be called with no arguments\n", UTILITY);
         return 1;
     }
+    /* get the usage times */
     en_time = times(&en_cpu);
     if(en_time == -1)
     {
-        fprintf(stderr, "%s: failed to read time: %s\r\n", UTILITY, strerror(errno));
+        fprintf(stderr, "%s: failed to read time: %s\n", UTILITY, strerror(errno));
         return 1;
     }
     double utime   = ((double)en_cpu.tms_utime )/CLK_TCK;
@@ -70,7 +86,7 @@ int __times(int argc, char *argv[] __attribute__((unused)))
     int    cumins  = cutime/60; cutime -= (cumins*60);
     int    csmins  = cstime/60; cstime -= (csmins*60);
 
-    printf("%dm%.2fs %dm%.2fs\r\n%dm%.2fs %dm%.2fs\r\n",
+    printf("%dm%.2fs %dm%.2fs\n%dm%.2fs %dm%.2fs\n",
            umins , utime , smins , stime ,
            cumins, cutime, csmins, cstime);
     return 0;

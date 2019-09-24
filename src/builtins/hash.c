@@ -26,41 +26,80 @@
 
 #define UTILITY             "hash"
 
+/*
+ * this is the hashtable where we store the names of executable utilities and
+ * their full pathnames, so that we can execute these utilities without having
+ * to search through $PATH every time the utility is invoked.
+ */
 struct hashtab_s *utility_hashes = NULL;
 
+/* defined below */
 int rehash_all();
 
 /* defined in ../strbuf.c */
 char *__get_malloced_str(char *str);
 
 
+/*
+ * initialize the utility hashtable.
+ */
 void init_utility_hashtable()
 {
     utility_hashes = new_hashtable();
 }
 
+
+/*
+ * remember a utility for later invocation by hashing its name
+ * and adding its path to the utility hashtable.. when we call the
+ * utility later on, we don't need to go through $PATH to find the
+ * utility, we just need to retrieve its path from the hashtable.
+ *
+ * returns 1 on success, 0 on failure.
+ */
 int hash_utility(char *utility, char *path)
 {
-    if(!utility || !path) return 0;
-    if(!utility_hashes)
+    /* sanity checks */
+    if(!utility || !path || !utility_hashes)
     {
-        //fprintf(stderr, "%s: error reading utility hash table\n", UTILITY);
         return 0;
     }
+    /* hash the utility */
     return add_hash_item(utility_hashes, utility, path) ? 1 : 0;
 }
 
+
+/*
+ * remove a utility from the hashtable, so that when we call it again,
+ * we will need to go through $PATH in order to find the utility's path.
+ */
 void unhash_utility(char *utility)
 {
-    if(!utility || !utility_hashes) return;
+    if(!utility || !utility_hashes)
+    {
+        return;
+    }
     rem_hash_item(utility_hashes, utility);
 }
 
+
+/*
+ * search for a utility in the hashtable and return its path.
+ *
+ * returns the path of the utility on success, NULL if the utility is
+ * not found in the hashtable.
+ */
 char *get_hashed_path(char *utility)
 {
-    if(!utility || !utility_hashes) return NULL;
+    if(!utility || !utility_hashes)
+    {
+        return NULL;
+    }
     struct hashitem_s *entry = get_hash_item(utility_hashes, utility);
-    if(!entry) return NULL;
+    if(!entry)
+    {
+        return NULL;
+    }
     return entry->val;
 }
 
@@ -69,68 +108,87 @@ char *get_hashed_path(char *utility)
 do {                                                    \
     if(startup_finished && option_set('r'))             \
     {                                                   \
-        fprintf(stderr, "%s: %s\r\n", UTILITY, (msg));  \
+        fprintf(stderr, "%s: %s\n", UTILITY, (msg));  \
         return 2;                                       \
     }                                                   \
 } while(0)
 
 
+/*
+ * the hash builtin utility (POSIX).. used to store the names and pathnames
+ * of invoked utilities, so that the shell remembers where the utilities are and
+ * doesn't have to go through $PATH in order to find a utility.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help hash` or `hash -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int hash(int argc, char **argv)
 {
+    /* no arguments or options. print the hashed utilities and return */
     if(argc == 1)
     {
         dump_hashtable(utility_hashes, NULL);
         return 0;
     }
     int res = 0;
-    /****************************
-     * process the arguments
-     ****************************/
     int   v = 1, c, unhash = 0, usepath = 0;
     char *path = NULL;
     int   pathlen = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "ahvrp:dl", &v, 1)) > 0)
     {
         switch(c)
         {
             /*
-             * tcsh has a rehash utility that rehashes all contents of executable dirs in path.
-             * additionally, it flushes the cache of home directories built by tilde expansion.
+             * tcsh has a 'rehash' utility that rehashes all contents of executable dirs in path..
+             * additionally, it flushes the cache of home directories built by tilde expansion..
              * this flag does something similar: it forces us to re-search and re-hash all of 
-             * the currently hashed utilities. we don't rehash all executable files as there would
+             * the currently hashed utilities.. we don't rehash all executable files as there would
              * probably be thousands of them.
              */
             case 'a':
                 return rehash_all();
                 
+            /* -h prints help */
             case 'h':
                 print_help(argv[0], REGULAR_BUILTIN_HASH, 1, 0);
                 return 0;
                 
+            /* -v prints shell ver */
             case 'v':
                 printf("%s", shell_ver);
                 return 0;
                 
+            /* -r removes all hashed utilities from the table */
             case 'r':
                 rem_all_items(utility_hashes, 0);
                 return 0;
                 
+            /* -l prints the contents of the utilities hashtable */
             case 'l':
                 dump_hashtable(utility_hashes, NULL);
                 return 0;
                 
+            /* -d unhashes the upcoming arguments */
             case 'd':
                 unhash = 1;
                 break;
                 
+            /* -p provides a path to use instead of $PATH */
             case 'p':
                 usepath = 1;
                 path = __optarg;
                 if(!path || path == INVALID_OPTARG)
                 {
-                    fprintf(stderr, "%s: missing argument to option -%c\r\n", UTILITY, c);
+                    fprintf(stderr, "%s: missing argument to option -%c\n", UTILITY, c);
                     return 2;
                 }
                 /*
@@ -144,30 +202,44 @@ int hash(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
     
+    /* no arguments. print the hashed utilities */
     if(v >= argc)
     {
         dump_hashtable(utility_hashes, NULL);
         return 0;
     }
 
+    /* process the arguments */
     for( ; v < argc; v++)
     { 
         char *arg = argv[v];
+        /* unhash utility */
         if(unhash)
         {
             unhash_utility(arg);
         }
+        /* hash utility using the given path */
         else if(usepath)
         {
             char cmd[pathlen+strlen(arg)+2];    /* 2 for '\0' and possible '/' */
-            if(path[pathlen-1] == '/') sprintf(cmd, "%s%s" , path, arg);
-            else                       sprintf(cmd, "%s/%s", path, arg);
+            if(path[pathlen-1] == '/')
+            {
+                sprintf(cmd, "%s%s" , path, arg);
+            }
+            else
+            {
+                sprintf(cmd, "%s/%s", path, arg);
+            }
+            /* check for a restricted shell (can't hash in r-shells) */
             RESTRICTED_SHELL_NOHASH("can't use the hash command: restricted shell");
             if(!hash_utility(arg, cmd))
             {
-                fprintf(stderr, "%s: failed to hash utility '%s'\r\n", SHELL_NAME, arg);
+                fprintf(stderr, "%s: failed to hash utility '%s'\n", SHELL_NAME, arg);
                 res = 1;
             }
         }
@@ -177,15 +249,22 @@ int hash(int argc, char **argv)
             char *p = search_path(arg, NULL, 1);
             if(!p)
             {
-                fprintf(stderr, "%s: failed to locate utility '%s'\r\n", SHELL_NAME, arg);
+                fprintf(stderr, "%s: failed to locate utility '%s'\n", SHELL_NAME, arg);
                 res = 1;
             }
             else
             {
-                RESTRICTED_SHELL_NOHASH("can't use the hash command: restricted shell");
+                /* check for a restricted shell (can't hash in r-shells) */
+                if(startup_finished && option_set('r'))
+                {
+                    fprintf(stderr, "%s: can't use the hash command: restricted shell\n", UTILITY);
+                    free_malloced_str(p);
+                    return 2;
+                }
+                //RESTRICTED_SHELL_NOHASH("can't use the hash command: restricted shell");
                 if(!hash_utility(arg, p))
                 {
-                    fprintf(stderr, "%s: failed to hash utility '%s'\r\n", SHELL_NAME, arg);
+                    fprintf(stderr, "%s: failed to hash utility '%s'\n", SHELL_NAME, arg);
                     res = 1;
                 }
                 free_malloced_str(p);
@@ -196,6 +275,11 @@ int hash(int argc, char **argv)
 }
 
 
+/*
+ * update the hashtable by rehashing all the hashed utilities.
+ *
+ * returns 0 if all utilities are located and hashed, 1 otherwise.
+ */
 int rehash_all()
 {
     int res = 0;
@@ -212,13 +296,16 @@ int rehash_all()
                 char *p = search_path(entry->name, NULL, 1);
                 if(!p)
                 {
-                    fprintf(stderr, "%s: failed to locate utility '%s'\r\n", SHELL_NAME, entry->name);
+                    fprintf(stderr, "%s: failed to locate utility '%s'\n", SHELL_NAME, entry->name);
                     res = 1;
                 }
                 else
                 {
-                    /* we directly free this bcuz it was alloc'd in string_hash.c */
-                    if(entry->val) free(entry->val);
+                    /* we directly free this because it was alloc'd in string_hash.c */
+                    if(entry->val)
+                    {
+                        free(entry->val);
+                    }
                     entry->val = __get_malloced_str(p);
                     free_malloced_str(p);
                 }

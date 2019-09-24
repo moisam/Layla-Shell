@@ -73,6 +73,8 @@ extern __int64_t optionsx;
 #define OPTION_RECOGNIZE_ONLY_EXE       0x100000000000l /* (1 << 44) -- tcsh-like extension */
 #define OPTION_SAVE_DIRS                0x200000000000l /* (1 << 45) -- tcsh-like extension */
 #define OPTION_SAVE_HIST                0x400000000000l /* (1 << 46) -- tcsh-like extension */
+#define OPTION_PROMPT_BANG              0x800000000000l /* (1 << 47) -- zsh-like extension */
+#define OPTION_PROMPT_PERCENT           0x1000000000000l/* (1 << 48) -- zsh-like extension */
 
 #define optionx_set(o)                  ((((optionsx) & (o)) == (o)) ? 1 : 0)
 

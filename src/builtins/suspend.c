@@ -24,18 +24,28 @@
 
 #define UTILITY             "suspend"
 
+
 /*
+ * the suspend builtin utility (non-POSIX).. used to suspend the shell.
+ *
  * this utility is a tcsh/bash extension. we mimic its bash working here.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help suspend` or `suspend -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
+
 int suspend(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
     int force = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hvf", &v, 1)) > 0)
     {
         switch(c)
@@ -54,15 +64,22 @@ int suspend(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
     
-    if(force) raise(SIGSTOP);
+    /* if the force -f flag is passed, raise the signal even if we are a login shell */
+    if(force)
+    {
+        raise(SIGSTOP);
+    }
     else
     {
         /* login shells can't be suspended without the -f option (bash) */
         if(option_set('L'))
         {
-            fprintf(stderr, "%s: failed to suspend: login shell\r\n", UTILITY);
+            fprintf(stderr, "%s: failed to suspend: login shell\n", UTILITY);
             return 2;
         }
         raise(SIGSTOP);

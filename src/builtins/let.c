@@ -31,28 +31,45 @@
 
 
 /*
+ * the let builtin utility (non-POSIX).. used to evaluate arithmetic arguments.
+ *
  * let does arithmetic evaluation of its arguments in most shells (bash, ksh, ...).
  * we need to check the result of the last argument. if non-zero, return
  * zero. otherwise, return 1.
  */
+
 int let(int argc, char **argv)
 {
-    if(argc == 1) return 1;
+    /* no arguments */
+    if(argc == 1)
+    {
+        return 1;
+    }
     char *endstr;    
     char *res[argc-1];
     int i = 1, j = 0;
+    /* parse the arguments */
     for( ; i < argc; i++, j++)
     {
-        res[j] = __do_arithmetic(argv[i]);
+        res[j] = arithm_expand(argv[i]);
         /* __do_arithmetic() should have printed an appropriate error msg */
         if(!res[j])
         {
-            while(j--) free(res[j]);
+            while(j--)
+            {
+                free(res[j]);
+            }
             return 1;
         }
     }
     i = strtol(res[j-1], &endstr, 10);
-    if(endstr == res[j-1]) i = 1;
-    while(j--) free(res[j]);
+    if(endstr == res[j-1])
+    {
+        i = 1;
+    }
+    while(j--)
+    {
+        free(res[j]);
+    }
     return !i;
 }

@@ -25,11 +25,22 @@
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 
-#define L_OPTION    1
-#define P_OPTION    2
+#define L_OPTION    1   /* handle symbolic links logically */
+#define P_OPTION    2   /* handle symbolic links physically */
 
 #define UTILITY         "pwd"
 
+
+/*
+ * the pwd builtin utility (POSIX).. prints the current working directory,
+ * as reflected in the $PWD shell variable.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help pwd` or `pwd -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
 
 int pwd(int argc, char **argv)
 {
@@ -37,16 +48,17 @@ int pwd(int argc, char **argv)
     char *PWD = get_shell_varp("PWD", NULL);
     if(!PWD || !*PWD)
     {
-        fprintf(stderr, "%s: cannot read PWD variable: NULL value\r\n", UTILITY);
+        fprintf(stderr, "%s: cannot read PWD variable: NULL value\n", UTILITY);
         return 2;
     }
+    /* use the -L option by default */
     int option = L_OPTION;
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hvLP", &v, 1)) > 0)
     {
         switch(c)
@@ -69,10 +81,16 @@ int pwd(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 1;
+    if(c == -1)
+    {
+        return 1;
+    }
     
-    /* do POSIX-style on PWD */
-    if(option == P_OPTION) goto do_p_option;
+    /* go POSIX-style on PWD */
+    if(option == P_OPTION)
+    {
+        goto do_p_option;
+    }
     if(*PWD == '/')
     {
         char *p = PWD;
@@ -82,13 +100,19 @@ int pwd(int argc, char **argv)
             if(*p == '.' && p[-1] == '/')
             {
                 /* we have "/./" or "/." */
-                if(p[1] == '/' || p[1] == '\0') goto do_p_option;
+                if(p[1] == '/' || p[1] == '\0')
+                {
+                    goto do_p_option;
+                }
                 /* we have "/../" or "/.." */
-                if(p[1] == '.' && (p[2] == '/' || p[2] == '\0')) goto do_p_option;
+                if(p[1] == '.' && (p[2] == '/' || p[2] == '\0'))
+                {
+                    goto do_p_option;
+                }
             }
         }
         set_terminal_color(COL_WHITE, COL_DEFAULT);
-        printf("%s\r\n", PWD);
+        printf("%s\n", PWD);
         return 0;
     }
 do_p_option:
@@ -97,7 +121,7 @@ do_p_option:
      */
     set_terminal_color(COL_WHITE, COL_DEFAULT);
     PWD = getcwd(NULL, 0);
-    printf("%s\r\n", PWD);
+    printf("%s\n", PWD);
     symtab_entry_setval(entry, PWD);
     return 0;
 }

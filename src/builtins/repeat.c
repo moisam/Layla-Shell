@@ -33,18 +33,27 @@
 
 
 /*
+ * the repeat builtin utility (non-POSIX).. used to execute commands a number
+ * of times.
+ *
  * the repeat utility is a tcsh non-POSIX extension. bash doesn't have it.
+ *
+ * returns the exit status of the last command executed.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help repeat` or `repeat -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
 
 int repeat(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
     int count = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hv", &v, 1)) > 0)
     {
         switch(c)
@@ -59,34 +68,45 @@ int repeat(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
     
+    /* missing arguments */
     if(v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: count\r\n", UTILITY);
+        fprintf(stderr, "%s: missing argument: count\n", UTILITY);
         return 2;
     }
 
+    /* get the repeat count */
     char *strend = NULL;
     count = strtol(argv[v], &strend, 10);
     if(strend == argv[v] || count < 0)
     {
-        fprintf(stderr, "%s: missing argument: invalid count: %s\r\n", UTILITY, argv[v]);
+        fprintf(stderr, "%s: missing argument: invalid count: %s\n", UTILITY, argv[v]);
         return 2;
     }
 
+    /* we should have at least one command to execute */
     if(++v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: command name\r\n", UTILITY);
+        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
         return 2;
     }
     
     int    cargc = argc-v;
     char **cargv = &argv[v];
     v = 0;
+    /* push a local symbol table on top of the stack */
+    symtab_stack_push();
+    /* execute the command(s) */
     while(count-- > 0)
     {
         v = search_and_exec(cargc, cargv, NULL, SEARCH_AND_EXEC_DOFORK|SEARCH_AND_EXEC_DOFUNC);
     }
+    /* free the local symbol table */
+    free_symtab(symtab_stack_pop());
     return v;
 }

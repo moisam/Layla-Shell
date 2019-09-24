@@ -31,6 +31,11 @@
 
 #define UTILITY     "kill"
 
+/*
+ * convert a string to uppercase.
+ *
+ * returns the malloc'd converted string.
+ */
 char *str_toupper(char *lower)
 {
     char *upper = get_malloced_str(lower);
@@ -38,36 +43,67 @@ char *str_toupper(char *lower)
     while(*u)
     {
         if(*u >= 'a' && *u <= 'z')
+        {
             *u = *u-('a'-'A');
+        }
         u++;
     }
     return upper;
 }
 
+
+/*
+ * return the signal number for the given signal name.
+ *
+ * returns the signal number, or -1 for invalid signal names.
+ */
 int get_signum(char *__signame)
 {
     int i;
     char *signame = str_toupper(__signame);
     char signame2[10];
-    if(strncmp(signame, "SIG", 3) == 0) strcpy(signame2, signame);
+    if(strncmp(signame, "SIG", 3) == 0)
+    {
+        /* signal name has the SIG prefix */
+        strcpy(signame2, signame);
+    }
     else
     {
+        /* signal name with no SIG prefix. add the prefix */
         strcpy(signame2, "SIG"  );
         strcat(signame2, signame);
     }
     free_malloced_str(signame);
+    /* get the signal number */
     for(i = 0; i < total_signames; i++)
+    {
         if(strcmp(signames[i], signame2) == 0)
+        {
             return i;
+        }
+    }
+    /* invalid signal name */
     return -1;
 }
 
 
+/*
+ * the kill builtin utility (non-POSIX).. used to send a signal to a job, process,
+ * or process group.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help kill` or `kill -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int __kill(int argc, char *argv[])
 {
+    /* we should have at least one option/argument */
     if(argc == 1)
     {
-        fprintf(stderr, "%s: missing operand(s)\r\n", UTILITY);
+        fprintf(stderr, "%s: missing operand(s)\n", UTILITY);
         return 1;
     }
     int    index  = 0;
@@ -78,58 +114,93 @@ int __kill(int argc, char *argv[])
     struct job *job = NULL;
     char  *arg;
 
+    /* process the options and arguments */
     while(++index < argc)
     {
         arg = argv[index];
+        /* options start with '-' */
         if(*arg == '-')
         {
-            if     (strcmp(arg, "-h") == 0) { print_help(argv[0], REGULAR_BUILTIN_KILL, 1, 0); continue; }
-            else if(strcmp(arg, "-v") == 0) { printf("%s", shell_ver); continue; }
-            else if(strcmp(arg, "--") == 0) break;
+            if     (strcmp(arg, "-h") == 0)
+            {
+                print_help(argv[0], REGULAR_BUILTIN_KILL, 1, 0);
+                return 0;
+            }
+            else if(strcmp(arg, "-v") == 0)
+            {
+                printf("%s", shell_ver);
+                return 0;
+            }
+            else if(strcmp(arg, "--") == 0)
+            {
+                break;
+            }
+            /* get the signal number */
             else if(strcmp(arg, "-n") == 0)
             {
                 if(++index >= argc)
                 {
-                    fprintf(stderr, "%s: missing argument: signal number\r\n", UTILITY);
+                    fprintf(stderr, "%s: missing argument: signal number\n", UTILITY);
                     return 1;
                 }
                 arg = argv[index];
                 if(isdigit(*arg))
                 {
                     signum = atoi(arg);
-                    if(signum == 0 || signum > total_signames) goto invalid_signame;
+                    if(signum == 0 || signum > total_signames)
+                    {
+                        goto invalid_signame;
+                    }
                     continue;
                 }
-                else goto invalid_signame;
+                else
+                {
+                    goto invalid_signame;
+                }
             }
+            /* get the symbolic signal name */
             else if(strcmp(arg, "-s") == 0)
             {
                 if(++index >= argc)
                 {
-                    fprintf(stderr, "%s: missing argument: signal name\r\n", UTILITY);
+                    fprintf(stderr, "%s: missing argument: signal name\n", UTILITY);
                     return 1;
                 }
                 arg = argv[index];
-                if(strcmp(arg, "0") == 0) signum = 0;
-                else signum = get_signum(arg);
+                if(strcmp(arg, "0") == 0)
+                {
+                    signum = 0;
+                }
+                else
+                {
+                    signum = get_signum(arg);
+                }
+                /* check the validity of the signal name */
                 if(signum == -1)
                 {
                     goto invalid_signame;
                 }
                 continue;
             }
+            /* list all signal names, or the number of the given name */
             else if(strcmp(arg, "-l") == 0 || strcmp(arg, "-L") == 0)
             {
-                /* no option-argument */
+                /* no option-argument. list all signals */
                 if(++index >= argc)
                 {
                     /* list all signal names */
                     for(i = 0; i < total_signames; i++)
                     {
                         printf("%2d) %.10s ", i, signames[i]);
-                        if((i % 4) == 0) printf("\r\n");
+                        if((i % 4) == 0)
+                        {
+                            printf("\n");
+                        }
                     }
-                    if(total_signames % 4) printf("\r\n");
+                    if(total_signames % 4)
+                    {
+                        printf("\n");
+                    }
                     return 0;
                 }
                 /* we have an option-argument, which is a singal number */
@@ -137,44 +208,73 @@ int __kill(int argc, char *argv[])
                 int j = atoi(arg);
                 if(isdigit(*arg) && j >= 0 && j < total_signames)
                 {
-                    if(j == 0) printf("NULL\r\n");
-                    else       printf("%s\r\n", &signames[j][3]);   /* without SIG prefix */
+                    if(j == 0)
+                    {
+                        printf("NULL\n");
+                    }
+                    else
+                    {
+                        printf("%s\n", &signames[j][3]);   /* without SIG prefix */
+                    }
                     return 0;
                 }
                 /* we have an exit status of a process terminated by a signal */
                 if(WIFSIGNALED(j))
                 {
                     int sig = WTERMSIG(j);
-                    if(sig < 0 || sig >= total_signames) printf("%d\r\n", sig);
-                    else printf("%s\r\n", signames[sig]);
+                    if(sig < 0 || sig >= total_signames)
+                    {
+                        printf("%d\n", sig);
+                    }
+                    else
+                    {
+                        printf("%s\n", signames[sig]);
+                    }
                     return 0;
                 }
-                fprintf(stderr, "%s: invalid signal specification: %s\r\n", UTILITY, arg);
+                fprintf(stderr, "%s: invalid signal specification: %s\n", UTILITY, arg);
                 return 4;
             }
-            /* try a -signal_name or -signal_number options */
+            /* try parsing as a -signal_name or -signal_number option */
             arg++;
             if(isalpha(*arg))
             {
-                if(strcmp(arg, "0") == 0) signum = 0;
-                else signum = get_signum(arg);
-                if(signum == -1) goto invalid_signame;
+                if(strcmp(arg, "0") == 0)
+                {
+                    signum = 0;
+                }
+                else
+                {
+                    signum = get_signum(arg);
+                }
+                /* check the validity of the signal name */
+                if(signum == -1)
+                {
+                    goto invalid_signame;
+                }
                 continue;
             }
             else if(isdigit(*arg))
             {
                 signum = atoi(arg);
-                if(signum == 0 || signum > total_signames) goto invalid_signame;
+                if(signum == 0 || signum > total_signames)
+                {
+                    goto invalid_signame;
+                }
                 continue;
             }
-            fprintf(stderr, "%s: unknown option: %s\r\n", UTILITY, arg);
+            fprintf(stderr, "%s: unknown option: %s\n", UTILITY, arg);
             return 3;
         }
         break;
     }
     /* end of options. start of arguments */
-    if(index >= argc) return res;
+    if(index >= argc)
+    {
+        return res;
+    }
 
+    /* process the arguments */
     do
     {
         arg = argv[index];
@@ -184,14 +284,14 @@ int __kill(int argc, char *argv[])
             /* bash says we can't kill jobs if job control is not active, which makes sense */
             if(!option_set('m'))
             {
-                fprintf(stderr, "%s: can't kill job %s: job control is not active\r\n", UTILITY, arg);
+                fprintf(stderr, "%s: can't kill job %s: job control is not active\n", UTILITY, arg);
                 return 2;
             }
             pid = get_jobid(arg);
             job = get_job_by_jobid(pid);
             if(pid == 0 || !job)
             {
-                fprintf(stderr, "%s: invalid job id: %s\r\n", UTILITY, arg);
+                fprintf(stderr, "%s: invalid job id: %s\n", UTILITY, arg);
                 res = 3;
                 continue;
             }
@@ -208,15 +308,22 @@ int __kill(int argc, char *argv[])
          * it will receive our signal (tcsh does this).
          */
         if(signum == SIGTERM || signum == SIGHUP)
+        {
             kill(pid, SIGCONT);
+        }
+        /* send the signal */
         if(kill(pid, signum) != 0)
         {
             if(signum < 0 || signum >= total_signames)
-                fprintf(stderr, "%s: failed to send signal %d to process %d: %s\r\n",
+            {
+                fprintf(stderr, "%s: failed to send signal %d to process %d: %s\n",
                         UTILITY, signum, pid, strerror(errno));
+            }
             else
-                fprintf(stderr, "%s: failed to send signal %s to process %d: %s\r\n", 
+            {
+                fprintf(stderr, "%s: failed to send signal %s to process %d: %s\n", 
                         UTILITY, signames[signum], pid, strerror(errno));
+            }
             res = 3;
         }
         else if(job)
@@ -231,6 +338,6 @@ int __kill(int argc, char *argv[])
     return res;
     
 invalid_signame:
-    fprintf(stderr, "%s: invalid signal name: %s\r\n", UTILITY, arg);
+    fprintf(stderr, "%s: invalid signal name: %s\n", UTILITY, arg);
     return 2;
 }

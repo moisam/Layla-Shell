@@ -28,22 +28,47 @@
 #define UTILITY         "type"
 
 
+/*
+ * the type builtin utility (POSIX).. used to print the type of an argument.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help type` or `type -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int type(int argc, char **argv)
 {
     int i;
     int res = 0;
+    /* print the command's path without searching for builtins and functions first */
     int print_path       = 0;
+    /* print all possible interpretations of each argument */
     int print_all        = 0;
     //int use_path         = 0;
+    /* print only one word to describe each argument */
     int print_word       = 0;
+    /* look in the functions table */
     int search_funcs     = 1;
+
+    /****************************
+     * process the options
+     ****************************/
     for(i = 1; i < argc; i++)
     { 
         if(argv[i][0] == '-')
         {
             char *p = argv[i];
-            if(strcmp(p, "-") == 0 || strcmp(p, "--") == 0) { i++; break; }
+            /* the special '-' and '--' options */
+            if(strcmp(p, "-") == 0 || strcmp(p, "--") == 0)
+            {
+                i++;
+                break;
+            }
+            /* skip the '-' */
             p++;
+            /* process the options string */
             while(*p)
             {
                 switch(*p)
@@ -63,13 +88,14 @@ int type(int argc, char **argv)
                     case 'P':
                         //use_path = 1;
                         /* fall through */
+                        __attribute__((fallthrough));
                         
                     case 'p':
                         print_path = 1;
                         if(startup_finished && option_set('r'))
                         {
                             /* r-shells can't use this option */
-                            fprintf(stderr, "%s: restricted shells can't use the -%c option\r\n", SHELL_NAME, *p);
+                            fprintf(stderr, "%s: restricted shells can't use the -%c option\n", SHELL_NAME, *p);
                             return 3;
                         }
                         break;
@@ -83,89 +109,151 @@ int type(int argc, char **argv)
                         break;
                         
                     default:                        
-                        fprintf(stderr, "%s: unknown option: %s\r\n", UTILITY, argv[i]);
+                        fprintf(stderr, "%s: unknown option: %s\n", UTILITY, argv[i]);
                         return 2;
                 }
                 p++;
             }
         }
-        else break;
+        else
+        {
+            break;
+        }
     }
+
+    /* missing arguments */
     if(i >= argc)
     {
-        fprintf(stderr, "%s: missing argument: command name\r\n", UTILITY);
+        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
         return 2;
     }
+
+    /* parse the arguments */
     for( ; i < argc; i++)
     {
         if(strchr (argv[i], '/'))
         {
-            printf("%s is %s\r\n", argv[i], argv[i]);
+            /* argument contains slashes. treat as a pathname and print as-is */
+            printf("%s is %s\n", argv[i], argv[i]);
         }
         else
         {
+            /* argument has no slashes. process it */
             if(!print_path)
             {
-                char *alias = __parse_alias(argv[i]);
+                /* check if it is a defined alias */
+                char *alias = parse_alias(argv[i]);
                 if(alias != argv[i])
                 {
-                    if(print_word) printf("alias\r\n");
+                    if(print_word)
+                    {
+                        printf("alias\n");
+                    }
                     else
                     {
                         printf("%s is aliased to ", argv[i]);
                         purge_quoted_val(alias);
-                        printf("\r\n");
+                        printf("\n");
                     }
-                    if(!print_all) continue;
+                    if(!print_all)
+                    {
+                        continue;
+                    }
                 }
+                /* check if it is a keyword */
                 if(is_keyword (argv[i]) >= 0)
                 {
-                    if(print_word) printf("keyword\r\n");
+                    if(print_word)
+                    {
+                        printf("keyword\n");
+                    }
                     else
                     {
-                        printf("%s is a shell keyword\r\n", argv[i]);
+                        printf("%s is a shell keyword\n", argv[i]);
                     }
-                    if(!print_all) continue;
+                    if(!print_all)
+                    {
+                        continue;
+                    }
                 }
+                /* check if it is a builtin utility */
                 if(is_builtin (argv[i]))
                 {
-                    if(print_word) printf("builtin\r\n");
+                    if(print_word)
+                    {
+                        printf("builtin\n");
+                    }
                     else
                     {
-                        printf("%s is a shell builtin\r\n", argv[i]);
+                        printf("%s is a shell builtin\n", argv[i]);
                     }
-                    if(!print_all) continue;
+                    if(!print_all)
+                    {
+                        continue;
+                    }
                 }
+                /* check if it is a defined shell function */
                 if(search_funcs && is_function(argv[i]))
                 {
-                    if(print_word) printf("function\r\n");
+                    if(print_word)
+                    {
+                        printf("function\n");
+                    }
                     else
                     {
-                        printf("%s is a shell function\r\n", argv[i]);
+                        printf("%s is a shell function\n", argv[i]);
                     }
-                    if(!print_all) continue;
+                    if(!print_all)
+                    {
+                        continue;
+                    }
                 }
             }
+            /* now search for an external command with the given name */
             char *path = get_hashed_path(argv[i]);
             char *hpath = path;
-            if(!path) path = search_path(argv[i], NULL, 1);
+            /* no hashed path found. search in $PATH */
             if(!path)
             {
-                if(print_word) printf("\r\n");
-                else printf("%s is unknown\r\n", argv[i]);
+                path = search_path(argv[i], NULL, 1);
+            }
+            /* nothing found */
+            if(!path)
+            {
+                if(print_word)
+                {
+                    printf("\n");
+                }
+                else
+                {
+                    printf("%s is unknown\n", argv[i]);
+                }
                 res = 3;
                 continue;
             }
             else
             {
+                /* path found */
                 if(print_word)
                 {
-                    if(print_path) printf("%s\n", path);
-                    else printf("file\r\n");
+                    if(print_path)
+                    {
+                        printf("%s\n", path);
+                    }
+                    else
+                    {
+                        printf("file\n");
+                    }
                 }
-                else printf("%s is %s\r\n", argv[i], path);
+                else
+                {
+                    printf("%s is %s\n", argv[i], path);
+                }
             }
-            if(path != hpath) free_malloced_str(path);
+            if(path != hpath)
+            {
+                free_malloced_str(path);
+            }
         }
     }
 

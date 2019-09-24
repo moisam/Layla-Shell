@@ -31,26 +31,39 @@
 
 
 /*
+ * the hup/nohup builtin utilities (non-POSIX) are used to run a command, making it
+ * ignore the SIGHUP signal (nohup utility) or not (hup utility).
+ *
  * the hup/nohup utilities are tcsh non-POSIX extensions. bash doesn't have them.
  * nohup is part of the GNU coreutils package, not the shell itself.
+ *
  * this function does the role of both utilities, depending on the name it is called
- * with (hup or nohup, that is the question).
+ * with (to hup or to nohup, that is the question).
  */
 
 int hup(int argc, char **argv)
 {
     int i;
+    /* determine whether to run as hup or nohup, depending on argv[0] */
     int hup = strcmp(argv[0], "hup") == 0 ? 1 : 0;
     char *UTILITY = hup ? "hup" : "nohup";
 
+    /* parse options */
     for(i = 1; i < argc; i++)
     {
         char *arg = argv[i];
         if(*arg == '-')
         {
             char *p = arg;
-            if(strcmp(p, "-") == 0 || strcmp(p, "--") == 0) { i++; break; }
+            /* the special - and -- options signal the end of options */
+            if(strcmp(p, "-") == 0 || strcmp(p, "--") == 0)
+            {
+                i++;
+                break;
+            }
+            /* skip the '-' */
             p++;
+            /* parse the options string */
             while(*p)
             {
                 switch(*p)
@@ -70,12 +83,17 @@ int hup(int argc, char **argv)
                 p++;
             }
         }
-        else break;
+        else
+        {
+            /* end of options */
+            break;
+        }
     }
 
+    /* we should have at least one argument */
     if(i >= argc)
     {
-        fprintf(stderr, "%s: missing argument: command name\r\n", UTILITY);
+        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
         return 2;
     }
     

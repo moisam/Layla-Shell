@@ -24,10 +24,21 @@
 
 #define UTILITY             "ver"
 
+
+/*
+ * the ver builtin utility (non-POSIX).. prints the shell version.
+ *
+ * returns 0 on success, non-zero if an unknown option is given.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help ver` or `ver -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int ver(int argc, char **argv)
 {
-    int v;
-    for(v = 1; v < argc; v++)
+    int v = 1;
+    for( ; v < argc; v++)
     { 
         char *arg = argv[v];
         if(arg[0] == '-')
@@ -39,19 +50,19 @@ int ver(int argc, char **argv)
                 {
                     case 'h':
                         print_help(argv[0], REGULAR_BUILTIN_VER, 1, 0);
-                        continue;
+                        return 0;
                         
                     case 'v':
                         printf("%s", shell_ver);
-                        continue;
+                        return 0;
                         
                     default:
-                        fprintf(stderr, "%s: unknown option: %s\r\n", UTILITY, argv[v]);
+                        fprintf(stderr, "%s: unknown option: %s\n", UTILITY, argv[v]);
                         return 2;
                 }
             }
         }
     }
     printf("%s", shell_ver);
-    return 1;
+    return 0;
 }

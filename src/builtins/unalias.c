@@ -24,68 +24,105 @@
 
 #define UTILITY         "unalias"
 
+
+/*
+ * forget all defined aliases.
+ */
 void unalias_all()
 {
     int i;
     for(i = 0; i < MAX_ALIASES; i++)
     {
-        if(!__aliases[i].name) continue;
+        if(!__aliases[i].name)
+        {
+            continue;
+        }
         free(__aliases[i].name);
         __aliases[i].name = NULL;
-        if(__aliases[i].val) free(__aliases[i].val);
+        if(__aliases[i].val)
+        {
+            free(__aliases[i].val);
+        }
         __aliases[i].val  = NULL;
     }
 }
 
 
+/*
+ * the unalias builtin utility (POSIX).. used to remove aliases.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help unalias` or `unalias -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int unalias(int argc, char **argv)
 {
     int do_unalias_all = 0;
     int i;
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hva", &v, 1)) > 0)
     {
-        if     (c == 'h') { print_help(argv[0], REGULAR_BUILTIN_UNALIAS, 1, 0); }
-        else if(c == 'v') { printf("%s", shell_ver); }
-        else if(c == 'a') { do_unalias_all = 1     ; }
+        if(c == 'h')
+        {
+            print_help(argv[0], REGULAR_BUILTIN_UNALIAS, 1, 0);
+            return 0;
+        }
+        else if(c == 'v')
+        {
+            printf("%s", shell_ver);
+            return 0;
+        }
+        else if(c == 'a')
+        {
+            do_unalias_all = 1;
+        }
     }
     /* unknown option */
-    if(c == -1) return 1;
+    if(c == -1)
+    {
+        return 1;
+    }
 
+    /* the -a option removes all aliases */
     if(do_unalias_all)
     {
         unalias_all();
         return 0;
     }
 
+    /* process the arguments */
     int res = 0;
     for( ; v < argc; v++)
     {
-        size_t len = strlen(argv[v]);
         for(i = 0; i < MAX_ALIASES; i++)
         {
             if(__aliases[i].name)
             {
-                size_t len2 = strlen(__aliases[i].name);
-                if(len2 != len) continue;
                 if(strcmp(__aliases[i].name, argv[v]) == 0)
                 {
                     free(__aliases[i].name);
                     __aliases[i].name = NULL;
-                    if(__aliases[i].val) free(__aliases[i].val);
+                    if(__aliases[i].val)
+                    {
+                        free(__aliases[i].val);
+                    }
                     __aliases[i].val  = NULL;
                     break;
                 }
             }
         }
+        /* alias not found */
         if(i == MAX_ALIASES)
         {
-            fprintf(stderr, "%s: unknown alias: %s\r\n", UTILITY, argv[v]);
+            fprintf(stderr, "%s: unknown alias: %s\n", UTILITY, argv[v]);
             res = 2;
         }
     }

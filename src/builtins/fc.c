@@ -33,7 +33,6 @@
 #include "../debug.h"
 
 #define UTILITY             "fc"
-char    *fc_filename = "FIXCMD";
 
 /* internal procedure to output multiline commands */
 void __output_multi(char *cmd)
@@ -42,22 +41,40 @@ void __output_multi(char *cmd)
     while(*p)
     {
         putc(*p  , stdout);
+        /* indent the next line */
         if(*p == '\n' && p[-1] == '\\')
-             putc('\t', stdout);
+        {
+            putc('\t', stdout);
+        }
         p++;
     }
 }
 
 
+/*
+ * the fc builtin utility (POSIX).. used to list, edit and rerun commands from
+ * the history list.
+ *
+ * returns the exit status of the last command executed.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help fc` or `fc -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int fc(int argc, char **argv)
 {
     
-    /* the parser automatically adds new entries to the history list.
+    /*
+     * the parser automatically adds new entries to the history list.
      * remove the newest entry, which is the fc command that brought
      * us here.
      */
     char *h = get_last_cmd_history();
-    if(h && strstr(h, "fc ") == 0) remove_newest();
+    if(h && strstr(h, "fc ") == 0)
+    {
+        remove_newest();
+    }
     
     int   v = 1;
     int   suppress_numbers = 0;     /* -n option */
@@ -72,11 +89,11 @@ int fc(int argc, char **argv)
     int   prev_command     = hist_total;
     
     /****************************
-     * process the arguments
+     * process the options
      ****************************/
-    int c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    int c, i;
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
     while((c = parse_args(argc, argv, "hvelnrs", &v, 0)) > 0)
     {
         switch(c)
@@ -89,6 +106,7 @@ int fc(int argc, char **argv)
                 printf("%s", shell_ver);
                 break;
                 
+            /* -e specifies the editor to use to edit commands */
             case 'e':
                 if(!argv[v] || !argv[v][0])
                 {
@@ -104,46 +122,67 @@ int fc(int argc, char **argv)
                 else
                 {
                     editor = search_path(argv[v], NULL, 1);
-                    if(editor) edit_malloc = 1;
+                    /* remember we malloc'd the editor name so we can free it later */
+                    if(editor)
+                    {
+                        edit_malloc = 1;
+                    }
                     v++;
                 }
                 break;
                 
+             /* -l lists commands without invoking them */
             case 'l':
                 list_only = 1;
                 break;
                 
+            /* -n suppresses output of command numbers */
             case 'n':
                 suppress_numbers = 1;
                 break;
                 
+            /* -r reverses the order of printed/edited commands */
             case 'r':
                 reverse = 1;
                 break;
                 
+            /* -s executes the commands without invoking the editor */
             case 's':
                 direct_exec = 1;
                 break;
         }
     }
     /* unknown option */
-    if(c == -1) return 1;
-    /****************************/
+    if(c == -1)
+    {
+        return 1;
+    }
 
     /* get the 'first' operand */
     if(v < argc)
     {
         char *f = argv[v++];
+        /* the replace string takes the format str=replacement */
         if(direct_exec && strchr(f, '='))
         {
             replace_str = f;
-            if(v >= argc) goto check_bounds;
+            if(v >= argc)
+            {
+                goto check_bounds;
+            }
             f = argv[v++];
         }
-        if(*f == '-' || *f == '+' || isdigit(*f)) first = atoi(f);
+        /* check if the argument is numeric: -n, +n or n */
+        if(*f == '-' || *f == '+' || isdigit(*f))
+        {
+            first = atoi(f);
+        }
         else
         {
-            int i;
+            /*
+             * if non-numeric argument, use it as a string to search for in the
+             * history list.
+             */
             for(i = cmd_history_end-1; i >= 0; i--)
             {
                 if(strstr(cmd_history[i].cmd, f) == cmd_history[i].cmd)
@@ -153,9 +192,10 @@ int fc(int argc, char **argv)
                 }
             }
         }
+        /* first is -ve, effectively subtracting from the history list count */
         if(first < 0)
         {
-            first  = hist_total+first;  /* first is -ve, effectively subtracting */
+            first  = hist_total+first;
         }
     }
     /* get the 'last' operand */
@@ -164,14 +204,25 @@ int fc(int argc, char **argv)
         char *f = argv[v++];
         if(direct_exec)
         {
-            fprintf(stderr, "%s: too many arguments\r\n", UTILITY);
-            if(editor) free_malloced_str(editor);
+            fprintf(stderr, "%s: too many arguments\n", UTILITY);
+            if(editor)
+            {
+                free_malloced_str(editor);
+            }
             return 3;
         }
-        if(*f == '-' || *f == '+' || isdigit(*f)) last = atoi(f);
+        /* check if the argument is numeric: -n, +n or n */
+        if(*f == '-' || *f == '+' || isdigit(*f))
+        {
+            last = atoi(f);
+        }
         else
         {
-            for(int i = cmd_history_end-1; i >= 0; i--)
+            /*
+             * if non-numeric argument, use it as a string to search for in the
+             * history list.
+             */
+            for(i = cmd_history_end-1; i >= 0; i--)
             {
                 if(strstr(cmd_history[i].cmd, f) == cmd_history[i].cmd)
                 {
@@ -180,39 +231,88 @@ int fc(int argc, char **argv)
                 }
             }
         }
+        /* last is -ve, effectively subtracting from the history list count */
         if(last < 0)
         {
-            last  = hist_total+last;  /* first is -ve, effectively subtracting */
+            last  = hist_total+last;
         }
     }
     
 check_bounds:
+    /*
+     * check that both the first and last command numbers are within the
+     * valid range of the history list.
+     *
+     * if we are directly executing commands with the -s option, check if we
+     * have the first command number.. if we don't, use the last command in
+     * the history list.
+     */
     if(direct_exec)
     {
-        if(first == 0) first = prev_command;
+        if(first == 0)
+        {
+            first = prev_command;
+        }
         last = first;
     }
     else
     {
+        /*
+         * we have the 'first' command number but not the 'last'.. if we are
+         * listing - not executing - commands, list all commands from 'first'
+         * to the last command in the history list.. if we are executing
+         * commands, execute only the command whose number is given by the
+         * 'first' argument.
+         */
         if(last == 0 && first)
         {
-            if(list_only) last = prev_command;
-            else          last = first;
+            if(list_only)
+            {
+                last = prev_command;
+            }
+            else
+            {
+                last = first;
+            }
         }
+        /*
+         * we don't have the 'first' or 'last' command numbers.. if we are
+         * listing - not executing - commands, list the last 16 commands in
+         * the history list.. if we are executing commands, execute only the
+         * last command in the history list.
+         */
         if(last == 0 && first == 0)
         {
             last  = prev_command;
-            if(list_only) first = last-16;
-            else          first = last;
+            if(list_only)
+            {
+                first = last-16;
+            }
+            else
+            {
+                first = last;
+            }
         }
     }
 
     /* boundary-check the given ranges */
-    if(first < 1) first = 1;
-    if(last  < 1) last  = 1;
-    if(first > hist_total) first = hist_total;
-    if(last  > hist_total) last  = hist_total;
-
+    if(first < 1)
+    {
+        first = 1;
+    }
+    if(last  < 1)
+    {
+        last  = 1;
+    }
+    if(first > hist_total)
+    {
+        first = hist_total;
+    }
+    if(last  > hist_total)
+    {
+        last  = hist_total;
+    }
+    /* reverse the first and last numbers if needed */
     if(first > last)
     {
         int temp = first;
@@ -220,50 +320,96 @@ check_bounds:
         last     = temp;
         reverse  = 1;
     }
-    
+    /*
+     *  our history indices are zero-based, so subtract one from
+     *  first and last.
+     */
     first--;
     last--;
-    /************************************/
-    /* Option 1- list the commands only */
+
+    /*************************************/
+    /* Option 1 - list the commands only */
+    /*************************************/
     if(list_only)
     {
+        i = 1;
+        /* print commands in reverse order */
         if(reverse)
         {
-            int i = 1;
             for( ; last >= first; last--, i++)
             {
                 char *cmd = cmd_history[last].cmd;
-                if(!suppress_numbers) printf("%d", i);
+                /* print the command number in the history list */
+                if(!suppress_numbers)
+                {
+                    printf("%d", i);
+                }
                 putc('\t', stdout);
-                if(strstr(cmd, "\\\n")) __output_multi(cmd);
-                else printf("%s", cmd);
-                if(cmd[strlen(cmd)-1] != '\n') putc('\n', stdout);
+                /* print the command */
+                if(strstr(cmd, "\\\n"))
+                {
+                    __output_multi(cmd);
+                }
+                else
+                {
+                    printf("%s", cmd);
+                }
+                /* add newline char if the command doesn't end in \n */
+                if(cmd[strlen(cmd)-1] != '\n')
+                {
+                    putc('\n', stdout);
+                }
             }
         }
+        /* print commands in normal order */
         else
         {
-            int i = 1;
             for( ; first <= last; first++, i++)
             {
                 char *cmd = cmd_history[first].cmd;
-                if(!suppress_numbers) printf("%d", i);
+                /* print the command number in the history list */
+                if(!suppress_numbers)
+                {
+                    printf("%d", i);
+                }
                 putc('\t', stdout);
-                if(strstr(cmd, "\\\n")) __output_multi(cmd);
-                else printf("%s", cmd);
-                if(cmd[strlen(cmd)-1] != '\n') putc('\n', stdout);
+                /* print the command */
+                if(strstr(cmd, "\\\n"))
+                {
+                    __output_multi(cmd);
+                }
+                else
+                {
+                    printf("%s", cmd);
+                }
+                /* add newline char if the command doesn't end in \n */
+                if(cmd[strlen(cmd)-1] != '\n')
+                {
+                    putc('\n', stdout);
+                }
             }
         }
-        if(editor) free_malloced_str(editor);
+        /* free the editor name */
+        if(editor)
+        {
+            free_malloced_str(editor);
+        }
         return 0;
     }
 
-    /* Option 2- execute without editing */
+    /**************************************/
+    /* Option 2 - execute without editing */
+    /**************************************/
     if(direct_exec)
     {
         int replace = 1;
         struct source_s save_src = __src;
         for( ; first <= last; first++)
         {
+            /*
+             * find the first occurrence of replace and substitute it with
+             * replace_str.
+             */
             if(replace && replace_str)
             {
                 char *cmd    = cmd_history[first].cmd;
@@ -290,43 +436,56 @@ check_bounds:
                     __src.buffer   = cmd_history[first].cmd;
                 }
                 __src.bufsize  = strlen(__src.buffer)-1;
-                __src.filename = fc_filename;
+                __src.srctype  = SOURCE_FCCMD;
+                __src.srcname  = NULL;
                 __src.curpos   = -2;
+                /* parse and execute */
                 do_cmd();
                 replace = 0;
             }
             else
             {
+                /* execute the command without replacement */
                 __src.buffer   = cmd_history[first].cmd;
                 __src.bufsize  = strlen(cmd_history[first].cmd)-1;
-                __src.filename = fc_filename;
+                __src.srctype  = SOURCE_FCCMD;
+                __src.srcname  = NULL;
                 __src.curpos   = -2;
                 do_cmd();
             }
         }
+        /* restore the input source */
         __src = save_src;
-        if(editor) free_malloced_str(editor);
+        /* free the editor name */
+        if(editor)
+        {
+            free_malloced_str(editor);
+        }
         return exit_status;
     }
     
-    /* Option 3- edit commands */
+    /****************************/
+    /* Option 3 - edit commands */
+    /****************************/
     if(!editor)
     {
-        struct symtab_entry_s *entry = get_symtab_entry("FCEDIT");
-        char *fcedit = entry ? entry->val : NULL;
+        /*
+         * we don't have the editor name.. we will look for a valid editor name
+         * in $FCEDIT, $HISTEDIT, and $EDITOR in turn.. if none is defined, we
+         * will use the default editor /bin/ed.
+         */
+        char *fcedit = get_shell_varp("FCEDIT", NULL);
         if(!fcedit || !*fcedit)
         {
             /* $HISTEDIT is not a POSIX-defined var, but is widely
              * used by shells, so there is a chance it is set by the
              * user/shell instead of FCEDIT.
              */
-            entry = get_symtab_entry("HISTEDIT");
-            fcedit = entry ? entry->val : NULL;
+            fcedit = get_shell_varp("HISTEDIT", NULL);
             /* bash checks $EDITOR if $FCEDIT is not set when in --posix mode */
             if(!fcedit || !*fcedit)
             {
-                entry = get_symtab_entry("EDITOR");
-                fcedit = entry ? entry->val : NULL;
+                fcedit = get_shell_varp("EDITOR", NULL);
             }
         }
         if(!fcedit || !*fcedit)
@@ -336,6 +495,7 @@ check_bounds:
         }
         else
         {
+            /* word-expand the editor name */
             editor = word_expand_to_str(fcedit);
             if(!editor)
             {
@@ -345,31 +505,53 @@ check_bounds:
         }
     }
 
+    /*
+     * in order to pass the commands to the editor, we will create a temporary
+     * file in which we will write the history commands.. after the editor
+     * finishes, we will read the temporary file to retrieve the edited commands,
+     * which we will then execute.
+     */
+    /* get a temp filename */
     char *tmpname = get_tmp_filename();
     if(!tmpname)
     {
-        fprintf(stderr, "%s: error creating temp file: %s\r\n", UTILITY, strerror(errno));
+        fprintf(stderr, "%s: error creating temp file: %s\n", UTILITY, strerror(errno));
         if(editor)
         {
-            if(edit_malloc) free_malloced_str(editor);
-            else free(editor);
+            /* free the editor name */
+            if(edit_malloc)
+            {
+                free_malloced_str(editor);
+            }
+            else
+            {
+                free(editor);
+            }
         }
         return 4;
     }
-
+    /* create the temp file with the given name */
     int tmp = mkstemp(tmpname);
     if(tmp < 0)
     {
-        fprintf(stderr, "%s: error creating temp file: %s\r\n", UTILITY, strerror(errno));
+        fprintf(stderr, "%s: error creating temp file: %s\n", UTILITY, strerror(errno));
         free(tmpname);
         if(editor)
         {
-            if(edit_malloc) free_malloced_str(editor);
-            else free(editor);
+            /* free the editor name */
+            if(edit_malloc)
+            {
+                free_malloced_str(editor);
+            }
+            else
+            {
+                free(editor);
+            }
         }
         return 4;
     }
     
+    /* write the commands to the temp file */
     if(reverse)
     {
         for( ; last >= first; last--)
@@ -385,22 +567,32 @@ check_bounds:
         }
     }
 
+    /*
+     * invoke the editor and check its exit status to determine if we should
+     * execute the commands or not (the user might have cancelled her editing,
+     * in which case we should not execute the commands).
+     */
     char *editor_argv[3] = { editor, tmpname, NULL };
     int   status = fork_command(2, editor_argv, NULL, UTILITY, 0, 0);
     unlink(tmpname);
     if(WIFEXITED(status) && WEXITSTATUS(status) == 0)
     {
+        /* read the edited commands */
         lseek(tmp, 0, SEEK_SET);
         FILE *f = fdopen(tmp, "r");
         int  line_max = sysconf(_SC_LINE_MAX);
-        if(line_max <= 0) line_max = DEFAULT_LINE_MAX;
+        if(line_max <= 0)
+        {
+            line_max = DEFAULT_LINE_MAX;
+        }
         char cmd[line_max];
         struct source_s save_src = __src;
         while(fgets(cmd, line_max-1, f))
         {
             __src.buffer   = cmd;
             __src.bufsize  = strlen(cmd)-1;
-            __src.filename = fc_filename;
+            __src.srctype  = SOURCE_FCCMD;
+            __src.srcname  = NULL;
             __src.curpos   = -2;
             do_cmd();
         }
@@ -408,11 +600,19 @@ check_bounds:
         fclose(f);
     }
     close(tmp);
+    /* free the editor name */
     if(editor)
     {
-        if(edit_malloc) free_malloced_str(editor);
-        else free(editor);
+        if(edit_malloc)
+        {
+            free_malloced_str(editor);
+        }
+        else
+        {
+            free(editor);
+        }
     }
     free(tmpname);
+    /* return the exit status of the last command executed */
     return exit_status;
 }

@@ -34,24 +34,54 @@
 
 #define UTILITY     "unset"
 
-void do_unset(char *name, struct symtab_entry_s *entry);
 
+/*
+ * the unset builtin utility (non-POSIX).. used to unset shell variables.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help unset` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
 
 int unset(int argc, char *argv[])
 {
-    if(argc == 1) return 0;
+    /* no arguments. bail out */
+    if(argc == 1)
+    {
+        return 0;
+    }
     int i      = 0;
     int is_var = 1;
     int res    = 0;
-
+    
+    /*
+     * pop our local symbol table, so that we will unset variables in the caller's
+     * scope.. this will give the caller the intended behaviour, as calling unset
+     * should unset variables in the caller's scope, not in the unset utility's scope.
+     */
+    struct symtab_s *symtab = symtab_stack_pop();
+    
     while(++i < argc)
     {
         char *arg = argv[i];
         if(arg[0] == '-')
         {
-            if(strcmp(arg, "-v") == 0) { is_var = 1; continue; }
-            if(strcmp(arg, "-f") == 0) { is_var = 0; continue; }
-            fprintf(stderr, "%s: unknown option: %s\r\n", UTILITY, arg);
+            /* arguments are variable names */
+            if(strcmp(arg, "-v") == 0)
+            {
+                is_var = 1;
+                continue;
+            }
+            /* arguments are function names */
+            if(strcmp(arg, "-f") == 0)
+            {
+                is_var = 0;
+                continue;
+            }
+            fprintf(stderr, "%s: unknown option: %s\n", UTILITY, arg);
+            symtab_stack_push(symtab);
             return 2;
         }
         /* check we are not trying to unset one of the special variables */
@@ -67,67 +97,73 @@ int unset(int argc, char *argv[])
                 case '$':
                 case '!':
                 case '0':
-                    fprintf(stderr, "%s: unable to unset '%s': special parameter\r\n", UTILITY, arg);
+                    fprintf(stderr, "%s: unable to unset '%s': special parameter\n", UTILITY, arg);
                     res = 1;
                     continue;
             }
         }
         if(is_var)
         {
-            struct symtab_entry_s *entry = get_symtab_entry(arg);
-            if(!entry) continue;
-            //if(entry->val_type == SYM_FUNC  ) continue;
-            if(entry->flags & FLAG_READONLY )
+            struct symtab_entry_s *entry;
+            if(is_special_param(arg))
             {
-                fprintf(stderr, "%s: unable to unset '%s': readonly variable\r\n", UTILITY, arg);
+                fprintf(stderr, "%s: unable to unset '%s': special parameter\n", UTILITY, arg);
                 res = 1;
                 continue;
             }
-            if(is_special_param(entry->name))
+            /*
+             * localvar_unset causes variables defined in previous scopes to be unset for the duration
+             * of the current function call. after the call finishes, variables are unmasked, they
+             * retrieve their previous values. we achieve this effect by simply adding a NULL-valued
+             * entry to the local symbol table, masking the global symbol table's entry. we don't remove
+             * the variable from the local symbol table as this might unmask a global variable with the
+             * same name.
+             */
+            if(optionx_set(OPTION_LOCAL_VAR_UNSET))
             {
-                fprintf(stderr, "%s: unable to unset '%s': special parameter\r\n", UTILITY, arg);
-                res = 1;
-                continue;
+                if((entry = get_local_symtab_entry(arg)) == NULL)
+                {
+                    entry = add_to_symtab(arg);
+                }
+                if(entry)
+                {
+                    if(entry->flags & FLAG_READONLY )
+                    {
+                        fprintf(stderr, "%s: unable to unset '%s': readonly variable\n", UTILITY, arg);
+                        res = 1;
+                        continue;
+                    }
+                    symtab_entry_setval(entry, NULL);
+                }
             }
-            do_unset(arg, entry);
+            else
+            {
+                if((entry = get_symtab_entry(arg)))
+                {
+                    if(entry->flags & FLAG_READONLY )
+                    {
+                        fprintf(stderr, "%s: unable to unset '%s': readonly variable\n", UTILITY, arg);
+                        res = 1;
+                        continue;
+                    }
+                    rem_from_symtab(entry);
+                }
+            }
         }
         else
         {
-            //if(entry->val_type != SYM_FUNC) continue;
-            //do_unset(arg, entry);
             unset_func(arg);
         }
         if(unsetenv(arg) != 0)
         {
-            fprintf(stderr, "%s: unable to unset '%s': %s\r\n", UTILITY, arg, strerror(errno));
+            fprintf(stderr, "%s: unable to unset '%s': %s\n", UTILITY, arg, strerror(errno));
             res = 1;
         }
     }
+    /*
+     * restore our local symbol table, so that do_simple_command() or whoever called us
+     * can pop the local symbol table correctly.
+     */
+    symtab_stack_push(symtab);
     return res;
-}
-
-/*
- * localvar_unset causes variables defined in previous scopes to be unset for the duration
- * of the current function call. after the call finishes, variables are unmasked, they
- * retrieve their previous values. we achieve this effect by simply adding a NULL-valued
- * entry to the local symbol table, masking the global symbol table's entry. we don't remove
- * the variable from the local symbol table as this might unmask a global variable with the
- * same name.
- * 
- * TODO: this might not give the desired effect as we will be working on our own symbol table,
- *       not our caller's (e.g. a function or script).
- */
-void do_unset(char *name, struct symtab_entry_s *entry)
-{
-    debug (NULL);
-    if(optionx_set(OPTION_LOCAL_VAR_UNSET))
-    {
-        if(get_local_symtab_entry(name) == entry) symtab_entry_setval(entry, NULL);
-        else
-        {
-            add_to_symtab(name);
-            symtab_entry_setval(entry, NULL);
-        }
-    }
-    else rem_from_symtab(entry);
 }

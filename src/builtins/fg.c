@@ -36,6 +36,10 @@ int wait_on_child(pid_t pid, struct node_s *cmd, struct job *job);
 
 #define UTILITY         "fg"
 
+
+/*
+ * bring a job to the foreground.
+ */
 void __fg(struct job *job)
 {
     /*
@@ -48,58 +52,57 @@ void __fg(struct job *job)
      * no need to check for option_set('m') here because it must be set,
      * otherwise this function would have never been called.
      */
-    int   status;
     int   tty = isatty(0);
-    printf("%s\r\n", job->commandstr);
+    printf("%s\n", job->commandstr);
     if(tty)
     {
         tcsetpgrp(0, job->pgid);
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(job->tty_attr) tcsetattr(0, TCSANOW, job->tty_attr);
-    }
-    kill(-(job->pgid), SIGCONT);
-    wait_on_child(job->pgid, NULL, job);
-    if(tty) tcsetpgrp(0, tty_pid);
-#if 0
-    int res = waitpid(job->pgid, &status, WAIT_FLAG);
-    if(tty) tcsetpgrp(0, tty_pid);
-    if(res < 0)
-    {
-        fprintf(stderr, "%s: failed to get child status (%d): %s\r\n", UTILITY, errno, strerror(errno));
-        return;
-    }
-    if(WIFSTOPPED(status) || WIFSIGNALED(status))
-    {
-        if(option_set('m'))
+        if(job->tty_attr)
         {
-            if(cur_job != job->job_num) set_cur_job(job);
-            notice_termination(job->pgid, status);
+            tcsetattr(0, TCSANOW, job->tty_attr);
         }
     }
-    else
+    /* continue the job and wait for it */
+    kill(-(job->pgid), SIGCONT);
+    wait_on_child(job->pgid, NULL, job);
+    /* restore our foreground pgid */
+    if(tty)
     {
-        set_exit_status(status, 1);
-        kill_job(job);
+        tcsetpgrp(0, tty_pid);
     }
-#endif
 }
 
 
+/*
+ * the fg builtin utility (POSIX).. used to bring a job to the foreground.
+ * if more than one job is specified, brings the jobs, one at a time, to the
+ * foreground, waiting for each to finish execution before resuming the next.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help fg` or `fg -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int fg(int argc, char **argv)
 {
+    /* job control must be on */
     if(!option_set('m'))
     {
-        fprintf(stderr, "%s: job control is not enabled\r\n", UTILITY);
+        fprintf(stderr, "%s: job control is not enabled\n", UTILITY);
         return 2;
     }
     
     struct job *job;
+    /* we have no job argument.. use the current job */
     if(argc == 1)
     {
         job = get_job_by_jobid(get_jobid("%%"));
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %%%%\r\n", UTILITY);
+            fprintf(stderr, "%s: unknown job: %%%%\n", UTILITY);
             return 3;
         }
         __fg(job);
@@ -107,26 +110,43 @@ int fg(int argc, char **argv)
     }
 
     /****************************
-     * process the arguments
+     * process the options
      ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
     while((c = parse_args(argc, argv, "hv", &v, 0)) > 0)
     {
-        if     (c == 'h') { print_help(argv[0], REGULAR_BUILTIN_FG, 1, 0); }
-        else if(c == 'v') { printf("%s", shell_ver)     ; }
+        switch(c)
+        {
+            case 'h':
+                print_help(argv[0], REGULAR_BUILTIN_FG, 1, 0);
+                return 0;
+
+            case 'v':
+                printf("%s", shell_ver);
+                return 0;
+        }
     }
     /* unknown option */
-    if(c == -1) return 1;
-    if(v >= argc) return 0;
+    if(c == -1)
+    {
+        return 1;
+    }
+
+    /* no job arguments */
+    if(v >= argc)
+    {
+        return 0;
+    }
     
+    /* process the job arguments */
     for( ; v < argc; v++)
     {
         job = get_job_by_jobid(get_jobid(argv[v]));
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\r\n", UTILITY, argv[v]);
+            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
             return 3;
         }
         __fg(job);

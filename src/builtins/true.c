@@ -23,26 +23,23 @@
 
 #define UTILITY             "true"
 
-int true(int argc, char **argv)
+
+/*
+ * the true builtin utility (POSIX).
+ *
+ * returns 0.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help true` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
+int true(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     /*
      * NOTE: ksh, bash and other major shells implement a true builtin
-     *       that accepts no options, specially the '--' option.
+     *       that accepts no options, especially the '--' option.
      */
-#if 0
-    int v;
-    for(v = 1; v < argc; v++)
-    { 
-        if(argv[v][0] == '-')
-        {
-            if(strcmp(argv[v], "-h") == 0) { print_help(argv[0], REGULAR_BUILTIN_TRUE, 1); continue; }
-            if(strcmp(argv[v], "-v") == 0) { printf("%s", shell_ver); continue; }
-            fprintf(stderr, "%s: unknown option: %s\r\n", UTILITY, argv[v]);
-            return 2;
-        }
-        break;
-    }
-#endif
     return 0;
 }
 

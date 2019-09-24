@@ -47,13 +47,25 @@
 #define UTILITY         "ulimit"
 #define RLIMIT_PIPESZ   100
 
+
+/*
+ * struct to represent our rlimits.
+ */
 struct rlim_s
 {
-    int    which ;
-    rlim_t limit ;
-    char   option;
+    int    which ;      /* which rlimit is it */
+    rlim_t limit ;      /* the limit value */
+    char   option;      /*
+                         * one char describing the option passed to ulimit
+                         * on the command line.
+                         */
 };
 
+
+/*
+ * get the size of pipes on this system in kilobytes (there is no direct and
+ * portable way of getting the default pipe size - hence this hack).
+ */
 long get_pipesz()
 {
     int pipefd[2];
@@ -61,18 +73,36 @@ long get_pipesz()
     long sz = ((long)fcntl(pipefd[0], F_GETPIPE_SZ));
     close(pipefd[0]);
     close(pipefd[1]);
-    if(sz == -1) return 0;
-    else return sz/1024;
+    if(sz == -1)
+    {
+        return 0;
+    }
+    else
+    {
+        return sz/1024;
+    }
 }
 
+
+/*
+ * output an rlimit, printing 'unlimited' as appropriate.
+ */
 void print_rlimit(rlim_t limit)
 {
     if(limit == RLIM_INFINITY)
-        printf("unlimited\r\n");
+    {
+        printf("unlimited\n");
+    }
     else
-        printf("%lu\r\n", limit);
+    {
+        printf("%lu\n", limit);
+    }
 }
 
+
+/*
+ * return a string describing the rlimit given in 'which'.
+ */
 char *rlimit_name(int which)
 {
     switch(which)
@@ -130,17 +160,34 @@ char *rlimit_name(int which)
     }
 }
 
+
+/*
+ * get or set the rlimit given in 'which'.. if getting, the rlimit is stored in 'rlim'..
+ * if setting, 'valstr' contains the value to give to the rlimit, or one of the special
+ * values 'unlimited', 'hard', or 'soft'.. if the 'ishard' parameter is non-zero, we will
+ * be working with the hard limit, otherwise we will manipulate the soft limit..
+ * the 'div' parameter is a number we will divide the rlimit by (if getting the limit),
+ * or multiply the rlimit by (if setting the limit).. for example, to set an rlimit to 2kb,
+ * we can pass 2 as the rlimit value with a div of 1024.. to get the rlimit value back in kb,
+ * we will pass 1024 as the value of div when we are retrieving the rlimit value.
+ *
+ * returns 0 if the rlimit is got/set successfully, non-zero otherwise.
+ */
 int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int ishard)
 {
     struct rlimit limit;
+    /* first get the current rlimit */
     if(getrlimit(which, &limit) == 0)
     {
+        /* we are setting the rlimit */
         if(valstr)
         {
+            /* extract the numeric value */
             char *strend;
             long val = strtol(valstr, &strend, 10);
             if(strend == valstr)
             {
+                /* no numeric value. maybe its a special string value */
                 if(strcmp(valstr, "unlimited") == 0)
                 {
                     /* set to unlimited */
@@ -163,23 +210,36 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int isha
                 }
                 else
                 {
-                    fprintf(stderr, "%s: invalid limit value: %s\r\n", UTILITY, valstr);
+                    /* invalid value */
+                    fprintf(stderr, "%s: invalid limit value: %s\n", UTILITY, valstr);
                     return 2;
                 }
             }
             else
             {
-                if(div) val = val * div;
-                if(ishard) limit.rlim_max = val;
-                else       limit.rlim_cur = val;
+                /* convert value as appropriate */
+                if(div)
+                {
+                    val = val * div;
+                }
+                /* set the soft/hard limit */
+                if(ishard)
+                {
+                    limit.rlim_max = val;
+                }
+                else
+                {
+                    limit.rlim_cur = val;
+                }
             }
             /* now set the limit */
             if(setrlimit(which, &limit) == -1)
             {
-                fprintf(stderr, "%s: failed to set rlimit: %s\r\n", UTILITY, strerror(errno));
+                fprintf(stderr, "%s: failed to set rlimit: %s\n", UTILITY, strerror(errno));
                 return 3;
             }
         }
+        /* we are getting the rlimit */
         else
         {
             rlim->which = which;
@@ -190,39 +250,61 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int isha
             }
             else
             {
-                if(div) rlim->limit = l2/div;
-                else    rlim->limit = l2;
+                if(div)
+                {
+                    rlim->limit = l2/div;
+                }
+                else
+                {
+                    rlim->limit = l2;
+                }
             }
         }
     }
     else
     {
-        fprintf(stderr, "%s: failed to get rlimit: %s\r\n", UTILITY, strerror(errno));
+        /* failed to get the rlimit */
+        fprintf(stderr, "%s: failed to get rlimit: %s\n", UTILITY, strerror(errno));
         return 3;
     }
     return 0;
 }
 
+
+/*
+ * the ulimit builtin utility (POSIX).. used to set and report process resource limits.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help ulimit` or `ulimit -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int __ulimit(int argc, char **argv)
 {
     struct rlimit limit;
-    /* assume -f option */
+    /* no arguments. assume the -f option */
     if(argc == 1)
     {
         if(getrlimit(RLIMIT_FSIZE, &limit) == 0)
         {
             if(limit.rlim_cur == RLIM_INFINITY)
+            {
                 print_rlimit(limit.rlim_cur);
+            }
             else
+            {
                 print_rlimit(limit.rlim_cur/512);
+            }
         }
         return 0;
     }
     
     /*
-     * process the arguments. we will first collect all requested
-     * rlimits in an array, then print them out. this is so if the
-     * caller is asking for one rlimit, we will output it. otherwise,
+     * process the arguments.. we will first collect all requested
+     * rlimits in an array, then print them out.. this is so if the
+     * caller is asking for one rlimit, we will output it.. otherwise,
      * we will print a nicely formatted multi-line result indicating
      * each rlimit and its value.
      */
@@ -234,8 +316,11 @@ int __ulimit(int argc, char **argv)
     int res2   = 0;
     int ishard = 0;     /* set soft limits by default, unless -H is specified */
     char *newlimit;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hac:d:e:f:i:l:m:n:p:q:r:s:t:u:v:x:HS", &v, 1)) > 0)
     {
         newlimit = ((__optarg) && (__optarg != INVALID_OPTARG)) ? __optarg : NULL;
@@ -253,25 +338,55 @@ int __ulimit(int argc, char **argv)
                 ishard = 0;
                 continue;
                 
-            case 'a':
-                parse_rlimit(&limits[0 ], RLIMIT_CORE      , NULL, 512 , ishard); limits[0 ].option = 'c';
-                parse_rlimit(&limits[1 ], RLIMIT_DATA      , NULL, 1024, ishard); limits[1 ].option = 'd';
-                parse_rlimit(&limits[2 ], RLIMIT_NICE      , NULL, 0   , ishard); limits[2 ].option = 'e';
-                parse_rlimit(&limits[3 ], RLIMIT_FSIZE     , NULL, 512 , ishard); limits[3 ].option = 'f';
-                parse_rlimit(&limits[4 ], RLIMIT_SIGPENDING, NULL, 0   , ishard); limits[4 ].option = 'i';
-                parse_rlimit(&limits[5 ], RLIMIT_MEMLOCK   , NULL, 1024, ishard); limits[5 ].option = 'l';
-                parse_rlimit(&limits[6 ], RLIMIT_RSS       , NULL, 1024, ishard); limits[6 ].option = 'm';
-                parse_rlimit(&limits[7 ], RLIMIT_NOFILE    , NULL, 0   , ishard); limits[7 ].option = 'n';
-                parse_rlimit(&limits[9 ], RLIMIT_MSGQUEUE  , NULL, 1024, ishard); limits[9 ].option = 'q';
-                parse_rlimit(&limits[10], RLIMIT_RTPRIO    , NULL, 0   , ishard); limits[10].option = 'r';
-                parse_rlimit(&limits[11], RLIMIT_STACK     , NULL, 1024, ishard); limits[11].option = 's';
-                parse_rlimit(&limits[12], RLIMIT_CPU       , NULL, 0   , ishard); limits[12].option = 't';
-                parse_rlimit(&limits[13], RLIMIT_NPROC     , NULL, 0   , ishard); limits[13].option = 'u';
-                parse_rlimit(&limits[14], RLIMIT_AS        , NULL, 1024, ishard); limits[14].option = 'v';
-                parse_rlimit(&limits[15], RLIMIT_LOCKS     , NULL, 0   , ishard); limits[15].option = 'x';
+            case 'a':               /* get all limits */
+                parse_rlimit(&limits[0 ], RLIMIT_CORE      , NULL, 512 , ishard);
+                limits[0 ].option = 'c';
+
+                parse_rlimit(&limits[1 ], RLIMIT_DATA      , NULL, 1024, ishard);
+                limits[1 ].option = 'd';
+
+                parse_rlimit(&limits[2 ], RLIMIT_NICE      , NULL, 0   , ishard);
+                limits[2 ].option = 'e';
+
+                parse_rlimit(&limits[3 ], RLIMIT_FSIZE     , NULL, 512 , ishard);
+                limits[3 ].option = 'f';
+
+                parse_rlimit(&limits[4 ], RLIMIT_SIGPENDING, NULL, 0   , ishard);
+                limits[4 ].option = 'i';
+
+                parse_rlimit(&limits[5 ], RLIMIT_MEMLOCK   , NULL, 1024, ishard);
+                limits[5 ].option = 'l';
+
+                parse_rlimit(&limits[6 ], RLIMIT_RSS       , NULL, 1024, ishard);
+                limits[6 ].option = 'm';
+
+                parse_rlimit(&limits[7 ], RLIMIT_NOFILE    , NULL, 0   , ishard);
+                limits[7 ].option = 'n';
+
                 limits[8].limit  = get_pipesz();
                 limits[8].which  = RLIMIT_PIPESZ;
                 limits[8].option = 'p';
+
+                parse_rlimit(&limits[9 ], RLIMIT_MSGQUEUE  , NULL, 1024, ishard);
+                limits[9 ].option = 'q';
+
+                parse_rlimit(&limits[10], RLIMIT_RTPRIO    , NULL, 0   , ishard);
+                limits[10].option = 'r';
+
+                parse_rlimit(&limits[11], RLIMIT_STACK     , NULL, 1024, ishard);
+                limits[11].option = 's';
+
+                parse_rlimit(&limits[12], RLIMIT_CPU       , NULL, 0   , ishard);
+                limits[12].option = 't';
+
+                parse_rlimit(&limits[13], RLIMIT_NPROC     , NULL, 0   , ishard);
+                limits[13].option = 'u';
+
+                parse_rlimit(&limits[14], RLIMIT_AS        , NULL, 1024, ishard);
+                limits[14].option = 'v';
+
+                parse_rlimit(&limits[15], RLIMIT_LOCKS     , NULL, 0   , ishard);
+                limits[15].option = 'x';
                 count = 16;
                 goto print;
                 break;
@@ -320,7 +435,7 @@ int __ulimit(int argc, char **argv)
                 }
                 else
                 {
-                    fprintf(stderr, "%s: pipe buffer size: cannot modify a readonly limit\r\n", UTILITY);
+                    fprintf(stderr, "%s: pipe buffer size: cannot modify a readonly limit\n", UTILITY);
                     res2 = 2;
                 }
                 break;
@@ -353,17 +468,28 @@ int __ulimit(int argc, char **argv)
                 res2 = parse_rlimit(&limits[count], RLIMIT_LOCKS  , newlimit, 0   , ishard);
                 break;
         }
+
         /* check if we parsed the option successfully or not */
         if(res2 == 0)
         {
             if(!newlimit) limits[count++].option = c;
         }
-        else res = res2;
+        else
+        {
+            res = res2;
+        }
     }
     /* unknown option */
-    if(c == -1) return 1;
+    if(c == -1)
+    {
+        return 1;
+    }
     
-    if(!count) return res;
+    /* no rlimits are parsed */
+    if(!count)
+    {
+        return res;
+    }
 
     /* only one rlimit was requested. spit it out and exit */
     if(count == 1)
@@ -378,13 +504,19 @@ print:
     {
         char *name = rlimit_name(limits[v].which);
         printf("%s%*s(-%c)  ", name, (int)(32-strlen(name)), " ", limits[v].option);
-        /* nice values are in the range 19 to -20, but the limit returned
+        /*
+         * nice values are in the range 19 to -20, but the limit returned
          * from the Linux kernel is in the range 1 to 40, so you need to subtract
          * from 20 if you wanted to get the actual nice value.
          */
         if(limits[v].which == RLIMIT_NICE || limits[v].which == RLIMIT_RTPRIO)
-             printf("%lu\r\n", limits[v].limit);
-        else print_rlimit(limits[v].limit);
+        {
+             printf("%lu\n", limits[v].limit);
+        }
+        else
+        {
+            print_rlimit(limits[v].limit);
+        }
     }
     return res;
 }

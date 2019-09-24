@@ -46,6 +46,9 @@
 extern long int CLK_TCK;
 
 
+/*
+ * get the current time in seconds.
+ */
 double get_cur_time()
 {
     struct timeval tm;
@@ -54,6 +57,12 @@ double get_cur_time()
 }
 
 
+/*
+ * print the minutes and seconds specified in the mins and secs parameters,
+ * respectively.. if l != 0 and hrs > 0, we also print the hours.. the p
+ * parameter represents the percision, or the number of decimal places to use
+ * when we print the seconds.
+ */
 void print_time(int l, int p, int hrs, int mins, double secs)
 {
     char buf[32];
@@ -71,72 +80,50 @@ void print_time(int l, int p, int hrs, int mins, double secs)
 }
 
 
+/*
+ * the time builtin utility (POSIX).. used to execute commands and time their execution.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help time` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int __time(struct node_s *cmd)
-// int __time(int argc, char *argv[])
 {
     int     res = 0;
-    int     use_posix_fmt = 0;
-    clock_t st_time;
-    clock_t en_time;
+    /* use POSIX format by default if running in the --posix mode */
+    int     use_posix_fmt = option_set('P');
+    clock_t st_time;          /* start time (before executing the command) */
+    clock_t en_time;          /* end time (after executing the command) */
     struct  tms st_cpu;
     struct  tms en_cpu;
     double  rstart, rend;     /* real clock time diff in secs */
     
     /* if time is called with no arguments, we print the shell's times information (zsh) */
-    if(!cmd) return __times(1, NULL);
+    if(!cmd)
+    {
+        return __times(1, NULL);
+    }
     
     /* get start time */
     st_time = times(&st_cpu);
     if(st_time == -1)
     {
-        fprintf(stderr, "%s: failed to read time: %s\r\n", UTILITY, strerror(errno));
+        fprintf(stderr, "%s: failed to read time: %s\n", UTILITY, strerror(errno));
         return 1;
     }
     rstart = get_cur_time();
 
+    /* execute the command(s) */
     res = !do_complete_command(cmd);
     
-#if 0
-    /****************************
-     * process the arguments
-     ****************************/
-    int c, v = 1;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
-    while((c = parse_args(argc, argv, "hvp", &v, 0)) > 0)
-    {
-        switch(c)
-        {
-            case 'h':
-                print_help(argv[0], SPECIAL_BUILTIN_TIME, 0, 0);
-                break;
-                
-            case 'v':
-                printf("%s", shell_ver);
-                break;
-                
-            case 'p':
-                use_posix_fmt = 1;
-                break;
-        }
-    }
-    /* unknown option */
-    if(c == -1) return 2;
-    
-    if(v < argc)
-    {
-        int    cargc = argc-v;
-        char **cargv = &argv[v];    
-        res = search_and_exec(cargc, cargv, NULL, SEARCH_AND_EXEC_DOFORK|SEARCH_AND_EXEC_DOFUNC);
-    }
-    
-#endif
-
     /* get end time */
     en_time = times(&en_cpu);
     if(en_time == -1)
     {
-        fprintf(stderr, "%s: failed to read time: %s\r\n", UTILITY, strerror(errno));
+        fprintf(stderr, "%s: failed to read time: %s\n", UTILITY, strerror(errno));
         return 1;
     }
     rend = get_cur_time();
@@ -151,15 +138,6 @@ int __time(struct node_s *cmd)
     double cstime  = (en_cpu.tms_cstime - st_cpu.tms_cstime+ 0.0)/CLK_TCK;
     utime = utime + cutime;
     stime = stime + cstime;
-    /*
-    fprintf(stderr, "%s(): CLK_TCK %ld\n", __func__, CLK_TCK);
-    fprintf(stderr, "%s(): en_cpu.tms_utime = %ld, st_cpu.tms_utime = %ld\r\n", __func__, en_cpu.tms_utime, st_cpu.tms_utime);
-    fprintf(stderr, "%s(): en_cpu.tms_stime = %ld, st_cpu.tms_stime = %ld\r\n", __func__, en_cpu.tms_stime, st_cpu.tms_stime);
-    fprintf(stderr, "%s(): en_cpu.tms_cutime = %ld, st_cpu.tms_cutime = %ld\r\n", __func__, en_cpu.tms_cutime, st_cpu.tms_cutime);
-    fprintf(stderr, "%s(): en_cpu.tms_cstime = %ld, st_cpu.tms_cstime = %ld\r\n", __func__, en_cpu.tms_cstime, st_cpu.tms_cstime);
-    fprintf(stderr, "%s(): %ld,%ld\n", __func__, st_time, en_time);
-    fprintf(stderr, "%s(): %f, %f, %f, %f\n", __func__, utime, stime, cutime, cstime);
-    */
     /* calculate the seconds */
     int    umins   = utime /60;
     int    smins   = stime /60;
@@ -185,7 +163,10 @@ int __time(struct node_s *cmd)
         if(entry)
         {
             /* if the value of $TIMEFORMAT is null, no timing info is displayed (ksh, bash) */
-            if(!entry->val) return 0;
+            if(!entry->val)
+            {
+                return 0;
+            }
             format = entry->val;
         }
     }
@@ -200,19 +181,24 @@ int __time(struct node_s *cmd)
                 switch(*f)
                 {
                     case 'n':
-                        putchar('\n'); break;
+                        putchar('\n');
+                        break;
 
                     case 'r':
-                        putchar('\r'); break;
+                        putchar('\r');
+                        break;
 
                     case 't':
-                        putchar('\t'); break;
+                        putchar('\t');
+                        break;
 
                     case 'f':
-                        putchar('\f'); break;
+                        putchar('\f');
+                        break;
 
                     case 'v':
-                        putchar('\v'); break;
+                        putchar('\v');
+                        break;
                         
                     default:
                         putchar(*f);
@@ -238,11 +224,20 @@ int __time(struct node_s *cmd)
                         if(isdigit(*f))         /* optional precision digit */
                         {
                             precision = (*f)-'0';
-                            if(precision < 0) precision = 0;
-                            if(precision > 3) precision = 3;
+                            if(precision < 0)
+                            {
+                                precision = 0;
+                            }
+                            if(precision > 3)
+                            {
+                                precision = 3;
+                            }
                             f++;
                         }
-                        if(*f == 'l') longfmt = 1, f++;     /* optional 'l' for long output */
+                        if(*f == 'l')
+                        {
+                            longfmt = 1, f++;     /* optional 'l' for long output */
+                        }
                         switch(*f)
                         {
                             case 'S':
@@ -268,11 +263,5 @@ int __time(struct node_s *cmd)
         f++;
     }
     putchar('\n');
-    /*
-    fprintf(stderr, "real\t%dm%.3fs\r\n"
-                    "user\t%dm%.3fs\r\n"
-                    "sys \t%dm%.3fs\r\n",
-                    rmins, rtime, umins, utime, smins, stime);
-    */
     return res;
 }

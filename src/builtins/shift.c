@@ -30,11 +30,23 @@
 
 #define UTILITY     "shift"
 
+
+/*
+ * the shift builtin utility (POSIX).. used to shift positional arguments by a given
+ * number, or by 1 if no argument is given.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help shift` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int shift(int argc, char *argv[])
 {
     if(argc > 2)
     {
-        fprintf(stderr, "%s: too many arguments\r\n", UTILITY);
+        fprintf(stderr, "%s: too many arguments\n", UTILITY);
         return 1;
     }
     struct symtab_entry_s *hash = get_symtab_entry("#");
@@ -46,10 +58,15 @@ int shift(int argc, char *argv[])
         if(shift > params || shift < 0)
         {
             if(optionx_set(OPTION_SHIFT_VERBOSE))
-                fprintf(stderr, "%s: invalid shift number: %s\r\n", UTILITY, argv[1]);
+            {
+                fprintf(stderr, "%s: invalid shift number: %s\n", UTILITY, argv[1]);
+            }
             return 2;
         }
-        if(shift == 0) return 0;
+        if(shift == 0)
+        {
+            return 0;
+        }
     }
 
     int i, j = 1+shift;
@@ -59,11 +76,20 @@ int shift(int argc, char *argv[])
     {
         sprintf(buf, "%d", i);
         entry1 = get_symtab_entry(buf);
-        if(!entry1) entry1 = add_to_symtab(buf);
+        if(!entry1)
+        {
+            entry1 = add_to_symtab(buf);
+        }
         sprintf(buf, "%d", j);
         entry2 = get_symtab_entry(buf);
-        if(!entry2) symtab_entry_setval(entry1, NULL);
-        else        symtab_entry_setval(entry1, entry2->val);
+        if(!entry2)
+        {
+            symtab_entry_setval(entry1, NULL);
+        }
+        else
+        {
+            symtab_entry_setval(entry1, entry2->val);
+        }
     }
     params -= shift;
     sprintf(buf, "%d", params);

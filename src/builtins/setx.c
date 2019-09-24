@@ -99,13 +99,18 @@ optionx_list[] =
     /*
      * TODO: these two are currently not implemented
      */
-    { "progcomp"            , },
-    { "progcomp_alias"      , },
+    //{ "progcomp"            , },
+    //{ "progcomp_alias"      , },
     
     { "promptvars"                  , OPTION_PROMPT_VARS          },
+    { "prompt_vars"                 , OPTION_PROMPT_VARS          },    /* as above */
+    { "prompt_bang"                 , OPTION_PROMPT_BANG          },    /* similar to setting zsh PROMPT_BANG option */
+    { "prompt-bang"                 , OPTION_PROMPT_BANG          },    /* as above */
+    { "prompt_percent"              , OPTION_PROMPT_PERCENT       },    /* similar to setting zsh PROMPT_PERCENT option */
+    { "prompt-percent"              , OPTION_PROMPT_PERCENT       },    /* as above */
     { "pushdtohome"                 , OPTION_PUSHD_TO_HOME        },    /* similar to setting tcsh pushdtohome variable */
     { "recognize_only_executables"  , OPTION_RECOGNIZE_ONLY_EXE   },    /* similar to setting tcsh 
-                                                                         recognize_only_executables variable */
+                                                                           recognize_only_executables variable */
     { "recognize-only-executables"  , OPTION_RECOGNIZE_ONLY_EXE   },
     { "restricted_shell"            , OPTION_RESTRICTED_SHELL     },
     { "restricted-shell"            , OPTION_RESTRICTED_SHELL     },
@@ -115,7 +120,7 @@ optionx_list[] =
     { "shift-verbose"               , OPTION_SHIFT_VERBOSE        },
     { "sourcepath"                  , OPTION_SOURCE_PATH          },
     { "usercomplete"                , OPTION_USER_COMPLETE        },    /* our extension to auto-complete user names.
-                                                                   similar to bash's hostcomplete */
+                                                                           similar to bash's hostcomplete */
     { "xpg_echo"                    , OPTION_XPG_ECHO             },
     { "xpg-echo"                    , OPTION_XPG_ECHO             },
 };
@@ -123,41 +128,71 @@ optionx_list[] =
 int optionx_count = sizeof(optionx_list)/sizeof(struct optionx_s);
 
 
+/*
+ * turn the extended option 'op' on or off.
+ */
 int set_optionx(__int64_t op, int onoff)
 {
-    if(onoff) optionsx |= op;
-    else      optionsx &= ~op;
+    if(onoff)
+    {
+        optionsx |= op;
+    }
+    else
+    {
+        optionsx &= ~op;
+    }
     return 1;
 }
 
 
+/*
+ * get the table index of the extended shell option whose name is given in 'opname'.
+ * we use this index to access the extended option in the optionx_list[] array.
+ *
+ * returns the option index in the array, or -1 if the option is not found.
+ */
 __int64_t optionx_index(char *opname)
 {
     int i;
     for(i = 0; i < optionx_count; i++)
     {
         if(strcasecmp(opname, optionx_list[i].name) == 0)
+        {
             return optionx_list[i].val;
+        }
     }
     return -1;
 }
 
 
+/*
+ * print the on/off state of the extended shell options.
+ * if 'which' is 's', print only the set options.
+ * if 'which' is 'u', print only the unset options.
+ */
 void purge_xoptions(char which, int formal)
 {
     int i;
     for(i = 0; i < optionx_count; i++)
     {
         int isset = optionx_set(optionx_list[i].val);
-        if((which == 's' && !isset) || (which == 'u' && isset)) continue;
+        if((which == 's' && !isset) || (which == 'u' && isset))
+        {
+            continue;
+        }
         /* options with '-' in their names are duplicates for those with '_' in their names */
-        if(strchr(optionx_list[i].name, '-')) continue;
+        if(strchr(optionx_list[i].name, '-'))
+        {
+            continue;
+        }
         if(formal)
         {
+            /* formal output can be used as input to the shell to properly set the options */
             printf("setx -%c %s\n",  isset ? 's' : 'u', optionx_list[i].name);
         }
         else
         {
+            /* informal output cannot be used as input to the shell but is more human-readable */
             printf("%s%*s\t%s\n", optionx_list[i].name,
                    (int)(24-strlen(optionx_list[i].name)), " ",
                    isset ? "on": "off");
@@ -166,16 +201,27 @@ void purge_xoptions(char which, int formal)
 }
 
 
+/*
+ * the setx builtin utility (non-POSIX).. used to enable and disable extended shell
+ * options in a manner similar to bash's shopt builtin utility.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help setx` or `setx -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int setx(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int enable = 0, disable = 0, quiet = 0, setonly = 0, formal = 0;
     int v = 1, c;
     int res = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hvpsuqo", &v, 1)) > 0)
     {
         switch(c)
@@ -210,8 +256,16 @@ int setx(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
+    /*
+     *  no arguments, we will print all options unless the quiet mode is on
+     *  (the -q option is passed), in which case we will set our exit status
+     *  to the number of set options without printing anything.
+     */
     if(v >= argc)
     {
         if(quiet)
@@ -219,7 +273,10 @@ int setx(int argc, char **argv)
             /* return 0 if all options are set, non-zero otherwise */
             for(v = 0; v < optionx_count; v++)
             {
-                if(!optionx_set(optionx_list[v].val)) res++;
+                if(!optionx_set(optionx_list[v].val))
+                {
+                    res++;
+                }
             }
             return res;
         }
@@ -248,8 +305,14 @@ int setx(int argc, char **argv)
                 char o[] = { enable ? '-' : '+', 'o', '\0' };
                 if(do_options(o, arg) != 0)
                 {
-                    if(quiet) res++;
-                    else      res = 2;
+                    if(quiet)
+                    {
+                        res++;
+                    }
+                    else
+                    {
+                        res = 2;
+                    }
                 }
             }
             else
@@ -257,7 +320,10 @@ int setx(int argc, char **argv)
                 char o = short_option(arg);
                 if(!o)
                 {
-                    if(quiet) res++;
+                    if(quiet)
+                    {
+                        res++;
+                    }
                     else
                     {
                         fprintf(stderr, "%s: invalid option: %s\n", UTILITY, arg);
@@ -266,7 +332,10 @@ int setx(int argc, char **argv)
                 }
                 else if(quiet)
                 {
-                    if(!option_set(o)) res++;
+                    if(!option_set(o))
+                    {
+                        res++;
+                    }
                 }
                 else if(formal)
                 {
@@ -289,7 +358,7 @@ int setx(int argc, char **argv)
                 res++;
                 continue;
             }
-            fprintf(stderr, "%s: invalid option: %s\r\n", UTILITY, arg);
+            fprintf(stderr, "%s: invalid option: %s\n", UTILITY, arg);
             return 2;
         }
         
@@ -297,13 +366,13 @@ int setx(int argc, char **argv)
         {
             if(c2 == OPTION_LOGIN_SHELL || c2 == OPTION_RESTRICTED_SHELL)
             {
-                fprintf(stderr, "%s: error setting %s: readonly option\r\n", UTILITY, arg);
+                fprintf(stderr, "%s: error setting %s: readonly option\n", UTILITY, arg);
                 return 2;
             }
 
             if(!set_optionx(c2, enable ? 1 : 0))
             {
-                fprintf(stderr, "%s: error setting: %s\r\n", UTILITY, arg);
+                fprintf(stderr, "%s: error setting: %s\n", UTILITY, arg);
                 return 2;
             }
             continue;
@@ -311,8 +380,14 @@ int setx(int argc, char **argv)
         else
         {
             int o = optionx_set(c2);
-            if(!o) res++;
-            if(quiet) continue;
+            if(!o)
+            {
+                res++;
+            }
+            if(quiet)
+            {
+                continue;
+            }
             else if(formal)
             {
                 printf("setx -%c %s\n", o ? 's' : 'u', arg);

@@ -30,65 +30,126 @@
 #define UTILITY     "readonly"
 
 
+/*
+ * print all the readonly variables.
+ */
+void purge_readonlys()
+{
+    int i;
+    /* use an alpha list to sort variables alphabetically */
+    struct alpha_list_s list;
+    init_alpha_list(&list);
+    struct symtab_stack_s *stack = get_symtab_stack();
+
+    for(i = 0; i < stack->symtab_count; i++)
+    {
+        struct symtab_s *symtab = stack->symtab_list[i];
+        /*
+         * for all but the local symbol table, we check the table lower down in the
+         * stack to see if there is a local variable defined with the same name as
+         * a global variable.. if that is the case, the local variable takes precedence
+         * over the global variable, and we skip printing the global variable as we
+         * will print the local variable when we reach the local symbol table.
+         */
+
 #ifdef USE_HASH_TABLES
 
-    void purge_readonlys()
-    {
-        int i;
-        struct symtab_stack_s *stack = get_symtab_stack();
-        for(i = 0; i < stack->symtab_count; i++)
+        if(symtab->used)
         {
-            struct symtab_s *symtab = stack->symtab_list[i];
-            if(symtab->used)
+            struct symtab_entry_s **h1 = symtab->items;
+            struct symtab_entry_s **h2 = symtab->items + symtab->size;
+            for( ; h1 < h2; h1++)
             {
-                struct symtab_entry_s **h1 = symtab->items;
-                struct symtab_entry_s **h2 = symtab->items + symtab->size;
-                for( ; h1 < h2; h1++)
-                {
-                    struct symtab_entry_s *entry = *h1;
-                    while(entry)
-                    {
-                        if(entry->flags & FLAG_READONLY)
-                            purge_quoted("readonly", entry->name, entry->val);
-                        entry = entry->next;
-                    }
-                }
-            }
-        }
-    }
+                struct symtab_entry_s *entry = *h1;
 
 #else
 
-    void purge_readonlys()
-    {
-        int i;
-        struct symtab_stack_s *stack = get_symtab_stack();
-        for(i = 0; i < stack->symtab_count; i++)
-        {
-            struct symtab_s       *symtab = stack->symtab_list[i];
-            struct symtab_entry_s *entry  = symtab->first;
-            while(entry)
-            {
-                if(entry->flags & FLAG_READONLY)
-                    purge_quoted("readonly", entry->name, entry->val);
-                entry = entry->next;
-            }
-        }
-    }
+                struct symtab_entry_s *entry  = symtab->first;
 
 #endif
 
+                while(entry)
+                {
+                    if(entry->flags & FLAG_READONLY)
+                    {
+                        /* check the lower symbol tables don't have the same variable defined */
+                        struct symtab_entry_s *entry2 = get_symtab_entry(entry->name);
+                        /* check we got an entry that is different from this one */
+                        if(entry2 != entry)
+                        {
+                            /* we have a local variable with the same name. skip this one */
+                            entry = entry->next;
+                            continue;
+                        }
+                        /* get the formatted name=val string */
+                        char *str = NULL;
+                        if(entry->val == NULL)
+                        {
+                            str = alpha_list_make_str("readonly %s", entry->name);
+                        }
+                        else
+                        {
+                            char *val = quote_val(entry->val, 1);
+                            if(val)
+                            {
+                                str = alpha_list_make_str("readonly %s=%s", entry->name, val);
+                                free(val);
+                            }
+                            else
+                            {
+                                str = alpha_list_make_str("readonly %s=", entry->name);
+                            }
+                        }
+                        add_to_alpha_list(&list, str);
+                    }
+                    entry = entry->next;
+                }
+
+#ifdef USE_HASH_TABLES
+
+            }
+        }
+
+#endif
+
+    }
+
+    print_alpha_list(&list);
+    free_alpha_list(&list);
+}
+
+
+/*
+ * the readonly builtin utility (POSIX).. used to set the readonly attribute to
+ * one or more variables.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help readonly` or `readonly -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
 
 int readonly(int argc, char *argv[])
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hvp", &v, 1)) > 0)
     {
+        /*
+         * when in --posix mode, we recognize only the options defined by POSIX: -p.
+         */
+        if(option_set('P') && c != 'p')
+        {
+            fprintf(stderr, "%s: option -%c unrecognized in --posix mode\n", UTILITY, c);
+            c = -1;
+            break;
+        }
+        /* parse the option */
         switch(c)
         {
             case 'h':
@@ -105,37 +166,27 @@ int readonly(int argc, char *argv[])
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
+    /* no arguments. print all the readonly variables */
     if(v >= argc)
     {
         purge_readonlys();
         return 0;
     }
     
+    /* set the selected variables as readonly */
     int res = 0;
     for( ; v < argc; v++)
     {
         char *arg = argv[v];
-        if(do_declare_var(arg, 0, FLAG_READONLY, 0, SPECIAL_BUILTIN_READONLY) != 0) res = 1;
-        /*
-        char *equals  = strchr(arg, '=');
-        char *val     = equals ? equals+1 : NULL;
-        int  name_len = equals ? (equals-arg) : strlen(arg);
-        char name_buf[name_len+1];
-        strncpy(name_buf, arg, name_len);
-        name_buf[name_len] = '\0';
-        if(is_pos_param(name_buf) || is_special_param(name_buf))
+        if(do_declare_var(arg, 0, FLAG_READONLY, 0, SPECIAL_BUILTIN_READONLY) != 0)
         {
             res = 1;
-            fprintf(stderr, "%s: error setting/unsetting '%s' is not allowed\r\n", UTILITY, arg);
         }
-        else if(!__set(name_buf, val, 0, FLAG_READONLY))
-        {
-            res = 1;
-            fprintf(stderr, "%s: error setting readonly variable '%s'\r\n", UTILITY, arg);
-        }
-        */
     }
     return res;
 }

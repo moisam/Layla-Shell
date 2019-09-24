@@ -37,26 +37,42 @@ extern char **environ;
 #define UTILITY             "setenv"
 
 
+/*
+ * when we set or change the value of an environment variable, we set or change
+ * the value of the corresponding shell variable too.
+ */
 static inline void set_entry(char *name, char *val)
 {
     struct symtab_entry_s *entry = add_to_symtab(name);
-    if(name) symtab_entry_setval(entry, val);
+    if(name)
+    {
+        symtab_entry_setval(entry, val);
+    }
 }
 
 
 /*
+ * the setenv builtin utility (non-POSIX).. used to set or change the value of one or
+ * more environment variables.
+ *
  * the setenv utility is a tcsh non-POSIX extension. bash doesn't have it.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help setenv` or `setenv -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
 
 int __setenv(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
     char separator = '\n';
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hv", &v, 1)) > 0)
     {
         switch(c)
@@ -71,8 +87,12 @@ int __setenv(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
+    /* no arguments. print the list of environment variables */
     if(v >= argc)
     {
         char **p2 = environ;
@@ -83,7 +103,8 @@ int __setenv(int argc, char **argv)
         }
         return 0;
     }
-    
+
+    /* set the given environment variables */
     int res = 0;
     for( ; v < argc; v++)
     {

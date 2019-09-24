@@ -27,14 +27,25 @@
 #define UTILITY         "source"
 
 
+/*
+ * the source builtin utility (non-POSIX).. used to source (read and execute) a script file,
+ * similar to what the dot builtin utility does.
+ *
+ * returns the exit status of the last command executed.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help source` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int source(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "h:v", &v, 1)) > 0)
     {
         switch(c)
@@ -46,7 +57,7 @@ int source(int argc, char **argv)
             case 'h':
                 if(!__optarg || __optarg == INVALID_OPTARG)
                 {
-                    fprintf(stderr, "%s: -%c option is missing arguments\r\n", UTILITY, 'h');
+                    fprintf(stderr, "%s: -%c option is missing arguments\n", UTILITY, 'h');
                     return 2;
                 }
                 char *argv2[] = { "history", "-L", __optarg, NULL };
@@ -58,7 +69,10 @@ int source(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
     
     return dot(argc, argv);
 }

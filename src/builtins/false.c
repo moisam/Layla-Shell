@@ -23,33 +23,22 @@
 
 #define UTILITY             "false"
 
+
+/*
+ * the false builtin utility (POSIX).
+ *
+ * returns 1.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help false` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int false(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     /*
      * NOTE: ksh, bash and other major shells implement a false builtin
-     *       that accepts no options, specially the '--' option.
+     *       that accepts no options, especially the '--' option.
      */
-#if 0
-    /****************************
-     * process the arguments
-     ****************************/
-    int v = 1, c;
-    argi = 0;   /* args.c */
-    while((c = parse_args(argc, argv, "hv", &v, 1)) > 0)
-    {
-        switch(c)
-        {
-            case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_FALSE, 1);
-                return 0;
-                
-            case 'v':
-                printf("%s", shell_ver);
-                return 0;
-        }
-    }
-    /* unknown option */
-    if(c == -1) return 2;
-#endif
     return 1;
 }

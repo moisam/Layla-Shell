@@ -34,23 +34,40 @@
 
 #define UTILITY         "newgrp"
 
-/* check if the given group id is part of the supplementary group ids */
+/*
+ *  check if the given group id is part of the supplementary group ids.
+ */
 static inline int gid_in_list(gid_t gid, gid_t *supp_groups, int supp_group_count)
 {
     int i;
     for(i = 0; i < supp_group_count; i++)
-        if(supp_groups[i] == gid) return 1;
+    {
+        if(supp_groups[i] == gid)
+        {
+            return 1;
+        }
+    }
     return 0;
 }
 
+/*
+ * helper macro to print an error message and bail out.
+ */
 #define ERROR(msg)                          \
 do {                                        \
-    fprintf(stderr, "%s: %s: %s\r\n",       \
+    fprintf(stderr, "%s: %s: %s\n",       \
             UTILITY, msg, strerror(errno)); \
     goto fin;                               \
 } while(0);
 
 
+/*
+ * get the list of supplementary group ids for the user name.
+ *
+ * returns 1 if the supplementary groups are retrieved successfully from
+ * the group database.. the list is saved in *_supp_groups, the group count
+ * is saved in *_n.. returns 0 on error.
+ */
 int get_supp_groups(char *name, gid_t gid, gid_t **_supp_groups, int *_n)
 {
     int n = 32;
@@ -59,7 +76,10 @@ int get_supp_groups(char *name, gid_t gid, gid_t **_supp_groups, int *_n)
     
 get:
     supp_groups = malloc(len);
-    if(!supp_groups) return 0;
+    if(!supp_groups)
+    {
+        return 0;
+    }
     memset(supp_groups, 0, len);
     if(getgrouplist(name, gid, supp_groups, &n) < 0)
     {
@@ -74,6 +94,11 @@ get:
 }
 
 
+/*
+ * add the group id 'new_gid' to the supplementary group list 'supp_groups',
+ * which contains 'supp_group_count' items.. the list is extended and the pointer
+ * to the new list is returned.
+ */
 gid_t *add_supp_group(gid_t *supp_groups, int supp_group_count, gid_t new_gid)
 {
     gid_t *supp_groups2 = malloc((supp_group_count+1)*sizeof(gid_t));
@@ -90,20 +115,34 @@ gid_t *add_supp_group(gid_t *supp_groups, int supp_group_count, gid_t new_gid)
 }
 
 
+/*
+ * the newgrp builtin utility (POSIX).. used to start a new shell with a new group id.
+ *
+ * returns non-zero on failure, doesn't return on success (the new shell should overlay
+ * the currently running shell in memory).
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help newgrp` or `newgrp -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int newgrp(int argc, char **argv)
 {
     int   req_login  = 0;
     gid_t new_gid    = 0;
     gid_t old_gid    = getgid();
     int   groups_max = sysconf(_SC_NGROUPS_MAX);
-    if(groups_max <= 0) groups_max = 16;
+    if(groups_max <= 0)
+    {
+        groups_max = 16;
+    }
     gid_t *supp_groups = NULL;
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hvl", &v, 1)) > 0)
     {
         switch(c)
@@ -122,22 +161,39 @@ int newgrp(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 1;
+    if(c == -1)
+    {
+        return 1;
+    }
     
+    /* get the supplementary groups list */
     struct passwd *pw = getpwuid(getuid());
     if(v >= argc)
     {
-        if(pw) new_gid = pw->pw_gid;
-        else ERROR("error reading user info from user database");
+        if(pw)
+        {
+            new_gid = pw->pw_gid;
+        }
+        else
+        {
+            ERROR("error reading user info from user database");
+        }
+        /* set our new effective gid */
         if(setegid(new_gid) < 0)
+        {
             ERROR("error setting EGID");
+        }
         int   n;
         gid_t *supp_groups;
-        //if(getgrouplist(pw->pw_name, pw->pw_gid, supp_groups, &n) < 0)
+        /* set our supplementary groups */
         if(!get_supp_groups(pw->pw_name, pw->pw_gid, &supp_groups, &n))
+        {
             ERROR("error reading group ids from user database");
+        }
         if(setgroups(n, supp_groups) < 0)
+        {
             ERROR("error setting supplementary group ids");
+        }
         goto fin;
     }
     
@@ -153,7 +209,9 @@ int newgrp(int argc, char **argv)
         new_gid = atoi(group);
         grp = getgrgid(new_gid);
         if(!grp)
+        {
             ERROR("error reading group info from user database");
+        }
     }
         
     if(pw)
@@ -195,7 +253,10 @@ int newgrp(int argc, char **argv)
             goto fin;
         }
     }
-    else ERROR("error reading user info from user database");
+    else
+    {
+        ERROR("error reading user info from user database");
+    }
 
     /* the following convoluted code is modeled on the POSIX newgrp utility
      * description. see the link:
@@ -205,9 +266,13 @@ int newgrp(int argc, char **argv)
     int len = supp_group_count*sizeof(gid_t);
     supp_groups = malloc(len);
     if(!supp_groups)
+    {
         ERROR("insufficient memory for supplementary group ids");
+    }
     if(getgroups(supp_group_count, supp_groups) < 0)
+    {
         ERROR("error reading supplementary group ids");
+    }
     
     if(gid_in_list(old_gid, supp_groups, supp_group_count))
     {
@@ -218,9 +283,14 @@ int newgrp(int argc, char **argv)
                 if((supp_groups = add_supp_group(supp_groups, supp_group_count, new_gid)))
                 {
                     if(setgroups(supp_group_count+1, supp_groups) < 0)
+                    {
                         ERROR("error adding new gid to supplementary group ids");
+                    }
                 }
-                else ERROR("insufficient memory for supplementary group ids");
+                else
+                {
+                    ERROR("insufficient memory for supplementary group ids");
+                }
             }
         }
     }
@@ -242,7 +312,9 @@ int newgrp(int argc, char **argv)
             }
             supp_group_count--;
             if(setgroups(supp_group_count, supp_groups) < 0)
+            {
                 ERROR("error deleting supplementary group id");
+            }
         }
         if(!gid_in_list(old_gid, supp_groups, supp_group_count))
         {
@@ -251,14 +323,22 @@ int newgrp(int argc, char **argv)
                 if((supp_groups = add_supp_group(supp_groups, supp_group_count, old_gid)))
                 {
                     if(setgroups(supp_group_count+1, supp_groups) < 0)
+                    {
                         ERROR("error adding new gid to supplementary group ids");
+                    }
                 }
-                else ERROR("insufficient memory for supplementary group ids");
+                else
+                {
+                    ERROR("insufficient memory for supplementary group ids");
+                }
             }
         }
     }
     
-    if(setregid(new_gid, new_gid) < 0) ERROR("error setting new group id");
+    if(setregid(new_gid, new_gid) < 0)
+    {
+        ERROR("error setting new group id");
+    }
     
     /* 
      * even if authorization failed, we should create a new 
@@ -266,11 +346,17 @@ int newgrp(int argc, char **argv)
      */
 fin:
     //restore_std();
-    if(supp_groups) free(supp_groups);
+    if(supp_groups)
+    {
+        free(supp_groups);
+    }
 
     struct symtab_entry_s *shell = get_symtab_entry("SHELL");
     char *shell_path = "/bin/sh";
-    if(shell && shell->val) shell_path = shell->val;
+    if(shell && shell->val)
+    {
+        shell_path = shell->val;
+    }
 
     char *old_arg0 = shell_argv[0];
     if(req_login)
@@ -278,13 +364,13 @@ fin:
         char *arg = malloc(strlen(shell_path)+2);
         if(!arg)
         {
-            fprintf(stderr, "%s: failed to exec shell: %s\r\n", UTILITY, strerror(errno));
+            fprintf(stderr, "%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
             return 3;
         }
         sprintf(arg, "-%s", shell_path);
         shell_argv[0] = arg;
         execvp(shell_path, shell_argv);
-        fprintf(stderr, "%s: failed to exec shell: %s\r\n", UTILITY, strerror(errno));
+        fprintf(stderr, "%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
         shell_argv[0] = old_arg0;
         return 3;
     }
@@ -292,7 +378,7 @@ fin:
     {
         shell_argv[0] = shell_path;
         execvp(shell_path, shell_argv);
-        fprintf(stderr, "%s: failed to exec shell: %s\r\n", UTILITY, strerror(errno));
+        fprintf(stderr, "%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
         shell_argv[0] = old_arg0;
         return 3;
     }

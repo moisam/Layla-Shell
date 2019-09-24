@@ -37,19 +37,27 @@ extern char **environ;
 
 
 /*
+ * the printenv builtin utility (non-POSIX).. prints the environment variables.
+ *
  * the printenv utility is a tcsh non-POSIX extension. bash doesn't have it,
  * as it is part of the GNU coreutils package, not the shell itself.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help printenv` or `printenv -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
  */
 
 int printenv(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c;
     char separator = '\n';
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "hv0", &v, 1)) > 0)
     {
         switch(c)
@@ -68,8 +76,12 @@ int printenv(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
 
+    /* no arguments. print all environment variables */
     if(v >= argc)
     {
         char **p2 = environ;
@@ -81,6 +93,7 @@ int printenv(int argc, char **argv)
         return 0;
     }
     
+    /* print only the selected variables */
     c = 0;
     for( ; v < argc; v++)
     {
@@ -90,8 +103,14 @@ int printenv(int argc, char **argv)
             printf("%s%c", p, separator);
             c = 0;
         }
-        else c = 1;
+        else
+        {
+            c = 1;
+        }
     }
-    if(c) putchar(separator);
+    if(c)
+    {
+        putchar(separator);
+    }
     return 0;
 }

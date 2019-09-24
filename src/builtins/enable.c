@@ -29,6 +29,10 @@
 #define UTILITY         "enable"
 
 
+/*
+ * print a one-line message indicating the status of the builtin utility (i.e. is it
+ * enabled or disabled).
+ */
 static inline void status(struct builtin_s *builtin)
 {
     printf("enable %s%s\n", 
@@ -37,53 +41,90 @@ static inline void status(struct builtin_s *builtin)
 }
 
 
+/*
+ * print the enabled/disabled status of builtin utilities.. the printed list depends
+ * on the value of the which parameter:
+ *
+ *   'a' : print the status of all builtin utilities (regular and special, enabled and
+ *         disabled)
+ *   'e' : print the status of enabled builtin utilities
+ *   'r' : print the status of regular builtin utilities
+ *   's' : print the status of special builtin utilities
+ */
 void enable_list(char which)
 {
     int i;
     switch(which)
     {
         case 's':           /* list the special builtins only */
-            for(i = 0; i < special_builtin_count; i++) status(&special_builtins[i]);
+            for(i = 0; i < special_builtin_count; i++)
+            {
+                status(&special_builtins[i]);
+            }
             break;
             
         case 'r':           /* list the regular builtins only */
-            for(i = 0; i < regular_builtin_count; i++) status(&regular_builtins[i]);
+            for(i = 0; i < regular_builtin_count; i++)
+            {
+                status(&regular_builtins[i]);
+            }
             break;
             
         case 'e':           /* list the enabled builtins only */
             for(i = 0; i < special_builtin_count; i++)
             {
                 if(flag_set(special_builtins[i].flags, BUILTIN_ENABLED))
+                {
                     status(&special_builtins[i]);
+                }
             }
             for(i = 0; i < regular_builtin_count; i++)
             {
                 if(flag_set(regular_builtins[i].flags, BUILTIN_ENABLED))
+                {
                     status(&regular_builtins[i]);
+                }
             }
             break;
                 
         default:           /* list all builtins */
-            for(i = 0; i < special_builtin_count; i++) status(&special_builtins[i]);
-            for(i = 0; i < regular_builtin_count; i++) status(&regular_builtins[i]);
+            for(i = 0; i < special_builtin_count; i++)
+            {
+                status(&special_builtins[i]);
+            }
+            for(i = 0; i < regular_builtin_count; i++)
+            {
+                status(&regular_builtins[i]);
+            }
             break;
     }
 }
 
 
+/*
+ * the enable builtin utility (non-POSIX).. used to enable, disable and print the
+ * status of different builtin utilities.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help enable` or `enable -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int enable(int argc, char **argv)
 {
-    /****************************
-     * process the arguments
-     ****************************/
     int v = 1, c, res = 0;
     int print_attribs = 0;
     int disable       = 0;
     int print_all     = 0;
     int spec_only     = 0;
     int reg_only      = 0;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /****************************
+     * process the options
+     ****************************/
     while((c = parse_args(argc, argv, "ahnprsv", &v, 1)) > 0)
     {
         switch(c)
@@ -118,10 +159,20 @@ int enable(int argc, char **argv)
         }
     }
     /* unknown option */
-    if(c == -1) return 2;
-
-    if(print_all) spec_only = 0, reg_only = 0;
-
+    if(c == -1)
+    {
+        return 2;
+    }
+    /* -a supersedes -s and -r */
+    if(print_all)
+    {
+        spec_only = 0, reg_only = 0;
+    }
+    /*
+     *  if no arguments, list the utilities depending on the given option: all utilities (-a),
+     *  special builtins (-s), regular builtins (-r), or only the enabled builtins (if none
+     *  of the above options is provided).
+     */
     if(v >= argc)
     {
         enable_list(print_all ? 'a' :
@@ -133,10 +184,11 @@ int enable(int argc, char **argv)
     int print_only = (print_all || print_attribs || reg_only || spec_only);
     struct builtin_s *builtin = NULL;
     int i;
-    
+    /* process the arguments. each argument gives the name of a builtin utility to print */
     for( ; v < argc; v++, builtin = NULL)
     {
         char *arg = argv[v];
+        /* first check if the argument refers to a special builtin utility */
         if(print_all || spec_only)
         {
             for(i = 0; i < special_builtin_count; i++)
@@ -148,40 +200,47 @@ int enable(int argc, char **argv)
                 }
             }
         }
-        if(!builtin)
+        /* the argument is not a special builtin utility. check if it is a regular builtin */
+        if(!builtin && (print_all || reg_only))
         {
-            if(print_all || reg_only)
+            for(i = 0; i < regular_builtin_count; i++)
             {
-                for(i = 0; i < regular_builtin_count; i++)
+                if(strcmp(regular_builtins[i].name, arg) == 0)
                 {
-                    if(strcmp(regular_builtins[i].name, arg) == 0)
-                    {
-                        builtin = &regular_builtins[i];
-                        break;
-                    }
+                    builtin = &regular_builtins[i];
+                    break;
                 }
             }
         }
+        /* argument is neither a special nor a regular builtin utility */
         if(!builtin)
         {
             fprintf(stderr, "%s: cannot find %s: not a shell builtin\n", UTILITY, arg);
             res = 2;
             continue;
         }
-        
-        if(print_only) status(builtin);
+        /* print the utility's status */
+        if(print_only)
+        {
+            status(builtin);
+        }
         else
         {
-            if(disable) builtin->flags &= ~BUILTIN_ENABLED;
+            /* disable the builtin (the -n option) */
+            if(disable)
+            {
+                builtin->flags &= ~BUILTIN_ENABLED;
+            }
             else
             {
                 /* is this shell restricted? */
                 if(startup_finished && option_set('r'))
                 {
                     /* bash says r-shells can't enable disabled builtins */
-                    fprintf(stderr, "%s: can't enable builtin: restricted shell\r\n", UTILITY);
+                    fprintf(stderr, "%s: can't enable builtin: restricted shell\n", UTILITY);
                     return 2;
                 }
+                /* enable the builtin */
                 builtin->flags |=  BUILTIN_ENABLED;
             }
         }
