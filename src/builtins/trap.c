@@ -350,12 +350,6 @@ void reset_nonignored_traps()
             continue;
         }
         struct sigaction *handler = get_sigaction(i);
-        /*
-        if(signal(i, handler->sa_handler) < 0)
-        {
-            continue;
-        }
-        */
         sigemptyset(&handler->sa_mask);
         handler->sa_flags = 0;
         if(sigaction(i, handler, NULL) != -1)
@@ -431,21 +425,6 @@ void purge_traps()
         //printf("trap -- %s %s\n", trap->action_str, trap->name);
     }
 }
-
-
-/*
- * set the signal handler function for signal number signum to sa_handler().
- */
-#if 0
-int set_trap_handler(int signum, void (handler)(int))
-{
-    struct sigaction sigact;
-    sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = 0;
-    sigact.sa_handler = handler;
-    return sigaction(signum, &sigact, NULL);
-}
-#endif
 
 
 /*
