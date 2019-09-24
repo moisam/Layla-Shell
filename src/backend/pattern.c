@@ -59,6 +59,10 @@ struct char_class_s
 const int char_class_count = sizeof(char_class)/sizeof(struct char_class_s);
 
 
+/*
+ * check if the string *p has any regular expression (regex) characters,
+ * which are *, ?, [ and ].
+ */
 int has_regex_chars(char *p, size_t len)
 {
     char *p2 = p+len;
@@ -82,7 +86,10 @@ int has_regex_chars(char *p, size_t len)
         p++;
     }
     /* do we have a matching number of opening and closing brackets? */
-    if(ob && ob == cb) return 1;
+    if(ob && ob == cb)
+    {
+        return 1;
+    }
     return 0;
 }
 
@@ -95,7 +102,10 @@ int has_regex_chars(char *p, size_t len)
  */
 int match_prefix(char *pattern, char *str, int longest)
 {
-    if(!pattern || !str) return 0;
+    if(!pattern || !str)
+    {
+        return 0;
+    }
     char *s = str+1;
     char  c = *s;
     char *smatch = NULL;
@@ -124,7 +134,10 @@ int match_prefix(char *pattern, char *str, int longest)
     {
         return lmatch-str;
     }
-    if(smatch) return smatch-str;
+    if(smatch)
+    {
+        return smatch-str;
+    }
     return 0;
 }
 
@@ -136,7 +149,10 @@ int match_prefix(char *pattern, char *str, int longest)
  */
 int match_suffix(char *pattern, char *str, int longest)
 {
-    if(!pattern || !str) return 0;
+    if(!pattern || !str)
+    {
+        return 0;
+    }
     char *s = str+strlen(str)-1;
     char *smatch = NULL;
     char *lmatch = NULL;
@@ -161,7 +177,10 @@ int match_suffix(char *pattern, char *str, int longest)
     {
         return lmatch-str;
     }
-    if(smatch) return smatch-str;
+    if(smatch)
+    {
+        return smatch-str;
+    }
     return 0;
 }
 
@@ -171,7 +190,10 @@ int match_suffix(char *pattern, char *str, int longest)
  */
 int match_filename(char *pattern, char *str, int print_err, int ignore)
 {
-    if(!pattern || !str) return 0;
+    if(!pattern || !str)
+    {
+        return 0;
+    }
     /*
      * $FIGNORE is a non-POSIX extension that defines the set of 
      * file names that is ignored when performing file name matching.
@@ -192,20 +214,28 @@ int match_filename(char *pattern, char *str, int print_err, int ignore)
         case 0:
             if(ignore && fignore)
             {
-                //if(match_filename(fignore, str, print_err)) return 0;
-                if(match_ignore(fignore, str)) return 0;
+                if(match_ignore(fignore, str))
+                {
+                    return 0;
+                }
             }
             return 1;
-        case FNM_NOMATCH: return 0;
+            
+        case FNM_NOMATCH:
+            return 0;
+            
         default:
-            if(print_err) fprintf(stderr, "%s: failed to match filename(s)\n", SHELL_NAME);
+            if(print_err)
+            {
+                fprintf(stderr, "%s: failed to match filename(s)\n", SHELL_NAME);
+            }
             return 0;
     }
 }
 
 
 /* dummy function to satisfy scandir() */
-static int one(const struct dirent *unused)
+static int one(const struct dirent *unused __attribute__((unused)))
 {
     return 1;
 }
@@ -213,7 +243,9 @@ static int one(const struct dirent *unused)
 struct stat   statbuf;
 struct dirent **eps;
 
-/* scans the provided path to look for input files */
+/*
+ * scans the provided path to look for input files.
+ */
 int scan_dir(char *path, int report_err)
 {
     int n;
@@ -225,13 +257,18 @@ int scan_dir(char *path, int report_err)
     else
     {
         if(report_err)
+        {
             BACKEND_RAISE_ERROR(FAILED_TO_OPEN_FILE, path, strerror(errno));
+        }
         return 0;
     }
 }
 
 char *__next_path    = NULL;
-/* gets the next filename from the directory listing */
+
+/*
+ * gets the next filename from the directory listing.
+ */
 char *get_next_filename(char *__path, int *n, int report_err)
 {
     static int   first_time = 1;
@@ -247,15 +284,25 @@ char *get_next_filename(char *__path, int *n, int report_err)
         if(!(file_count = scan_dir(__next_path, report_err)))
         {
             /* error or empty directory */
-            if(n) *n = 0;
+            if(n)
+            {
+                *n = 0;
+            }
             return NULL;
         }
         first_time = 0;
-        if(n) *n = file_count;
+        if(n)
+        {
+            *n = file_count;
+        }
     }
 loop:
-    if(index >= file_count) return NULL;
-    /* something funny happens after stating '.' & '..', the first file after
+    if(index >= file_count)
+    {
+        return NULL;
+    }
+    /*
+     * something funny happens after stating '.' & '..', the first file after
        those is not seen as a file but as a dir. So wipe out the struct to
        prevent this from happening.
      */
@@ -273,16 +320,31 @@ loop:
 }
 
 
+/*
+ * perform pathname (or filename) expansion, matching files in the given *dir to the
+ * given *path, which is treated as a regex pattern that specifies which filename(s)
+ * we should match.
+ * returns a char ** pointer to the list of matched filenames, or NULL if nothing matched.
+ */
 char **filename_expand(char *dir, char *path, glob_t *matches)
 {
     /* to guard our caller from trying to free an unused struct in case of expansion failure */
     matches->gl_pathc = 0;
     matches->gl_pathv = NULL;
-    if(option_set('f')) return NULL;
-    if(!dir || !path) return NULL;
+    if(option_set('f'))
+    {
+        return NULL;
+    }
+    if(!dir || !path)
+    {
+        return NULL;
+    }
     if(strcmp(dir, cwd) != 0)
     {
-        if(chdir(dir) == -1) return NULL;
+        if(chdir(dir) == -1)
+        {
+            return NULL;
+        }
     }
     char *fignore = get_shell_varp("GLOBIGNORE", NULL);
     //glob_t matches;
@@ -298,10 +360,13 @@ char **filename_expand(char *dir, char *path, glob_t *matches)
     if(res != 0)
     {
         globfree(matches);
-        if(dir != cwd) chdir(cwd);
+        if(dir != cwd)
+        {
+            chdir(cwd);
+        }
         return NULL;
     }
-    int i;
+    size_t i;
     if(fignore)
     {
         for(i = 0; i < matches->gl_pathc; i++)
@@ -309,15 +374,20 @@ char **filename_expand(char *dir, char *path, glob_t *matches)
             if(match_ignore(fignore, matches->gl_pathv[i]))
             {
                 free(matches->gl_pathv[i]);
-                int j;
+                size_t j;
                 for(j = i; j < matches->gl_pathc; j++)
+                {
                     matches->gl_pathv[j] = matches->gl_pathv[j+1];
+                }
                 matches->gl_pathc--;
                 i--;
             }
         }
     }
-    if(dir != cwd) chdir(cwd);
+    if(dir != cwd)
+    {
+        chdir(cwd);
+    }
     return matches->gl_pathv;
 }
 
@@ -333,7 +403,10 @@ int match_ignore(char *pattern, char *filename)
     while(*e1)
     {
         char *e2 = e1+1;
-        while(*e2 && *e2 != ':') e2++;
+        while(*e2 && *e2 != ':')
+        {
+            e2++;
+        }
         char c = *e2;
         *e2 = '\0';
         if(match_filename(e1, filename, 0, 0))

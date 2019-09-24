@@ -37,8 +37,12 @@
 #include "../debug.h"
 
 
-char *fifo_filename = "FIFOCMD";
-
+/*
+ * perform process substitution. the op parameter specifies the redirection operator to
+ * apply to the process substitution, which can be '<' or '>'. the cmdline parameter
+ * contains the command(s) to execute in the process. the tmpname parameter contains
+ * the pathname of the file we'll use for the redirection.
+ */
 void redirect_proc_do(char *cmdline, char op, char *tmpname)
 {
     if(fork_child() == 0)
@@ -46,7 +50,10 @@ void redirect_proc_do(char *cmdline, char op, char *tmpname)
         int i = strlen(cmdline)-1;
         int j = i+strlen(tmpname)+12;
         char *buf = malloc(j);
-        if(!buf) return;
+        if(!buf)
+        {
+            return;
+        }
         char c = cmdline[i];
         cmdline[i] = ' ';
         sprintf(buf, "{ %s} %c%s", cmdline+1, (op == '>') ? '<' : '>', tmpname);
@@ -54,13 +61,23 @@ void redirect_proc_do(char *cmdline, char op, char *tmpname)
         __src.buffer   = buf;
         __src.bufsize  = j;
         __src.curpos   = -2;
-        __src.filename = fifo_filename;
+        __src.srctype = SOURCE_FIFO;
+        __src.srcname = NULL;
         do_cmd();
         unlink(tmpname);
         exit(exit_status);
     }
 }
 
+
+/*
+ * prepare for process substitution by opening a FIFO under /tmp/lsh, or if the
+ * system doesn't support named FIFO's, create a regular pipe and use its file
+ * descriptors in place of the FIFO. in the latter case, the pipe will be passed
+ * to the process as a file named /dev/fdN, where N is the file descriptor number.
+ * returns the pathname of the FIFO/pipe, so that we can pass it to the other end,
+ * i.e. the command which will read from or write to the process we'll fork.
+ */
 char *redirect_proc(char op, char *cmdline)
 {
     char *tmpdir = get_shell_varp("TMPDIR", "/tmp");
@@ -73,7 +90,10 @@ char *redirect_proc(char op, char *cmdline)
         /* try to perform process substitution via using a named pipe/fifo */
         if(mkfifo(tmpname, 0600) != 0)
         {
-            if(errno == EEXIST) continue;
+            if(errno == EEXIST)
+            {
+                continue;
+            }
             /*
              * if the system doesn't support named pipes, or another error occurred, such as
              * insufficient disk space, try performing this via a regular pipe, whose path we'll
@@ -102,7 +122,7 @@ char *redirect_proc(char op, char *cmdline)
                 }
                 else
                 {
-                    fprintf(stderr, "%s: error creating fifo: %s\r\n", SHELL_NAME, "system doesn't support `/dev/fd` file names");
+                    fprintf(stderr, "%s: error creating fifo: %s\n", SHELL_NAME, "system doesn't support `/dev/fd` file names");
                     close(filedes[0]);
                     close(filedes[1]);
                     return NULL;
@@ -110,7 +130,7 @@ char *redirect_proc(char op, char *cmdline)
             }
             else
             {
-                fprintf(stderr, "%s: error creating fifo: %s\r\n", SHELL_NAME, strerror(errno));
+                fprintf(stderr, "%s: error creating fifo: %s\n", SHELL_NAME, strerror(errno));
                 return NULL;
             }
         }
@@ -121,21 +141,24 @@ char *redirect_proc(char op, char *cmdline)
 }
 
 /*
- * get the slot belonging to this fileno, or else the first
- * empty slot in the redirection table.
+ * get the slot belonging to this fileno, or else the first empty
+ * slot in the redirection table. returns -1 if no slot is available.
  */
 int get_slot(int fileno, struct io_file_s *io_files)
 {
     int i;
     for(i = 0; i < FOPEN_MAX; i++)
     {
-        if(io_files[i].fileno == fileno || io_files[i].fileno == -1) return i;
+        if(io_files[i].fileno == fileno || io_files[i].fileno == -1)
+        {
+            return i;
+        }
     }
     return -1;
 }
 
 /*
- * prepare redirection file from redirection node.
+ * prepare a redirection file from the given redirection node.
  */
 int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
 {
@@ -160,8 +183,14 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
             {
                 s[i-1] = '\0';
                 struct node_s *child2 = child->first_child;
-                if(child2) child2 = child2->first_child;
-                if(child2->val_type != VAL_STR) child2 = NULL;
+                if(child2)
+                {
+                    child2 = child2->first_child;
+                }
+                if(child2->val_type != VAL_STR)
+                {
+                    child2 = NULL;
+                }
                 /*
                  * if the path is '-', it means we need to close the fd, so we'll get the fd number
                  * from the shell variable where it was saved before.
@@ -177,7 +206,10 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                     char *strend;
                     fileno = strtol(s2, &strend, 10);
                     s[i-1] = '}';
-                    if(strend == s2) fileno = -1;
+                    if(strend == s2)
+                    {
+                        fileno = -1;
+                    }
                     break;
                 }
                 /* search for an available slot for the new file descriptor, starting with #10 */
@@ -209,7 +241,7 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
     {
         sprintf(buf, "%d", fileno);
         BACKEND_RAISE_ERROR(INVALID_REDIRECT_FILENO, buf, NULL);
-        //fprintf(stderr, "%s: invalid redirection file number: %d\r\n", SHELL_NAME, fileno);
+        //fprintf(stderr, "%s: invalid redirection file number: %d\n", SHELL_NAME, fileno);
         return -1;
     }
     
@@ -257,9 +289,15 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
 }
 
 
+/*
+ * initialize the redirection table for the command to be executed.
+ */
 int redirect_prep(struct node_s *node, struct io_file_s *io_files)
 {
-    if(!io_files) return 0;
+    if(!io_files)
+    {
+        return 0;
+    }
     int  i;
     int  total_redirects = 0;
     for(i = 0; i < FOPEN_MAX; i++)
@@ -269,7 +307,10 @@ int redirect_prep(struct node_s *node, struct io_file_s *io_files)
         io_files[i].duplicates = -1;
         io_files[i].flags      =  0;
     }
-    if(!node) return 0;
+    if(!node)
+    {
+        return 0;
+    }
 
     struct node_s *child = node->first_child;
     /* prepare the redirections */
@@ -277,46 +318,70 @@ int redirect_prep(struct node_s *node, struct io_file_s *io_files)
     {
         if(child->type == NODE_IO_REDIRECT)
         {
-            if(redirect_prep_node(child, io_files) == -1) total_redirects = -1;
-            else total_redirects++;
+            if(redirect_prep_node(child, io_files) == -1)
+            {
+                total_redirects = -1;
+            }
+            else
+            {
+                total_redirects++;
+            }
         }
         child = child->next_sibling;
     }
     return total_redirects;
 }
 
+
 #define OPEN_SPECIAL_ERROR()                            \
 do {                                                    \
     fprintf(stderr,                                     \
             "%s: error opening %s: "                    \
-            "use of invalid redirection operator\r\n",  \
+            "use of invalid redirection operator\n",  \
             SHELL_NAME, path);                          \
     errno = EINVAL;                                     \
     return -1;                                          \
 } while(0)
 
-int open_special(char *path, int flags, int mask)
+/*
+ * open a special file, such as a remote tcp or udp connection, or a filename
+ * such as /dev/stdin.
+ * returns the file descriptor on which the file is opened, -1 otherwise.
+ */
+int open_special(char *path, int flags)
 {
     int fd = -1, i, remote = 0;
     if(strstr(path, "/dev/fd/") == path)
     {
         i = atoi(path+8);
-        if(i < 0) return -1;
+        if(i < 0)
+        {
+            return -1;
+        }
         fd = dup(i);
     }
     else if(strcmp(path, "/dev/stdin") == 0)
     {
-        if(!flag_set(flags, R_FLAG)) OPEN_SPECIAL_ERROR();
+        if(!flag_set(flags, R_FLAG))
+        {
+            OPEN_SPECIAL_ERROR();
+        }
         fd = dup(0);
     }
     else if(strcmp(path, "/dev/stdout") == 0)
     {
-        if(!flag_set(flags, R_FLAG)) OPEN_SPECIAL_ERROR();
+        if(!flag_set(flags, R_FLAG))
+        {
+            OPEN_SPECIAL_ERROR();
+        }
         fd = dup(1);
     }
     else if(strcmp(path, "/dev/stderr") == 0)
     {
-        if(!flag_set(flags, R_FLAG)) OPEN_SPECIAL_ERROR();
+        if(!flag_set(flags, R_FLAG))
+        {
+            OPEN_SPECIAL_ERROR();
+        }
         fd = dup(2);
     }
     else if(strstr(path, "/dev/tcp/") == path)
@@ -368,7 +433,7 @@ int open_special(char *path, int flags, int mask)
         serv_addr.sin_family = AF_INET;
         memcpy(server->h_addr_list[0], &serv_addr.sin_addr.s_addr, server->h_length);
         serv_addr.sin_port = htons(port);
-        if (connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
+        if(connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
         {
             //fprintf(stderr, "%s: error connecting to socket: %s\n", SHELL_NAME, strerror(errno));
             return -1;
@@ -378,6 +443,12 @@ int open_special(char *path, int flags, int mask)
 }
 
 
+/*
+ * perform the redirections in the *io_files redirection list. this function should be
+ * called after the shell has forked a child process to handle execution of a command.
+ * if called from the shell itself, the redirections will affect the file descriptors
+ * of the shell process.
+ */
 int __redirect_do(struct io_file_s *io_files, int do_savestd)
 {
     int i, j;
@@ -391,16 +462,28 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
             //if(i <= 2) save_std(i);
             if(path[0] == '-' && path[1] == '\0')
             {
-                if(j <= 2 && do_savestd) save_std(j);
+                if(j <= 2 && do_savestd)
+                {
+                    save_std(j);
+                }
                 close(j);
                 /* POSIX says we can open an "unspecified file" in this case */
-                if(j == 0) open("/dev/null", O_RDONLY);
-                if(j == 1 || j == 2) open("/dev/null", O_WRONLY);
+                if(j == 0)
+                {
+                    open("/dev/null", O_RDONLY);
+                }
+                else if(j == 1 || j == 2)
+                {
+                    open("/dev/null", O_WRONLY);
+                }
             }
             else if(path[0] != '\0')
             {
                 path = word_expand_to_str(path);
-                if(!path) continue;
+                if(!path)
+                {
+                    continue;
+                }
 
                 /* check the noclobber situation */
                 if(flag_set(io_files[i].flags, W_FLAG) && option_set('C'))
@@ -416,7 +499,10 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
                     }
                     io_files[i].flags |= O_EXCL;
                 }
-                if(io_files[i].flags == C_FLAG) io_files[i].flags = W_FLAG;
+                if(io_files[i].flags == C_FLAG)
+                {
+                    io_files[i].flags = W_FLAG;
+                }
                 
                 /*
                  * >#((expr)) and <#((expr)) are non-POSIX extensions to move
@@ -434,7 +520,7 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
                     char expr[len+1];
                     strncpy(expr, path+3, len);
                     expr[len] = '\0';
-                    char *p2 = __do_arithmetic(expr);
+                    char *p2 = arithm_expand(expr);
                     if(p2)
                     {
                         char *pend;
@@ -470,7 +556,7 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
                 if(fd < 0)
                 {
                     //errno = 0;
-                    if((fd = open_special(path, io_files[i].flags, FILE_MASK)) < 0)
+                    if((fd = open_special(path, io_files[i].flags)) < 0)
                     {
                         BACKEND_RAISE_ERROR(FAILED_TO_OPEN_FILE, io_files[i].path, strerror(errno));
                         EXIT_IF_NONINTERACTIVE();
@@ -479,7 +565,10 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
                     }
                 }
 
-                if(j <= 2 && do_savestd) save_std(j);
+                if(j <= 2 && do_savestd)
+                {
+                    save_std(j);
+                }
                 if(fd != j)
                 {
                     //close(j);
@@ -491,65 +580,287 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
         }
         else if(io_files[i].duplicates >= 0)
         {
-            //if(i <= 2) save_std(i);
-            if(io_files[i].flags == C_FLAG) io_files[i].flags = W_FLAG;
-            //int fd1    = i;
+            if(io_files[i].flags == C_FLAG)
+            {
+                io_files[i].flags = W_FLAG;
+            }
             int fd2    = io_files[i].duplicates;
             int flags1 = io_files[i].flags;
             int flags2 = fcntl(fd2, F_GETFL);
             /* special flag for heredocs */
-            if(flags1 == (int)CLOOPEN) goto _dup;
-            if((flags1 & W_FLAG) || (flags1 & A_FLAG))
+            if(flags1 != (int)CLOOPEN)
             {
-                if(!flag_set(flags2, O_WRONLY) && !flag_set(flags2, O_RDWR))
+                if(flag_set(flags1, W_FLAG) || flag_set(flags1, A_FLAG))
                 {
-                    BACKEND_RAISE_ERROR(FAILED_REDIRECT, NULL, NULL);
-                    EXIT_IF_NONINTERACTIVE();
-                    continue;
+                    if(!flag_set(flags2, O_WRONLY) && !flag_set(flags2, O_RDWR))
+                    {
+                        BACKEND_RAISE_ERROR(FAILED_REDIRECT, NULL, NULL);
+                        EXIT_IF_NONINTERACTIVE();
+                        continue;
+                    }
+                }
+                if((flags1 & R_FLAG))
+                {
+                    if(!flag_set(flags2, O_RDONLY) && !flag_set(flags2, O_RDWR))
+                    {
+                        BACKEND_RAISE_ERROR(FAILED_REDIRECT, NULL, NULL);
+                        EXIT_IF_NONINTERACTIVE();
+                        continue;
+                    }
                 }
             }
-            if((flags1 & R_FLAG))
+// _dup:
+            if(j <= 2 && do_savestd)
             {
-                if(!flag_set(flags2, O_RDONLY) && !flag_set(flags2, O_RDWR))
-                {
-                    BACKEND_RAISE_ERROR(FAILED_REDIRECT, NULL, NULL);
-                    EXIT_IF_NONINTERACTIVE();
-                    continue;
-                }
+                save_std(j);
             }
-_dup:
-            if(j <= 2 && do_savestd) save_std(j);
             dup2(io_files[i].duplicates, j);
             if(flag_set(io_files[i].flags, CLOOPEN))
             {
                 close(io_files[i].duplicates);
             }
         }
-        /*
-        switch(j)
-        {
-            case 0: STDIN  = fdopen(j, "r"); break;
-            case 1: STDOUT = fdopen(j, "w"); break;
-            case 2: STDERR = fdopen(j, "w"); break;
-        }
-        */
     } /* end for */
     return 1;
 }
 
 
+/*
+ * prepare a redirection list and then execute the redirections.
+ */
 int redirect_do(struct node_s *redirect_list)
 {
-    if(!redirect_list) return 1;
+    if(!redirect_list)
+    {
+        return 1;
+    }
     struct io_file_s io_files[FOPEN_MAX];
-    if(redirect_prep(redirect_list, io_files) == -1) return 0;
-    if(!__redirect_do(io_files, 1)) return 0;
+    if(redirect_prep(redirect_list, io_files) == -1)
+    {
+        return 0;
+    }
+    if(!__redirect_do(io_files, 1))
+    {
+        return 0;
+    }
     do_restore_std = 0;
     return 1;
 }
 
+
+/*
+ * restore the standard streams if they have been redirected.
+ */
 void redirect_restore()
 {
     do_restore_std = 1;
     restore_std();
+}
+
+
+/*
+ * prepare an I/O redirection for a file.
+ */
+int  do_io_file(struct node_s *node, struct io_file_s *io_file)
+{
+    int fileno     = -1;
+    int duplicates = 0;
+    struct node_s *child = node->first_child;
+    if(!child)
+    {
+        return 0;
+    }
+    char *str = child->val.str;
+    char buf[32];
+
+    /* r-shells can't redirect output */
+    if(startup_finished && option_set('r'))
+    {
+        char c = node->val.chr;
+        if(c == IO_FILE_LESSGREAT || c == IO_FILE_CLOBBER || c == IO_FILE_GREAT ||
+           c == IO_FILE_GREATAND  || c == IO_FILE_DGREAT  || c == IO_FILE_AND_GREAT_GREAT)
+        {
+            /*
+             * NOTE: consequences of failed redirection are handled by the caller, 
+             *       i.e. do_simple_command().
+             */
+            fprintf(stderr," %s: restricted shells can't redirect output\n", SHELL_NAME);
+            return 0;
+        }
+    }
+    
+    switch(node->val.chr)
+    {
+        case IO_FILE_LESS     :
+            io_file->flags = R_FLAG;
+            break;
+            
+        case IO_FILE_LESSAND  :
+            duplicates = 1;
+            io_file->flags = R_FLAG;
+            break;
+            
+        case IO_FILE_LESSGREAT:
+            io_file->flags = R_FLAG|W_FLAG;
+            break;
+            
+        case IO_FILE_CLOBBER  :
+            io_file->flags = C_FLAG;
+            break;
+            
+        case IO_FILE_GREAT    :
+            io_file->flags = W_FLAG;
+            break;
+            
+        case IO_FILE_GREATAND :
+            duplicates = 1;
+            io_file->flags = W_FLAG;
+            break;
+            
+        case IO_FILE_AND_GREAT_GREAT:
+            duplicates = 1;
+            io_file->flags = A_FLAG;
+            break;
+            
+        case IO_FILE_DGREAT   :
+            io_file->flags = A_FLAG;
+            break;
+    }
+
+    if(duplicates && strcmp(str, "-"))
+    {
+        /* I/O from coprocess */
+        if(strcmp(str, "p-") == 0 || strcmp(str, "p") == 0)
+        {
+            switch(node->val.chr)
+            {
+                case IO_FILE_LESSAND  :
+                    if(wfiledes[0] == -1)
+                    {
+                        goto invalid;
+                    }
+                    fileno = wfiledes[0];
+                    break;
+                    
+                case IO_FILE_GREATAND :
+                    if(rfiledes[1] == -1)
+                    {
+                        goto invalid;
+                    }
+                    fileno = rfiledes[1];
+                    break;
+                    
+                default:
+                    goto invalid;
+            }
+        }
+        else
+        {
+            char *str2 = NULL;
+            /* get the file number from the shell variable in the >{$var} type of redirection */
+            if(str[0] == '$')
+            {
+                str2 = word_expand_to_str(str);
+                if(str2)
+                {
+                    str = get_malloced_str(str2);
+                    if(!str)
+                    {
+                        return 0;
+                    }
+                    free(str2);
+                }
+            }
+            char *strend;
+            fileno = strtol(str, &strend, 10);
+            if(strend == str)
+            {
+                io_file->duplicates = -1;
+                io_file->path       = str;
+                return 1;
+            }
+        }
+        if(fileno < 0 || fileno >= FOPEN_MAX)
+        {
+            goto invalid;
+        }
+        /* >&n- and <&n-, but don't close coproc files */
+        if(str[strlen(str)-1] == '-' && strcmp(str, "p-"))
+        {
+            io_file->flags |= CLOOPEN;
+        }
+        io_file->duplicates = fileno;
+        io_file->path       = NULL;
+    }
+    else
+    {
+        io_file->duplicates = -1;
+        io_file->path       = str;
+    }
+    
+    return 1;
+    
+invalid:
+    sprintf(buf, "%d", fileno);
+    BACKEND_RAISE_ERROR(INVALID_REDIRECT_FILENO, buf, NULL);
+    /*
+     * NOTE: consequences of failed redirection are handled by the caller, 
+     *       i.e. do_simple_command().
+     */
+    return 0;
+}
+
+
+/*
+ * prepare an I/O redirection for a here document.
+ */
+int  do_io_here(struct node_s *node, struct io_file_s *io_file)
+{
+    struct node_s *child = node->first_child;
+    if(!child)
+    {
+        return 0;
+    }
+    char *heredoc = child->val.str;
+    FILE *tmp = tmpfile();
+    if(!tmp)
+    {
+        return 0;
+    }
+    if(node->val.chr == IO_HERE_EXPAND)
+    {
+        struct word_s *head = word_expand(heredoc);
+        struct word_s *w = head;
+        while(w)
+        {
+            fprintf(tmp, "%s", w->data);
+            w = w->next;
+        }
+        free_all_words(head);
+    }
+    else
+    {
+        fprintf(tmp, "%s", heredoc);
+    }
+    int fd = fileno(tmp);
+    rewind(tmp);
+    io_file->duplicates = fd;
+    io_file->path       = NULL;
+    io_file->flags      = CLOOPEN;
+    return 1;
+}
+
+
+/*
+ * prepare an I/O redirection for a file or a here document by calling the
+ * appropriate delegate function to handle the redirection.
+ */
+int  do_io_redirect(struct node_s *node, struct io_file_s *io_file)
+{
+    struct node_s *io = node->first_child;
+    if(io->type == NODE_IO_FILE)
+    {
+        return do_io_file(io, io_file);
+    }
+    return do_io_here(io, io_file);
 }
