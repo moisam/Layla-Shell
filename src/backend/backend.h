@@ -52,6 +52,7 @@ int   do_subshell(struct node_s *node, struct node_s *redirect_list);
 int   do_do_group(struct node_s *node, struct node_s *redirect_list);
 int   do_for_clause2(struct node_s *node, struct node_s *redirect_list);
 int   do_for_clause(struct node_s *node, struct node_s *redirect_list);
+int   do_select_clause(struct node_s *node, struct node_s *redirect_list);
 int   do_case_item(struct node_s *node, char *word, struct node_s *redirect_list);
 int   do_case_clause(struct node_s *node, struct node_s *redirect_list);
 int   do_if_clause(struct node_s *node, struct node_s *redirect_list);
@@ -59,17 +60,13 @@ int   do_while_clause(struct node_s *node, struct node_s *redirect_list);
 int   do_until_clause(struct node_s *node, struct node_s *redirect_list);
 int   do_brace_group(struct node_s *node, struct node_s *redirect_list);
 int   do_compound_command(struct node_s *node, struct node_s *redirect_list);
-int   do_io_file(struct node_s *node, struct io_file_s *io_file);
-int   do_io_here(struct node_s *node, struct io_file_s *io_file);
-int   do_io_redirect(struct node_s *node, struct io_file_s *io_file);
-int   do_redirect_list(struct node_s *node, struct io_file_s *io_file);
 int   do_function_body(struct node_s *node);
 int   do_function_definition(int argc, char **argv);
 int   do_simple_command(struct node_s *node, struct node_s *redirect_list, int fork);
 int   do_command(struct node_s *node, struct node_s *redirect_list, int fork);
 int   do_translation_unit(struct node_s *node);
-char *__tok_to_str(struct cmd_token *tok);
-char **__make_list(struct cmd_token *first_tok, int *token_count);
+char *__tok_to_str(struct word_s *tok);
+char **__make_list(struct word_s *first_tok, int *token_count);
 void  asynchronous_prologue();
 void  inc_subshell_var();
 
@@ -99,9 +96,25 @@ int   redirect_prep(struct node_s *node, struct io_file_s *io_files);
 int   redirect_do(struct node_s *redirect_list);
 void  redirect_restore();
 char *redirect_proc(char op, char *cmdline);
+int   do_io_file(struct node_s *node, struct io_file_s *io_file);
+int   do_io_here(struct node_s *node, struct io_file_s *io_file);
+int   do_io_redirect(struct node_s *node, struct io_file_s *io_file);
+//int   do_redirect_list(struct node_s *node, struct io_file_s *io_file);
 
 /* coprocess file descriptors */
 extern int rfiledes[];
 extern int wfiledes[];
+
+
+#define ERR_TRAP_OR_EXIT()                          \
+do {                                                \
+    if(!res || exit_status)                         \
+    {                                               \
+        trap_handler(ERR_TRAP_NUM);                 \
+        if(option_set('e'))                         \
+            exit_gracefully(EXIT_FAILURE, NULL);    \
+    }                                               \
+} while(0)
+
 
 #endif
