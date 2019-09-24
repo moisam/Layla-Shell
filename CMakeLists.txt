@@ -19,25 +19,40 @@
 #     along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
 #      
 
+# if you are using Eclipse, you can build the project files from the source
+# directory by running:
+#
+#    $ cmake -G "Eclipse CDT4 - Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_ECLIPSE_MAKE_ARGUMENTS=-j8 .
+#
+# then open Eclipse and select File -> Import... -> General -> Existing Projects into Workspace
+# and select the source directory.
+
 cmake_minimum_required(VERSION 2.6)
 project(shell)
 
 # we set the debug mode so that we can easily use gdb and valgrind later.
 # don't forget to turn off in the release version!
+
 set(CMAKE_BUILD_TYPE Debug)
 
-add_executable(lsh   main.c cmd_args.c      cmdline.c               helpfunc.c   initsh.c
+# gcc flags
+
+set(CMAKE_C_FLAGS "-Wall -Wextra")
+
+# the source files
+
+add_executable(lsh   main.c wordexp.c       cmdline.c               helpfunc.c   initsh.c
                      jobs.c prompt.c        args.c                  params.c  signames.c tab.c
-                     debug.c                kbdevent2.c             #kbdevent.c
+                     debug.c                kbdevent2.c             shunt.c      alphalist.c
                      early_environ.h        cmd.h                   signames.h   braceexp.c
                      debug.h                kbdevent.h              cpu.h     ostype.h   vars.c
                      vi.c vi.h vi_keys.c    comptype.h  strbuf.c    popen.c   functab.c
                      scanner/lexical.c      scanner/source.c
                      scanner/scanner.h      scanner/source.h        scanner/keywords.h
-                     parser/node.c          parser/parser.c
-                     parser/node.h
+                     parser/node.c          parser/parser.c         parser/conditionals.c
+                     parser/node.h          parser/loops.c          parser/redirect.c
                      backend/backend.c      backend/backend.h       backend/pattern.c
-                     backend/redirect.c     backend/shunt.c
+                     backend/redirect.c     backend/conditionals.c  backend/loops.c
                      symtab/symtab_hash.c   symtab/symtab_hash.h    symtab/symtab.h
                      symtab/string_hash.c   symtab/string_hash.h
                      error/error.c          error/error.h
@@ -66,5 +81,10 @@ add_executable(lsh   main.c cmd_args.c      cmdline.c               helpfunc.c  
                      builtins/setenv.c      builtins/stop.c         builtins/unlimit.c
                      builtins/unsetenv.c
                      )
-target_link_libraries (lsh rt)      # librt is needed for timer_create() and timer_settime()
+                     
+# librt is needed for timer_create() and timer_settime()
+target_link_libraries (lsh rt)
+
+# compile and install
+
 install(TARGETS lsh RUNTIME DESTINATION bin)

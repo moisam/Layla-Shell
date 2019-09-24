@@ -1,3 +1,8 @@
+* Tue Sep 24 2019 Mohammed Isam <mohammed_isam1984@yahoo.com> 1.1-1
+- Bugfixes
+- Fixed the code formatting
+- Added the --posix option
+
 * Fri Jul 05 2019 Mohammed Isam <mohammed_isam1984@yahoo.com> 1.0-1
 - First release
 

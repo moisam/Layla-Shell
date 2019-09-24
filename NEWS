@@ -19,6 +19,12 @@
 #    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
 #    
 
+Sep 24 2019 Mohammed Isam:
+- Bugfixes
+- Fixed the code formatting
+- Added the --posix option
+
+
 Jul 05 2019 - Mohammed Isam:
 - First release
 
