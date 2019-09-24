@@ -36,28 +36,42 @@
 #include "error/error.h"
 #include "debug.h"
 
-#define W_FLAG      (O_RDWR | O_CREAT | O_TRUNC )
-#define A_FLAG      (O_RDWR | O_CREAT | O_APPEND)
-#define R_FLAG      (O_RDONLY)
-
-// #ifdef __detour_kernel
-// #  define WAIT_FLAG (WUNTRACED)
-// #else
-// #  define WAIT_FLAG (WUNTRACED|WNOHANG)
-// #endif
-
 #define UTILITY         "jobs"
 
-/* all jobs running under this shell */
+/* jobs table for all the jobs running under this shell */
 struct job __jobs[MAX_JOBS];
+
+/* jobs count */
 int total_jobs   = 0;
+
+/* the current job number */
 int cur_job      = 0;
+
+/* the previous job number */
 int prev_job     = 0;
 
-/* tokens per input string */
-struct cmd_token *tokens[MAX_TOKENS];
+/* flags for the output_status() function */
+#define OUTPUT_STATUS_RUN_ONLY      (1 << 0)    /* output the status of running jobs only */
+#define OUTPUT_STATUS_STOP_ONLY     (1 << 1)    /* output the status of stopped jobs only */
+#define OUTPUT_STATUS_NEW_ONLY      (1 << 2)    /* output the status of unnotified jobs only */
+#define OUTPUT_STATUS_PIDS_ONLY     (1 << 3)    /* output only the job process ids */
+#define OUTPUT_STATUS_VERBOSE       (1 << 4)    /* output verbose info about the job */
+
+/* 
+ * struct to hold the list of dead process whose status hasn't been added to
+ * the jobs table yet.
+ */
+struct
+{
+    pid_t pid;
+    int   status;
+} deadlist[32];
+int listindex = 0;
 
 /*
+ * set the exit status of the last command executed in both the global
+ * exit_status variable and the $? shell variable.
+ * 
  * the domacros flag tells us if we should examine the status
  * argument to extract the actual exit status. if the flag is 0,
  * we set the exit status to status, otherwise we use wait.h macros
@@ -67,28 +81,58 @@ void set_exit_status(int status, int domacros)
 {
     if(domacros)
     {
-        if     (WIFEXITED  (status)) status = WEXITSTATUS(status);
-        else if(WIFSIGNALED(status)) status = WTERMSIG   (status) + 128;
-        else if(WIFSTOPPED (status)) status = WSTOPSIG   (status) + 128;
+        /* we need to extract the exit status code */
+        if(WIFEXITED(status))
+        {
+            status = WEXITSTATUS(status);
+        }
+        else if(WIFSIGNALED(status))
+        {
+            status = WTERMSIG(status) + 128;
+        }
+        else if(WIFSTOPPED(status))
+        {
+            status = WSTOPSIG(status) + 128;
+        }
     }
     char status_str[10];
     _itoa(status_str, status);
     struct symtab_entry_s *entry = get_symtab_entry("?");
-    if(entry) symtab_entry_setval(entry, status_str);
+    if(entry)
+    {
+        symtab_entry_setval(entry, status_str);
+    }
     exit_status = status;
 }
 
+
+/*
+ * update the job table entry with the exit status of the process with the
+ * given pid.
+ */
 void set_pid_exit_status(struct job *job, pid_t pid, int status)
 {
     int i;
-    if(!job || !job->pids || !job->exit_codes) return;
+    if(!job || !job->pids || !job->exit_codes)
+    {
+        return;
+    }
+    /* search the job's pid list to find the given pid */
     for(i = 0; i < job->proc_count; i++)
     {
         if(job->pids[i] == pid)
         {
+            /* update the exit status bitmap */
             job->exit_codes[i] = status;
-            if(WIFEXITED(status)) job->child_exitbits |=  (1 << i);
-            else                  job->child_exitbits &= ~(1 << i);
+            /* process exited normally or was terminated by a signal */
+            if(WIFEXITED(status) || WIFSIGNALED(status))
+            {
+                job->child_exitbits |=  (1 << i);
+            }
+            else
+            {
+                job->child_exitbits &= ~(1 << i);
+            }
             break;
         }
     }
@@ -97,13 +141,26 @@ void set_pid_exit_status(struct job *job, pid_t pid, int status)
     int j = 1;
     for(i = 0; i < job->proc_count; i++, j <<= 1)
     {
-        if((job->child_exitbits & j) == j) job->child_exits++;
+        if((job->child_exitbits & j) == j)
+        {
+            job->child_exits++;
+        }
     }
 }
 
+
+/*
+ * set the job's exit status according to the exit status of its member processes.
+ * if the pipefail '-l' option is set, the job's exit status is that of the last
+ * process to exit with non-zero exit status, otherwise its that of the process
+ * whose pid == pgid of the job.
+ */
 void set_job_exit_status(struct job *job, pid_t pid, int status)
 {
-    if(!job) return;
+    if(!job)
+    {
+        return;
+    }
     if(option_set('l'))    /* the pipefail option */
     {
         int i;
@@ -119,51 +176,112 @@ void set_job_exit_status(struct job *job, pid_t pid, int status)
                 }
             }
         }
-        if(res != job->status) job->flags &= ~JOB_FLAG_NOTIFIED;
+        if(res != job->status)
+        {
+            job->flags &= ~JOB_FLAG_NOTIFIED;
+        }
         job->status = res;
     }
     else
     {
         /* normal, everyday pipe (with no pipefail option) */
-        if(job->pgid == pid) job->status = status;
+        if(job->pgid == pid)
+        {
+            job->status = status;
+        }
     }
     /* now get the $! variable and set $? if needed */
     struct symtab_entry_s *entry = get_symtab_entry("!");
-    if(!entry || !entry->val) return;
+    if(!entry || !entry->val)
+    {
+        return;
+    }
     char *endptr;
     long n = strtol(entry->val, &endptr, 10);
-    if(endptr == entry->val) return;
+    if(endptr == entry->val)
+    {
+        return;
+    }
     if(n == job->pgid)
     {
         entry = get_symtab_entry("?");
-        if(!entry) return;
+        if(!entry)
+        {
+            return;
+        }
         char buf[16];
-        if     (WIFEXITED  (job->status)) status = WEXITSTATUS(job->status);
-        else if(WIFSIGNALED(job->status)) status = WTERMSIG   (job->status) + 128;
-        else if(WIFSTOPPED (job->status)) status = WSTOPSIG   (job->status) + 128;
-        else status = job->status;
+        if(WIFEXITED(job->status))
+        {
+            status = WEXITSTATUS(job->status);
+        }
+        else if(WIFSIGNALED(job->status))
+        {
+            status = WTERMSIG(job->status) + 128;
+        }
+        else if(WIFSTOPPED(job->status))
+        {
+            status = WSTOPSIG(job->status) + 128;
+        }
+        else
+        {
+            status = job->status;
+        }
         sprintf(buf, "%d", status);
         symtab_entry_setval(entry, buf);
     }
 }
 
 
-/* check for POSIX list terminators: ';', '\n', and '&' */
+/*
+ * update the job's exit status by updating the exit status of the job's member 
+ * processes and setting the job's exit status accordingly.
+ */
+void update_job_exit_status(struct job *job)
+{
+    if(!job)
+    {
+        return;
+    }
+    /* update the exit status of each process in the job's pid list */
+    int i, status;
+    pid_t pid;
+    for(i = 0; i < job->proc_count; i++)
+    {
+        pid = job->pids[i];
+        if(waitpid(pid, &status, WNOHANG) == pid)
+        {
+            set_pid_exit_status(job, pid, status);
+            set_job_exit_status(job, pid, status);
+        }
+    }
+}
+
+
+/*
+ * check for POSIX list terminators: ';', '\n', and '&'.
+ * 
+ * returns 1 if the first char of *c is a list terminator, 0 otherwise.
+ */
 inline int is_list_terminator(char *c)
 {
-    if(*c == ';' || *c   == '\n') return 1;
-    if(*c == '&' && c[1] !=  '&') return 1;
+    if(*c == ';' || *c   == '\n')
+    {
+        return 1;
+    }
+    if(*c == '&' && c[1] !=  '&')
+    {
+        return 1;
+    }
     return 0;
 }
 
 
-struct
-{
-    pid_t pid;
-    int   status;
-} deadlist[32];
-int listindex = 0;
-
+/*
+ * print a notification message telling the user about the status of the job to
+ * which process pid (with the given exit status) belongs.. the output_pid
+ * parameter indicates whether we should print the pid as part of the message or not..
+ * if the rip_dead parameter is non-zero, we will remove the job from the jobs table.
+ */
 void __output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_dead)
 {
     struct job *job = get_job_by_any_pid(pid);
@@ -171,14 +289,31 @@ void __output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_d
      * no job with this pid? probably it was a subshell or some command
      * substitution task. bail out.
      */
-    if(!job) return;
+    if(!job)
+    {
+        return;
+    }
     char statstr[32];
+    int sig;
     if(WIFSTOPPED(status))
     {
-        if     (WSTOPSIG(status) == SIGTSTP) strcpy(statstr, "Stopped          ");
-        else if(WSTOPSIG(status) == SIGSTOP) strcpy(statstr, "Stopped (SIGSTOP)");
-        else if(WSTOPSIG(status) == SIGTTIN) strcpy(statstr, "Stopped (SIGTTIN)");
-        else if(WSTOPSIG(status) == SIGTTOU) strcpy(statstr, "Stopped (SIGTTOU)");
+        sig = WSTOPSIG(status);
+        if(sig == SIGTSTP)
+        {
+            strcpy(statstr, "Stopped          ");
+        }
+        else if(sig == SIGSTOP)
+        {
+            strcpy(statstr, "Stopped (SIGSTOP)");
+        }
+        else if(sig == SIGTTIN)
+        {
+            strcpy(statstr, "Stopped (SIGTTIN)");
+        }
+        else if(sig == SIGTTOU)
+        {
+            strcpy(statstr, "Stopped (SIGTTOU)");
+        }
     }
     else if(WIFCONTINUED(status))
     {
@@ -188,30 +323,54 @@ void __output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_d
     {
         int sig = WTERMSIG(status);
         if(sig < 0 || sig >= total_signames)
+        {
              sprintf(statstr, "Signaled(%3d)     ", sig);
-        else sprintf(statstr, "Signaled(%.9s)    ", signames[sig]);
-    }
-    else if(WIFEXITED   (status))
-    {
-        if(WEXITSTATUS(status) == 0) strcpy(statstr, "Done             ");
+        }
         else
-            sprintf(statstr, "Done(%3u)      ", WEXITSTATUS(status));
+        {
+            sprintf(statstr, "Signaled(%.9s)    ", signames[sig]);
+        }
     }
-    else strcpy(statstr, "Running          ");
-
+    else if(job->child_exits && job->child_exits == job->proc_count)
+    //else if(WIFEXITED   (status))
+    {
+        if(WEXITSTATUS(status) == 0)
+        {
+            strcpy(statstr, "Done             ");
+        }
+        else
+        {
+            sprintf(statstr, "Done(%3u)      ", WEXITSTATUS(status));
+        }
+    }
+    else
+    {
+        strcpy(statstr, "Running          ");
+    }
+    /* print the notification message */
     char current = (job->job_num == cur_job ) ? '+' :
                    (job->job_num == prev_job) ? '-' : ' ';
     if(output_pid)
-         fprintf(out, "[%d]%c %u %s  %s\r\n",
+    {
+         fprintf(out, "[%d]%c %u %s  %s\n",
                  job->job_num, current, job->pgid, statstr, job->commandstr);
-    else fprintf(out, "[%d]%c %s     %s\r\n",
+    }
+    else
+    {
+        fprintf(out, "[%d]%c %s     %s\n",
                  job->job_num, current, statstr, job->commandstr);
-    if(WIFEXITED(status) && rip_dead) kill_job(job);
+    }
+    /* remove the job from the jobs table if it exited normally or by receiving a signal */
+    if(rip_dead && (WIFSIGNALED(status) || WIFEXITED(status)))
+    {
+        kill_job(job);
+    }
+    /* mark the job as notified */
     job->flags |= JOB_FLAG_NOTIFIED;
 }
 
 /*
- *            POSIX Job Control Job ID Formats:
+ * POSIX Job Control Job ID Formats:
  * 
  * Job Control Job ID       Meaning
  * ==================       ====================================
@@ -222,14 +381,39 @@ void __output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_d
  * %string                  Job whose command begins with string.
  * %?string                 Job whose command contains string.
  */
+
+/*
+ * get the job id for the given job string (should be one of the entries in
+ * the table above).
+ * 
+ * returns the job id number, or 0 if the job is not found.
+ */
 int get_jobid(char *jobid_str)
 {
-    if(!jobid_str || !*jobid_str) return 0;
-    if(*jobid_str != '%') return 0;
-    if(strcmp(jobid_str, "%%") == 0) return cur_job ;
-    if(strcmp(jobid_str, "%+") == 0) return cur_job ;
-    if(strcmp(jobid_str, "%-") == 0) return prev_job;
-    if(!*++jobid_str) return 0;
+    if(!jobid_str || !*jobid_str)
+    {
+        return 0;
+    }
+    if(*jobid_str != '%')
+    {
+        return 0;
+    }
+    if(strcmp(jobid_str, "%%") == 0)
+    {
+        return cur_job ;
+    }
+    if(strcmp(jobid_str, "%+") == 0)
+    {
+        return cur_job ;
+    }
+    if(strcmp(jobid_str, "%-") == 0)
+    {
+        return prev_job;
+    }
+    if(!*++jobid_str)
+    {
+        return 0;
+    }
     if(*jobid_str >= '0' && *jobid_str <= '9')
     {
         return atoi(jobid_str);
@@ -237,25 +421,39 @@ int get_jobid(char *jobid_str)
     struct job *job;
     if(*jobid_str == '?')
     {
+        /* search for a job whose command contains the given string */
         jobid_str++;
         for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
         {
-            if(job->job_num == 0) continue;
-            if(strstr(job->commandstr, jobid_str)) return job->job_num;
+            if(job->job_num == 0)
+            {
+                continue;
+            }
+            if(strstr(job->commandstr, jobid_str))
+            {
+                return job->job_num;
+            }
         }
     }
     else
     {
+        /* search for a job whose command starts with the given string */
         size_t len = strlen(jobid_str);
         for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
         {
-            if(job->job_num == 0) continue;
+            if(job->job_num == 0)
+            {
+                continue;
+            }
             if(strncmp(job->commandstr, jobid_str, len) == 0)
+            {
                 return job->job_num;
+            }
         }
     }
     return 0;
 }
+
 
 /*
  * get the number of current jobs.
@@ -268,14 +466,19 @@ int pending_jobs()
     {
         if(job->job_num != 0)
         {
-            if(!WIFEXITED(job->status) || job->child_exits != job->proc_count)
+            if(!job->child_exits || job->child_exits != job->proc_count)
+            {
                 count++;
+            }
         }
     }
     return count;
 }
 
+
 /*
+ * kill all the pending jobs.
+ * 
  * called by exit() and others to kill all child processes.
  * the flag field tells us if we want to exclude specific
  * jobs from receiving the signal, e.g. all jobs except
@@ -289,7 +492,10 @@ void kill_all_jobs(int signum, int flag)
     {
         if(job->job_num != 0)
         {
-            if(flag && flag_set(job->flags, flag)) continue;
+            if(flag && flag_set(job->flags, flag))
+            {
+                continue;
+            }
             pid_t pid = -(job->pgid);
             kill(pid, SIGCONT);
             kill(pid, signum);
@@ -297,15 +503,24 @@ void kill_all_jobs(int signum, int flag)
     }
 }
 
+
 /*
- * replace all jobspec occurences in the form of '%n' in the given argv, then
- * call command, passing it the arguments to execute them.
+ * replace all jobspec occurences in the form of '%n' in the given argv, starting
+ * with argv[startat], then call the command builtin utility, passing it the
+ * arguments to execute them.
+ * 
+ * returns 0 if the command is found and executed, non-zero otherwise.
  */
 int replace_and_run(int startat, int argc, char **argv)
 {
     char buf[32];
     int i = startat;
-    if(i >= argc) return 2;
+    /* can't start past argc count */
+    if(i >= argc)
+    {
+        return 2;
+    }
+    /* loop on the argv array, replacing all jobspecs */
     for( ; i < argc; i++)
     {
         int modified = 0;
@@ -313,29 +528,48 @@ int replace_and_run(int startat, int argc, char **argv)
         char __arg[strlen(argv[i])*2];
         char *arg = __arg;
         strcpy(arg, argv[i]);
+        /* search the argument for % */
         while((perc = strchr(arg, '%')))
         {
             char c = perc[1];
+            /* %%, %+, %-, and % jobspecs */
             if(c == '%' || c == '+' || c == '-' || c == '\0')
             {
-                buf[0] = '%' ;
-                if(c) buf[1] = c  ;
-                else  buf[1] = '%';
+                buf[0] = '%';
+                if(c)
+                {
+                    buf[1] = c;
+                }
+                else    /* add another % to make % become %% */
+                {
+                    buf[1] = '%';
+                }
                 buf[2] = '\0';
             }
+            /* %n jobspecs */
             else if(isdigit(c))
             {
-                buf[0] = '%' ;
+                buf[0] = '%';
                 p = buf+1;
-                while(isdigit((c = *++perc))) *p++ = c;
+                while(isdigit((c = *++perc)))
+                {
+                    *p++ = c;
+                }
                 *p = '\0';
             }
+            /* %str and %?str jobspecs */
             else if(isalpha(c) || c == '?')
             {
-                buf[0] = '%' ;
+                buf[0] = '%';
                 p = buf+1;
-                if(c == '?') *p++ = c, c = *++perc;
-                while(isalnum((c = *++perc))) *p++ = c;
+                if(c == '?')
+                {
+                    *p++ = c, c = *++perc;
+                }
+                while(isalnum((c = *++perc)))
+                {
+                    *p++ = c;
+                }
                 *p = '\0';
             }
             else
@@ -344,11 +578,11 @@ int replace_and_run(int startat, int argc, char **argv)
                 continue;
             }
             int len = strlen(buf);
-            /* get the pgid of this job */
+            /* get the pgid of the job given the jobspec */
             struct job *job = get_job_by_jobid(get_jobid(buf));
             if(!job)
             {
-                fprintf(stderr, "%s: unknown job: %s\r\n", UTILITY, buf);
+                fprintf(stderr, "%s: unknown job: %s\n", UTILITY, buf);
                 return 1;
             }
             sprintf(buf, "%d", job->pgid);
@@ -359,34 +593,94 @@ int replace_and_run(int startat, int argc, char **argv)
                 int j = len2-len;
                 char *p1 = arg+strlen(arg);
                 char *p2 = p1+j;
-                while(p1 > arg) *p2-- = *p1--;
+                while(p1 > arg)
+                {
+                    *p2-- = *p1--;
+                }
             }
             strncpy(arg, buf, len2);
             arg = perc+len2;
             modified = 1;
         }
-        
+        /* has we substituted any jobspecs in this arg? */
         if(modified)
         {
             p = get_malloced_str(__arg);
-            if(!p) continue;
-            free_malloced_str(argv[i]);     /* strings alloc'd in backend.c by calling get_malloced_str() */
+            if(!p)
+            {
+                continue;
+            }
+            /* free the old arg and store the modified one in its place */
+            free_malloced_str(argv[i]);
             argv[i] = p;
         }
     }
+    /* now call command */
     int    cargc = argc-2;
     char **cargv = &argv[2];
-    return search_and_exec(cargc, cargv, NULL, SEARCH_AND_EXEC_DOFORK|SEARCH_AND_EXEC_DOFUNC);
+    /* push a local symbol table on top of the stack */
+    symtab_stack_push();
+    int res = search_and_exec(cargc, cargv, NULL, SEARCH_AND_EXEC_DOFORK|SEARCH_AND_EXEC_DOFUNC);
+    /* free the local symbol table */
+    free_symtab(symtab_stack_pop());
+    /* return the result */
+    return res;
 }
 
 
+/*
+ * output the status of a job.. called by the jobs builtin utility (see below).
+ */
+void output_status(struct job *job, int flags)
+{
+    if(!job)
+    {
+        return;
+    }
+    /* update job with the exit status codes of its child processes */
+    update_job_exit_status(job);
+    /* check if we ought to list running jobs but the job is not running */
+    if(flag_set(flags, OUTPUT_STATUS_RUN_ONLY) && NOT_RUNNING(job->status))
+    {
+        return;
+    }
+    /* check if we ought to list stopped jobs but the job is not stopped */
+    if(flag_set(flags, OUTPUT_STATUS_STOP_ONLY) && !WIFSTOPPED(job->status))
+    {
+        return;
+    }
+    /* check if we ought to list job pids only */
+    if(flag_set(flags, OUTPUT_STATUS_PIDS_ONLY))
+    {
+        printf("%d\n", job->pgid);
+    }
+    else
+    {
+        /* don't list notified jobs */
+        if(!flag_set(flags, OUTPUT_STATUS_NEW_ONLY) || !flag_set(job->flags, JOB_FLAG_NOTIFIED))
+        {
+            /* don't list disowned jobs */
+            if(!flag_set(job->flags, JOB_FLAG_DISOWNED))
+            {
+                __output_status(job->pgid, job->status, flag_set(flags, OUTPUT_STATUS_VERBOSE), stdout, 0);
+            }
+        }
+    }
+}
+
+
+/*
+ * the jobs builtin utility (POSIX).. used to list the status of running/stopped jobs.
+ * returns 0, unless an unknown option or jobspec was supplied.
+ * 
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help jobs` or `jobs -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
 int jobs(int argc, char **argv)
 {
-    int pids_only    = 0;
-    int new_only     = 0;
-    int run_only     = 0;   /* list only running jobs */
-    int stop_only    = 0;   /* list only stopped jobs */
-    int verbose_info = 0;
+    int flags        = 0;
     int i;
     int finish       = 0;
     struct job *job;
@@ -394,11 +688,8 @@ int jobs(int argc, char **argv)
      * process the arguments
      ****************************/
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
-    /*
-     * TODO: support bash jobs -x option. see page 110 of bash manual.
-     */
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
     while((c = parse_args(argc, argv, "hvlpnrsx", &v, 1)) > 0)
     {
         switch(c)
@@ -412,32 +703,40 @@ int jobs(int argc, char **argv)
                 break;
                 
             case 'l':
-                verbose_info = 1;
+                flags |= OUTPUT_STATUS_VERBOSE;
                 break;
                 
             case 'p':
-                pids_only    = 1;
+                flags |= OUTPUT_STATUS_PIDS_ONLY;
                 break;
                 
             case 'n':
-                new_only     = 1;
+                flags |= OUTPUT_STATUS_NEW_ONLY;
                 break;
                 
             case 'r':
-                run_only     = 1;
+                flags |= OUTPUT_STATUS_RUN_ONLY;
+                flags &= ~OUTPUT_STATUS_STOP_ONLY;
                 break;
                 
             case 's':
-                stop_only    = 1;
+                flags |= OUTPUT_STATUS_STOP_ONLY;
+                flags &= ~OUTPUT_STATUS_RUN_ONLY;
                 break;
                 
+            /*
+             * support bash's jobs -x option. see page 110 of bash manual.
+             */
             case 'x':
                 return replace_and_run(v+1, argc, argv);
         }
     }
     /* unknown option */
-    if(c == -1) return 1;
-    
+    if(c == -1)
+    {
+        return 1;
+    }
+    /* loop on the arguments */
     for(i = v; i < argc; i++)
     {
         /* first try POSIX-style job ids */
@@ -447,47 +746,30 @@ int jobs(int argc, char **argv)
         {
             char *strend;
             long pgid = strtol(argv[i], &strend, 10);
-            if(strend != argv[i]) job = get_job_by_any_pid(pgid);
+            if(strend != argv[i])
+            {
+                job = get_job_by_any_pid(pgid);
+            }
         }
         /* still nothing? */
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\r\n", UTILITY, argv[i]);
+            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[i]);
             return 1;
         }
-
-        if(run_only  && NOT_RUNNING(job->status)) continue;
-        if(stop_only && !WIFSTOPPED(job->status)) continue;
-        
-        if(pids_only) printf("%d\r\n", job->pgid);
-        else
-        {
-            if(!new_only || !flag_set(job->flags, JOB_FLAG_NOTIFIED))
-            {
-                if(!flag_set(job->flags, JOB_FLAG_DISOWNED))
-                    __output_status(job->pgid, job->status, verbose_info, stdout, 1);
-            }
-        }
+        output_status(job, flags);
         finish = 1;
     }
-    if(finish) return 0;
-
+    if(finish)
+    {
+        return 0;
+    }
+    /* we have no arguments. list all unnotified jobs */
     for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
     {
         if(job->job_num != 0)
         {
-            if(run_only  && NOT_RUNNING(job->status)) continue;
-            if(stop_only && !WIFSTOPPED(job->status)) continue;
-            
-            if(pids_only) printf("%d\r\n", job->pgid);
-            else
-            {
-                if(!new_only || !flag_set(job->flags, JOB_FLAG_NOTIFIED))
-                {
-                    if(!flag_set(job->flags, JOB_FLAG_DISOWNED))
-                        __output_status(job->pgid, job->status, verbose_info, stdout, 0);
-                }
-            }
+            output_status(job, flags);
         }
     }
     /* 
@@ -499,12 +781,21 @@ int jobs(int argc, char **argv)
     for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
     {
         if(job->job_num != 0)
-            if(WIFEXITED(job->status))
+        {
+            if(job->child_exits == job->proc_count)
+            {
                 kill_job(job);
+            }
+        }
     }
     return 0;
 }
 
+
+/*
+ * check for any child processes that has changed status since our last check.
+ * called by cmdline() every time its about to print $PS1.
+ */
 void check_on_children()
 {
     /* check for children who died while we were away */
@@ -521,7 +812,9 @@ void check_on_children()
             if(job->child_exits == job->proc_count)
             {
                 if(!flag_set(job->flags, JOB_FLAG_FORGROUND))
+                {
                     __output_status(deadlist[i].pid, deadlist[i].status, 0, stderr, 1);
+                }
                 kill_job(job);
             }
             /* or if it was stopped/continued and not notified, regardless of fg/bg status */
@@ -536,7 +829,10 @@ void check_on_children()
     while(1)
     {
         pid_t pid = waitpid(-1, &status, WAIT_FLAG|WNOHANG);
-        if(pid <= 0) break;
+        if(pid <= 0)
+        {
+            break;
+        }
         struct job *job = get_job_by_any_pid(pid);
         if(job)
         {
@@ -546,9 +842,12 @@ void check_on_children()
             if(job->child_exits == job->proc_count)
             {
                 if(!flag_set(job->flags, JOB_FLAG_FORGROUND))
+                {
                     __output_status(pid, status, 0, stderr, 1);
+                }
                 kill_job(job);
             }
+            /* or if it was stopped/continued and not notified, regardless of fg/bg status */
             else if(!WIFEXITED(status) && !flag_set(job->flags, JOB_FLAG_NOTIFIED))
             {
                 __output_status(pid, status, 0, stderr, 1);
@@ -557,9 +856,19 @@ void check_on_children()
     }
 }
 
+
+/*
+ * if a child process changes status, notify the user of this by calling
+ * __output_status() if the -b option is set.. otherwise, add the pid and
+ * status to the deadlist for us to reap later on in the check_on_children()
+ * function.
+ */
 void notice_termination(pid_t pid, int status)
 {
-    if(pid <= 0) return;
+    if(pid <= 0)
+    {
+        return;
+    }
     /* asynchronous notification flag is on */
     if(option_set('b'))
     {
@@ -575,13 +884,14 @@ void notice_termination(pid_t pid, int status)
             break;
         }
     }
-    /* not found. add a new entry */
+    /* zombie not found. add a new entry */
     if(i == listindex)
     {
         deadlist[listindex].pid    = pid;
         deadlist[listindex].status = status;
         listindex++;
     }
+    /* update the job table entry with the child process status */
     struct job *job = get_job_by_any_pid(pid);
     if(job)
     {
@@ -589,11 +899,16 @@ void notice_termination(pid_t pid, int status)
         if(WIFSTOPPED(status) && isatty(0))
         {
             if((job->tty_attr = malloc(sizeof(struct termios))))
+            {
                 tcgetattr(0, job->tty_attr);
+            }
         }
         else
         {
-            if(job->tty_attr) free(job->tty_attr);
+            if(job->tty_attr)
+            {
+                free(job->tty_attr);
+            }
             job->tty_attr = NULL;
         }
         set_pid_exit_status(job, pid, status);
@@ -612,14 +927,28 @@ void notice_termination(pid_t pid, int status)
          */
         if(WIFEXITED(status) && !flag_set(job->flags, JOB_FLAG_FORGROUND) && option_set('m'))
         {
-            if(job->child_exits == job->proc_count) trap_handler(CHLD_TRAP_NUM);
+            if(job->child_exits == job->proc_count)
+            {
+                trap_handler(CHLD_TRAP_NUM);
+            }
         }
     }
 }
 
+
+/*
+ * reap a dead child process whose pid is given by removing it from the dead
+ * list and returning its exit status.. if the child process is not found in
+ * the table, return -1.
+ */
 int rip_dead(pid_t pid)
 {
-    if(!listindex) return -1;
+    /* the deadlist is empty */
+    if(!listindex)
+    {
+        return -1;
+    }
+    /* find the process's entry in the deadlist */
     int i;
     for(i = 0; i < listindex; i++)
     {
@@ -635,79 +964,142 @@ int rip_dead(pid_t pid)
             deadlist[i].pid    = 0;
             deadlist[i].status = 0;
             listindex--;
+            /* return the dead's status */
             return status;
         }
     }
+    /* entry not found */
     return -1;
 }
 
+
+/*
+ * return a job entry given the pgid of the job.. if the job is not found, return NULL.
+ */
 struct job *get_job_by_pid(pid_t pgid)
 {
-    if(!pgid) return NULL;
+    if(!pgid)
+    {
+        return NULL;
+    }
     struct job *job;
     for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
     {
-        if(job->pgid == pgid) return job;
+        if(job->pgid == pgid)
+        {
+            return job;
+        }
     }
     return NULL;
 }
 
+
+/*
+ * return a job entry given the pid of any process in the job pipeline..
+ * if the job is not found, return NULL.
+ */
 struct job *get_job_by_any_pid(pid_t pid)
 {
-    if(!pid) return NULL;
+    if(!pid)
+    {
+        return NULL;
+    }
     struct job *job;
     for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
     {
         int i;
-        if(!job->pids) continue;
+        if(!job->pids)
+        {
+            continue;
+        }
         for(i = 0; i < job->proc_count; i++)
-            if(job->pids[i] == pid) return job;
+        {
+            if(job->pids[i] == pid)
+            {
+                return job;
+            }
+        }
     }
     return NULL;
 }
 
+
+/*
+ * return a job entry given the job id.. if the job is not found, return NULL.
+ */
 struct job *get_job_by_jobid(int n)
 {
-    if(!n) return NULL;
+    if(!n)
+    {
+        return NULL;
+    }
     struct job *job;
     for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
     {
-        if(job->job_num == n) return job;
+        if(job->job_num == n)
+        {
+            return job;
+        }
     }
     return NULL;
 }
 
+
+/*
+ * set the current job.
+ * 
+ * returns 1 if the current job is set successfully, 0 otherwise.
+ */
 int set_cur_job(struct job *job)
 {
-    if(!job) return 0;
-    /* only make a suspended job the current one.
+    if(!job)
+    {
+        return 0;
+    }
+    /*
+     * only make a suspended job the current one.
      * NOTE: maybe redundant, as we only call this function for suspended jobs.
      */
     if(WIFSTOPPED(job->status))
     {
-        prev_job   = cur_job;
-        cur_job    = job->job_num;
+        prev_job = cur_job;
+        cur_job  = job->job_num;
     }
     else
     {
         if(cur_job == 0 && prev_job == 0)
+        {
             cur_job = job->job_num;
+        }
     }
     return 1;
 }
 
+
+/*
+ * add a new job entry given the job pgid, the processes pid list and their count,
+ * the job's command string, and a flag telling whether its a background job or not.
+ * 
+ * returns the new job struct, or NULL on error.
+ */
 struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, int is_bg)
 {
+    /* find an empty slot in the jobs table */
     struct job *job, *j2;
     for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
     {
         if(job->job_num == 0)
         {
+            /* find the highest job number */
             int jnum = 0;
             for(j2 = &__jobs[0]; j2 < &__jobs[MAX_JOBS]; j2++)
             {
-                if(j2->job_num > jnum) jnum = j2->job_num;
+                if(j2->job_num > jnum)
+                {
+                    jnum = j2->job_num;
+                }
             }
+            /* initialize the job struct */
             job->job_num     = jnum+1;
             job->pgid        = pgid;
             job->commandstr  = get_malloced_str(commandstr);
@@ -743,6 +1135,12 @@ struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, i
 }
 
 
+/*
+ * remove the given job from the jobs table.
+ * 
+ * returns the job number if it was successfully removed from the jobs table,
+ * or 0 if the job is not found in the table.
+ */
 int kill_job(struct job *job)
 {
     int res = 0;
@@ -750,10 +1148,27 @@ int kill_job(struct job *job)
     if(job)
     {
         res = job->job_num;
-        if(job->commandstr) free_malloced_str(job->commandstr);
-        if(job->pids      ) free(job->pids      );
-        if(job->exit_codes) free(job->exit_codes);
-        if(job->tty_attr  ) free(job->tty_attr  );
+        /* free the job command string */
+        if(job->commandstr)
+        {
+            free_malloced_str(job->commandstr);
+        }
+        /* free the job pids table */
+        if(job->pids)
+        {
+            free(job->pids);
+        }
+        /* free the job exit codes table */
+        if(job->exit_codes)
+        {
+            free(job->exit_codes);
+        }
+        /* free the job terminal attributes struct */
+        if(job->tty_attr)
+        {
+            free(job->tty_attr);
+        }
+        /* reset the rest of the fields */
         job->job_num     = 0;
         job->commandstr  = NULL;
         job->pids        = NULL;
@@ -772,135 +1187,62 @@ int kill_job(struct job *job)
         /* shift jobs down by one */
         for(job2 = &job[1]; job2 < &__jobs[MAX_JOBS]; job2++, job++)
         {
-            if(job2->job_num == 0) continue;
+            if(job2->job_num == 0)
+            {
+                continue;
+            }
             memcpy((void *)job, (void *)job2, sizeof(struct job));
             job2->job_num    = 0;
             job2->commandstr = 0;
             job2->proc_count = 0;
             job->child_exits = 0;
             job->tty_attr    = NULL;
-            if(job->job_num > last_job) last_job = job->job_num;
+            if(job->job_num > last_job)
+            {
+                last_job = job->job_num;
+            }
             if(WIFSTOPPED(job->status) && job->job_num > last_suspended)
+            {
                 last_suspended = job->job_num;
+            }
         }
         if(!prev_job)
         {
-            if(last_suspended) prev_job = last_suspended;
-            else               prev_job = last_job;
+            if(last_suspended)
+            {
+                prev_job = last_suspended;
+            }
+            else
+            {
+                prev_job = last_job;
+            }
         }
         total_jobs--;
     }
     return res;
 };
 
-int get_total_jobs() { return total_jobs; }
 
+/*
+ * return the total number of jobs.
+ */
+int get_total_jobs()
+{
+    return total_jobs;
+}
+
+
+/*
+ * alloc memory for the process pids table for a job.
+ */
 pid_t *get_malloced_pids(pid_t pids[], int pid_count)
 {
     size_t sz = pid_count*sizeof(pid_t);
     pid_t *new_pids = malloc(sz);
-    if(!new_pids) return NULL;
+    if(!new_pids)
+    {
+        return NULL;
+    }
     memcpy(new_pids, pids, sz);
     return new_pids;
-}
-
-struct cmd_token *get_heredoc(char *_cmd, int strip)
-{
-    char *cmd   = _cmd;
-    char delim[32];
-    int  expand = 1;        /* expand by default, unless delimiter is quoted */
-    int  heredoc_len = 0;
-    while(*cmd && !isspace(*cmd) && *cmd != ';' && *cmd != '&') cmd++;
-    if(cmd == _cmd) delim[0] = '\0';
-    else
-    {
-        /* copy delimiter */
-        char *c1 = _cmd;
-        char *c2 = delim;
-        while(c1 < cmd)
-        {
-            if(*c1 == '"' || *c1 == '\'')
-            {
-                c1++;
-                expand = 0;
-            }
-            else
-            {
-                if(*c1 == '\\')
-                {
-                    expand = 0;
-                    c1++;
-                }
-                *c2++ = *c1++;
-            }
-        }
-        *c2++ = '\n';
-        *c2   = '\0';
-        /* now remove it from the original command string */
-        c2 = _cmd;
-        c1 = cmd;
-        while((*c2++ = *c1++)) ;
-    }
-    /* get the next new line */
-    char *nl = strchr(_cmd, '\n');
-    char *end;
-    if(!nl)
-    {
-        BACKEND_RAISE_ERROR(HEREDOC_MISSING_NEWLINE, NULL, NULL);
-        return NULL;
-    }
-    /* get the heredoc length */
-    if(delim[0] == '\0')
-    {
-        BACKEND_RAISE_ERROR(HEREDOC_EXPECTED_DELIM, NULL, NULL);
-        return NULL;
-    }
-    else
-    {
-        end = strstr(_cmd, delim);
-        if(!end)
-        {
-            /* remove the newline char to print delimiter nicely */
-            delim[cmd - _cmd] = '\0';
-            BACKEND_RAISE_ERROR(HEREDOC_EXPECTED_DELIM, delim, NULL);
-            return NULL;
-        }
-        heredoc_len = end - nl;
-    }
-    /* now get the heredoc proper */
-    char *heredoc = (char *)malloc(heredoc_len+1);
-    if(!heredoc)
-    {
-        BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "saving heredoc", NULL);
-        return NULL;
-    }
-    char *p1 = nl+1;
-    char *p2 = heredoc;
-    do
-    {
-        if(*p1 == '\n')
-        {
-            /* stripping tabs */
-            if(strip) while(*p1 == '\t') p1++;
-        }
-        *p2++ = *p1++;
-    } while(p1 < end);
-    *p2 = '\0';
-    /* remove the heredoc from the original command string */
-    p2 = nl+1;
-    p1 = end;
-    p1 += strlen(delim);
-    while((*p2++ = *p1++)) ;
-    
-    struct cmd_token *t = (struct cmd_token *)malloc(sizeof(struct cmd_token));
-    if(!t)
-    {
-        BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "parsing heredoc", NULL);
-        return NULL;
-    }
-    t->data    = heredoc;
-    t->len     = strlen(heredoc);
-    if(expand) t->token_type = HEREDOC_TOKEN_EXP;
-    else       t->token_type = HEREDOC_TOKEN_NOEXP;
-    return t;
 }

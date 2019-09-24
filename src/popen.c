@@ -33,6 +33,78 @@
 
 
 /*
+ * initialize a subshell's environment.
+ */
+void init_subshell()
+{
+    /* make sure we have the shell's PGID */
+    setpgid(0, tty_pid);
+
+    /* reset the -dumpast option if set */
+    set_option('d', 0);
+
+    /* turn off job control */
+    set_option('m', 0);
+
+    /* turn off the interactive mode */
+    set_option('i', 0);
+
+    /* reset signals, traps and stdin */
+    asynchronous_prologue();
+
+    /* forget about all aliases (they are an interactive feature, anyway) */
+    unset_all_aliases();
+
+    /* export environment variables and functions */
+    do_export_vars();
+
+    /* indicate we are in a subshell */
+    inc_subshell_var();
+
+    /*
+     * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
+     * if -o errtrace (-E) is not set. traced functions inherit both traps
+     * from the calling shell (bash).
+     */
+    if(!option_set('T'))
+    {
+        save_trap("DEBUG" );
+        save_trap("RETURN");
+    }
+    if(!option_set('E'))
+    {
+        save_trap("ERR");
+    }
+    /*
+     * the -e (errexit) option is reset in subshells if inherit_errexit
+     * is not set (bash).
+     */
+    if(!optionx_set(OPTION_INHERIT_ERREXIT))
+    {
+        set_option('e', 0);
+    }
+}
+
+
+/*
+ * increment the value of the $SUBSHELL variable when we're running a subshell.
+ */
+void inc_subshell_var()
+{
+    subshell_level++;
+    char buf[8];
+    //sprintf(buf, "%d", subshell);
+    sprintf(buf, "%d", subshell_level);
+    struct symtab_entry_s *entry = get_symtab_entry("SUBSHELL");
+    if(!entry)
+    {
+        entry = add_to_symtab("SUBSHELL");
+    }
+    symtab_entry_setval(entry, buf);
+}
+
+
+/*
  * this call is similar to popen(), except it sets the environment in the subshell
  * by exporting variables and function definitions. the 'r' suffix is because we
  * open the pipe for reading, equivalent to calling pipe(cmd, "r").
@@ -40,7 +112,10 @@
 
 FILE *popenr(char *cmd)
 {
-    if(!cmd) return NULL;
+    if(!cmd)
+    {
+        return NULL;
+    }
     int filedes[2] = { -1, -1 };
     pid_t pid;
     
@@ -50,16 +125,8 @@ FILE *popenr(char *cmd)
     if((pid = fork_child()) == 0)     /* child process */
     {
         
-        /* reset the -dumpast option if set */
-        set_option('d', 0);
-
-        /*
-         * export environment variables and functions.
-         */
-        do_export_vars();
-        
-        /* indicate we are in a subshell */
-        inc_subshell_var();
+        /* init our subshell environment */
+        init_subshell();
 
         /* modify our standard streams */
         close(0);   /* stdin */
@@ -87,8 +154,10 @@ FILE *popenr(char *cmd)
 
         /* returning from execl means error */
         if(errno)
-            fprintf(stderr, "%s: failed to exec '%s': %s\r\n", SHELL_NAME, "/bin/sh", strerror(errno));
-
+        {
+            fprintf(stderr, "%s: failed to exec '%s': %s\n", SHELL_NAME, "/bin/sh", strerror(errno));
+        }
+        /* exit in error */
         if(errno == ENOEXEC)
         {
             exit(EXIT_ERROR_NOEXEC);
@@ -97,11 +166,14 @@ FILE *popenr(char *cmd)
         {
             exit(EXIT_ERROR_NOENT);
         }
-        else exit(EXIT_FAILURE);
+        else
+        {
+            exit(EXIT_FAILURE);
+        }
     }
     else if(pid < 0)            /* error */
     {
-        fprintf(stderr, "%s: failed to fork subshell: %s\r\n", SHELL_NAME, strerror(errno));
+        fprintf(stderr, "%s: failed to fork subshell: %s\n", SHELL_NAME, strerror(errno));
         return NULL;
     }
     else

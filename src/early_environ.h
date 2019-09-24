@@ -103,7 +103,6 @@ struct early_env_item_s early_environ[] =
   { "LINENO"      , ""                      },
   { "LINES"       , ""                      },
   { "LOGNAME"     , ""                      },
-  /* INTERNATIONALIZATION VARIABLES */
   { "LSH_VERSION" , shell_ver               },
   { "MAILCHECK"   , "600"                   },
   { "OLDPWD"      , ""                      },
@@ -114,13 +113,13 @@ struct early_env_item_s early_environ[] =
   { "PATH"        , "/bin:/usr/bin:/sbin:/usr/sbin" },
   /* parent process ID during shell initialization */
   { "PPID"        , ""                      },
-  /* parsed every time a new prompt is due to be printed */
-  { "PS1"         , "[\\u \\W]\\$\\ "       },
+  /* parsed and printed to STDERR every time a new prompt is due to be printed */
+  { "PS1"         , "[\\# \\u \\W]\\$ "       },
   /* printed to STDERR whenever user presses ENTER before completing a command */
-  { "PS2"         , ">\\ "                  },
-  { "PS3"         , "#?\\ "                 },
+  { "PS2"         , "> "                    },
+  { "PS3"         , "#? "                   },
   /* printed to STDERR when execution trace 'set -x' is on */
-  { "PS4"         , "+\\ "                  },
+  { "PS4"         , "+ "                    },
   { "PWD"         , ""                      },
   { "SHELL"       , ""                      },	/* pathname to shell */
   { "USER"        , ""                      },

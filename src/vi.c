@@ -50,9 +50,13 @@ extern int       start_row   ;
 extern int       start_col   ;
 extern int       insert      ;
 
+/* saved copies of the current row, column, and command buffer index */
 static int srow, scol, scmdindex;
+/* flag to indicate if we are in the INSERT mode */
 int   sinsert = 0;
+/* last search string used */
 char *lstring = NULL;
+/* backup copy of the command buffer */
 char *backup  = NULL;
 
 
@@ -62,6 +66,9 @@ char *backup  = NULL;
  * search string. if back is > 0, search is done backwards
  * (towards first history entry), otherwise is done forwards
  * (towards last history entry).
+ * 
+ * returns the index of the command history line containing the
+ * search string, -1 if no matches were found.
  */
 int search_history(char *buf, int hook, int back)
 {
@@ -69,29 +76,72 @@ int search_history(char *buf, int hook, int back)
     char *s;
     if(back)
     {
-        if(cmd_history_index == 0) return -1;
+        /* search backwards */
+        if(cmd_history_index == 0)
+        {
+            /* already at the first history entry */
+            return -1;
+        }
+        /* perform the search */
         for(i = cmd_history_index-1; i >= 0; i--)
         {
-            if((s = strstr(cmd_history[i].cmd, buf)) == NULL) continue;
-            if(hook && s == cmd_history[i].cmd) return i;
+            if((s = strstr(cmd_history[i].cmd, buf)) == NULL)
+            {
+                continue;
+            }
+            if(hook)
+            {
+                if(s == cmd_history[i].cmd)
+                {
+                    return i;
+                }
+                else
+                {
+                    continue;
+                }
+            }
             return i;
         }
     }
     else
     {
-        if(cmd_history_index >= cmd_history_end-1) return -1;
+        /* search forwards */
+        if(cmd_history_index >= cmd_history_end-1)
+        {
+            /* already at the last history entry */
+            return -1;
+        }
+        /* perform the search */
         for(i = cmd_history_index+1; i < cmd_history_end; i++)
         {
-            if((s = strstr(cmd_history[i].cmd, buf)) == NULL) continue;
-            if(hook && s == cmd_history[i].cmd) return i;
+            if((s = strstr(cmd_history[i].cmd, buf)) == NULL)
+            {
+                continue;
+            }
+            if(hook)
+            {
+                if(s == cmd_history[i].cmd)
+                {
+                    return i;
+                }
+                else
+                {
+                    continue;
+                }
+            }
             return i;
         }
     }
+    /* no matches found */
     return -1;
 }
 
+
 /*
- * find next char c.
+ * find the next occurence of char c in the command buffer.
+ * parameter c should be 't' or 'f' to indicate forward search.
+ * if char c is found, move the cursor to that position, otherwise
+ * do nothing.
  */
 void find_next(char c, char c2, int count)
 {
@@ -101,9 +151,16 @@ void find_next(char c, char c2, int count)
         case 't':
         case 'f':                       /* find next char */
             count2 = cmdbuf_index+1;
-            if(cmdbuf_index >= cmdbuf_end) break;
-            while(cmdbuf[count2] != c2 && count2 < cmdbuf_end) count2++;
-            //if(cmdbuf[count2] == '\0') break;
+            /* reached the end of buffer */
+            if(cmdbuf_index >= cmdbuf_end)
+            {
+                break;
+            }
+            /* search for the char */
+            while(cmdbuf[count2] != c2 && count2 < cmdbuf_end)
+            {
+                count2++;
+            }
             if(cmdbuf[count2] == c2)
             {
                 count2 -= cmdbuf_index;
@@ -112,15 +169,25 @@ void find_next(char c, char c2, int count)
             /* t is equal to f-h */
             if(c == 't')
             {
-                if(!count) do_left_key(    1);
-                else       do_left_key(count);
+                if(!count)
+                {
+                    do_left_key(1);
+                }
+                else
+                {
+                    do_left_key(count);
+                }
             }
             break;
     }
 }
 
+
 /*
- * find prev char c.
+ * find the previous occurence of char c in the command buffer.
+ * parameter c should be 'T' or 'F' to indicate backward search.
+ * if char c is found, move the cursor to that position, otherwise
+ * do nothing.
  */
 void find_prev(char c, char c2, int count)
 {
@@ -130,8 +197,16 @@ void find_prev(char c, char c2, int count)
         case 'T':
         case 'F':                       /* find prev char */
             count2 = cmdbuf_index-1;
-            if(cmdbuf_index <= 0) break;
-            while(cmdbuf[count2] != c2 && count2 > 0) count2--;
+            /* reached the start of buffer */
+            if(cmdbuf_index <= 0)
+            {
+                break;
+            }
+            /* search for the char */
+            while(cmdbuf[count2] != c2 && count2 > 0)
+            {
+                count2--;
+            }
             if(cmdbuf[count2] == c2)
             {
                 count2 = cmdbuf_index-count2;
@@ -140,8 +215,14 @@ void find_prev(char c, char c2, int count)
             /* T is equal to F-l */
             if(c == 'T')
             {
-                if(!count) do_left_key(    1);
-                else       do_left_key(count);
+                if(!count)
+                {
+                    do_left_key(1);
+                }
+                else
+                {
+                    do_left_key(count);
+                }
             }
             break;
     }
@@ -157,40 +238,78 @@ void find_prev(char c, char c2, int count)
 char *get_curword(char *buf, int *start, int *end)
 {
     char c = cmdbuf[cmdbuf_index];
-    if(isspace(c) || c == '\0') return NULL;
-    if(!buf) return NULL;
+    if(isspace(c) || c == '\0')
+    {
+        return NULL;
+    }
+    if(!buf)
+    {
+        return NULL;
+    }
     int i = cmdbuf_index;
     int j = i;
-    while(!isspace(cmdbuf[i]) && i > 0) i--;
-    if(i && isspace(cmdbuf[i])) i++;
-    while(!isspace(cmdbuf[j]) && j < cmdbuf_end) j++;
-    if(isspace(cmdbuf[j]) || cmdbuf[j] == 0) j--;
+    /* skip chars to determine the beginning of the word */
+    while(!isspace(cmdbuf[i]) && i > 0)
+    {
+        i--;
+    }
+    if(i && isspace(cmdbuf[i]))
+    {
+        i++;
+    }
+    /* skip chars to determine the end of the word */
+    while(!isspace(cmdbuf[j]) && j < cmdbuf_end)
+    {
+        j++;
+    }
+    if(isspace(cmdbuf[j]) || cmdbuf[j] == 0)
+    {
+        j--;
+    }
+    /* copy the word to the buffer */
     strncpy(buf, cmdbuf+i, j-i+1);
     buf[j-i+1] = '\0';
+    /* save the pointers */
     *start = i;
     *end   = j;
+    /* return the word */
     return buf;
 }
 
+
 /*
  * identify brace characters.
+ * 
+ * returns 1 if char c is a brace character, 0 otherwise.
  */
 int isbrace(char c)
 {
     if(c == '(' || c == '{' || c == '[' || c == ')' || c == '}' || c == ']')
+    {
         return 1;
+    }
     return 0;
 }
 
+
 /*
- * find next brace char.
+ * find the next brace char.
  */
 void find_brace()
 {
     int count2;
     count2 = cmdbuf_index+1;
-    if(cmdbuf_index >= cmdbuf_end) return;
-    while(!isbrace(cmdbuf[count2]) && count2 < cmdbuf_end) count2++;
+    /* reached the end of buffer */
+    if(cmdbuf_index >= cmdbuf_end)
+    {
+        return;
+    }
+    /* find the next brace char */
+    while(!isbrace(cmdbuf[count2]) && count2 < cmdbuf_end)
+    {
+        count2++;
+    }
+    /* if we found a brace, move the cursor to its position */
     if(isbrace(cmdbuf[count2]))
     {
         count2 -= cmdbuf_index;
@@ -198,6 +317,10 @@ void find_brace()
     }
 }
 
+
+/*
+ * save the current cursor position.
+ */
 void save_curpos()
 {
     srow = terminal_row;
@@ -205,6 +328,10 @@ void save_curpos()
     scmdindex = cmdbuf_index;
 }
 
+
+/*
+ * restore the cursor to its saved position.
+ */
 void restore_curpos()
 {
     terminal_row = srow;
@@ -220,26 +347,40 @@ void restore_curpos()
 void insert_at(char *s)
 {
     int slen = strlen(s);
-    if(!slen) return;
+    /* zero-length string */
+    if(!slen)
+    {
+        return;
+    }
     char *p1, *p2, *p3;
     p1 = cmdbuf+cmdbuf_end;
     p2 = p1+slen;
     p3 = cmdbuf+cmdbuf_index;
     cmdbuf[cmdbuf_end+slen] = '\0';
-    /* make some room */
-    while(p1 >= p3) *p2-- = *p1--;
+    /* make some room for the new string */
+    while(p1 >= p3)
+    {
+        *p2-- = *p1--;
+    }
     p1++;
     /* now insert the new string */
     p2 = s;
     p3 = s+slen;
-    while(p2 < p3) *p1++ = *p2++;
+    while(p2 < p3)
+    {
+        *p1++ = *p2++;
+    }
+    /* print the new command line */
     printf("%s", s);
     save_curpos();
     printf("%s", cmdbuf+cmdbuf_index+slen);
+    /* adjust our buffer pointers */
     cmdbuf_end   += slen;
     cmdbuf_index += slen;
+    /* move the cursor to where we inserted the new string */
     do_left_key(cmdbuf_end-cmdbuf_index);
 }
+
 
 /*
  * replace the whole buffer contents with another string.
@@ -254,17 +395,32 @@ void replace_with(char *s)
     output_cmd();
 }
 
+
+/*
+ * free our internal buffers.
+ */
 void free_bufs()
 {
-    if(backup) free(backup);
-    if(lstring) free_malloced_str(lstring);
+    if(backup)
+    {
+        free(backup);
+    }
+    if(lstring)
+    {
+        free_malloced_str(lstring);
+    }
     insert = sinsert;
 }
+
 
 /*
  * this function performs the actions of the vi-editing control mode.
  * see the 'vi Line Editing Command Mode' section of this link:
  * http://pubs.opengroup.org/onlinepubs/9699919799/utilities/sh.html
+ * 
+ * returns '\n' or '\r' if the user entered a newline or carriage return,
+ * respectively, so that cmdline() would execute the command line.. returns
+ * zero otherwise.
  */
 int vi_cmode()
 {
@@ -272,31 +428,49 @@ int vi_cmode()
     int  tabs   = 0;
     int  count  = 0, count2;
     char *p, **pp;
-    /* last command, and count and count */
+    /* last command char and last count */
     char lc     = 0, lc2 = 0;
     int  lcount = 0;
     /* last search string used */
     lstring = NULL;
+    
+    /* our command buffer */
 #define BUFCHARS    127
     char buf[BUFCHARS+1];
+    
     /*
      * this is a backup copy of the command buffer, just in case we
      * received a 'U' or 'undo all' command.
      */
     backup = malloc(cmdbuf_end+1);
-    if(backup) strcpy(backup, cmdbuf);
+    if(backup)
+    {
+        strcpy(backup, cmdbuf);
+    }
+    /* save the current INSERT mode */
     sinsert = insert;
     
+    /* loop to read vi commands */
     while(1)
     {
         /***********************
          * get next key stroke
          ***********************/
         c = get_next_key();
-        if(c == 0) continue;
+        if(c == 0)
+        {
+            continue;
+        }
 
-        if(c != '\t') tabs = 0;
-        else          tabs++;
+        /* count tabs */
+        if(c != '\t')
+        {
+            tabs = 0;
+        }
+        else
+        {
+            tabs++;
+        }
         
 select:
         save_curpos();
@@ -315,12 +489,25 @@ select:
                 {
                     count2 = cmdbuf_index;
                     do_home_key();
-                    if     (lc == 'c') { do_del_key(count2); free_bufs(); return 0; }
-                    else if(lc == 'd') do_del_key(count2);
-                    else if(lc == 'y') { yank(0, count2); restore_curpos(); }
+                    if(lc == 'c')
+                    {
+                        do_del_key(count2);
+                        free_bufs();
+                        return 0;
+                    }
+                    else if(lc == 'd')
+                    {
+                        do_del_key(count2);
+                    }
+                    else if(lc == 'y')
+                    {
+                        yank(0, count2);
+                        restore_curpos();
+                    }
                     break;
                 }
-                /* fall through to the next case */
+                /* NOTE: fall through to the next case */
+                __attribute__((fallthrough));
                 
             case '1':
             case '2':
@@ -342,9 +529,21 @@ select:
                 count2 = cmdbuf_index;
                 do_home_key();
                 count = 0;
-                if     (lc == 'c') { do_del_key(count2); free_bufs(); return 0; }
-                else if(lc == 'd') do_del_key(count2);
-                else if(lc == 'y') { yank(0, count2); restore_curpos(); }
+                if(lc == 'c')
+                {
+                    do_del_key(count2);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_del_key(count2);
+                }
+                else if(lc == 'y')
+                {
+                    yank(0, count2);
+                    restore_curpos();
+                }
                 break;
                 
             case 'b':                       /* move backward one word */
@@ -352,18 +551,42 @@ select:
                 lcount = c;
                 if(isspace(cmdbuf[cmdbuf_index]))
                 {
-                    while(isspace(cmdbuf[c]) && c > 0) c--;
+                    while(isspace(cmdbuf[c]) && c > 0)
+                    {
+                        c--;
+                    }
                 }
                 else
                 {
-                    while(!isspace(cmdbuf[c]) && c > 0) c--;
-                    if(isspace(cmdbuf[c])) c++;
+                    while(!isspace(cmdbuf[c]) && c > 0)
+                    {
+                        c--;
+                    }
+                    if(isspace(cmdbuf[c]))
+                    {
+                        c++;
+                    }
                 }
                 count = cmdbuf_index-c;
-                if(count) do_left_key(count);
-                if     (lc == 'c') { do_del_key(count); free_bufs(); return 0; }
-                else if(lc == 'd') do_del_key(count);
-                else if(lc == 'y') { yank(lcount, cmdbuf_index); restore_curpos(); }
+                if(count)
+                {
+                    do_left_key(count);
+                }
+                if(lc == 'c')
+                {
+                    do_del_key(count);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_del_key(count);
+                }
+                else if(lc == 'y')
+                {
+                    yank(lcount, cmdbuf_index);
+                    restore_curpos();
+                }
                 count = 0;
                 break;
                 
@@ -372,14 +595,35 @@ select:
                 lcount = c;
                 if(!isspace(cmdbuf[cmdbuf_index]))
                 {
-                    while(!isspace(cmdbuf[c]) && c > 0) c--;
+                    while(!isspace(cmdbuf[c]) && c > 0)
+                    {
+                        c--;
+                    }
                 }
-                while(isspace(cmdbuf[c]) && c > 0) c--;
+                while(isspace(cmdbuf[c]) && c > 0)
+                {
+                    c--;
+                }
                 count = cmdbuf_index-c;
-                if(count) do_left_key(count);
-                if     (lc == 'c') { do_del_key(count); free_bufs(); return 0; }
-                else if(lc == 'd') do_del_key(count);
-                else if(lc == 'y') { yank(cmdbuf_index, lcount); restore_curpos(); }
+                if(count)
+                {
+                    do_left_key(count);
+                }
+                if(lc == 'c')
+                {
+                    do_del_key(count);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_del_key(count);
+                }
+                else if(lc == 'y')
+                {
+                    yank(cmdbuf_index, lcount);
+                    restore_curpos();
+                }
                 count = 0;
                 break;
 
@@ -389,51 +633,125 @@ select:
                 lcount = c2;
                 if(isspace(cmdbuf[cmdbuf_index]))
                 {
-                    while(isspace(cmdbuf[c2]) && c2 < cmdbuf_end) c2++;
+                    while(isspace(cmdbuf[c2]) && c2 < cmdbuf_end)
+                    {
+                        c2++;
+                    }
                 }
-                while(!isspace(cmdbuf[c2]) && c2 < cmdbuf_end) c2++;
-                if(c == 'e' && (isspace(cmdbuf[c2]) || cmdbuf[c2] == 0)) c2--;
+                while(!isspace(cmdbuf[c2]) && c2 < cmdbuf_end)
+                {
+                    c2++;
+                }
+                if(c == 'e' && (isspace(cmdbuf[c2]) || cmdbuf[c2] == 0))
+                {
+                    c2--;
+                }
                 count = c2-cmdbuf_index;
-                if(count) do_right_key(count);
-                if     (lc == 'c') { do_backspace(count); free_bufs(); return 0; }
-                else if(lc == 'd') do_backspace(count);
-                else if(lc == 'y') { yank(lcount, cmdbuf_index); restore_curpos(); }
+                if(count)
+                {
+                    do_right_key(count);
+                }
+                if(lc == 'c')
+                {
+                    do_backspace(count);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_backspace(count);
+                }
+                else if(lc == 'y')
+                {
+                    yank(lcount, cmdbuf_index);
+                    restore_curpos();
+                }
                 count = 0;
                 break;
                 
             case LEFT_KEY:
                 count = 1;
+                /* NOTE: fall through to the next case */
+                __attribute__((fallthrough));
                 
             case 'h':                       /* move backward one char */
-                if(!count) count = 1;
+                if(!count)
+                {
+                    count = 1;
+                }
                 do_left_key(count);
-                if     (lc == 'c') { do_del_key(count); free_bufs(); return 0; }
-                else if(lc == 'd') do_del_key(count);
-                else if(lc == 'y') { yank(cmdbuf_index, cmdbuf_index+count); restore_curpos(); }
+                if(lc == 'c')
+                {
+                    do_del_key(count);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_del_key(count);
+                }
+                else if(lc == 'y')
+                {
+                    yank(cmdbuf_index, cmdbuf_index+count);
+                    restore_curpos();
+                }
                 count = 0;
                 break;
                 
             case RIGHT_KEY:
                 count = 1;
+                /* NOTE: fall through to the next case */
+                __attribute__((fallthrough));
                 
             case 'l':                       /* move forward one char */
-                if(!count) count = 1;
+                if(!count)
+                {
+                    count = 1;
+                }
                 do_right_key(count);
-                if     (lc == 'c') { do_backspace(count); free_bufs(); return 0; }
-                else if(lc == 'd') do_backspace(count);
-                else if(lc == 'y') { yank(cmdbuf_index-count, cmdbuf_index); restore_curpos(); }
+                if(lc == 'c')
+                {
+                    do_backspace(count);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_backspace(count);
+                }
+                else if(lc == 'y')
+                {
+                    yank(cmdbuf_index-count, cmdbuf_index);
+                    restore_curpos();
+                }
                 count = 0;
                 break;
             
             case 't':
             case 'f':                       /* find next char */
                 c2 = get_next_key();
-                if(c2 == '\e') { count = 0; break; }
+                if(c2 == '\e')              /* ESC key */
+                {
+                    count = 0;
+                    break;
+                }
                 lcount = cmdbuf_index;
                 find_next(c, c2, count);
-                if     (lc == 'y') { yank(lcount, cmdbuf_index); restore_curpos(); }
-                else if(lc == 'c') { do_backspace(cmdbuf_index-lcount); free_bufs(); return 0; }
-                else if(lc == 'd') { do_backspace(cmdbuf_index-lcount); }
+                if(lc == 'y')
+                {
+                    yank(lcount, cmdbuf_index);
+                    restore_curpos();
+                }
+                else if(lc == 'c')
+                {
+                    do_backspace(cmdbuf_index-lcount);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_backspace(cmdbuf_index-lcount);
+                }
                 lc = c;
                 lc2 = c2;
                 lcount = count;
@@ -443,12 +761,28 @@ select:
             case 'T':
             case 'F':                       /* find prev char */
                 c2 = get_next_key();
-                if(c2 == '\e') { count = 0; break; }
+                if(c2 == '\e')              /* ESC key */
+                {
+                    count = 0;
+                    break;
+                }
                 lcount = cmdbuf_index;
                 find_prev(c, c2, count);
-                if     (lc == 'y') { yank(cmdbuf_index, lcount); restore_curpos(); }
-                else if(lc == 'c') { do_del_key(lcount-cmdbuf_index); free_bufs(); return 0; }
-                else if(lc == 'd') { do_del_key(lcount-cmdbuf_index); }
+                if(lc == 'y')
+                {
+                    yank(cmdbuf_index, lcount);
+                    restore_curpos();
+                }
+                else if(lc == 'c')
+                {
+                    do_del_key(lcount-cmdbuf_index);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_del_key(lcount-cmdbuf_index);
+                }
                 lc = c;
                 lc2 = c2;
                 lcount = count;
@@ -460,18 +794,42 @@ select:
                 lcount = c;
                 if(isspace(cmdbuf[cmdbuf_index]))
                 {
-                    while(isspace(cmdbuf[c]) && c < cmdbuf_end) c++;
+                    while(isspace(cmdbuf[c]) && c < cmdbuf_end)
+                    {
+                        c++;
+                    }
                 }
                 else
                 {
-                    while(!isspace(cmdbuf[c]) && c < cmdbuf_end) c++;
-                    if(isspace(cmdbuf[c]) || cmdbuf[c] == 0) c--;
+                    while(!isspace(cmdbuf[c]) && c < cmdbuf_end)
+                    {
+                        c++;
+                    }
+                    if(isspace(cmdbuf[c]) || cmdbuf[c] == 0)
+                    {
+                        c--;
+                    }
                 }
                 count = c-cmdbuf_index;
-                if(count) do_right_key(count);
-                if     (lc == 'c') { do_backspace(count); free_bufs(); return 0; }
-                else if(lc == 'd') do_backspace(count);
-                else if(lc == 'y') { yank(lcount, cmdbuf_index); restore_curpos(); }
+                if(count)
+                {
+                    do_right_key(count);
+                }
+                if(lc == 'c')
+                {
+                    do_backspace(count);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_backspace(count);
+                }
+                else if(lc == 'y')
+                {
+                    yank(lcount, cmdbuf_index);
+                    restore_curpos();
+                }
                 count = 0;
                 break;
                 
@@ -480,19 +838,43 @@ select:
                 lcount = c;
                 if(!isspace(cmdbuf[cmdbuf_index]))
                 {
-                    while(!isspace(cmdbuf[c]) && c < cmdbuf_end) c++;
+                    while(!isspace(cmdbuf[c]) && c < cmdbuf_end)
+                    {
+                        c++;
+                    }
                 }
-                while(isspace(cmdbuf[c]) && c < cmdbuf_end) c++;
+                while(isspace(cmdbuf[c]) && c < cmdbuf_end)
+                {
+                    c++;
+                }
                 count = c-cmdbuf_index;
-                if(count) do_right_key(count);
-                if     (lc == 'c') { do_backspace(count); free_bufs(); return 0; }
-                else if(lc == 'd') do_backspace(count);
-                else if(lc == 'y') { yank(lcount, cmdbuf_index); restore_curpos(); }
+                if(count)
+                {
+                    do_right_key(count);
+                }
+                if(lc == 'c')
+                {
+                    do_backspace(count);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_backspace(count);
+                }
+                else if(lc == 'y')
+                {
+                    yank(lcount, cmdbuf_index);
+                    restore_curpos();
+                }
                 count = 0;
                 break;
 
-            case ';':
-                if(count == 0) count = 1;
+            case ';':           /* repeat last search command */
+                if(count == 0)
+                {
+                    count = 1;
+                }
                 while(count--)
                 {
                     if(lc == 't' || lc == 'f')
@@ -503,17 +885,37 @@ select:
                     {
                         find_prev(lc, lc2, lcount);
                     }
-                    else break;
+                    else
+                    {
+                        break;
+                    }
                 }
                 count = 0;
                 break;
 
-            case ',':
-                if(count == 0) count = 1;
-                if(lc == 't') c = 'T';
-                else if(lc == 'T') c = 't';
-                else if(lc == 'f') c = 'F';
-                else if(lc == 'F') c = 'f';
+            case ',':           /* repeat last search command inversed */
+                if(count == 0)
+                {
+                    count = 1;
+                }
+                /* inverse the last search command */
+                if(lc == 't')
+                {
+                    c = 'T';
+                }
+                else if(lc == 'T')
+                {
+                    c = 't';
+                }
+                else if(lc == 'f')
+                {
+                    c = 'F';
+                }
+                else if(lc == 'F')
+                {
+                    c = 'f';
+                }
+                /* now perform the command */
                 while(count--)
                 {
                     if(c == 't' || c == 'f')
@@ -524,29 +926,62 @@ select:
                     {
                         find_prev(c, lc2, lcount);
                     }
-                    else break;
+                    else
+                    {
+                        break;
+                    }
                 }
                 count = 0;
                 break;
 
             case '|':                       /* move to column 'count' */
                 count--;
-                if(count < 0) count = 0;
-                else if(count > cmdbuf_end) count = cmdbuf_end;
+                if(count < 0)
+                {
+                    count = 0;
+                }
+                else if(count > cmdbuf_end)
+                {
+                    count = cmdbuf_end;
+                }
                 /* move left or right? */
-                if     (count < cmdbuf_index)
+                if(count < cmdbuf_index)
                 {
                     do_left_key(cmdbuf_index-count);
-                    if     (lc == 'c') { do_del_key(cmdbuf_index-count); free_bufs(); return 0; }
-                    else if(lc == 'd') do_del_key(cmdbuf_index-count);
-                    else if(lc == 'y') { yank(cmdbuf_index, cmdbuf_index+count); restore_curpos(); }
+                    if(lc == 'c')
+                    {
+                        do_del_key(cmdbuf_index-count);
+                        free_bufs();
+                        return 0;
+                    }
+                    else if(lc == 'd')
+                    {
+                        do_del_key(cmdbuf_index-count);
+                    }
+                    else if(lc == 'y')
+                    {
+                        yank(cmdbuf_index, cmdbuf_index+count);
+                        restore_curpos();
+                    }
                 }
                 else if(count > cmdbuf_index)
                 {
                     do_right_key(count-cmdbuf_index);
-                    if     (lc == 'c') { do_backspace(count-cmdbuf_index); free_bufs(); return 0; }
-                    else if(lc == 'd') do_backspace(count-cmdbuf_index);
-                    else if(lc == 'y') { yank(cmdbuf_index-count, cmdbuf_index); restore_curpos(); }
+                    if(lc == 'c')
+                    {
+                        do_backspace(count-cmdbuf_index);
+                        free_bufs();
+                        return 0;
+                    }
+                    else if(lc == 'd')
+                    {
+                        do_backspace(count-cmdbuf_index);
+                    }
+                    else if(lc == 'y')
+                    {
+                        yank(cmdbuf_index-count, cmdbuf_index);
+                        restore_curpos();
+                    }
                 }
                 count = 0;
                 break;
@@ -555,9 +990,21 @@ select:
             case '$':                       /* move to end of line */
                 count2 = cmdbuf_index;
                 do_end_key();
-                if     (lc == 'c') { do_backspace(cmdbuf_index-count2); free_bufs(); return 0; }
-                else if(lc == 'd') do_backspace(cmdbuf_index-count2);
-                else if(lc == 'y') { yank(count2, cmdbuf_index); restore_curpos(); }
+                if(lc == 'c')
+                {
+                    do_backspace(cmdbuf_index-count2);
+                    free_bufs();
+                    return 0;
+                }
+                else if(lc == 'd')
+                {
+                    do_backspace(cmdbuf_index-count2);
+                }
+                else if(lc == 'y')
+                {
+                    yank(count2, cmdbuf_index);
+                    restore_curpos();
+                }
                 count = 0;
                 break;
                 
@@ -576,58 +1023,121 @@ select:
                 count = 0;
                 break;
                 
-            case '[':
+            case '[':                   /* POSIX vi commands that begin with '[' */
                 c = get_next_key();
                 switch(c)
                 {
-                    case 'A':                       /* fetch prev command */
-                        if(!count) count = 1;
+                    case 'A':                       /* the fetch prev command */
+                        if(!count)
+                        {
+                            count = 1;
+                        }
                         do_up_key(count);
                         break;
                         
-                    case 'B':                       /* fetch next command */
-                        if(!count) count = 1;
+                    case 'B':                       /* the fetch next command */
+                        if(!count)
+                        {
+                            count = 1;
+                        }
                         do_down_key(count);
                         break;
                         
                     case 'C':               /* move forward one char */
-                        if(!count) count = 1;
+                        if(!count)
+                        {
+                            count = 1;
+                        }
                         do_right_key(count);
-                        if     (lc == 'c') { do_backspace(count); free_bufs(); return 0; }
-                        else if(lc == 'd') do_backspace(count);
-                        else if(lc == 'y') { yank(cmdbuf_index-count, cmdbuf_index); restore_curpos(); }
+                        if(lc == 'c')
+                        {
+                            do_backspace(count);
+                            free_bufs();
+                            return 0;
+                        }
+                        else if(lc == 'd')
+                        {
+                            do_backspace(count);
+                        }
+                        else if(lc == 'y')
+                        {
+                            yank(cmdbuf_index-count, cmdbuf_index);
+                            restore_curpos();
+                        }
                         break;
 
                     case 'D':               /* move backward one char */
-                        if(!count) count = 1;
+                        if(!count)
+                        {
+                            count = 1;
+                        }
                         do_left_key (count);
-                        if(lc == 'c') { do_del_key(count); free_bufs(); return 0; }
-                        else if(lc == 'd') do_del_key(count);
-                        else if(lc == 'y') { yank(cmdbuf_index, cmdbuf_index+count); restore_curpos(); }
+                        if(lc == 'c')
+                        {
+                            do_del_key(count);
+                            free_bufs();
+                            return 0;
+                        }
+                        else if(lc == 'd')
+                        {
+                            do_del_key(count);
+                        }
+                        else if(lc == 'y')
+                        {
+                            yank(cmdbuf_index, cmdbuf_index+count);
+                            restore_curpos();
+                        }
                         break;
                         
                     case 'H':               /* move to first non-blank character */
                         c = 0;
                         if(isspace(cmdbuf[0]))
                         {
-                            while(isspace(cmdbuf[c]) && c < cmdbuf_end) c++;
+                            while(isspace(cmdbuf[c]) && c < cmdbuf_end)
+                            {
+                                c++;
+                            }
                         }
                         count = cmdbuf_index;
                         cmdbuf_index = c;
                         terminal_col = start_col+c;
                         terminal_row = start_row;
                         move_cur(terminal_row, terminal_col);
-                        if     (lc == 'c') { do_del_key(count-cmdbuf_index); free_bufs(); return 0; }
-                        else if(lc == 'd') do_del_key(count-cmdbuf_index);
-                        else if(lc == 'y') { yank(cmdbuf_index, count); restore_curpos(); }
+                        if(lc == 'c')
+                        {
+                            do_del_key(count-cmdbuf_index);
+                            free_bufs();
+                            return 0;
+                        }
+                        else if(lc == 'd')
+                        {
+                            do_del_key(count-cmdbuf_index);
+                        }
+                        else if(lc == 'y')
+                        {
+                            yank(cmdbuf_index, count);
+                            restore_curpos();
+                        }
                         break;
                         
                     case 'Y':               /* move to end of line */
                         count2 = cmdbuf_index;
                         do_end_key();
-                        if     (lc == 'c') { do_backspace(cmdbuf_index-count2); free_bufs(); return 0; }
-                        else if(lc == 'd') do_backspace(cmdbuf_index-count2);
-                        else if(lc == 'y') { yank(count2, cmdbuf_index); restore_curpos(); }
+                        if(lc == 'c')
+                        {
+                            do_backspace(cmdbuf_index-count2);
+                            free_bufs();
+                            return 0;
+                        }
+                        else if(lc == 'd')
+                        {
+                            do_backspace(cmdbuf_index-count2);
+                        }
+                        else if(lc == 'y')
+                        {
+                            yank(count2, cmdbuf_index);
+                            restore_curpos();
+                        }
                         break;
                 }
                 count = 0;
@@ -644,28 +1154,50 @@ select:
             /************************
              * Search Edit Commands
              ************************/
-            case '+':                      /* fetch next command */
+            case '+':                      /* the fetch next command */
             case 'j':
-                if(!count) count = 1;
+                if(!count)
+                {
+                    count = 1;
+                }
                 do_down_key(count);
                 break;
                 
-            case '-':                       /* fetch prev command */
+            case '-':                       /* the fetch prev command */
             case 'k':
-                if(!count) count = 1;
+                if(!count)
+                {
+                    count = 1;
+                }
                 do_up_key(count);
                 break;
 
             case 'G':                       /* fetch command # count */
-                if(!count) count = -1;
-                else       count -= cmd_history_index;
-                if     (count < 0) do_up_key  (-count);
-                else if(count > 0) do_down_key( count);
+                if(!count)
+                {
+                    count = -1;
+                }
+                else
+                {
+                    count -= cmd_history_index;
+                }
+                /* move up or down? */
+                if(count < 0)
+                {
+                    do_up_key  (-count);
+                }
+                else if(count > 0)
+                {
+                    do_down_key( count);
+                }
                 count = 0;
                 break;
                 
-            case 'n':                       /* search history backwards with last string */
-                if(!lstring) break;
+            case 'n':               /* search history backwards using the last search string */
+                if(!lstring)
+                {
+                    break;
+                }
                 count = search_history(lstring, 0, 1);
                 if(count == -1)                         /* no match found */
                 {
@@ -678,8 +1210,11 @@ select:
                 count = 0;
                 break;
                 
-            case 'N':                       /* search history forwards with last string */
-                if(!lstring) break;
+            case 'N':               /* search history forwards using the last search string */
+                if(!lstring)
+                {
+                    break;
+                }
                 count = search_history(lstring, 0, 0);
                 if(count == -1)                         /* no match found */
                 {
@@ -695,17 +1230,33 @@ select:
             case '/':                       /* search history backwards */
                 count = 0;
                 c = get_next_key();
-                if(c == '\e') { beep(); break; }
-                if(c == '^') count2 = 1;    /* hook search to start of line */
-                else buf[count++] = c, count2 = 0;
+                if(c == '\e')               /* ESC key */
+                {
+                    beep();
+                    break;
+                }
+                if(c == '^')
+                {
+                    count2 = 1;    /* hook search to start of line */
+                }
+                else
+                {
+                    buf[count++] = c, count2 = 0;
+                }
                 while(count < BUFCHARS)
                 {
                     c = get_next_key();
-                    if(c == '\n' || c == '\r') break;
+                    if(c == '\n' || c == '\r')
+                    {
+                        break;
+                    }
                     buf[count++] = c;
                 }
                 buf[count] = '\0';
-                if(count == 0) strcpy(buf, lstring);    /* use prev string */
+                if(count == 0)
+                {
+                    strcpy(buf, lstring);    /* use prev string */
+                }
                 count = search_history(buf, count2, 1);
                 if(count == -1)                         /* no match found */
                 {
@@ -716,24 +1267,43 @@ select:
                 count -= cmd_history_index;
                 do_up_key(-count);
                 count = 0;
-                if(lstring) free_malloced_str(lstring);
+                if(lstring)
+                {
+                    free_malloced_str(lstring);
+                }
                 lstring = get_malloced_str(buf);
                 break;
                 
             case '?':                       /* search history forwards */
                 count = 0;
                 c = get_next_key();
-                if(c == '\e') { beep(); break; }
-                if(c == '^') count2 = 1;    /* hook search to start of line */
-                else buf[count++] = c, count2 = 0;
+                if(c == '\e')               /* ESC key */
+                {
+                    beep();
+                    break;
+                }
+                if(c == '^')
+                {
+                    count2 = 1;    /* hook search to start of line */
+                }
+                else
+                {
+                    buf[count++] = c, count2 = 0;
+                }
                 while(count < BUFCHARS)
                 {
                     c = get_next_key();
-                    if(c == '\n' || c == '\r') break;
+                    if(c == '\n' || c == '\r')
+                    {
+                        break;
+                    }
                     buf[count++] = c;
                 }
                 buf[count] = '\0';
-                if(count == 0) strcpy(buf, lstring);    /* use prev string */
+                if(count == 0)
+                {
+                    strcpy(buf, lstring);    /* use prev string */
+                }
                 count = search_history(buf, count2, 0);
                 if(count == -1)                         /* no match found */
                 {
@@ -744,7 +1314,10 @@ select:
                 count -= cmd_history_index;
                 do_down_key(count);
                 count = 0;
-                if(lstring) free_malloced_str(lstring);
+                if(lstring)
+                {
+                    free_malloced_str(lstring);
+                }
                 lstring = get_malloced_str(buf);
                 break;
 
@@ -789,9 +1362,14 @@ select:
                 return 0;
                 
             case 's':                           /* replace count chars under the cursor in input mode */
-                if(!count) count = 1;
+                if(!count)
+                {
+                    count = 1;
+                }
                 if(cmdbuf_index+count > cmdbuf_end)
+                {
                     count = cmdbuf_end-cmdbuf_index;
+                }
                 do_del_key(count);
                 free_bufs();
                 return 0;
@@ -802,7 +1380,10 @@ select:
                      do_kill_key();
                      lc = 0;
                 }
-                else lc = 'd';
+                else
+                {
+                    lc = 'd';
+                }
                 break;
                 
             case 'D':                           /* similar to 'C' without entering input mode */
@@ -823,7 +1404,10 @@ select:
                 return 0;
                 
             case 'P':                           /* insert save buffer before cur position */
-                if(!count) count = 1;
+                if(!count)
+                {
+                    count = 1;
+                }
                 lcount = count;
                 while(count--)
                 {
@@ -833,7 +1417,10 @@ select:
                 break;
                 
             case 'p':                           /* insert save buffer after cur position */
-                if(!count) count = 1;
+                if(!count)
+                {
+                    count = 1;
+                }
                 lcount = count;
                 while(count--)
                 {
@@ -850,8 +1437,15 @@ select:
                 
             case 'r':                           /* replace count chars with c */
                 c = get_next_key();
-                if(c == '\e') { beep(); break; }
-                if(!count) count = 1;
+                if(c == '\e')                   /* ESC key */
+                {
+                    beep();
+                    break;
+                }
+                if(!count)
+                {
+                    count = 1;
+                }
                 lcount = count;
                 while(count--)
                 {
@@ -863,13 +1457,6 @@ select:
                     cmdbuf[cmdbuf_index++] = c;
                     putchar(c);
                 }
-                /*
-                if(cmdbuf_index > cmdbuf_end)
-                {
-                    cmdbuf_end = cmdbuf_index;
-                    cmdbuf[cmdbuf_index+1] = '\0';
-                }
-                */
                 update_row_col();
                 lc = 'r';
                 break;
@@ -882,7 +1469,10 @@ select:
                  */
                 
             case 'U':
-                if(!backup) break;
+                if(!backup)
+                {
+                    break;
+                }
                 replace_with(backup);
                 break;
                 
@@ -923,7 +1513,10 @@ select:
                      yank(0, cmdbuf_end);
                      lc = 0;
                 }
-                else lc = 'y';
+                else
+                {
+                    lc = 'y';
+                }
                 break;
                 
             case 'Y':                           /* yank (copy) chars from cur cursor to EOL */
@@ -932,7 +1525,11 @@ select:
                 break;
                 
             case '_':                           /* append 'count' word from prev and enter input mode */
-                if(cmd_history_index <= 0) { beep(); break; }
+                if(cmd_history_index <= 0)
+                {
+                    beep();
+                    break;
+                }
                 p = cmd_history[cmd_history_index-1].cmd;
                 count2 = strlen(p);
                 if(count)
@@ -943,10 +1540,16 @@ select:
                     while(count--)
                     {
                         /* find start of word */
-                        while( isspace(p[c]) && c < count2) c++;
+                        while( isspace(p[c]) && c < count2)
+                        {
+                            c++;
+                        }
                         c2 = c;
                         /* find end of word */
-                        while(!isspace(p[c]) && c < count2) c++;
+                        while(!isspace(p[c]) && c < count2)
+                        {
+                            c++;
+                        }
                     }
                     strncpy(buf, p+c2, c-c2);
                     buf[c-c2] = '\0';
@@ -956,11 +1559,20 @@ select:
                     /* use the last word */
                     c = count2-1;
                     /* find end of word */
-                    while( isspace(p[c]) && c > 0) c--;
+                    while( isspace(p[c]) && c > 0)
+                    {
+                        c--;
+                    }
                     c2 = c+1;
                     /* find start of word */
-                    while(!isspace(p[c]) && c > 0) c--;
-                    if(c) c++;
+                    while(!isspace(p[c]) && c > 0)
+                    {
+                        c--;
+                    }
+                    if(c)
+                    {
+                        c++;
+                    }
                     strncpy(buf, p+c, c2-c);
                     buf[c2-c] = '\0';
                 }
@@ -982,7 +1594,10 @@ select:
                 goto select;
                 
             case '~':                           /* invert chars case */
-                if(!count) count = 1;
+                if(!count)
+                {
+                    count = 1;
+                }
                 lcount = count;
                 while(count--)
                 {
@@ -992,8 +1607,14 @@ select:
                         break;
                     }
                     c = cmdbuf[cmdbuf_index];
-                    if(c >= 'a' && c <= 'z') c = c-'a'+'A';
-                    else if(c >= 'A' && c <= 'Z') c = c-'A'+'a';
+                    if(c >= 'a' && c <= 'z')
+                    {
+                        c = c-'a'+'A';
+                    }
+                    else if(c >= 'A' && c <= 'Z')
+                    {
+                        c = c-'A'+'a';
+                    }
                     cmdbuf[cmdbuf_index++] = c;
                     putchar(c);
                 }
@@ -1013,7 +1634,11 @@ select:
                                                  * command or file name completion (replace all
                                                  * matches as per POSIX).
                                                  */
-                if(!(p = get_curword(buf, &c, &c2))) { beep(); break; }
+                if(!(p = get_curword(buf, &c, &c2)))
+                {
+                    beep();
+                    break;
+                }
                 count = strlen(buf);
                 /* assume implicit '*' if no regex chars as per POSIX */
                 if(!has_regex_chars(buf, count))
@@ -1034,7 +1659,7 @@ select:
                     break;
                 }
                 /* insert the list of matched file/dir names */
-                char *p2 = __substitute(cmdbuf, p, c, c2);
+                char *p2 = substitute_str(cmdbuf, p, (size_t)c, (size_t)c2);
                 if(p2)
                 {
                     /* move to start of cur word */
@@ -1045,7 +1670,10 @@ select:
                     insert_at(p2);
                     /* position cursor at end of inserted word */
                     /* now insert the space if it was not a dir */
-                    if(p[strlen(p)-1] != '/') do_insert(' ');
+                    if(p[strlen(p)-1] != '/')
+                    {
+                        do_insert(' ');
+                    }
                     free(p2);
                 }
                 /* POSIX says we should return to input mode */
@@ -1057,7 +1685,11 @@ select:
                                                  * command or file name completion (replace the longest
                                                  * match as per POSIX).
                                                  */
-                if(!(p = get_curword(buf, &c, &c2))) { beep(); break; }
+                if(!(p = get_curword(buf, &c, &c2)))
+                {
+                    beep();
+                    break;
+                }
                 count = strlen(buf);
                 /* assume implicit '*' if no regex chars as per POSIX */
                 if(!has_regex_chars(buf, count))
@@ -1075,7 +1707,7 @@ select:
                 count = 0;
                 p = pp[0];
                 char *psave = NULL;
-                for(count2 = 0; count2 < glob.gl_pathc; count2++)
+                for(count2 = 0; count2 < (int)glob.gl_pathc; count2++)
                 {
                     /* save the index of the longest match */
                     int len = strlen(pp[count2]);
@@ -1087,10 +1719,16 @@ select:
                     }
                 }
                 /* we will need to insert a space after filenames */
-                if(p[count-1] != '/') count2 = 1;
-                else                  count2 = 0;
+                if(p[count-1] != '/')
+                {
+                    count2 = 1;
+                }
+                else
+                {
+                    count2 = 0;
+                }
                 /* for now, insert the matched file/dir name */
-                p = __substitute(cmdbuf, p, c, c2);
+                p = substitute_str(cmdbuf, p, (size_t)c, (size_t)c2);
                 if(p)
                 {
                     save_curpos();
@@ -1098,10 +1736,16 @@ select:
                     restore_curpos();
                     do_right_key(count);
                     /* now insert the space if it was not a dir */
-                    if(count2) do_insert(' ');
+                    if(count2)
+                    {
+                        do_insert(' ');
+                    }
                     free(p);
                 }
-                if(psave) free_malloced_str(psave);
+                if(psave)
+                {
+                    free_malloced_str(psave);
+                }
                 globfree(&glob);
                 /* POSIX says we should return to input mode */
                 free_bufs();
@@ -1109,7 +1753,10 @@ select:
                 
             case '#':                           /* toggle commented lines */
                 count = 0;
-                while(isspace(cmdbuf[count]) && count < cmdbuf_end) count++;
+                while(isspace(cmdbuf[count]) && count < cmdbuf_end)
+                {
+                    count++;
+                }
                 cmdbuf_index = count;
                 do_right_key(count);
                 if(cmdbuf[count] == '#')
@@ -1136,7 +1783,10 @@ select:
                     {
                         if(cmdbuf_index == 0 || cmdbuf[cmdbuf_index] == '\n')
                         {
-                            if(cmdbuf[cmdbuf_index+1] == '\0') break;
+                            if(cmdbuf[cmdbuf_index+1] == '\0')
+                            {
+                                break;
+                            }
                             do_insert('#');
                             continue;
                         }
@@ -1156,18 +1806,33 @@ select:
             case '@':                       /* search for alias name */
                 count = 0;
                 c = get_next_key();
-                if(c == '\e') { beep(); break; }
+                if(c == '\e')               /* ESC key */
+                {
+                    beep();
+                    break;
+                }
                 buf[count++] = c, count2 = 0;
                 while(count < BUFCHARS)
                 {
                     c = get_next_key();
-                    if(c == '\n' || c == '\r') break;
+                    if(c == '\n' || c == '\r')
+                    {
+                        break;
+                    }
                     buf[count++] = c;
                 }
                 buf[count] = '\0';
-                if(count == 0) { beep(); break; }
-                char *a = __parse_alias(buf);
-                if(!a) { beep(); break; }
+                if(count == 0)
+                {
+                    beep();
+                    break;
+                }
+                char *a = parse_alias(buf);
+                if(!a)
+                {
+                    beep();
+                    break;
+                }
                 replace_with(a);
                 break;
                 
@@ -1197,7 +1862,7 @@ select:
                 return '\r';
                 
             case CTRLV_KEY:
-                printf("\r\n%s\r\n", shell_ver);
+                printf("\n%s\n", shell_ver);
                 print_prompt();
                 update_row_col();
                 start_row = terminal_row;

@@ -17,7 +17,7 @@
  *
  *    You should have received a copy of the GNU General Public License
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
- */    
+ */
 
 #include <errno.h>
 #include <stdlib.h>
@@ -29,15 +29,20 @@
 #include "kbdevent.h"
 #include "debug.h"
 
+/* original terminal attributes (when the shell started) */
 struct termios tty_attr_old;
+
+/* current terminal attributes (as the shell runs) */
 struct termios tty_attr    ;
 
+/* masks to indicate the status of meta keys */
 char ALT_MASK   ;
 char CTRL_MASK  ;
 char SHIFT_MASK ;
 char CAPS_MASK  ;
 char INSERT_MASK;
 
+/* special control keys, as defined by the stty utility for the terminal */
 char ERASE_KEY ;
 char KILL_KEY  ;
 char INTR_KEY  ;
@@ -45,79 +50,45 @@ char EOF_KEY   ;
 char VLNEXT_KEY;
 
 
-char *get_key_str(int c)
-{
-    static char buf[16];
-    
-    switch(c)
-    {
-        case ESC_KEY:    return "ESC"      ;
-        case RESKEY:     return "UNKNOWN"  ;
-        case '\b':       return "BACKSPACE";
-        case '\t':       return "TAB"      ;
-        case '\n':       return "NEWLINE"  ;
-        case CTRL_KEY:   return "CTRL"     ;
-        case SHIFT_KEY:  return "SHIFT"    ;
-        case ALT_KEY:    return "ALT"      ;
-        case ' ':        return "SPACE"    ;
-        case CAPS_KEY:   return "CAPSLOCK" ;
-        case F1_KEY:     return "F1"       ;
-        case F2_KEY:     return "F2"       ;
-        case F3_KEY:     return "F3"       ;
-        case F4_KEY:     return "F4"       ;
-        case F5_KEY:     return "F5"       ;
-        case F6_KEY:     return "F6"       ;
-        case F7_KEY:     return "F7"       ;
-        case F8_KEY:     return "F8"       ;
-        case F9_KEY:     return "F9"       ;
-        case F10_KEY:    return "F10"      ;
-        case F11_KEY:    return "F11"      ;
-        case F12_KEY:    return "F12"      ;
-        case HOME_KEY:   return "HOME"     ;
-        case PGUP_KEY:   return "PGUP"     ;
-        case UP_KEY:     return "UP"       ;
-        case LEFT_KEY:   return "LEFT"     ;
-        case RIGHT_KEY:  return "RIGHT"    ;
-        case END_KEY:    return "END"      ;
-        case DOWN_KEY:   return "DOWN"     ;
-        case PGDOWN_KEY: return "PGDN"     ;
-        case INS_KEY:    return "INSERT"   ;
-        case DEL_KEY:    return "DELETE"   ;
-        default:
-            if(c < 32)
-            {
-                sprintf(buf, "^%c", 64+c);
-            }
-            else
-            {
-                sprintf(buf, "%c (%d)", c, c);
-            }
-            return buf;
-    }
-}
-
-
-void rawoff()
-{
-    if(isatty(0)) tcsetattr(0, TCSAFLUSH, &tty_attr_old);
-}
-
-
+/*
+ * turn the raw mode on.
+ * 
+ * returns 1 if the terminal attributes are set successfully, 0 otherwise.
+ */
 int rawon()
 {
-    if(tcgetattr(0, &tty_attr_old) == -1) return 0;
-    //atexit(rawoff);
+    /* get the current terminal attributes */
+    if(tcgetattr(0, &tty_attr_old) == -1)
+    {
+        return 0;
+    }
     /* get the special control keys */
     ERASE_KEY  = tty_attr_old.c_cc[VERASE];
     KILL_KEY   = tty_attr_old.c_cc[VKILL ];
     INTR_KEY   = tty_attr_old.c_cc[VINTR ];
     EOF_KEY    = tty_attr_old.c_cc[VEOF  ];
     VLNEXT_KEY = tty_attr_old.c_cc[VLNEXT];
-    if(!ERASE_KEY ) ERASE_KEY  = DEF_ERASE_KEY;
-    if(!KILL_KEY  ) KILL_KEY   = DEF_KILL_KEY ;
-    if(!INTR_KEY  ) INTR_KEY   = DEF_INTR_KEY ;
-    if(!EOF_KEY   ) EOF_KEY    = DEF_EOF_KEY  ;
-    if(!VLNEXT_KEY) VLNEXT_KEY = CTRLV_KEY    ;
+    /* if any of the special control keys is not defined, use our default value */
+    if(!ERASE_KEY)
+    {
+        ERASE_KEY = DEF_ERASE_KEY;
+    }
+    if(!KILL_KEY)
+    {
+        KILL_KEY = DEF_KILL_KEY;
+    }
+    if(!INTR_KEY)
+    {
+        INTR_KEY = DEF_INTR_KEY;
+    }
+    if(!EOF_KEY)
+    {
+        EOF_KEY = DEF_EOF_KEY;
+    }
+    if(!VLNEXT_KEY)
+    {
+        VLNEXT_KEY = CTRLV_KEY;
+    }
     /* now modify the terminal's attributes */
     tty_attr            = tty_attr_old;
     /* turn off buffering, echo and key processing */
@@ -126,13 +97,19 @@ int rawon()
     //tty_attr.c_oflag    &= ~(OPOST);
     tty_attr.c_cc[VMIN]  = 0;          /* wait until at least one keystroke available */
     tty_attr.c_cc[VTIME] = 1;         /* no timeout */
-    if((tcsetattr(0, TCSAFLUSH, &tty_attr) == -1)) return 0;
+    /* set the new terminal attributes */
+    if((tcsetattr(0, TCSAFLUSH, &tty_attr) == -1))
+    {
+        return 0;
+    }
     return 1;
 }
 
 
+/*
+ * return the next key press from the terminal.
+ */
 int get_next_key()
-// int get_next_key2()
 {
     CTRL_MASK = 0;
     int nread;
@@ -148,57 +125,119 @@ int get_next_key()
     if(c == '\x1b')
     {
         char seq[3];        
-        if(read(0, &seq[0], 1) != 1) return '\x1b';
-        if(read(0, &seq[1], 1) != 1) return '\x1b';
+        if(read(0, &seq[0], 1) != 1)
+        {
+            return '\x1b';
+        }
+        if(read(0, &seq[1], 1) != 1)
+        {
+            return '\x1b';
+        }
 
         if(seq[0] == '[')
         {
             if(seq[1] >= '0' && seq[1] <= '9')
             {
-                if(read(0, &seq[2], 1) != 1) return '\x1b';                
+                if(read(0, &seq[2], 1) != 1)
+                {
+                    return '\x1b';
+                }
                                 
                 if(seq[2] == '~')
                 {
                     switch(seq[1])
                     {
-                        case '1': return HOME_KEY  ;
-                        case '2': return INS_KEY   ;       /* keypad '0' key */
-                        case '3': return DEL_KEY   ;
-                        case '4': return END_KEY   ;
-                        case '5': return PGUP_KEY  ;
-                        case '6': return PGDOWN_KEY;
-                        case '7': return HOME_KEY  ;
-                        case '8': return END_KEY   ;
+                        case '1':
+                            return HOME_KEY  ;
+                            
+                        case '2': 
+                            return INS_KEY   ;       /* keypad '0' key */
+                            
+                        case '3':
+                            return DEL_KEY   ;
+                            
+                        case '4':
+                            return END_KEY   ;
+                            
+                        case '5':
+                            return PGUP_KEY  ;
+                            
+                        case '6':
+                            return PGDOWN_KEY;
+                            
+                        case '7':
+                            return HOME_KEY  ;
+                            
+                        case '8':
+                            return END_KEY   ;
                     }
                 }
                 else if(seq[2] == ';')
                 {
-                    if(read(0, &seq[1], 1) != 1) return '\x1b';
-                    if(read(0, &seq[1], 1) != 1) return '\x1b';
+                    if(read(0, &seq[1], 1) != 1)
+                    {
+                        return '\x1b';
+                    }
+                    if(read(0, &seq[1], 1) != 1)
+                    {
+                        return '\x1b';
+                    }
                     switch(seq[1])
                     {
-                        case 'A': CTRL_MASK = 1; return UP_KEY   ;
-                        case 'B': CTRL_MASK = 1; return DOWN_KEY ;
-                        case 'C': CTRL_MASK = 1; return RIGHT_KEY;
-                        case 'D': CTRL_MASK = 1; return LEFT_KEY ;
-                        case 'P': CTRL_MASK = 1; return F1_KEY;
-                        case 'Q': CTRL_MASK = 1; return F2_KEY;
-                        case 'R': CTRL_MASK = 1; return F3_KEY;
-                        case 'S': CTRL_MASK = 1; return F4_KEY;
+                        case 'A':
+                            CTRL_MASK = 1;
+                            return UP_KEY;
+                            
+                        case 'B':
+                            CTRL_MASK = 1;
+                            return DOWN_KEY;
+                            
+                        case 'C':
+                            CTRL_MASK = 1;
+                            return RIGHT_KEY;
+                            
+                        case 'D':
+                            CTRL_MASK = 1;
+                            return LEFT_KEY;
+                            
+                        case 'P':
+                            CTRL_MASK = 1;
+                            return F1_KEY;
+                            
+                        case 'Q':
+                            CTRL_MASK = 1;
+                            return F2_KEY;
+                            
+                        case 'R':
+                            CTRL_MASK = 1;
+                            return F3_KEY;
+                            
+                        case 'S':
+                            CTRL_MASK = 1;
+                            return F4_KEY;
                     }
                 }                
                 else if(seq[1] == '1' || seq[1] == '2')
                 {
-                    if(read(0, &seq[1], 1) != 1) return '\x1b';
+                    if(read(0, &seq[1], 1) != 1)
+                    {
+                        return '\x1b';
+                    }
                     if(seq[1] == ';')
                     {
-                        if(read(0, &seq[1], 1) != 1) return '\x1b';
+                        if(read(0, &seq[1], 1) != 1)
+                        {
+                            return '\x1b';
+                        }
                         CTRL_MASK = 1;
                     }
                     
                     if(seq[1] != '~')
                     {
-                        if(read(0, &seq[1], 1) != 1) return '\x1b';
+                        if(read(0, &seq[1], 1) != 1)
+                        {
+                            return '\x1b';
+                        }
                         CTRL_MASK = 1;
                     }
 
@@ -234,13 +273,26 @@ int get_next_key()
             {
                 switch(seq[1])
                 {
-                    case 'A': return UP_KEY   ;
-                    case 'B': return DOWN_KEY ;
-                    case 'C': return RIGHT_KEY;
-                    case 'D': return LEFT_KEY ;
-                    case 'E': return 0        ;         /* TODO: this is the keypad '5' key. what does it signify? */
-                    case 'F': return END_KEY  ;
-                    case 'H': return HOME_KEY ;
+                    case 'A':
+                        return UP_KEY   ;
+                        
+                    case 'B':
+                        return DOWN_KEY ;
+                        
+                    case 'C':
+                        return RIGHT_KEY;
+                        
+                    case 'D':
+                        return LEFT_KEY ;
+                        
+                    case 'E':
+                        return 0        ;         /* TODO: this is the keypad '5' key. what does it signify? */
+                        
+                    case 'F':
+                        return END_KEY  ;
+                        
+                    case 'H':
+                        return HOME_KEY ;
                 }
             }
         }
@@ -248,12 +300,23 @@ int get_next_key()
         {
             switch(seq[1])
             {
-                case 'H': return HOME_KEY;
-                case 'F': return END_KEY ;
-                case 'P': return F1_KEY  ;
-                case 'Q': return F2_KEY  ;
-                case 'R': return F3_KEY  ;
-                case 'S': return F4_KEY  ;
+                case 'H':
+                    return HOME_KEY;
+                    
+                case 'F':
+                    return END_KEY ;
+                    
+                case 'P':
+                    return F1_KEY  ;
+                    
+                case 'Q':
+                    return F2_KEY  ;
+                    
+                case 'R':
+                    return F3_KEY  ;
+                    
+                case 'S':
+                    return F4_KEY  ;
             }
         }
         
@@ -262,7 +325,10 @@ int get_next_key()
     }
     else
     {
-        if(c == 127) return '\b';
+        if(c == 127)
+        {
+            return '\b';
+        }
         return c;
     }
 }

@@ -38,16 +38,13 @@
 
 /* process group id of the command line interpreter */
 pid_t  tty_pid;
+
+/* the source input struct */
 struct source_s  __src;
 struct source_s *src = &__src;
-char  *cmdline_filename = "CMDLINE";
-char  *cmdstr_filename  = "CMDSTR" ;
-int    read_stdin       = 1;
-int    SIGINT_received  = 0;    /* used to break out of loops when SIGINT is received */
 
-// FILE  *STDIN  = NULL;
-// FILE  *STDOUT = NULL;
-// FILE  *STDERR = NULL;
+int    read_stdin       = 1;    /* flag to indicate if we are reading from stdin */
+int    SIGINT_received  = 0;    /* flag to break out of loops when SIGINT is received */
 
 #define CLOCKID CLOCK_REALTIME
 
@@ -64,16 +61,29 @@ extern int cur_loop_level;
 extern int req_break     ;
 
 
-static void SIGALRM_handler(int sig __attribute__((unused)), siginfo_t *si __attribute__((unused)), void *uc __attribute__((unused)))
+/*
+ * signal handler for SIGALRM (alarm signal). we use this signal to inform us
+ * when a period of $TPERIOD minutes has elapsed so that we can execute the 'periodic'
+ * special alias.
+ */
+static void SIGALRM_handler(int sig __attribute__((unused)),
+                            siginfo_t *si __attribute__((unused)),
+                            void *uc __attribute__((unused)))
 {
     do_periodic = 1;
 }
 
+
+/*
+ * signal handler for SIGINT (interrupt signal).
+ */
 void SIGINT_handler(int signum __attribute__((unused)))
 {
     SIGINT_received = 1;
-    if(option_set('i')) kill_input();
-    
+    if(option_set('i'))
+    {
+        kill_input();
+    }
     /* force break from any running loop */
     if(cur_loop_level)
     {
@@ -83,21 +93,33 @@ void SIGINT_handler(int signum __attribute__((unused)))
     signal(SIGINT, SIGINT_handler);
 }
 
+
+/*
+ * signal handler for SIGQUIT (quit signal).
+ */
 void SIGQUIT_handler(int signum)
 {
-    fprintf(stderr, "%s: received signal %d\r\n", SHELL_NAME, signum);
+    fprintf(stderr, "%s: received signal %d\n", SHELL_NAME, signum);
     /* make sure we're the signal handler so no funny business happens */
     signal(SIGQUIT, SIGQUIT_handler);
 }
 
+
+/*
+ * signal handler for SIGWINCH (window size change signal).
+ */
 void SIGWINCH_handler(int signum)
 {
-    fprintf(stderr, "%s: received signal %d\r\n", SHELL_NAME, signum);
+    fprintf(stderr, "%s: received signal %d\n", SHELL_NAME, signum);
     get_screen_size();
     /* make sure we're the signal handler so no funny business happens */
     signal(SIGWINCH, SIGWINCH_handler);
 }
 
+
+/*
+ * signal handler for SIGCHLD (child status change signal).
+ */
 void SIGCHLD_handler(int signum __attribute__((unused)))
 {
     int pid, status, save_errno = errno;
@@ -107,21 +129,20 @@ void SIGCHLD_handler(int signum __attribute__((unused)))
         status = 0;
         pid = waitpid(-1, &status, WAIT_FLAG|WNOHANG);
         //if(WIFEXITED(status)) status = WEXITSTATUS(status);
-        if(pid < 0)
+        if(pid <= 0)
         {
-            //perror("waitpid");
             break;
         }
-        if(pid == 0) break;
-        /*
-         * don't notify foreground job completions, as they will be waited for in 
-         * wait_on_child() in backend/backend.c.
-         */
-
         notice_termination(pid, status);
         /* tcsh extensions */
-        if(optionx_set(OPTION_LIST_JOBS_LONG)) jobs(2, (char *[]){ "jobs", "-l" });
-        else if(optionx_set(OPTION_LIST_JOBS)) jobs(1, (char *[]){ "jobs"       });
+        if(optionx_set(OPTION_LIST_JOBS_LONG))
+        {
+            jobs(2, (char *[]){ "jobs", "-l" });
+        }
+        else if(optionx_set(OPTION_LIST_JOBS))
+        {
+            jobs(1, (char *[]){ "jobs"       });
+        }
         /* in tcsh, special alias jobcmd is run before running commands and when jobs change state */
         run_alias_cmd("jobcmd");
     }
@@ -130,6 +151,10 @@ void SIGCHLD_handler(int signum __attribute__((unused)))
     signal(SIGCHLD, SIGCHLD_handler);
 }
 
+
+/*
+ * signal handler for SIGHUP (hangup signal).
+ */
 void SIGHUP_handler(int signum)
 {
     /* only interactive shells worry about killing their child jobs */
@@ -141,32 +166,11 @@ void SIGHUP_handler(int signum)
 }
 
 
+/*
+ * main shell entry point.
+ */
 int main(int argc, char **argv)
 {
-    
-    /*
-     * NOTE: check the name by which this executable was called.
-     *       if the caller wants one of the regular builtin utilities
-     *       (e.g., alias, cd, fg, bg, ...), then redirect argc & argv
-     *       to the respective function and then exit.
-     *       otherwise carry on with the shell loading as usual.
-     */
-    char     *invok = argv[0];
-    char     *slash = strrchr(invok, '/');
-    if(slash) invok = slash+1;
-    size_t   cmdlen = strlen(invok);
-    int      j;
-    for(j = 0; j < regular_builtin_count; j++)
-    {
-        if(strlen(regular_builtins[j].name) != cmdlen) continue;
-        if(strcmp(regular_builtins[j].name, invok) == 0)
-        {
-            int (*func)(int, char **) = (int (*)(int, char **))regular_builtins[j].func;
-            return do_exec_cmd(argc, argv, NULL, func);
-        }
-    }
-        
-
     /*************************************
      *************************************
      * Shell initialization begins here
@@ -221,7 +225,10 @@ int main(int argc, char **argv)
         while(*s1)
         {
             char *s2 = s1+1;
-            while(*s2 && *s2 != ':') s2++;
+            while(*s2 && *s2 != ':')
+            {
+                s2++;
+            }
             char c = *s2;
             *s2 = '\0';
             do_options("-o", s1);
@@ -240,6 +247,7 @@ int main(int argc, char **argv)
      *       down below, which affects SIGQUIT.
      */
     save_signals();    
+
     /* if interactive shell ... */
     if(option_set('i'))
     {
@@ -271,7 +279,7 @@ int main(int argc, char **argv)
         sigemptyset(&sa.sa_mask);
         if(sigaction(SIGALRM, &sa, NULL) == -1)
         {
-            fprintf(stderr, "%s: failed to catch SIGALRM: %s\r\n", SHELL_NAME, strerror(errno));
+            fprintf(stderr, "%s: failed to catch SIGALRM: %s\n", SHELL_NAME, strerror(errno));
         }
 
         /* Create the timer */
@@ -280,7 +288,7 @@ int main(int argc, char **argv)
         sev.sigev_value.sival_ptr = &timerid;
         if(timer_create(CLOCKID, &sev, &timerid) == -1)
         {
-            fprintf(stderr, "%s: failed to create timer: %s\r\n", SHELL_NAME, strerror(errno));
+            fprintf(stderr, "%s: failed to create timer: %s\n", SHELL_NAME, strerror(errno));
         }
         
         /* Start the timer ($TPERIOD is in minutes) */
@@ -292,7 +300,7 @@ int main(int argc, char **argv)
             its.it_interval.tv_nsec = its.it_value.tv_nsec;
             if(timer_settime(timerid, 0, &its, NULL) == -1)
             {
-               fprintf(stderr, "%s: failed to start timer: %s\r\n", SHELL_NAME, strerror(errno));
+               fprintf(stderr, "%s: failed to start timer: %s\n", SHELL_NAME, strerror(errno));
             }
         }
     }
@@ -303,8 +311,14 @@ int main(int argc, char **argv)
     {
         uid_t euid = geteuid(), ruid = getuid();
         gid_t egid = getegid(), rgid = getgid();
-        if(euid != ruid) seteuid(ruid);
-        if(egid != rgid) setegid(rgid);
+        if(euid != ruid)
+        {
+            seteuid(ruid);
+        }
+        if(egid != rgid)
+        {
+            setegid(rgid);
+        }
         /* bash doesn't read startup files in this case */
         noprofile = 1;
         norc      = 1;
@@ -314,14 +328,20 @@ int main(int argc, char **argv)
      * we check to see if this is a login shell. If so, read /etc/profile
      * and then ~/.profile.
      */
-    if(islogin) init_login();
+    if(islogin)
+    {
+        init_login();
+    }
 
     /*
      * check for and execute $ENV file, if any (if not in privileged mode).
      * if not privileged, ksh also uses /etc/suid_profile instead of $ENV
      * (but we pass this one).
      */
-    if(option_set('i')) init_rc();
+    if(option_set('i'))
+    {
+        init_rc();
+    }
     
     /*
      * the restricted mode '-r' is enabled in initsh() below, after $ENV and .profile
@@ -341,14 +361,12 @@ int main(int argc, char **argv)
         signal(SIGQUIT, SIGQUIT_handler);
         set_option('m', 0);
     }
-
   
     /* init aliases */
     memset((void *)__aliases, 0, sizeof(__aliases));
     
     /* init our internal clock */
     start_clock();
-
     
     /* seed the random number generator */
     init_rand();
@@ -451,91 +469,161 @@ int main(int argc, char **argv)
     {
         do_cmd();
     }
-    exit_gracefully(exit_status, NULL);
+    //exit_gracefully(exit_status, NULL);
+    __exit(1, (char *[]){ "exit", NULL });
 }
 
 
+/*
+ * parse and execute the translation unit we have in the global source_s struct.
+ * 
+ * returns 1.
+ */
 int do_cmd()
 {
-    struct node_s   *root   = (struct node_s *)NULL;
-    eof_token.src           = src;
+    struct node_s   *root = (struct node_s *)NULL;
+    eof_token.src         = src;
+    /* parse the translation unit */
     root = parse_translation_unit();
+    /* if parsed successfully */
     if(root)
     {
-        /* dump the Abstract Source Tree (AST) of this translation unit.
+        /*
+         * dump the Abstract Source Tree (AST) of this translation unit.
          * note that we are using an extended option '-d' which is not
          * defined by POSIX.
          */
         if(option_set('d'))
+        {
             dump_node_tree(root, 1);
+        }
         /* -n option means read commands but don't execute them */
         int noexec = (option_set('n') && !option_set('i'));
         if(!noexec)
         {
             do_translation_unit(root);
-            /* defined in initsh.c */
-            //extern char *stdin_filename;
-            //if(src->filename == stdin_filename) term_canon(0);
-            if(isatty(0)) term_canon(0);
+            if(isatty(0))
+            {
+                term_canon(0);
+            }
         }
+        /* free the parsed nodetree */
         free_node_tree(root);
     }
     return 1;
 }
 
 
+/*
+ * read a file (presumably a script file) and initialize the
+ * source_s struct so that we can parse and execute the file.
+ * 
+ * NOTE: this function doesn't handle big files.. we should extend
+ *       it so it uses memmaped files or any other method for handling
+ *       big files.
+ * 
+ * returns 1 if the file is loaded successfully, 0 otherwise.
+ */
 int read_file(char *__filename, struct source_s *src)
 {
     errno = 0;
-    if(!__filename) return 0;
+    if(!__filename)
+    {
+        return 0;
+    }
     char *filename = word_expand_to_str(__filename);
-    if(!  filename) return 0;
+    if(!filename)
+    {
+        return 0;
+    }
     char *tmpbuf = (char *)NULL;
     FILE *f      = (FILE *)NULL;
     if(strchr(filename, '/'))
     {
-        /* pathname with '/', try it */
+        /* pathname with '/', try opening it */
         f = fopen(filename, "r");
     }
     else
     {
+        /* pathname with no slashes, try to locate it */
         size_t len = strlen(filename);
         /* try CWD */
         char tmp[len+3];
         strcpy(tmp, "./");
         strcat(tmp, filename);
         f = fopen(tmp, "r");
-        if(f) goto read;
+        if(f)   /* file found */
+        {
+            goto read;
+        }
         /* search using $PATH */
         char *path = search_path(filename, NULL, 0);
-        if(!path) return 0;
+        if(!path)   /* file not found */
+        {
+            free(filename);
+            return 0;
+        }
         f = fopen(path, "r");
         free_malloced_str(path);
-        if(f) goto read;
+        if(f)
+        {
+            goto read;
+        }
+        /* failed to open the file */
         free(filename);
         return 0;
     }
-    if(!f) goto error;
+    /* failed to open the file */
+    if(!f)
+    {
+        goto error;
+    }
+    
 read:
-    if(fseek(f, 0, SEEK_END) != 0) goto error;
+    /* seek to the end of the file */
+    if(fseek(f, 0, SEEK_END) != 0)
+    {
+        goto error;
+    }
+    /* get the file length */
     long i;
-    if((i = ftell(f)) == -1) goto error;
+    if((i = ftell(f)) == -1)
+    {
+        goto error;
+    }
     rewind(f);
+    /* alloc buffer */
     tmpbuf = (char *)malloc(i+1);
-    if(!tmpbuf) goto error;
+    if(!tmpbuf)
+    {
+        goto error;
+    }
+    /* read the file */
     long j = fread(tmpbuf, 1, i, f);
-    if(j != i) goto error;
+    if(j != i)
+    {
+        goto error;
+    }
     tmpbuf[i]     = '\0';
     fclose(f);
     src->buffer   = tmpbuf;
     src->bufsize  = i;
-    src->filename = filename;
+    src->srctype  = SOURCE_EXTERNAL_FILE;
+    src->srcname  = get_malloced_str(filename);
+    free(filename);
     src->curpos   = -2;
     //free(filename);
     return 1;
+    
 error:
-    if(f) fclose(f);
-    if(tmpbuf) free(tmpbuf);
+    if(f)
+    {
+        fclose(f);
+    }
+    if(tmpbuf)
+    {
+        free(tmpbuf);
+    }
     free(filename);
     return 0;
 }

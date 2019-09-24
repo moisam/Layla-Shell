@@ -33,35 +33,39 @@
 static const char TAB = '\t';
 static const char CR  = '\r';
 static const char NL  = '\n';
-static inline char is_space(char c)
-{
-    if(c == ' ' || /* c == '\n' || */ c == '\t') return 1;
-    return 0;
-}
 
+/* the name of this shell */
 #define SHELL_NAME      "lsh"
 
 /* process group id of the command line interpreter */
 extern pid_t tty_pid;
 
+/* flag to pass to waitpid() */
 // #define WAIT_FLAG       (WEXITED|WSTOPPED|WCONTINUED|WUNTRACED /* |WNOHANG */)
 #define WAIT_FLAG       (WUNTRACED)
 
+/* I/O file redirection flags */
 #define W_FLAG      (O_RDWR | O_CREAT | O_TRUNC )
 #define A_FLAG      (O_RDWR | O_CREAT | O_APPEND)
 #define R_FLAG      (O_RDONLY)
-#define C_FLAG      (W_FLAG | O_NOCTTY) /* use O_NOCTTY as our "no-clobber" flag */
+// #define C_FLAG      (W_FLAG | O_NOCTTY) /* use O_NOCTTY as our "no-clobber" flag */
+#define C_FLAG      (W_FLAG | 0400)
+/* close-on-open flag */
 #define CLOOPEN     (-1)
+/* default file creation mask */
 #define FILE_MASK   (S_IROTH|S_IWOTH|S_IRGRP|S_IWGRP|S_IRUSR|S_IWUSR)
+/* default dir creation mask */
 #define DIR_MASK    (S_IRWXU | S_IRWXG | S_IRWXO)
 
-
+/* some jobs-related constants */
 #define MAX_PROCESS_PER_JOB     10
 #define MAX_JOBS                255
 #define MAX_TOKENS              255
 
+/* max length of the $ENV file name */
 #define MAX_ENV_NAME_LEN        31
 
+/* default values for the maximum line and path lengths */
 #define DEFAULT_LINE_MAX        2048
 #define DEFAULT_PATH_MAX        4096
 
@@ -69,70 +73,48 @@ extern pid_t tty_pid;
 #define EXIT_ERROR_NOENT        127
 #define EXIT_ERROR_NOEXEC       126
 
-
-struct _stream
-{
-    struct cmd_token *path;
-#define _ATTRIB_WRITE   1
-#define _ATTRIB_APPEND  2
-#define _ATTRIB_READ    3
-#define _ATTRIB_PIPE    4
-#define _ATTRIB_HEREDOC 5
-    char attributes;
-    int  flags;
-};
-
 /* job structure */
 struct job
 {
-    int     job_num;
-    int     proc_count;
-    int     pgid;
-    int     status;
-    char   *commandstr;
-    pid_t  *pids;
-    int    *exit_codes;
-    int     child_exits;
-    long    child_exitbits;
+    int     job_num;            /* job number */
+    int     proc_count;         /* number of processes in the job */
+    int     pgid;               /* job's process group id */
+    int     status;             /* current job status */
+    char   *commandstr;         /* job's command string */
+    pid_t  *pids;               /* list of process ids */
+    int    *exit_codes;         /* process exit status codes */
+    int     child_exits;        /* how many children did exit */
+    long    child_exitbits;     /* bitfield to indicate which children exited */
 #define JOB_FLAG_FORGROUND      (1 << 0)
 #define JOB_FLAG_DISOWNED       (1 << 1)
 #define JOB_FLAG_NOTIFIED       (1 << 2)
 #define JOB_FLAG_NOTIFY         (1 << 3)    /* set by the notify builtin to notify individual jobs */
-    int     flags;
-    struct  termios *tty_attr;              /* terminal state when job is suspended */
+    int     flags;              /* flags (see the macros above) */
+    struct  termios *tty_attr;  /* terminal state when job is suspended */
 };
 // extern char job_run_status[MAX_JOBS];
+
+/* macro to check if a flag is set */
 #define flag_set(flags, which)      (((flags) & (which)) == (which))
+
+/* macro to check if a job is running */
 #define NOT_RUNNING(status)         (WIFEXITED((status)) || WIFSIGNALED((status)) || WIFSTOPPED((status)))
 
 /* tokens per input string */
-struct cmd_token
+struct word_s
 {
-    char *data;
-    int len;
-#define PLAIN_TOKEN                 0
-#define SINGLY_QUOTED_TOKEN         1
-#define DOUBLY_QUOTED_TOKEN         2
-#define BACKTICKED_TOKEN            3
-#define COMMAND_SUBSTITUTE_TOKEN    4
-#define PARAMETER_EXPANSION_TOKEN   5
-#define ARITHMETIC_EXPANSION_TOKEN  6
-#define OPERATOR_TOKEN              7
-#define HEREDOC_TOKEN_EXP           8   /* expandable heredoc */
-#define HEREDOC_TOKEN_NOEXP         9   /* non-expandable heredoc */
-    char token_type;
-    struct cmd_token *next;
+    char  *data;
+    int    len;
+#define HEREDOC_TOKEN_EXP       (1 << 0)   /* expandable heredoc */
+#define HEREDOC_TOKEN_NOEXP     (1 << 1)   /* non-expandable heredoc */
+    int    flags;
+    struct word_s *next;
 };
 
-/* now for the "automatic" internal shell variables like $? and $1 ... */
-struct shell_var_s
-{
-    char name[MAX_ENV_NAME_LEN+1];
-    char str_value[12];
-    char *large_str_value;
-};
-
-
+/*
+ * function definitions (sorted by source file).
+ */
+ 
 /* prompt.c */
 extern  char prompt[];
 char   *__evaluate_prompt(char *PS);
@@ -144,6 +126,7 @@ void    print_prompt4();
 
 /* popen.c */
 FILE   *popenr(char *cmd);
+void    init_subshell();
 
 /* initsh.c */
 extern  int  null_environ_index;
@@ -193,7 +176,6 @@ size_t  remove_escaped_newlines(char *buf);
 void    term_canon(int on);
 char   *get_malloced_strl(char *str, int start, int length);
 int     is_same_str(char *s1, char *s2);
-struct  cmd_token *make_cmd_token(char *word);
 char   *search_path(char *file, char *use_path, int exe_only);
 int     is_function(char *cmd);
 int     is_builtin(char *cmd);
@@ -202,11 +184,12 @@ int     is_special_builtin(char *cmd);
 int     is_regular_builtin(char *cmd);
 void    save_signals();
 void    reset_signals();
-int     fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags, int flagarg);
+int     fork_command(int argc, char **argv, char *use_path, char *UTILITY,
+                     int flags, int flagarg);
 int     isroot();
 char   *strchr_any(char *string, char *chars);
 char   *list_to_str(char **list, int dofree);
-char   *quote_val(char *val);
+char   *quote_val(char *val, int add_quotes);
 int     echoon(int fd);
 int     echooff(int fd);
 int     file_exists(char *path);
@@ -216,42 +199,60 @@ char   *get_shell_varp(char *name, char *def_val);
 int     get_shell_vari(char *name, int def_val);
 long    get_shell_varl(char *name, int def_val);
 void    set_shell_varp(char *name, char *val);
+int     check_buffer_bounds(int *count, int *len, char ***names);
 
 /* flags for fork_command() */
 #define FORK_COMMAND_DONICE     (1 << 0)
 #define FORK_COMMAND_IGNORE_HUP (1 << 1)
 
-/* cmd_args.c */
+/* flags for word_expand() */
+#define EXPAND_STRIP_QUOTES     (1 << 0)
+#define EXPAND_STRIP_SPACES     (1 << 1)
+
+/* wordexp.c */
 int     is_reserved_word(char *str);
 int     is_restrict_var(char *name);
-void    free_all_tokens(struct cmd_token *first);
-size_t  __get_next_token(char *str, struct cmd_token *t);
-// int     tokenize(char *str, struct cmd_token *tok);
-void    __do_alias(struct cmd_token *tok);
-void    do_alias_substitution(struct cmd_token *tok);
-char   *__do_command(char *cmd, int backquoted);
-char   *__do_arithmetic(char *__expr);
-char   *__do_var(char *__var_name, struct cmd_token **tokens);
-char   *__substitute(char *s, char *val, size_t start, size_t end);
-void    __substitute_var(struct cmd_token *tok, char *val, size_t start, size_t end);
+size_t  __get_next_token(char *str, struct word_s *t);
+void    __do_alias(struct word_s *tok);
+void    do_alias_substitution(struct word_s *tok);
+// char   *__do_command(char *cmd, int backquoted);
+// char   *__do_arithmetic(char *__expr);
+// char   *__do_var(char *__var_name, struct word_s **tokens);
+// char   *__substitute(char *s, char *val, size_t start, size_t end);
+// void    __substitute_var(struct word_s *tok, char *val, size_t start, size_t end);
 size_t  find_closing_quote(char *data, int sq_nesting);
 size_t  find_closing_brace(char *data);
-char   *tilde_expand(char *s, size_t *_i, int in_var_assign);
-// int     __word_expand(struct cmd_token **_head, struct cmd_token ***_tail,
-//                       size_t *_i, size_t *_j, size_t *_len,
-//                       char cmd, char in_double_quotes);
+// char   *tilde_expand(char *s, size_t *_i, int in_var_assign);
 void    delete_char_at(char *str, size_t index);
-void    purge_tokens(struct cmd_token *tok);
-struct  cmd_token *word_expand(struct cmd_token *head, struct cmd_token **tail, int in_heredoc, int strip_quotes);
-struct  cmd_token *__make_fields(char *str);
-struct  cmd_token *make_head_tail_tokens(struct cmd_token *tok, struct cmd_token *fld, 
-                                        size_t len, size_t i, size_t j);
+void    purge_tokens(struct word_s *tok);
+// struct  word_s *word_expand(struct word_s *head, struct word_s **tail,
+//                                int in_heredoc, int flags);
+// struct  word_s *__make_fields(char *str);
+// struct  word_s *make_head_tail_tokens(struct word_s *tok, struct word_s *fld,
+//                                         size_t len, size_t i, size_t j);
+struct  word_s *word_expand(char *orig_word);
 char   *word_expand_to_str(char *word);
 char   *get_all_vars(char *prefix);
+
+void    free_all_words(struct word_s *first);
+struct  word_s *field_split(char *str);
+struct  word_s *make_word(char *word);
+char   *get_quoted_str(char *val, int add_quotes);
+char   *tilde_expand(char *s);
+char   *command_substitute(char *__cmd);
+char   *ansic_expand(char *str);
+char   *var_expand(char *__var_name);
+struct  word_s *pathnames_expand(struct word_s *words);
+void    remove_quotes(struct word_s *wordlist);
+char   *pos_params_expand(char *tmp, int in_double_quotes);
+char   *substitute_str(char *s1, char *s2, size_t start, size_t end);
+
+/* shunt.c */
+char   *arithm_expand(char *__expr);
 char    get_xdigit(char c);
 
 /* braceexp.c */
-char  **brace_expand(char *str, int *count);
+char  **brace_expand(char *str, size_t *count);
 
 /* tab.c */
 int do_tab(char *cmdbuf, uint16_t *cmdbuf_index, uint16_t *cmdbuf_end);
@@ -263,9 +264,9 @@ extern char *__optarg   ;
 extern char  __opterr   ;
 extern int     argi     ;
 #define INVALID_OPTARG      ((char *)-1)
-//char **make_argv_no_argc(struct cmd_token *tokens);
-char **make_argv(int argc, struct cmd_token *tokens);
-char **make_argv2(int argc, char **argv);
+// char **make_argv_no_argc(struct word_s *tokens);
+// char **make_argv(int argc, struct word_s *tokens);
+// char **make_argv2(int argc, char **argv);
 int    parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit);
 
 /* params.c */
@@ -273,27 +274,26 @@ extern char **pos_params;
 extern int    pos_params_count;
 // extern char  *null_param;
 extern int    exit_status;
-// extern struct cmd_token null_param_token;
+// extern struct word_s null_param_token;
 extern int    subshell_level;
 
 void   init_shell_vars(char *pw_name, gid_t gid, char *fullpath);
 int    is_pos_param(char *var_name);
 int    is_special_param(char *var_name);
-struct cmd_token *get_all_pos_params(char which, int quoted);
-struct cmd_token *get_pos_params(char which, int quoted, int offset, int count);
+struct word_s *get_all_pos_params(char which, int quoted);
+struct word_s *get_pos_params(char which, int quoted, int offset, int count);
+char  *get_all_pos_params_str(char which, int quoted);
+char  *get_pos_params_str(char which, int quoted, int offset, int count);
 int    pos_param_count();
 char **get_pos_paramsp();
 void   set_pos_paramsp(char **p);
 struct symtab_entry_s *get_pos_param(int i);
 
 /* main.c */
-// extern FILE  *STDIN ;
-// extern FILE  *STDOUT;
-// extern FILE  *STDERR;
 extern struct source_s  __src;
 extern struct source_s *src;
 extern int    SIGINT_received;
-int    do_cmd(/* int new_symtab */);
+int    do_cmd();
 int    read_file(char *filename, struct source_s *src);
 
 /* functab.c */
@@ -322,10 +322,12 @@ extern struct var_s special_vars[];
 /* builtins/history.c */
 #define  default_HISTSIZE       512
 #define  MAX_CMD_HISTORY        512
+
+/* struct for history list entries */
 struct histent_s
 {
-    char   *cmd;
-    time_t  time;
+    char   *cmd;        /* history command */
+    time_t  time;       /* time when it was entered */
 };
 // extern   char *cmd_history[];
 extern   struct histent_s cmd_history[];
@@ -352,7 +354,21 @@ int      history(int argc, char **argv);
 
 char    *hist_expand(int quotes);
 
+/* alphalist.c */
+struct alpha_list_s
+{
+    int count;
+    int len;
+    char **items;
+};
 
+void init_alpha_list(struct alpha_list_s *list);
+void free_alpha_list(struct alpha_list_s *list);
+void print_alpha_list(struct alpha_list_s *list);
+void add_to_alpha_list(struct alpha_list_s *list, char *str);
+char *alpha_list_make_str(const char *fmt, ...);
+
+/* terminal text colors */
 #define COL_WHITE       37
 #define COL_GREEN       32
 #define COL_RED         31
@@ -363,23 +379,26 @@ char    *hist_expand(int quotes);
 /* BUILTIN UTILITIES                      */
 /******************************************/
 
+/* struct for builtin utilities */
 struct builtin_s
 {
-    char *name;
+    char   *name;         /* utility name */
     /*
      * helps us when comparing builtin function names,
      * so that we don't need to call strlen() over and over.
      */
-    int   namelen;
-    char *explanation;
-    void *func;
+    size_t  namelen;      /* length of utility name */
+    char   *explanation;  /* what does the utility do */
+    void   *func;         /* function to call to execute the utility */
     /*
      * fields used by the help utility to display
      * information about each builtin utility.
      */
-    int   synopsis_name_count;
-    char *synopsis;
-    char *help;
+    int     synopsis_name_count;  /* how many times does the utility name
+                                 * appear in the synopsis
+                                 */
+    char   *synopsis;             /* utility usage */
+    char   *help;                 /* longer help message */
 #define BUILTIN_PRINT_VOPTION   (1 << 0)
 #define BUILTIN_PRINT_HOPTION   (1 << 1)
 #define BUILTIN_ENABLED         (1 << 2)
@@ -388,14 +407,8 @@ struct builtin_s
 
 /* builtins/builtins.c */
 extern int      regular_builtin_count;
-// extern char    *regular_builtin_explanation[];
-// extern char    *regular_builtin_name[];
-// extern void    *regular_builtin_func[];
 extern struct builtin_s regular_builtins[];
 extern int      special_builtin_count;
-// extern char    *special_builtin_explanation[];
-// extern char    *special_builtin_name[];
-// extern void    *special_builtin_func[];
 extern struct builtin_s special_builtins[];
 int    builtin(int argc, char *argv[]);
 
@@ -412,8 +425,8 @@ void   print_help(char *invokation_name, int index, int isreg, int flags);
 #define MAX_ALIASES         256
 struct alias_s
 {
-    char *name;
-    char *val;
+    char *name;         /* alias name */
+    char *val;          /* aliased value */
 };
 extern struct alias_s __aliases[MAX_ALIASES];
 extern char   *null_alias;
@@ -421,6 +434,7 @@ int    alias(int argc, char *argv[]);
 void   init_aliases();
 int    valid_alias_name(char *name);
 void   run_alias_cmd(char *alias);
+void   unset_all_aliases();
 
 /* builtins/bg.c */
 int    bg(int argc, char **argv);
@@ -435,8 +449,12 @@ int    command(int argc, char *argv[]);
 int    search_and_exec(int cargc, char **cargv, char *PATH, int flags);
 
 /* flags for the search_and_exec() function */
-#define SEARCH_AND_EXEC_DOFORK  (1 << 0)        /* fork for external commands */
-#define SEARCH_AND_EXEC_DOFUNC  (1 << 1)        /* do function search */
+/* fork new processes to execute external commands */
+#define SEARCH_AND_EXEC_DOFORK          (1 << 0)
+/* do function search */
+#define SEARCH_AND_EXEC_DOFUNC          (1 << 1)
+/* merge local symtab with global symtab after executing a function or regular builtin */
+#define SEARCH_AND_EXEC_MERGE_GLOBAL    (1 << 2)
 
 /* builtins/false.c */
 int    false(int argc, char **argv);
@@ -459,7 +477,6 @@ struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, i
 pid_t *get_malloced_pids(pid_t pids[], int pid_count);
 int    kill_job(struct job *j);
 int    start_job(struct job *myjob);
-struct cmd_token *get_heredoc(char *_cmd, int strip);
 void   check_on_children();
 void   notice_termination(pid_t pid, int status);
 int    set_cur_job(struct job *job);
@@ -542,6 +559,7 @@ int    get_callframe_count();
 
 #define DIRSTACK_FILE                       "~/.lshdirs"
 
+/* struct for directory stack entries */
 struct dirstack_ent_s
 {
     char *path;
@@ -600,7 +618,6 @@ void   do_echo(int v, int argc, char **argv, int flags);
 int    colon();
 
 /* builtins/dot.c */
-extern char *dot_filename;
 int    dot(int argc, char **argv);
 
 /* builtins/eval.c */
@@ -616,7 +633,6 @@ extern int tried_exit;
 
 /* builtins/export.c */
 int    is_capital(char c);
-int    is_legitimate(char c);
 int    is_shell_var(char *var);
 void   purge_quoted_val(char *val);
 void   purge_quoted(char *prefix, char *name, char *val);
@@ -673,7 +689,9 @@ double get_cur_time();
 /* builtins/trap.c */
 struct trap_item_s
 {
+    /* action to do when trap occurs (ignore, default, ...) */
     int   action    ;
+    /* command to execute when the trap occurs (if action not ignore/default) */
     char *action_str;
 };
 

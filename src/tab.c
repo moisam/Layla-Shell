@@ -35,25 +35,30 @@
 
 #define MAX_CMDS    2048
 
-char  *HOSTS_FILE    = "/etc/hosts";
-char **hostnames     = NULL;    /* hostnames buffer */
-int    hn_len        = 0;       /* max number of entries (size of buffer) */
-int    hn_count      = 0;       /* number of entries */
-time_t hn_last_check = 0;       /* last time we accessed the hosts file */
+char  *HOSTS_FILE    = "/etc/hosts";    /* default hosts file */
+char **hostnames     = NULL;            /* hostnames buffer */
+int    hn_len        = 0;               /* max number of entries (size of buffer) */
+int    hn_count      = 0;               /* number of entries */
+time_t hn_last_check = 0;               /* last time we accessed the hosts file */
 
-char  *PASSWD_FILE   = "/etc/passwd";
-char **usernames     = NULL;    /* user names buffer */
-int    un_len        = 0;       /* max number of entries (size of buffer) */
-int    un_count      = 0;       /* number of entries */
-time_t un_last_check = 0;       /* last time we accessed the passwd file */
+char  *PASSWD_FILE   = "/etc/passwd";   /* default passwd database file */
+char **usernames     = NULL;            /* user names buffer */
+int    un_len        = 0;               /* max number of entries (size of buffer) */
+int    un_count      = 0;               /* number of entries */
+time_t un_last_check = 0;               /* last time we accessed the passwd file */
 
 int    match_hostname(char *name, char **matches, int max);
 int    match_username(char *name, char **matches, int max);
 char **get_hostnames();
 char **get_usernames();
-int check_names_bounds(int *count, int *len, char ***names);
 
 
+/*
+ * auto-complete a pathname when the user enters a partial pathname and presses
+ * tab.. the __count parameter contains the number of entries already stored in
+ * the **results array.. the function saves the matched pathnames in the **results
+ * array and returns the count of the matched pathnames in addition to __count.
+ */
 int autocomplete_path(char *file, char **results, int __count)
 {
     extern char *__next_path;
@@ -66,86 +71,144 @@ int autocomplete_path(char *file, char **results, int __count)
     char *p2;
     int  count = __count;
     
-check:
-    /* $PATH finished */
-    if(!p || *p == '\0') return count;
-    p2 = p;
-    while(*p2 && *p2 != ':') p2++;
-    int  plen = p2-p;
-    if(!plen) plen = 1;
-    char path[plen+1];
-    strncpy(path, p, p2-p);
-    path[p2-p] = '\0';
-    if(path[plen-1] == '/') path[plen-1] = '\0';
-
-    int matches_count = 0;
-    int i;
-    struct stat st;
-    __next_path = NULL;
-    char *next = get_next_filename(path, &matches_count, 0);
-    if(!next)
+    /* search the next directory in $PATH for possible matches */
+    while(p && *p)
     {
-        p = p2;
-        if(*p2 == ':') p++;
-        goto check;
-    }
-    do
-    {
-        if(strstr(next, file) == next)
+        /* get the next entry in $PATH */
+        p2 = p;
+        while(*p2 && *p2 != ':')
         {
-            char exefile[plen+strlen(next)+2];
-            sprintf(exefile, "%s/%s", path, next);
-            if(stat(exefile, &st) == 0)
+            p2++;
+        }
+        int  plen = p2-p;
+        if(!plen)
+        {
+            plen = 1;
+        }
+        /* copy the entry */
+        char path[plen+1];
+        strncpy(path, p, p2-p);
+        path[p2-p] = '\0';
+        if(path[plen-1] == '/')
+        {
+            path[plen-1] = '\0';
+        }
+        /* search for possible matches in the directory */
+        int matches_count = 0;
+        int i;
+        struct stat st;
+        __next_path = NULL;
+        char *next = get_next_filename(path, &matches_count, 0);
+        /* no matches. move on to the next $PATH entry */
+        if(!next)
+        {
+            p = p2;
+            if(*p2 == ':')
             {
-                if(!S_ISREG(st.st_mode)) continue;
-                if(optionx_set(OPTION_RECOGNIZE_ONLY_EXE) && access(path, X_OK) != 0) continue;
-                /* check for duplicates */
-                int duplicate = 0;
-                for(i = 0; i < count; i++)
+                p++;
+            }
+            continue;
+        }
+        do
+        {
+            /* we have a matching name */
+            if(strstr(next, file) == next)
+            {
+                char exefile[plen+strlen(next)+2];
+                sprintf(exefile, "%s/%s", path, next);
+                if(stat(exefile, &st) == 0)
                 {
-                    if(strcmp(results[i], next) == 0)
+                    if(!S_ISREG(st.st_mode))    /* not a regular file */
                     {
-                        duplicate = 1;
+                        continue;
+                    }
+                    /* if we should recognize only exe files, check if the file is executable */
+                    if(optionx_set(OPTION_RECOGNIZE_ONLY_EXE) && access(path, X_OK) != 0)
+                    {
+                        continue;
+                    }
+                    /* check for duplicates */
+                    int duplicate = 0;
+                    for(i = 0; i < count; i++)
+                    {
+                        if(strcmp(results[i], next) == 0)
+                        {
+                            duplicate = 1;
+                            break;
+                        }
+                    }
+                    if(duplicate)
+                    {
+                        continue;
+                    }
+                    /* add the command to our list */
+                    results[count++] = get_malloced_str(next);
+                    if(count >= MAX_CMDS)
+                    {
                         break;
                     }
                 }
-                if(duplicate) continue;
-                /* add the command to our list */
-                results[count++] = get_malloced_str(next);
-                if(count >= MAX_CMDS) break;
             }
+        } while((next = get_next_filename(path, NULL, 0)));
+        /* free temp memory */
+        for(i = 0; i < matches_count; i++)
+        {
+            free(eps[i]);
         }
-    } while((next = get_next_filename(path, NULL, 0)));
-    /* free temp memory */
-    for(i = 0; i < matches_count; i++) free(eps[i]);
-    free(eps);
-    if(count >= MAX_CMDS) return count;
-    
-    p = p2;
-    if(*p2 == ':') p++;
-    goto check;
+        free(eps);
+        /* maximum number of entries reached */
+        if(count >= MAX_CMDS)
+        {
+            return count;
+        }
+        /* move on to the next $PATH entry */
+        p = p2;
+        if(*p2 == ':')
+        {
+            p++;
+        }
+    }
+    return count;
 }
 
 
 /*
- * get the longest column's width for formatting our output.
+ * get the longest column's width for formatting our output.. the **cmds parameter
+ * holds the matched entries which we are going to print, while count is their count.
+ * 
+ * returns the column width that is guaranteed to accommodate all of the entries.
  */
 int get_col_width(char **cmds, int count)
 {
     int k;
     int w = 0;
+    /* find the longest entry */
     for(k = 0; k < count; k++)
     {
         int len = strlen(cmds[k]);
-        if(len > w) w = len+1;
+        if(len > w)
+        {
+            w = len+1;
+        }
     }
+    /* try to put 4 columns on the screen */
     k = VGA_WIDTH/4;
-    if(w > VGA_WIDTH) w = VGA_WIDTH;
-    else if(w < k) w = k;
+    if(w > VGA_WIDTH)   /* our width is larger than the screen's */
+    {
+        w = VGA_WIDTH;
+    }
+    else if(w < k)      /* our width is smaller than screen width/4 */
+    {
+        w = k;
+    }
     return w;
 }
 
 
+/*
+ * print the list of matched entries, **cmds, which contains count entries,
+ * adjusted to a column length of w.
+ */
 void __output_results(char **cmds, int count, int w)
 {
     int k, col = 0, col2;
@@ -160,14 +223,20 @@ void __output_results(char **cmds, int count, int w)
             putchar('\n');
             col = 0;
         }
-        else col = col2;
+        else
+        {
+            col = col2;
+        }
     }
-    if(count % (VGA_WIDTH/w)) putchar('\n');
+    if(count % (VGA_WIDTH/w))
+    {
+        putchar('\n');
+    }
 }
 
 
 /*
- * output the results.
+ * output the results of tab completion.
  */
 void output_results(char **cmds, int count)
 {
@@ -179,6 +248,7 @@ void output_results(char **cmds, int count)
     int lines = count/cols;
     if(lines >= VGA_HEIGHT)
     {
+        /* we have more lines than can be printed on one screen */
         printf("Show all %d results? [y/N]: ", count);
         term_canon(1);
         int c = getc(stdin);
@@ -188,7 +258,10 @@ void output_results(char **cmds, int count)
         }
         term_canon(0);
     }
-    else __output_results(cmds, count, w);
+    else
+    {
+        __output_results(cmds, count, w);
+    }
 }
 
 
@@ -197,7 +270,10 @@ void output_results(char **cmds, int count)
  */
 char *get_common_prefix(char **cmds, int count)
 {
-    if(!cmds || !count) return NULL;
+    if(!cmds || !count)
+    {
+        return NULL;
+    }
     int i = 0, j = 0, nomatch;
     char c;
     while(1)
@@ -212,42 +288,69 @@ char *get_common_prefix(char **cmds, int count)
                 break;
             }
         }
-        if(nomatch) break;
+        if(nomatch)
+        {
+            break;
+        }
         j++;
     }
-    if(j == 0) return NULL;
+    if(j == 0)
+    {
+        return NULL;
+    }
     return get_malloced_strl(cmds[0], 0, j);
 }
 
 
 /*
  * this procedure will do command, variable and filename auto-completion.
+ * 
+ * returns 1 if tab completion is successful, 0 and beep otherwise.
  */
 int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
 {
     extern int start_row, start_col;
     uint16_t cmdbuf_index = *__cmdbuf_index;
     uint16_t cmdbuf_end   = *__cmdbuf_end  ;
-    uint16_t j, k, i = 0;
-    int      is_cmd = 0;
+    uint16_t j, k, i    = 0;
+    int      is_cmd     = 0;
     int      first_word = 0;
 
     i = cmdbuf_index;
-    if(i != 0) i--;
+    if(i != 0)
+    {
+        i--;
+    }
     while(!isspace(cmdbuf[i]) && cmdbuf[i] != '@' && 
           cmdbuf[i] != '~' && cmdbuf[i] != '$' && i != 0)
+    {
         i--;   /* get start of cur word */
-    if(isspace(cmdbuf[i])) i++;
-    
-    if(i == 0) j = cmdbuf_index, first_word = 1;
-    else if(i >= cmdbuf_index) j = i;          /* empty word */
+    }
+    if(isspace(cmdbuf[i]))
+    {
+        i++;
+    }
+    /* are we at the start of the command line? */
+    if(i == 0)
+    {
+        j = cmdbuf_index, first_word = 1;
+    }
+    else if(i >= cmdbuf_index)
+    {
+        j = i;          /* we've got an empty word */
+    }
     else
     {
         j = i-1;
-        while(isspace(cmdbuf[j]) && j != 0) j--;    /* skip prev spaces */
+        while(isspace(cmdbuf[j]) && j != 0)
+        {
+            j--;    /* skip prev spaces */
+        }
         if(cmdbuf[j] == ';' || cmdbuf[j] == '|' || cmdbuf[j] == '&' ||
            cmdbuf[j] == '(' || cmdbuf[j] == '{' || cmdbuf[j] == ' ')
+        {
             first_word = 1;
+        }
         j = cmdbuf_index;
     }
     /*
@@ -273,18 +376,27 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                     case '\t':
                     case '\n':
                     case '\r':
-                        if(!k) k = 2;
+                        if(!k)
+                        {
+                            k = 2;
+                        }
                         break;
                 }
-                if(k == 2) break;
+                if(k == 2)
+                {
+                    break;
+                }
                 j++;
             }
-            if(k != 1) is_cmd = 1;
+            if(k != 1)
+            {
+                is_cmd = 1;
+            }
         }
     }
-
+    /* copy the word we are about to tab-complete */
     char  tmp[j-i+2];    /* 2 chars for '\0' and possible trailing '*' */
-    int /* sword = i, */ eword = j;
+    int   eword = j;
     strncpy(tmp, cmdbuf+i, j-i);
     tmp[j-i] = '\0';
     int   res = 0;
@@ -299,7 +411,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
     {
         res = match_hostname(p+1, cmds, MAX_CMDS);
         
-        if(res)
+        if(res)     /* matches found */
         {
             if(res == 1)
             {
@@ -309,11 +421,17 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
             /* output the results */
             output_results(cmds, res);
             comm_prefix = get_common_prefix(cmds, res);
-            if(comm_prefix) p = comm_prefix+strlen(tmp)-1;
+            if(comm_prefix)
+            {
+                p = comm_prefix+strlen(tmp)-1;
+            }
             /* free used memory */
-            for(j = 0; j < res; j++) free(cmds[j]);
+            for(j = 0; j < res; j++)
+            {
+                free(cmds[j]);
+            }
         }
-        else
+        else        /* no matches found */
         {
             beep();  /* ring a bell */
             return 0;
@@ -328,7 +446,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
     {
         res = match_username(p+1, cmds, MAX_CMDS);
         
-        if(res)
+        if(res)     /* matches found */
         {
             if(res == 1)
             {
@@ -338,11 +456,17 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
             /* output the results */
             output_results(cmds, res);
             comm_prefix = get_common_prefix(cmds, res);
-            if(comm_prefix) p = comm_prefix+strlen(tmp)-1;
+            if(comm_prefix)
+            {
+                p = comm_prefix+strlen(tmp)-1;
+            }
             /* free used memory */
-            for(j = 0; j < res; j++) free(cmds[j]);
+            for(j = 0; j < res; j++)
+            {
+                free(cmds[j]);
+            }
         }
-        else
+        else        /* no matches found */
         {
             beep();  /* ring a bell */
             return 0;
@@ -370,11 +494,14 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                 if(vars[i+1] != '\0')
                 {
                     cmds[res++] = vars+i+1;
-                    if(res == MAX_CMDS) break;
+                    if(res == MAX_CMDS)
+                    {
+                        break;
+                    }
                 }
             }
         }
-        if(res == 1)
+        if(res == 1)        /* one match found */
         {
             p = cmds[0]+strlen(tmp)-1;
             goto one_res;
@@ -382,7 +509,10 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         /* output the results */
         output_results(cmds, res);
         comm_prefix = get_common_prefix(cmds, res);
-        if(comm_prefix) p = comm_prefix+strlen(tmp)-1;
+        if(comm_prefix)
+        {
+            p = comm_prefix+strlen(tmp)-1;
+        }
         /* free used memory */
         free(vars);
     }
@@ -395,39 +525,58 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         for(k = 0; k < special_builtin_count; k++)
         {
             char *cmd = special_builtins[k].name;
-            if(strstr(cmd, tmp) == cmd) cmds[res++] = cmd;
+            if(strstr(cmd, tmp) == cmd)
+            {
+                cmds[res++] = cmd;
+            }
         }
         for(k = 0; k < regular_builtin_count; k++)
         {
             char *cmd = regular_builtins[k].name;
-            if(strstr(cmd, tmp) == cmd) cmds[res++] = cmd;
+            if(strstr(cmd, tmp) == cmd)
+            {
+                cmds[res++] = cmd;
+            }
         }
         /* search for aliases */
         extern struct  alias_s __aliases[MAX_ALIASES];  /* builtins/alias.c */
         for(i = 0; i < MAX_ALIASES; i++)
         {
             char *cmd = __aliases[i].name;
-            if(!cmd) continue;
-            if(strstr(cmd, tmp) != cmd) continue;
+            if(!cmd)
+            {
+                continue;
+            }
+            if(strstr(cmd, tmp) != cmd)
+            {
+                continue;
+            }
             cmds[res++] = cmd;
-            if(res == MAX_CMDS) break;
+            /* maximum results reached */
+            if(res == MAX_CMDS)
+            {
+                break;
+            }
         }
         
         /* search for defined functions */
         struct symtab_entry_s *entry = get_symtab_entry(tmp);
-        if(entry && entry->val_type == SYM_FUNC) cmds[res++] = entry->name;
+        if(entry && entry->val_type == SYM_FUNC)
+        {
+            cmds[res++] = entry->name;
+        }
 
         int internals = res;
         /* search for stand-alone commands using $PATH */
         res = autocomplete_path(tmp, cmds, res);
     
         /* print list of results */
-        if(res == 0)
+        if(res == 0)        /* no matches found */
         {
             beep();  /* ring a bell */
             return 0;
         }
-        else if(res == 1)
+        else if(res == 1)   /* one match found */
         {
             p = cmds[0]+strlen(tmp);
             printf("%s", p);
@@ -439,15 +588,24 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
             }
             *__cmdbuf_index = strlen(cmdbuf);
             *__cmdbuf_end   = *__cmdbuf_index;
-            if(!internals) free_malloced_str(cmds[0]);
+            if(!internals)
+            {
+                free_malloced_str(cmds[0]);
+            }
             return 1;
         }
         /* output the results */
         output_results(cmds, res);
         comm_prefix = get_common_prefix(cmds, res);
-        if(comm_prefix) p = comm_prefix+strlen(tmp);
+        if(comm_prefix)
+        {
+            p = comm_prefix+strlen(tmp);
+        }
         /* free used memory */
-        for(i = internals; i < res; i++) free_malloced_str(cmds[i]);
+        for(i = internals; i < res; i++)
+        {
+            free_malloced_str(cmds[i]);
+        }
     }
     else
     {
@@ -466,28 +624,41 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         glob_t glob;
         char **matches = NULL;
         char *slash = strchr(tmp, '/');
-        if(slash)
+        if(slash)       /* file name has a slash char */
         {
             *slash = '\0';
+            /* perform word expansion */
             char *dir = word_expand_to_str(tmp);
             if(dir)
             {
-                if(*dir) matches = filename_expand(dir, slash+1, &glob);
-                else     matches = filename_expand("/", slash+1, &glob);
+                if(*dir)
+                {
+                    matches = filename_expand(dir, slash+1, &glob);
+                }
+                else
+                {
+                    matches = filename_expand("/", slash+1, &glob);
+                }
                 free(dir);
             }
             else
             {
-                if(*tmp) matches = filename_expand(tmp, slash+1, &glob);
-                else     matches = filename_expand("/", slash+1, &glob);
+                if(*tmp)
+                {
+                    matches = filename_expand(tmp, slash+1, &glob);
+                }
+                else
+                {
+                    matches = filename_expand("/", slash+1, &glob);
+                }
             }
             *slash = '/';
         }
-        else
+        else            /* file name with no slash chars */
         {
             matches = filename_expand(cwd, tmp, &glob);
         }
-            
+        
         if(matches)
         {
             if(matches[0])
@@ -497,18 +668,34 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                 {
                     if(matches[j][0] == '.')
                     {
+                        /* skip '..' and '.' */
                         if(matches[j][1] == '.' || matches[j][1] == '/' || matches[j][1] == '\0')
+                        {
                             continue;
+                        }
                     }
                     cmds[res++] = get_malloced_str(matches[j]);
-                    if(res == MAX_CMDS) break;
+                    /* maximum results reached */
+                    if(res == MAX_CMDS)
+                    {
+                        break;
+                    }
                 }
                 globfree(&glob);
-                if(res == 1)
+                if(res == 1)        /* found one match */
                 {
-                    if(slash) p = cmds[0]+strlen(slash+1);
-                    else      p = cmds[0]+strlen(tmp);
-                    if(star) p--;
+                    if(slash)
+                    {
+                        p = cmds[0]+strlen(slash+1);
+                    }
+                    else
+                    {
+                        p = cmds[0]+strlen(tmp);
+                    }
+                    if(star)
+                    {
+                        p--;
+                    }
                     goto one_res;
                 }
                 /* output the results */
@@ -516,20 +703,28 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                 comm_prefix = get_common_prefix(cmds, res);
                 if(comm_prefix)
                 {
-                    if(slash) p = comm_prefix+strlen(slash+1);
-                    else      p = comm_prefix+strlen(tmp);
-                    if(star) p--;
+                    if(slash)
+                    {
+                        p = comm_prefix+strlen(slash+1);
+                    }
+                    else
+                    {
+                        p = comm_prefix+strlen(tmp);
+                    }
+                    if(star)
+                    {
+                        p--;
+                    }
                 }
-                /* free used memory */
             }
-            else
+            else        /* no matches found */
             {
                 beep();  /* ring a bell */
                 globfree(&glob);
                 return 0;
             }
         }
-        else
+        else            /* no matches found */
         {
             beep();  /* ring a bell */
             globfree(&glob);
@@ -538,7 +733,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         globfree(&glob);
     }
 
-    printf("\r\n");
+    printf("\n");
     print_prompt();
     update_row_col();
     start_row = get_terminal_row();
@@ -548,20 +743,27 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
     {
         /* return the cursor to where it was */
         if(cmdbuf_index != cmdbuf_end)
+        {
             do_left_key(cmdbuf_end-cmdbuf_index);
+        }
         return res;
     }
     cmds[0] = NULL;
     
 one_res: ;
+    /* we will add a space after a complete file name, a slash after a directory name */
     int plen = strlen(p);
     int addsp = (p[plen-1] != '/' && cmdbuf[eword] != ' ');
-    if(comm_prefix || !optionx_set(OPTION_ADD_SUFFIX)) addsp = 0;
+    if(comm_prefix || !optionx_set(OPTION_ADD_SUFFIX))
+    {
+        addsp = 0;
+    }
     if(optionx_set(OPTION_COMPLETE_FULL_QUOTE))
     {
         char *p2 = p;
         while(*p2)
         {
+            /* escape quotes with backslash chars */
             if(*p2 == '$' || *p2 == '`' || *p2 == '"' || *p2 == '\'' || *p2 == '\\' || *p2 == ' ')
             {
                 plen++;
@@ -569,59 +771,99 @@ one_res: ;
             }
             putchar(*p2++);
         }
-        if(addsp) putchar(' ');
+        /* add a space after a file name */
+        if(addsp)
+        {
+            putchar(' ');
+        }
         printf("%s", cmdbuf+eword);
         /* make some room */
         p2 = cmdbuf+cmdbuf_end;
         char *p3 = p2+plen;
         char *p4 = cmdbuf+eword;
-        if(addsp) p3++;
-        while(p2 >= p4) *p3-- = *p2--;
-        /* copy the word */
-        //if(addsp) cmdbuf[eword++] = ' ';
+        if(addsp)
+        {
+            p3++;
+        }
+        while(p2 >= p4)
+        {
+            *p3-- = *p2--;
+        }
+        /* copy the word to the buffer */
         p2 = p;
         p3 = cmdbuf+eword;
         while(*p2)
         {
+            /* escape quotes with backslash chars */
             if(*p2 == '$' || *p2 == '`' || *p2 == '"' || *p2 == '\'' || *p2 == '\\' || *p2 == ' ')
             {
                 *p3++ = '\\';
             }
             *p3++ = *p2++;
         }
-        if(addsp) *p3 = ' ';
+        /* add a space after a file name */
+        if(addsp)
+        {
+            *p3 = ' ';
+        }
     }
     else
     {
         printf("%s", p);
-        if(addsp) putchar(' ');
+        /* add a space after a file name */
+        if(addsp)
+        {
+            putchar(' ');
+        }
         printf("%s", cmdbuf+eword);
         /* make some room */
         char *p2 = cmdbuf+cmdbuf_end;
         char *p3 = p2+plen;
         char *p4 = cmdbuf+eword;
-        if(addsp) p2++, p3++;
-        while(p2 >= p4) *p3-- = *p2--;
+        if(addsp)
+        {
+            p2++, p3++;
+        }
+        while(p2 >= p4)
+        {
+            *p3-- = *p2--;
+        }
         /* copy the word */
-        if(addsp) cmdbuf[eword++] = ' ';
+        if(addsp)
+        {
+            cmdbuf[eword++] = ' ';
+        }
         strncpy(cmdbuf+eword, p, plen);
     }
     *__cmdbuf_index = strlen(cmdbuf);
     *__cmdbuf_end   = *__cmdbuf_index;
     update_row_col();
-    if(cmds[0]) free_malloced_str(cmds[0]);
-    if(comm_prefix) free(comm_prefix);
+    if(cmds[0])
+    {
+        free_malloced_str(cmds[0]);
+    }
+    if(comm_prefix)
+    {
+        free(comm_prefix);
+    }
     return 1;
 }
 
 /*
  * match a partial hostname to the hostnames database entries.
+ * 
+ * returns the number of matched names, saving the entries in the matches array.
  */
 int match_hostname(char *name, char **matches, int max)
 {
-    if(!get_hostnames()) return 0;
+    /* get the hostnames */
+    if(!get_hostnames())
+    {
+        return 0;
+    }
     int i = 0, j = 0;
     int len = strlen(name);
+    /* search for matches */
     for( ; i < hn_count && j < max; i++)
     {
         if(strncmp(name, hostnames[i], len) == 0)
@@ -645,7 +887,9 @@ char **get_hostnames()
     if((i = stat(path, &st)) == 0)
     {
         if(S_ISREG(st.st_mode) && difftime(st.st_mtime, hn_last_check) > 0)
+        {
             checkf = 1;
+        }
     }
     else
     {
@@ -657,51 +901,97 @@ char **get_hostnames()
             if(stat(path, &st) == 0)
             {
                 if(S_ISREG(st.st_mode) && difftime(st.st_mtime, hn_last_check) > 0)
+                {
                     checkf = 1;
+                }
             }
         }
     }
-    
+    /* first call or hosts file has been modified since our last access */
     if(!hostnames || checkf)
     {
         if(hostnames)
         {
             /*
+             * free the entries we have stored in the host names array.
+             * 
              * TODO: bash adds new entries to the list, instead of overwriting it.
              *       follow that behaviour.
              */
-            for(i = 0; i < hn_count; i++) free_malloced_str(hostnames[i]);
+            for(i = 0; i < hn_count; i++)
+            {
+                free_malloced_str(hostnames[i]);
+            }
             free(hostnames);
             hostnames = NULL;
             hn_len    = 0;
             hn_count  = 0;
         }        
         hn_last_check = time(NULL);
-        
+        /*
+         * read the host names from the hosts file. each line in the file
+         * represents an entry in the format:
+         * 
+         *     127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+         *     ^           ^         ^                     ^          ^
+         *     |           |         |---------------------|----------|
+         *     IP address  hostname                     aliases
+         */
         char *line = NULL;
         FILE *f = fopen(path, "r");
-        if(!f) return NULL;
+        if(!f)
+        {
+            return NULL;
+        }
         int line_max = get_linemax();
         char buf[line_max];
         while((line = fgets(buf, line_max, f)))
         {
-            if(!line[0]) continue;
+            if(!line[0])    /* empty line. skip */
+            {
+                continue;
+            }
             char *p = line, *p2;
             /* skip the host address */
-            while(*p && !isspace(*p)) p++;
-            if(!*p) continue;
-            /* get the host name and aliases */
+            while(*p && !isspace(*p))
+            {
+                p++;
+            }
+            /* reached the end of line */
+            if(!*p)
+            {
+                continue;
+            }
+            /* get the host name and its aliases */
             while(*p)
             {
                 /* extend the buffer */
-                if(!check_names_bounds(&hn_count, &hn_len, &hostnames)) return hostnames;
+                if(!check_buffer_bounds(&hn_count, &hn_len, &hostnames))
+                {
+                    /* insufficient memory. return the list we've got so far */
+                    return hostnames;
+                }
                 /* skip the spaces */
-                while(*p && isspace(*p)) p++;
-                if(!*p) break;
+                while(*p && isspace(*p))
+                {
+                    p++;
+                }
+                /* reached the end of line */
+                if(!*p)
+                {
+                    break;
+                }
                 /* get the end of the name */
                 p2 = p;
-                while(*p2 && !isspace(*p2)) p2++;
-                if(p == p2) break;
+                while(*p2 && !isspace(*p2))
+                {
+                    p2++;
+                }
+                if(p == p2)
+                {
+                    break;
+                }
+                /* get a copy of the hostname */
                 char *host = get_malloced_strl(line, p-line, p2-p);
                 /* don't repeat entries */
                 int found = 0;
@@ -715,6 +1005,7 @@ char **get_hostnames()
                         break;
                     }
                 }
+                /* add the hostname to the list */
                 if(!found && host)
                 {
                     hostnames[hn_count++] = host;
@@ -723,18 +1014,26 @@ char **get_hostnames()
             }
         }
     }
+    /* return the hostnames list */
     return hostnames;
 }
 
 
 /*
  * match a partial username to the passwd database entries.
+ * 
+ * returns the number of matched names, saving the entries in the matches array.
  */
 int match_username(char *name, char **matches, int max)
 {
-    if(!get_usernames()) return 0;
+    /* get the usernames */
+    if(!get_usernames())
+    {
+        return 0;
+    }
     int i = 0, j = 0;
     int len = strlen(name);
+    /* search for the username */
     for( ; i < un_count && j < max; i++)
     {
         if(strncmp(name, usernames[i], len) == 0)
@@ -758,37 +1057,71 @@ char **get_usernames()
     if((i = stat(path, &st)) == 0)
     {
         if(S_ISREG(st.st_mode) && difftime(st.st_mtime, un_last_check) > 0)
+        {
             checkf = 1;
+        }
     }
-    
+    /* first call or passwd file has been modified since our last access */
     if(!usernames || checkf)
     {
         if(usernames)
         {
             /*
+             * free the entries we have stored in the user names array.
+             * 
              * TODO: add new entries to the list, instead of overwriting it.
              */
-            for(i = 0; i < un_count; i++) free_malloced_str(usernames[i]);
+            for(i = 0; i < un_count; i++)
+            {
+                free_malloced_str(usernames[i]);
+            }
             free(usernames);
             usernames = NULL;
             un_len    = 0;
             un_count  = 0;
         }        
         un_last_check = time(NULL);
-        
+        /*
+         * read the user names from the passwd file. each line in the file
+         * represents an entry in the format:
+         * 
+         *     root:x:0:0:root:/root:/bin/bash
+         *     ^    ^ ^ ^ ^    ^     ^
+         *     |    | | | |    |     +---------------+
+         *     |    | | | |    +------------+        |
+         *     |    | | | +----------+      |        |
+         *     |    | | +-------+    |      |        |
+         *     |    | +----+    |    |      |        |
+         *     |    ++     |    |    |      |        |
+         *     |     |     |    |    |      |        |
+         *     user  pass  uid  gid  group  homedir  login shell
+         */
         char *line = NULL;
         FILE *f = fopen(path, "r");
-        if(!f) return NULL;
+        if(!f)
+        {
+            return NULL;
+        }
         int line_max = get_linemax();
         char buf[line_max];
         while((line = fgets(buf, line_max, f)))
         {
-            if(!line[0]) continue;
+            if(!line[0])        /* empty line. skip */
+            {
+                continue;
+            }
             char *p = line;
             /* get to the first colon */
-            while(*p && *p != ':') p++;
+            while(*p && *p != ':')
+            {
+                p++;
+            }
             /* extend the buffer */
-            if(!check_names_bounds(&un_count, &un_len, &usernames)) return usernames;
+            if(!check_buffer_bounds(&un_count, &un_len, &usernames))
+            {
+                /* insufficient memory. return the list we've got so far */
+                return usernames;
+            }
             /* get the user name */
             char *user = get_malloced_strl(line, 0, p-line+1);
             user[p-line] = '/';
@@ -810,30 +1143,6 @@ char **get_usernames()
             }
         }
     }
+    /* return the usernames list */
     return usernames;
-}
-
-/*
- * extend the hostnames buffer if needed.
- */
-int check_names_bounds(int *count, int *len, char ***names)
-{
-    if(*count >= *len)
-    {
-        if(!(*names))
-        {
-            *names = malloc(32*sizeof(char **));
-            if(!(*names)) return 0;
-            *len = 32;
-        }
-        else
-        {
-            int newlen = (*len) << 1;
-            char **hn2 = realloc(*names, newlen*sizeof(char **));
-            if(!hn2) return 0;
-            *names = hn2;
-            *len = newlen;
-        }
-    }
-    return 1;
 }

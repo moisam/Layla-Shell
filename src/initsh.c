@@ -54,54 +54,76 @@
 
 extern char **environ;
 
-int   null_environ_index = 0;
-char *rcfile = "~/.lshrc";
-int   noprofile = 0;        /* do not load login scripts */
-int   norc      = 0;        /* do not load rc scripts */
-int   startup_finished = 0; /*
-                             * flag set after we've finished loading the startup scripts 
-                             * and the shell is up and running. useful to allow us to enable
-                             * things such as the restricted mode, which should become effective
-                             * only when the shell is fully operational.
-                             */
+int   null_environ_index = 0;   /* the index of the NULL environ entry */
+char *rcfile = "~/.lshrc";      /* default path of the rc file */
+int   noprofile = 0;            /* do not load login scripts */
+int   norc      = 0;            /* do not load rc scripts */
+int   startup_finished = 0;     /*
+                                 * flag set after we've finished loading the startup scripts 
+                                 * and the shell is up and running. useful to allow us to enable
+                                 * things such as the restricted mode, which should become effective
+                                 * only when the shell is fully operational.
+                                 */
 
 /* defined in main.c */
-extern char  *cmdstr_filename;
 extern struct source_s  __src;
 extern int    read_stdin     ;
 
 
 /*
- * POSIX says an interactive shell must read the ENV shell variable,
+ * POSIX says an interactive shell must read the $ENV shell variable,
  * and if found, it must be expanded to an absolute pathname that
  * refers to a file containing shell commands to be executed in the
  * current shell environment.
+ * 
  * bash only reads and executes $ENV if it is running in POSIX mode
  * (when invoked as sh, or --posix option was supplied). otherwise, 
  * it reads $BASH_ENV if the shell is non-interactive.
+ * 
  * this function is not called if the shell is not interactive.
+ * 
+ * returns 1 if the $ENV file is found and executed, 0 otherwise.
  */
 int check_env_file()
 {
-    if((getuid() != geteuid()) || (getgid() != getegid())) return 0;
-    char *ENV = get_shell_varp("ENV", NULL);
-    if(!ENV) return 0;
-    if(!read_file(ENV, src))
+    /* only execute $ENV if our real and effective ids match */
+    if((getuid() != geteuid()) || (getgid() != getegid()))
     {
-        fprintf(stderr, "%s: failed to read '%s': %s\r\n", SHELL_NAME, ENV, strerror(errno));
         return 0;
     }
+    char *ENV = get_shell_varp("ENV", NULL);
+    /* null $ENV variable */
+    if(!ENV)
+    {
+        return 0;
+    }
+    /* read the file */
+    if(!read_file(ENV, src))
+    {
+        fprintf(stderr, "%s: failed to read '%s': %s\n", SHELL_NAME, ENV, strerror(errno));
+        return 0;
+    }
+    /* and execute it */
     do_cmd();
+    /* free the buffer */
     free(src->buffer);
     return 1;
 }
 
 
-void initsh(int argc, char **argv, int init_tty)
+/*
+ * initialize the shell environment.
+ */
+void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
 {
     size_t i;
+    /* get the system-defined max length of pathnames */
     int path_max = sysconf(_PC_PATH_MAX);
-    if(path_max <= 0) path_max = DEFAULT_PATH_MAX;
+    if(path_max <= 0)
+    {
+        /* use default path max */
+        path_max = DEFAULT_PATH_MAX;
+    }
     
     /* init environ
      * 
@@ -136,16 +158,15 @@ void initsh(int argc, char **argv, int init_tty)
             char buf[len+1];
             strncpy(buf, *p2, len);
             buf[len] = '\0';
-            //entry = add_to_symtab(buf);
-
-            //symtab_entry_setval(entry, eq+1);
-
             /* parse functions that were passed to us in the environment */
             if(eq[1] == '(' && eq[2] == ')')
             {
                 entry = add_func(buf);
                 char *f = eq+3;
-                while(*f && isspace(*f)) f++;
+                while(*f && isspace(*f))
+                {
+                    f++;
+                }
                 if(!*f || *f == '}')
                 {
                     /* empty function body */
@@ -154,29 +175,28 @@ void initsh(int argc, char **argv, int init_tty)
                 else
                 {
                     entry->val_type = SYM_FUNC;
-#if 0
-                    struct source_s save_src = __src;
-                    src->filename = dot_filename;
-                    src->buffer   = f;
-                    src->bufsize  = strlen(f);
-                    src->curpos   = -2;
-                    struct token_s *tok = tokenize(src);
-                    struct node_s *body = parse_function_body(tok);
-                    if(body) entry->func_body = body;
-                    entry->val_type = SYM_FUNC;
-                    __src = save_src;
-#endif
                 }
             }
-            else entry = add_to_symtab(buf);
-            //else symtab_entry_setval(entry, eq+1);
-            if(entry) symtab_entry_setval(entry, eq+1);
+            else
+            {
+                /* normal variable */
+                entry = add_to_symtab(buf);
+            }
+            /* set the entry's value */
+            if(entry)
+            {
+                symtab_entry_setval(entry, eq+1);
+            }
         }
         else
         {
             entry = add_to_symtab(*p2);
         }
-        if(entry) entry->flags = FLAG_EXPORT;
+        /* set the export flag for all environment variables */
+        if(entry)
+        {
+            entry->flags = FLAG_EXPORT;
+        }
         p2++;
     }
 
@@ -207,7 +227,9 @@ void initsh(int argc, char **argv, int init_tty)
                 /* get and save the value of $HOST */
                 buf[0] = '\0';
                 if(gethostname(buf, MAXHOSTNAMELEN) != 0)
+                {
                     strcpy(buf, early_environ[i].value);
+                }
                 setenv(name, buf, 1);
                 e = buf;
                 break;
@@ -222,6 +244,8 @@ void initsh(int argc, char **argv, int init_tty)
                     e = cwd;
                     break;
                 }
+                /* NOTE: fall through to the next case */
+                __attribute__((fallthrough));
                 
             case INDEX_OLDPWD:
                 p = getcwd(NULL, 0);
@@ -238,12 +262,18 @@ void initsh(int argc, char **argv, int init_tty)
                         if(*p2 == '.' && p2[-1] == '/')
                         {
                             /* we have "/./" or "/." */
-                            if(p2[1] == '/' || p2[1] == '\0') break;
+                            if(p2[1] == '/' || p2[1] == '\0')
+                            {
+                                break;
+                            }
                             /* we have "/../" or "/.." */
-                            if(p2[1] == '.' && (p2[2] == '/' || p2[2] == '\0')) break;
+                            if(p2[1] == '.' && (p2[2] == '/' || p2[2] == '\0'))
+                            {
+                                break;
+                            }
                         }
                     }
-                    if(strlen(p) < path_max)
+                    if((int)strlen(p) < path_max)
                     {
                         early_environ[INDEX_PWD   ].value = p;
                         early_environ[INDEX_OLDPWD].value = p;
@@ -257,13 +287,19 @@ void initsh(int argc, char **argv, int init_tty)
                 cwd = (char *)malloc(len);
                 if(!cwd)
                 {
-                    fprintf(stderr, "%s: FATAL ERROR: Insufficient memory for cwd string\r\n", SHELL_NAME);
+                    fprintf(stderr, "%s: FATAL ERROR: Insufficient memory for cwd string\n", SHELL_NAME);
                     exit(EXIT_FAILURE);
                 }
                 memset((void *)cwd, 0, len);
                 strcpy(cwd, p);
-                if(i == INDEX_OLDPWD) setenv("OLDPWD", cwd, 1);
-                else                  setenv("PWD"   , cwd, 1);
+                if(i == INDEX_OLDPWD)
+                {
+                    setenv("OLDPWD", cwd, 1);
+                }
+                else
+                {
+                    setenv("PWD"   , cwd, 1);
+                }
                 break;
                 
             case INDEX_SHELL:
@@ -323,7 +359,10 @@ void initsh(int argc, char **argv, int init_tty)
                 
             case INDEX_HISTFILE:
                 p = getenv("HOME");
-                if(!p) break;
+                if(!p)
+                {
+                    break;
+                }
                 size_t  homelen = strlen(p);
                 size_t  hist_file_len = strlen(hist_file);
                 e = (char *)malloc(homelen+hist_file_len+2);
@@ -333,7 +372,10 @@ void initsh(int argc, char **argv, int init_tty)
                     break;
                 }
                 strcpy(e, p);
-                if(p[homelen-1] != '/') strcat(e, "/");
+                if(p[homelen-1] != '/')
+                {
+                    strcat(e, "/");
+                }
                 strcat(e, hist_file);
                 setenv(name, e, 1);
                 p = NULL;
@@ -341,10 +383,15 @@ void initsh(int argc, char **argv, int init_tty)
                 
             case INDEX_HISTSIZE:
                 p = getenv("HISTSIZE");
-                if(!p) break;
+                if(!p)
+                {
+                    break;
+                }
                 int n = atoi(p);
                 if(n <= 0 || n > MAX_CMD_HISTORY)
+                {
                     n = MAX_CMD_HISTORY;
+                }
                 sprintf(buf, "%d", n);
                 len = strlen(buf);
                 e = (char *)malloc(len+1);
@@ -359,7 +406,12 @@ void initsh(int argc, char **argv, int init_tty)
                 break;
                 
             case INDEX_PATH:
-                if(startup_finished && option_set('r')) flags |= FLAG_READONLY;
+                if(startup_finished && option_set('r'))
+                {
+                    flags |= FLAG_READONLY;
+                }
+                /* NOTE: fall through to the next case */
+                __attribute__((fallthrough));
                 
             default:
                 e = getenv(name);
@@ -372,7 +424,10 @@ void initsh(int argc, char **argv, int init_tty)
                     }
                 }
                 /* set the last few entries to readonly status */
-                if(i >= INDEX_MACHTYPE) flags |= FLAG_READONLY;
+                if(i >= INDEX_MACHTYPE)
+                {
+                    flags |= FLAG_READONLY;
+                }
                 break;
         }
         
@@ -384,12 +439,20 @@ void initsh(int argc, char **argv, int init_tty)
             if(e)
             {
                 if(i == INDEX_PWD || i == INDEX_OLDPWD)
+                {
                      symtab_entry_setval(entry, __get_malloced_str(e));
-                else symtab_entry_setval(entry, e);
+                }
+                else
+                {
+                    symtab_entry_setval(entry, e);
+                }
             }
             entry->flags = flags;
         }
-        if(p) free(p);
+        if(p)
+        {
+            free(p);
+        }
     }
     
     /*
@@ -403,30 +466,34 @@ void initsh(int argc, char **argv, int init_tty)
     //if(option_set('p'))
     {
         entry = get_symtab_entry("CDPATH");
-        if(entry) symtab_entry_setval(entry, NULL);
+        if(entry)
+        {
+            symtab_entry_setval(entry, NULL);
+        }
         entry = get_symtab_entry("GLOBIGNORE");
-        if(entry) symtab_entry_setval(entry, NULL);
+        if(entry)
+        {
+            symtab_entry_setval(entry, NULL);
+        }
         entry = get_symtab_entry("FIGNORE");
-        if(entry) symtab_entry_setval(entry, NULL);
+        if(entry)
+        {
+            symtab_entry_setval(entry, NULL);
+        }
         entry = get_symtab_entry("SHELLOPTS");
-        if(entry) symtab_entry_setval(entry, NULL);
+        if(entry)
+        {
+            symtab_entry_setval(entry, NULL);
+        }
     }
 
     /* init shell variables */
     init_shell_vars(pw->pw_name, pw->pw_gid, argv[0]);
   
-#if 0
-    /* init aliases */
-    memset((void *)__aliases, 0, sizeof(__aliases));
-
-    /* init history */
-    init_history();
-    
-    /* init our internal clock */
-    start_clock();
-#endif
-    
-    if(!init_tty) return;
+    if(!init_tty)
+    {
+        return;
+    }
 
     /* make sure our process group id is the same as our pid, and that the shell
      * knows we are the forground process.
@@ -437,16 +504,22 @@ void initsh(int argc, char **argv, int init_tty)
     /* get screen size */
     if(!get_screen_size())
     {
-        fprintf(stderr, "%s: ERROR: Failed to read screen size\r\n", SHELL_NAME);
-        fprintf(stderr, "       Assuming 80x25\r\n");
+        fprintf(stderr, "%s: ERROR: Failed to read screen size\n", SHELL_NAME);
+        fprintf(stderr, "       Assuming 80x25\n");
         /* update the value of terminal columns in the symbol table */
         VGA_WIDTH = 0;
         entry = get_symtab_entry("COLUMNS");
         if(entry)
         {
-            if(entry->val) VGA_WIDTH = atoi(entry->val);
+            if(entry->val)
+            {
+                VGA_WIDTH = atoi(entry->val);
+            }
         }
-        else entry = add_to_symtab("COLUMNS");
+        else
+        {
+            entry = add_to_symtab("COLUMNS");
+        }
         if(VGA_WIDTH <= 0)
         {
             VGA_WIDTH = 80;
@@ -457,9 +530,15 @@ void initsh(int argc, char **argv, int init_tty)
         entry = get_symtab_entry("LINES");
         if(entry)
         {
-            if(entry->val) VGA_HEIGHT = atoi(entry->val);
+            if(entry->val)
+            {
+                VGA_HEIGHT = atoi(entry->val);
+            }
         }
-        else entry = add_to_symtab("LINES");
+        else
+        {
+            entry = add_to_symtab("LINES");
+        }
         if(VGA_HEIGHT <= 0)
         {
             VGA_HEIGHT = 25;
@@ -468,16 +547,16 @@ void initsh(int argc, char **argv, int init_tty)
     }
 
     /* check we are on a terminal device */
-    if (isatty(2) == 0)
+    if(isatty(2) == 0)
     {
-        fprintf(stderr, "%s: not running in a terminal.\r\n", SHELL_NAME);
+        fprintf(stderr, "%s: not running in a terminal.\n", SHELL_NAME);
         exit(EXIT_FAILURE);
     }
 
     /* init terminal device to raw mode */
     if(!rawon())
     {
-        fprintf(stderr, "%s: FATAL ERROR: Failed to set terminal attributes (errno = %d)\r\n", SHELL_NAME, errno);
+        fprintf(stderr, "%s: FATAL ERROR: Failed to set terminal attributes (errno = %d)\n", SHELL_NAME, errno);
         exit(EXIT_FAILURE);
     }
 
@@ -493,14 +572,20 @@ void initsh(int argc, char **argv, int init_tty)
  */
 void init_login()
 {
-    if(noprofile) return;       /* bash extension */
+    if(noprofile)
+    {
+        return;       /* bash extension */
+    }
     /*
      * we are called before initsh() gets to set terminal raw mode.
      * so at least get the current termios struct so that we don't
      * mess up the terminal while we run them startup scripts.
      */
     extern struct termios tty_attr_old;
-    if(tcgetattr(0, &tty_attr_old) == -1) return;
+    if(tcgetattr(0, &tty_attr_old) == -1)
+    {
+        return;
+    }
 
     /* read global init script */
     if(read_file("/etc/profile", src))
@@ -606,6 +691,8 @@ char parse_options(int argc, char **argv)
     set_optionx(OPTION_INTERACTIVE_COMMENTS, 1);
     /* word-expansion on PS strings */
     set_optionx(OPTION_PROMPT_VARS         , 1);
+    /* bang-expansion on PS strings */
+    set_optionx(OPTION_PROMPT_BANG         , 1);
     /* let source (or dot) use $PATH to find scripts */
     set_optionx(OPTION_SOURCE_PATH         , 1);
     /* output shift builtin errors */
@@ -618,6 +705,7 @@ char parse_options(int argc, char **argv)
     set_optionx(OPTION_RECOGNIZE_ONLY_EXE  , 1);
     /* automatically save history on exit */
     set_optionx(OPTION_SAVE_HIST           , 1);
+    set_optionx(OPTION_PROMPT_PERCENT      , 1);
     
     /* now read command-line options */
     struct symtab_entry_s *entry;
@@ -627,8 +715,12 @@ char parse_options(int argc, char **argv)
     char   islogin       = 0;
     char   end_loop      = 0;
 
-    if(argv[0][0] == '-') islogin = 1;
-    
+    /* if argv[0] starts with '-', we are a login shell */
+    if(argv[0][0] == '-')
+    {
+        islogin = 1;
+    }
+    /* we have one argument (the shell name or argv[0]) */
     if(argc == 1)
     {
         /* $0 is the name of the shell or shell script */
@@ -643,7 +735,7 @@ char parse_options(int argc, char **argv)
         }
         goto init;
     }
-    
+    /* check for the '-c' option */
     if(strcmp(argv[1], "-c") == 0)
     {
         i++;
@@ -652,6 +744,7 @@ char parse_options(int argc, char **argv)
         end_loop      = 1;
         set_option('c', 1);
     }
+    /* check for the '-s' option */
     else if(strcmp(argv[1], "-s") == 0)
     {
         i++;
@@ -659,7 +752,7 @@ char parse_options(int argc, char **argv)
         read_stdin    = 1;
         set_option('s', 1);
     }
-
+    /* parse the command line options */
     for( ; i < argc; i++)
     {
         int skip;
@@ -743,11 +836,12 @@ char parse_options(int argc, char **argv)
                 }
                 if(strcmp(arg, "--version") == 0)                                       /* bash, csh */
                 {
-                    printf("version %s running on %s %s\r\n", shell_ver, CPU_ARCH, OS_TYPE);
+                    printf("version %s running on %s %s\n", shell_ver, CPU_ARCH, OS_TYPE);
                     //exit_gracefully(EXIT_SUCCESS, NULL);
                     exit(EXIT_SUCCESS);
                 }
-                /* fall through to the next case */
+                /* NOTE: fall through to the next case */
+                __attribute__((fallthrough));
                 
             case '+':
                 if(strcmp(arg, "+O") == 0 || strcmp(arg, "-O") == 0)                    /* bash */
@@ -762,12 +856,12 @@ char parse_options(int argc, char **argv)
                     }
                     if((c = optionx_index(arg)) < 0)
                     {
-                        fprintf(stderr, "%s: invalid option: %s\r\n", SHELL_NAME, arg);
+                        fprintf(stderr, "%s: invalid option: %s\n", SHELL_NAME, arg);
                         break;
                     }
                     if(!set_optionx(c, arg[0] == '-' ? 1 : 0))
                     {
-                        fprintf(stderr, "%s: error setting: %s\r\n", SHELL_NAME, arg);
+                        fprintf(stderr, "%s: error setting: %s\n", SHELL_NAME, arg);
                     }
                     break;
                 }
@@ -779,7 +873,10 @@ char parse_options(int argc, char **argv)
                 }
                 /* normal, set-like options */
                 skip = do_options(argv[i], argv[i+1]);
-                if(skip < 0) exit(EXIT_FAILURE);
+                if(skip < 0)    /* error parsing option */
+                {
+                    exit(EXIT_FAILURE);
+                }
                 i += skip;
                 break;
                 
@@ -787,23 +884,31 @@ char parse_options(int argc, char **argv)
                 end_loop = 1;
                 break;
         }
-        if(end_loop) break;
+        /* reached end of options? */
+        if(end_loop)
+        {
+            break;
+        }
     }
-    //debug ("i = %d\r\n", i);
-
+    //debug ("i = %d\n", i);
+    /* the '-c' option was supplied */
     if(expect_cmdstr)
     {
         if(i >= argc)
         {
-            fprintf(stderr, "%s: missing command string\r\n", SHELL_NAME);
+            fprintf(stderr, "%s: missing command string\n", SHELL_NAME);
             exit(EXIT_FAILURE);
         }
         /* is it an empty string? exit 0 as per POSIX */
-        if(argv[i][0] == '\0') exit(EXIT_SUCCESS);
+        if(argv[i][0] == '\0')
+        {
+            exit(EXIT_SUCCESS);
+        }
         /* otherwise, read it */
         __src.buffer   = argv[i++];
         __src.bufsize  = strlen(__src.buffer);
-        __src.filename = cmdstr_filename;
+        __src.srctype  = SOURCE_CMDSTR;
+        __src.srcname  = NULL;
         __src.curpos   = -2;
         if(i >= argc)
         {
@@ -820,6 +925,7 @@ char parse_options(int argc, char **argv)
         entry = add_to_symtab("COMMAND_STRING");
         symtab_entry_setval(entry, __src.buffer);
     }
+    /* the '-c' option was not supplied */
     else
     {
         if(i >= argc || option_set('s'))
@@ -835,7 +941,7 @@ char parse_options(int argc, char **argv)
             char *cmdfile = argv[i++];
             if(!read_file(cmdfile, src))
             {
-                fprintf(stderr, "%s: failed to read '%s': %s\r\n", SHELL_NAME,
+                fprintf(stderr, "%s: failed to read '%s': %s\n", SHELL_NAME,
                         cmdfile, strerror(errno));
                 exit(EXIT_ERROR_NOENT);
             }
@@ -847,7 +953,7 @@ char parse_options(int argc, char **argv)
             symtab_entry_setval(entry, cmdfile);
         }
     }
-
+    /* parse the arguments, if any, adding them as positional parameters */
     char buf[32];
     for( ; i < argc; i++)
     {
@@ -855,21 +961,30 @@ char parse_options(int argc, char **argv)
         entry = add_to_symtab(buf);
         symtab_entry_setval(entry, argv[i]);
     }
+    /* save the positional parameters count in $# */
     entry = add_to_symtab("#");
     sprintf(buf, "%d", param);
     symtab_entry_setval(entry, buf);
 
 init:
-    if (option_set('s') && !option_set('i')) set_option('i', 1);
-    if (option_set('i') && !option_set('s')) set_option('s', 1);
+    if(option_set('s') && !option_set('i'))
+    {
+        set_option('i', 1);
+    }
+    if(option_set('i') && !option_set('s'))
+    {
+        set_option('s', 1);
+    }
     if(!option_set('i') && !option_set('c') && read_stdin)
-    //if(param == 0)
     {
         if(isatty(0) && isatty(2))
         {
-             set_option('i', 1);     /* set interactive shell */
+            set_option('i', 1);     /* set interactive shell */
         }
-        else set_option('i', 0);     /* set non-interactive shell */
+        else
+        {
+            set_option('i', 0);     /* set non-interactive shell */
+        }
     }
     
     /* if not an interactive shell ... */
@@ -899,11 +1014,16 @@ init:
     
     /* check the $VISUAL editor */
     entry = get_symtab_entry("VISUAL");
-    if(!entry) entry = get_symtab_entry("EDITOR");
+    if(!entry)
+    {
+        entry = get_symtab_entry("EDITOR");
+    }
     if(entry && entry->val)
     {
         if(match_filename("*[Vv][Ii]*", entry->val, 0, 0))
+        {
             set_option('y', 1);
+        }
         /*
          * TODO: check the *macs* pattern for emacs-style editing.
          */

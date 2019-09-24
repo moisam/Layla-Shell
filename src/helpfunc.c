@@ -51,74 +51,148 @@
 /* declared in kbdevent2.c */
 extern struct termios tty_attr_old;
 extern struct termios tty_attr;
-/* declared in initsh.c */
-//extern int            old_keyboard_mode;
 
+
+/*
+ * turn the terminal canonical mode on or off.
+ */
 void term_canon(int on)
 {
-    if(!isatty(0)) return;
+    if(!isatty(0))
+    {
+        return;
+    }
     if(on)
     {
         tcsetattr(0, TCSANOW, &tty_attr_old);
-        //// ioctl(0, KDSKBMODE, old_keyboard_mode);
     }
     else
     {
         tcsetattr(0, TCSANOW, &tty_attr);
-        //// ioctl(0, KDSKBMODE, K_RAW);
     }
 }
 
 /* special struct termios for turning echo on/off */
 struct termios echo_tty_attr;
 
+
+/*
+ * turn echo on for the given file descriptor.
+ * 
+ * returns 1 on success, 0 on failure.
+ */
 int echoon(int fd)
 {
-    if(!isatty(fd)) return 0;
-    if(tcgetattr(fd, &echo_tty_attr) == -1) return 0;
+    /* check fd is a terminal */
+    if(!isatty(fd))
+    {
+        return 0;
+    }
+    /* get the terminal attributes */
+    if(tcgetattr(fd, &echo_tty_attr) == -1)
+    {
+        return 0;
+    }
+    /* turn echo on */
     echo_tty_attr.c_lflag |= ECHO;
-    if((tcsetattr(fd, TCSAFLUSH, &echo_tty_attr) == -1)) return 0;
+    /* set the new terminal attributes */
+    if((tcsetattr(fd, TCSAFLUSH, &echo_tty_attr) == -1))
+    {
+        return 0;
+    }
     return 1;
 }
 
+
+/*
+ * turn echo off for the given file descriptor.
+ * 
+ * returns 1 on success, 0 on failure.
+ */
 int echooff(int fd)
 {
-    if(!isatty(fd)) return 0;
-    if(tcgetattr(fd, &echo_tty_attr) == -1) return 0;
+    /* check fd is a terminal */
+    if(!isatty(fd))
+    {
+        return 0;
+    }
+    /* get the terminal attributes */
+    if(tcgetattr(fd, &echo_tty_attr) == -1)
+    {
+        return 0;
+    }
+    /* turn echo off */
     echo_tty_attr.c_lflag &= ~ECHO;
-    if((tcsetattr(fd, TCSAFLUSH, &echo_tty_attr) == -1)) return 0;
+    /* set the new terminal attributes */
+    if((tcsetattr(fd, TCSAFLUSH, &echo_tty_attr) == -1))
+    {
+        return 0;
+    }
     return 1;
 }
 
-/* well. duh! */
+
+/*
+ * get the screen size and save the width and height in the $COLUMNS and $LINES
+ * shell variables, respectively.
+ * 
+ * returns 1 if the screen size if obtained and saved, 0 otherwise.
+ */
 int get_screen_size()
 {
     struct winsize w;
-    /* find the size of the view */
+    /* find the size of the terminal window */
     int fd = isatty(0) ? 0 : isatty(2) ? 2 : -1;
-    if(fd == -1) return 0;
+    if(fd == -1)
+    {
+        return 0;
+    }
     int res = ioctl(fd, TIOCGWINSZ, &w);
-    if(res != 0) return 0;
+    if(res != 0)
+    {
+        return 0;
+    }
     VGA_HEIGHT = w.ws_row;
     VGA_WIDTH  = w.ws_col;
     /* update the value of terminal columns in environ and in the symbol table */
     char buf[32];
     struct symtab_entry_s *e = get_symtab_entry("COLUMNS");
-    if(!e) e = add_to_symtab("COLUMNS");
-    if(e && sprintf(buf, "%d", VGA_WIDTH)) symtab_entry_setval(e, buf);
+    if(!e)
+    {
+        e = add_to_symtab("COLUMNS");
+    }
+    if(e && sprintf(buf, "%d", VGA_WIDTH))
+    {
+        symtab_entry_setval(e, buf);
+    }
     /* update the value of terminal rows in environ and in the symbol table */
     e = get_symtab_entry("LINES");
-    if(!e) e = add_to_symtab("LINES");
-    if(e && sprintf(buf, "%d", VGA_HEIGHT)) symtab_entry_setval(e, buf);
+    if(!e)
+    {
+        e = add_to_symtab("LINES");
+    }
+    if(e && sprintf(buf, "%d", VGA_HEIGHT))
+    {
+        symtab_entry_setval(e, buf);
+    }
     return 1;
 }
 
+
+/*
+ * move the cursor to the given row (line) and column.. both values are 1-based,
+ * counting from the top-left corner of the screen.
+ */
 void move_cur(int row, int col)
 {
     fprintf(stdout, "\e[%d;%dH", row, col);
     fflush(stdout);
 }
 
+
+/*
+ * clear the screen.
+ */
 void clear_screen()
 {
     fprintf(stdout, "\e[2J");
@@ -126,15 +200,33 @@ void clear_screen()
     fprintf(stdout, "\e[3J\e[1;1H");
 }
 
+
+/*
+ * set the text foreground and background color.
+ */
 void set_terminal_color(int FG, int BG)
 {
     /*control sequence to set screen color */
     fprintf(stdout, "\x1b[%d;%dm", FG, BG);
 }
 
+
+/*
+ * get the cursor position (current row and column), which are 1-based numbers,
+ * counting from the top-left corner of the screen.
+ */
 void update_row_col()
 {
-    if(feof(stdin)) clearerr(stdin);
+    /*
+     * clear the terminal device's EOF flag.. this would have been set, for example,
+     * if we used the read builtin to read from the terminal and the user pressed
+     * CTRL-D to indicate end of input.. we can't read the cursor position without
+     * clearing that flag.
+     */
+    if(feof(stdin))
+    {
+        clearerr(stdin);
+    }
     /* 
      * we will temporarily block SIGCHLD so it won't disturb us between our cursor 
      * position request and the terminal's response.
@@ -144,7 +236,6 @@ void update_row_col()
     sigaddset(&intmask, SIGCHLD);
     sigprocmask(SIG_BLOCK, &intmask, NULL);
     /* request terminal cursor position report (CPR) */
-// loop:
     fprintf(stdout, "\x1b[6n");
     /* read the result. it will be reported as:
      *     ESC [ y; x R
@@ -157,8 +248,14 @@ void update_row_col()
     term_canon(0);
     while((c = getchar()) != EOF)
     {
-        if(c == 27 ) continue;
-        if(c == '[') continue;
+        if(c == 27 )
+        {
+            continue;
+        }
+        if(c == '[')
+        {
+            continue;
+        }
         *in = c-'0';
         while((c = getchar()) != delim)
         {
@@ -169,31 +266,67 @@ void update_row_col()
             in = &terminal_col;
             delim = 'R';
         }
-        else break;
+        else
+        {
+            break;
+        }
     }
     /* get the trailing 'R' if its still there */
-    while(c != EOF && c != 'R') c = getchar();
+    while(c != EOF && c != 'R')
+    {
+        c = getchar();
+    }
     sigprocmask(SIG_UNBLOCK, &intmask, NULL);
 }
 
+
+/*
+ * return the current row at which the cursor is positioned.. rows are 1-based,
+ * counting from the top of the screen.
+ */
 int get_terminal_row()
 {
     return terminal_row;
 }
 
+
+/*
+ * move the cursor to the given row.. rows are 1-based, counting from the
+ * top of the screen.
+ * 
+ * returns the new cursor row.
+ */
 int set_terminal_row(int row)
 {
     int diff = row-terminal_row;
-    if(diff < 0) fprintf(stdout, "\x1b[%dA", -diff);
-    else         fprintf(stdout, "\x1b[%dB",  diff);
+    if(diff < 0)
+    {
+        fprintf(stdout, "\x1b[%dA", -diff);
+    }
+    else
+    {
+        fprintf(stdout, "\x1b[%dB",  diff);
+    }
     return row;
 }
 
+
+/*
+ * return the current column at which the cursor is positioned.. columns are 1-based,
+ * counting from the left side of the screen.
+ */
 int get_terminal_col()
 {
     return terminal_col;
 }
 
+
+/*
+ * move the cursor to the given column.. columns are 1-based, counting from the
+ * left side of the screen.
+ * 
+ * returns the new cursor column.
+ */
 int set_terminal_col(int col)
 {
     fprintf(stdout, "\x1b[%dG", col);
@@ -201,6 +334,11 @@ int set_terminal_col(int col)
 }
 
 
+/*
+ * produce a beeping sound.
+ * 
+ * returns 1.
+ */
 int beep()
 {
     /* in tcsh, special alias beepcmd is run when the shell wants to ring the bell */
@@ -214,39 +352,59 @@ int beep()
  * 2 - String manipulation functions
  ****************************************/
 
-/* convert string to uppercase */
+/*
+ * convert string str letters to uppercase.
+ * 
+ * returns 1 on success, 0 if a NULL str pointer is given.
+ */
 int strupper(char *str)
 {
-    if(!str) return 0;
+    if(!str)
+    {
+        return 0;
+    }
     while(*str)
     {
-        //if(*str >= 'a' && *str <= 'z') *str = (*str)-32;
         *str = toupper(*str);
         str++;
     }
     return 1;
 }
 
-/* convert string to lowercase */
+
+/*
+ * convert string str letters to lowercase.
+ * 
+ * returns 1 on success, 0 if a NULL str pointer is given.
+ */
 int strlower(char *str)
 {
-    if(!str) return 0;
+    if(!str)
+    {
+        return 0;
+    }
     while(*str)
     {
-        //if(*str >= 'A' && *str <= 'Z') *str = (*str)+32;
         *str = tolower(*str);
         str++;
     }
     return 1;
 }
 
-/* quick converstion from integer to string */
+
 const char *_itoa_digits = "0123456789";
+
+/*
+ * quick converstion from an integer to a string format.
+ */
 void _itoa(char *str, int num)
 {
     size_t res = 1, i;
     uintmax_t copy = num;
-    while(10 <= copy) copy /= 10, res++;
+    while(10 <= copy)
+    {
+        copy /= 10, res++;
+    }
     str[res] = '\0';
     for(i = res; i != 0; i--)
     {
@@ -255,49 +413,64 @@ void _itoa(char *str, int num)
     }
 }
 
-/* append a character to a string */
+
+/*
+ * append character chr to string str at position pos (zero based).
+ */
 inline void strcat_c(char *str, int pos, char chr)
 {
     str[pos++] = chr;
     str[pos  ] = '\0';
 }
 
+
+/*
+ * remove all occurrences of '\\n' from the string in buf.
+ */
 size_t remove_escaped_newlines(char *buf)
 {
     size_t len = strlen(buf);
-    if(!len) return 0;
+    if(!len)
+    {
+        return 0;
+    }
     size_t i = 0;
     while(i < len)
     {
         if(buf[i] == '\\' && buf[i+1] == '\n')
-            delete_char_at(buf, i);
-        /*
         {
-            size_t j;
-            for(j = i; j < len-1; j++) buf[j] = buf[j+2];
-            len -= 2;
+            delete_char_at(buf, i);
         }
-        */
-        else i++;
+        else
+        {
+            i++;
+        }
     }
     return len;
 }
 
 /*
  * search string for any one of the passed characters.
- * returns a char pointer to the first occurence of the
- * character.
+ * 
+ * returns a char pointer to the first occurence of any of the characters,
+ * NULL if none found.
  */
 char *strchr_any(char *string, char *chars)
 {
-    if(!string || !chars) return NULL;
+    if(!string || !chars)
+    {
+        return NULL;
+    }
     char *s = string;
     while(*s)
     {
         char *c = chars;
         while(*c)
         {
-            if(*s == *c) return s;
+            if(*s == *c)
+            {
+                return s;
+            }
             c++;
         }
         s++;
@@ -306,12 +479,14 @@ char *strchr_any(char *string, char *chars)
 }
 
 /*
- * returns if two strings are the same.
+ * returns 1 if the two strings are the same, 0 otherwise.
  */
 int is_same_str(char *s1, char *s2)
 {
     if((strlen(s1) == strlen(s2)) && strcmp(s1, s2) == 0)
+    {
         return 1;
+    }
     return 0;
 }
 
@@ -319,71 +494,109 @@ int is_same_str(char *s1, char *s2)
  * return the passed string value, quoted in a format that can
  * be used for reinput to the shell.
  */
-char *quote_val(char *val)
+char *quote_val(char *val, int add_quotes)
 {
-    /* calc needed space */
-    int len = 2;    /* for the quotes */
-    char *tmp = val;
-    while(*tmp)
+    char *res = NULL;
+    size_t len;
+    /* empty string */
+    if(!val || !*val)
     {
-        switch(*tmp)
+        len = add_quotes ? 3 : 1;
+        res = malloc(len);
+        if(!res)
+        {
+            return NULL;
+        }
+        strcpy(res, add_quotes ? "\"\"" : "");
+        return res;
+    }
+    /* count the number of quotes needed */
+    len = 0;
+    char *v = val, *p;
+    while(*v)
+    {
+        switch(*v)
         {
             case '\\':
             case  '`':
             case  '$':
             case  '"':
                 len++;
-
-            default:
-                len++;
                 break;
         }
-        tmp++;
+        v++;
     }
-    /* alloc space */
-    char *sub = malloc(len+1);
-    if(!sub) return NULL;
-    char *s2 = sub;
-    *s2++ = '"';
-    tmp = val;
-    /* now copy the string, escaped */
-    while(*tmp)
+    len += strlen(val);
+    /* add two for the opening and closing quotes (optional) */
+    if(add_quotes)
     {
-        switch(*tmp)
+        len += 2;
+    }
+    /* alloc memory for quoted string */
+    res = malloc(len+1);
+    if(!res)
+    {
+        return NULL;
+    }
+    p = res;
+    /* add opening quote (optional) */
+    if(add_quotes)
+    {
+        *p++ = '"';
+    }
+    /* copy quoted val */
+    v = val;
+    while(*v)
+    {
+        switch(*v)
         {
             case '\\':
             case  '`':
             case  '$':
             case  '"':
-                *s2++ = '\\';
+                /* add '\' for quoting */
+                *p++ = '\\';
+                /* copy char */
+                *p++ = *v++;
+                break;
 
             default:
-                *s2++ = *tmp;
+                /* copy next char */
+                *p++ = *v++;
                 break;
         }
-        tmp++;
     }
-    *s2++ = '"' ;
-    *s2   = '\0';
-    return sub;
+    /* add closing quote (optional) */
+    if(add_quotes)
+    {
+        *p++ = '"';
+    }
+    *p = '\0';
+    return res;
 }
 
 /*
- * converts a string array to a single string with members
- * separated by spaces. last member must be NULL, or else we
- * will loop until we SIGSEGV! a non-zero dofree argument
+ * convert a string array to a single string with members
+ * separated by spaces.. the last member must be NULL, or else
+ * we will loop until we SIGSEGV! a non-zero dofree argument
  * causes the passed list to be freed (if the caller is too 
  * lazy to free its own memory).
  */
 char *list_to_str(char **list, int dofree)
 {
-    if(!list) return NULL;
+    if(!list)
+    {
+        return NULL;
+    }
     int i;
     int len = 0;
     int count = 0;
     char *p, *p2;
     /* get the count */
-    for(i = 0; list[i]; i++) ;
+    for(i = 0; list[i]; i++)
+    {
+        ;
+    }
     count = i;
     int lens[count];
     /* get total length and each item's length */
@@ -394,7 +607,10 @@ char *list_to_str(char **list, int dofree)
         len += lens[i];
     }
     p = malloc(len+1);
-    if(!p) return NULL;
+    if(!p)
+    {
+        return NULL;
+    }
     *p = 0;
     p2 = p;
     /* now copy the items */
@@ -407,12 +623,20 @@ char *list_to_str(char **list, int dofree)
     /* free the original list */
     if(dofree)
     {
-        for(i = 0; i < count; i++) free(list[i]);
+        for(i = 0; i < count; i++)
+        {
+            free(list[i]);
+        }
         free(list);
     }
     return p2;
 }
 
+
+/*
+ * get the system-defined maximum line length.. if no value is defined by the
+ * system, use our own default value.
+ */
 int get_linemax()
 {
     int line_max;
@@ -420,15 +644,62 @@ int get_linemax()
     line_max = LINE_MAX;
 #else
     line_max = sysconf(_SC_LINE_MAX);
-    if(line_max <= 0) line_max = DEFAULT_LINE_MAX;
+    if(line_max <= 0)
+    {
+        line_max = DEFAULT_LINE_MAX;
+    }
 #endif
     return line_max;
+}
+
+
+/*
+ * alloc memory for, or extend the host (or user) names buffer if needed..
+ * in the first call, the buffer is initialized to 32 entries.. subsequent
+ * calls result in the buffer size doubling, so that it becomes 64, 128, ...
+ * count is the number of used entries in the buffer, while len is the number
+ * of alloc'd entries (size of buffer divided by sizeof(char **)).
+ * 
+ * returns 1 if the buffer is alloc'd/extended, 0 otherwise.
+ */
+int check_buffer_bounds(int *count, int *len, char ***buf)
+{
+    if(*count >= *len)
+    {
+        if(!(*buf))
+        {
+            /* first call. alloc memory for the buffer */
+            *buf = malloc(32*sizeof(char **));
+            if(!(*buf))
+            {
+                return 0;
+            }
+            *len = 32;
+        }
+        else
+        {
+            /* subsequent calls. extend the buffer */
+            int newlen = (*len) << 1;
+            char **hn2 = realloc(*buf, newlen*sizeof(char **));
+            if(!hn2)
+            {
+                return 0;
+            }
+            *buf = hn2;
+            *len = newlen;
+        }
+    }
+    return 1;
 }
 
 
 /****************************************
  * 3 - Miscellaneous functions
  ****************************************/
+
+/*
+ * return 1 if the current user is root, 0 otherwise.
+ */
 int isroot()
 {
     static uid_t uid = -1;
@@ -441,148 +712,222 @@ int isroot()
     return (uid == 0);
 }
 
-struct cmd_token *make_cmd_token(char *word)
-{
-    struct cmd_token *cmdtok = (struct cmd_token *)malloc(sizeof(struct cmd_token));
-    if(!cmdtok) return NULL;
-    size_t  len  = strlen(word);
-    char   *data = (char *)malloc(len+1);
-    if(!data)
-    {
-        free(cmdtok);
-        return NULL;
-    }
-    strcpy(data, word);
-    cmdtok->data = data;
-    cmdtok->len  = len;
-    cmdtok->next = NULL;
-    return cmdtok;
-}
 
-
+/*
+ * search the path for the given file.. if use_path is NULL, we use the value
+ * of $PATH, otherwise we use the value of use_path as the search path.. if
+ * exe_only is non-zero, we search for executable files, otherwise we search
+ * for any file with the given name in the path.
+ *
+ * returns the absolute path of the first matching file, NULL if no match is found.
+ */
 char *search_path(char *file, char *use_path, int exe_only)
 {
     /* bash extension for ignored executable files */
     char *EXECIGNORE = get_shell_varp("EXECIGNORE", NULL);
-
+    /* use the given path or, if null, use $PATH */
     char *PATH = use_path ? use_path : getenv("PATH");
     char *p    = PATH;
     char *p2;
     
-check:
-    /* $PATH finished */
-    if(!p || *p == '\0')
+    while(p && *p)
     {
-        errno = ENOENT;
-        return 0;
-    }
-    p2 = p;
-    while(*p2 && *p2 != ':') p2++;
-    int  plen = p2-p;
-    if(!plen) plen = 1;
-    int  alen = strlen(file);
-    char path[plen+1+alen+1];
-    strncpy(path, p, p2-p);
-    path[p2-p] = '\0';
-    if(p2[-1] != '/') strcat(path, "/");
-    strcat(path, file);
-    struct stat st;
-    if(stat(path, &st) == 0)
-    {
-        if(!S_ISREG(st.st_mode))
+        p2 = p;
+        /* get the end of the next entry */
+        while(*p2 && *p2 != ':')
         {
-            errno = ENOENT;
-            goto next;
+            p2++;
         }
-        if(exe_only)
+        int  plen = p2-p;
+        if(!plen)
         {
-            if(access(path, X_OK) != 0)
+            plen = 1;
+        }
+        /* copy the next entry */
+        int  alen = strlen(file);
+        char path[plen+1+alen+1];
+        strncpy(path, p, p2-p);
+        path[p2-p] = '\0';
+        if(p2[-1] != '/')
+        {
+            strcat(path, "/");
+        }
+        /* and concat the file name */
+        strcat(path, file);
+        /* check if the file exists */
+        struct stat st;
+        if(stat(path, &st) == 0)
+        {
+            /* not a regular file */
+            if(!S_ISREG(st.st_mode))
             {
-                errno = ENOEXEC;
-                goto next;
+                errno = ENOENT;
+                /* check the next path entry */
+                p = p2;
+                if(*p2 == ':')
+                {
+                    p++;
+                }
+                continue;
+            }
+            /* requested exe files only */
+            if(exe_only)
+            {
+                if(access(path, X_OK) != 0)
+                {
+                    errno = ENOEXEC;
+                    /* check the next path entry */
+                    p = p2;
+                    if(*p2 == ':')
+                    {
+                        p++;
+                    }
+                    continue;
+                }
+            }
+            /* check its not one of the files we should ignore */
+            if(EXECIGNORE)
+            {
+                if(!match_ignore(EXECIGNORE, path))
+                {
+                    return get_malloced_str(path);
+                }
+            }
+            else
+            {
+                return get_malloced_str(path);
             }
         }
-        if(EXECIGNORE)
+        else    /* file not found */
         {
-            if(!match_ignore(EXECIGNORE, path)) return get_malloced_str(path);
+            /* check the next path entry */
+            p = p2;
+            if(*p2 == ':')
+            {
+                p++;
+            }
         }
-        else return get_malloced_str(path);
     }
-    
-next:
-    p = p2;
-    if(*p2 == ':') p++;
-    goto check;
-    
-// noexec:
+
     errno = ENOEXEC;
     return 0;
 }
 
+
+/*
+ * return 1 if the given cmd name is a defined function, 0 otherwise.
+ */
 int is_function(char *cmd)
 {
     return get_func(cmd) ? 1 : 0;
 }
 
+
+/*
+ * return 1 if the given cmd name is a builtin utility, 0 otherwise.
+ */
 int is_builtin(char *cmd)
 {
     return is_special_builtin(cmd) ? 1 : is_regular_builtin(cmd);
 }
 
+
+/*
+ * return 1 if the given cmd name is an enabled builtin utility, 0 otherwise.
+ */
 int is_enabled_builtin(char *cmd)
 {
-    if(!cmd) return 0;
+    if(!cmd)
+    {
+        return 0;
+    }
     int     j;
     for(j = 0; j < special_builtin_count; j++)
     {
         if(strcmp(special_builtins[j].name, cmd) == 0 && 
            flag_set(special_builtins[j].flags, BUILTIN_ENABLED))
+        {
             return 1;
+        }
     }
     for(j = 0; j < regular_builtin_count; j++)
     {
         if(strcmp(regular_builtins[j].name, cmd) == 0 &&
            flag_set(regular_builtins[j].flags, BUILTIN_ENABLED))
+        {
             return 1;
-    }
-    return 0;
-}
-
-int is_special_builtin(char *cmd)
-{
-    if(!cmd) return 0;
-    size_t  cmdlen = strlen(cmd);
-    int     j;
-    for(j = 0; j < special_builtin_count; j++)
-    {
-        if(special_builtins[j].namelen != cmdlen) continue;
-        if(strcmp(special_builtins[j].name, cmd) == 0) return 1;
-    }
-    return 0;
-}
-
-int is_regular_builtin(char *cmd)
-{
-    if(!cmd) return 0;
-    size_t  cmdlen = strlen(cmd);
-    int     j;
-    for(j = 0; j < regular_builtin_count; j++)
-    {
-        if(regular_builtins[j].namelen != cmdlen) continue;
-        if(strcmp(regular_builtins[j].name, cmd) == 0) return 1;
+        }
     }
     return 0;
 }
 
 
 /*
- * flagarg is an optional argument needed by flags. if flags are empty (i.e. zero), flagarg
- * should also be zero.
+ * return 1 if the given cmd name is a special builtin utility, 0 otherwise.
+ */
+int is_special_builtin(char *cmd)
+{
+    if(!cmd)
+    {
+        return 0;
+    }
+    size_t  cmdlen = strlen(cmd);
+    int     j;
+    for(j = 0; j < special_builtin_count; j++)
+    {
+        if(special_builtins[j].namelen != cmdlen)
+        {
+            continue;
+        }
+        if(strcmp(special_builtins[j].name, cmd) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+/*
+ * return 1 if the given cmd name is a regular builtin utility, 0 otherwise.
+ */
+int is_regular_builtin(char *cmd)
+{
+    if(!cmd)
+    {
+        return 0;
+    }
+    size_t  cmdlen = strlen(cmd);
+    int     j;
+    for(j = 0; j < regular_builtin_count; j++)
+    {
+        if(regular_builtins[j].namelen != cmdlen)
+        {
+            continue;
+        }
+        if(strcmp(regular_builtins[j].name, cmd) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+/*
+ * fork a new child process to execute a command, passing it argc and argv..
+ * flagarg is an optional argument needed by flags.. if flags are empty (i.e. zero),
+ * flagarg should also be zero.. use_path tells us if we should use $PATH when
+ * searching for the command (if use_path is NULL).. flags are set by some builtin
+ * utilities, such as nice and nohup.. the UTILITY parameter is the name of the builtin
+ * utility that called us (we use it in printing error messages).
+ *
+ * returns the exit status of the child process after executing the command.
  */
 int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags, int flagarg)
 {
     pid_t child_pid;
-    if((child_pid = fork_child()) == 0)
+    if((child_pid = fork_child()) == 0)    /* child process */
     {
         if(option_set('m'))
         {
@@ -596,16 +941,16 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         {
             if(setpriority(PRIO_PROCESS, 0, flagarg) == -1)
             {
-                fprintf(stderr, "%s: failed to set nice value to %d: %s\r\n", UTILITY, flagarg, strerror(errno));
+                fprintf(stderr, "%s: failed to set nice value to %d: %s\n", UTILITY, flagarg, strerror(errno));
             }
         }
         /* request to ignore SIGHUP (by the nohup builtin) */
         if(flag_set(flags, FORK_COMMAND_IGNORE_HUP))
         {
             /* tcsh ignores the HUP signal here */
-            if(signal(SIGHUP, SIG_IGN) < 0)
+            if(signal(SIGHUP, SIG_IGN) == SIG_ERR)
             {
-                fprintf(stderr, "%s: failed to ignore SIGHUP: %s\r\n", UTILITY, strerror(errno));
+                fprintf(stderr, "%s: failed to ignore SIGHUP: %s\n", UTILITY, strerror(errno));
             }
             /*
              * ... and GNU coreutils nohup modifies the standard streams if they are
@@ -639,13 +984,19 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
                 dup2(1, 2);
             }
         }
-
+        /* export variables and execute the command */
         do_export_vars();
         do_exec_cmd(argc, argv, use_path, NULL);
         /* NOTE: we should NEVER come back here, unless there is error of course!! */
-        fprintf(stderr, "%s: failed to exec '%s': %s\r\n", UTILITY, argv[0], strerror(errno));
-        if(errno == ENOEXEC) exit(EXIT_ERROR_NOEXEC);
-        if(errno == ENOENT ) exit(EXIT_ERROR_NOENT );
+        fprintf(stderr, "%s: failed to exec '%s': %s\n", UTILITY, argv[0], strerror(errno));
+        if(errno == ENOEXEC)
+        {
+            exit(EXIT_ERROR_NOEXEC);
+        }
+        if(errno == ENOENT)
+        {
+            exit(EXIT_ERROR_NOENT);
+        }
         exit(EXIT_FAILURE);
     }
     /* ... and parent countinues over here ...    */
@@ -680,82 +1031,52 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         }
     }
     /* reset the terminal's foreground pgid */
-    if(option_set('m')) tcsetpgrp(0, tty_pid);
+    if(option_set('m'))
+    {
+        tcsetpgrp(0, tty_pid);
+    }
     return status;
 }
 
+
+/*
+ * return 1 if path exists and is a regular file, 0 otherwise.
+ */
 int file_exists(char *path)
 {
     struct stat st;
     if(stat(path, &st) == 0)
     {
-        if(S_ISREG(st.st_mode)) return 1;
+        if(S_ISREG(st.st_mode))
+        {
+            return 1;
+        }
     }
     return 0;
 }
 
+
 /*
  * return the full path to a temporary filename template, to be passed to 
- * mkstemp() or mkdtemp(). as both functions modify the string we pass
- * them, we get an malloc'd string, instead of using a string from our string buffer.
+ * mkstemp() or mkdtemp().. as both functions modify the string we pass
+ * them, we get an malloc'd string, instead of using a string from our
+ * string buffer.. it is the caller's responsibility to free that string.
  */
 char *get_tmp_filename()
 {
     char *tmpdir = get_shell_varp("TMPDIR", "/tmp");
-    int len = strlen(tmpdir);
-    char buf[len+18];
+    int   len = strlen(tmpdir);
+    char  buf[len+18];
     sprintf(buf, "%s%clsh/", tmpdir, '/');
     /* try to mkdir our temp directory, so that all our tmp files reside under /tmp/lsh. */
     if(mkdir(buf, 0700) == 0)
+    {
         strcat(buf, "lsh.tmpXXXXXX");
+    }
     /* if we failed, just return a normal tmp file under /tmp */
     else
-        sprintf(buf, "%s%clsh.tmpXXXXXX", tmpdir, '/');
-    return __get_malloced_str(buf);
-}
-
-/*
- * retrive the string value of a symbol table entry (presumably a shell variable).
- * if name is not defined (or is null), return def_val, which can be NULL.
- * this function doesn't return empty strings (name must be set to a non-empty value).
- * you can bypass this by passing "" as the value of def_val;
- */
-char *get_shell_varp(char *name, char *def_val)
-{
-    struct symtab_entry_s *entry = get_symtab_entry(name);
-    return (entry && entry->val && entry->val[0]) ? entry->val : def_val;
-}
-
-/*
- * retrive the integer value of a symbol table entry (presumably a shell variable).
- * if name is not defined (or is null), return def_val, which usually is passed as 0.
- */
-int get_shell_vari(char *name, int def_val)
-{
-    return (int)get_shell_varl(name, def_val);
-}
-
-/*
- * same, but return long (not int).
- */
-long get_shell_varl(char *name, int def_val)
-{
-    struct symtab_entry_s *entry = get_symtab_entry(name);
-    if(entry && entry->val && entry->val[0])
     {
-        char *strend = NULL;
-        long i = strtol(entry->val, &strend, 10);
-        if(strend == entry->val) return def_val;
-        return i;
+        sprintf(buf, "%s%clsh.tmpXXXXXX", tmpdir, '/');
     }
-    return def_val;
-}
-
-/*
- * quick set of var value (without needing to retrieve symtab entry ourselves).
- */
-void set_shell_varp(char *name, char *val)
-{
-    struct symtab_entry_s *entry = get_symtab_entry(name);
-    if(entry) symtab_entry_setval(entry, val);
+    return __get_malloced_str(buf);
 }

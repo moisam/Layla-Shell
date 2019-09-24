@@ -26,55 +26,25 @@
 #include "symtab/symtab.h"
 #include "debug.h"
 
+/* original argv passed to the shell on startup */
 char **shell_argv;
+
+/* original argc passed to the shell on startup */
 int    shell_argc;
 
+
 /*
-char **make_argv_no_argc(struct cmd_token *tokens)
-{
-    if(!tokens) return errno = EINVAL, NULL;
-    int argc = 0;
-    struct cmd_token *t = tokens;
-    while(t) argc++, t = t->next;
-    return make_argv(argc, tokens);
-}
-*/
-
-char **make_argv(int argc, struct cmd_token *tokens)
-{
-    char **argv = (char **)malloc((argc+1) * sizeof(char *));
-    if(!argv) return errno = ENOMEM, NULL;
-    int i;
-    size_t tot_len = 0;
-    struct cmd_token *arg = tokens;
-    for(i = 0; i < argc; i++)
-    {
-        tot_len += arg->len;
-        arg = arg->next;
-    } tot_len++;
-    char *buf = (char *)malloc(tot_len);
-    if(!buf)
-    {
-        free(argv);
-        return errno = ENOMEM, NULL;
-    }
-    arg = tokens;
-    for(i = 0; i < argc; i++)
-    {
-        argv[i] = buf;
-        strncpy(buf, arg->data, arg->len);
-        buf[arg->len] = '\0';
-        buf += arg->len+1;
-        arg = arg->next;
-    }
-    argv[i] = NULL;
-    return argv;
-}
-
+ * create a duplicate argv list from the given argv list.
+ *
+ * returns the duplicate argv list, NULL on error.
+ */
 char **dup_argv(int argc, char **argv)
 {
     char **argv2 = (char **)malloc((argc+1) * sizeof(char *));
-    if(!argv2) return NULL;
+    if(!argv2)
+    {
+        return NULL;
+    }
     int   i;
     for(i = 0; i < argc; i++)
     {
@@ -84,14 +54,24 @@ char **dup_argv(int argc, char **argv)
     return argv2;
 }
 
+
+/*
+ * free the given argv list.
+ */
 void free_argv(char ***__argv)
 {
     char **argv = *__argv;
-    if(!argv) return;
+    if(!argv)
+    {
+        return;
+    }
     int i;
     for(i = 0; argv[i]; i++)
     {
-        if(argv[i]) free_malloced_str(argv[i]);
+        if(argv[i])
+        {
+            free_malloced_str(argv[i]);
+        }
     }
     free(argv);
     *__argv = NULL;
@@ -102,6 +82,8 @@ void free_argv(char ***__argv)
  * parse_args() to check if the newly passed argv is the same as 
  * the old saved argv, so that it will continue parsing from where
  * it stopped.
+ *
+ * returns 1 if the two argv arrays are the same, 0 otherwise.
  */
 int same_argv(char **argv1, char **argv2)
 {
@@ -109,12 +91,21 @@ int same_argv(char **argv1, char **argv2)
     for(i = 0, j = 0; argv1[i]; i++, j++)
     {
         /* argv1 is longer than argv2 */
-        if(!argv2[j]) return 0;
+        if(!argv2[j])
+        {
+            return 0;
+        }
         /* argv1 and argv2 are not the same */
-        if(strcmp(argv1[i], argv2[j]) != 0) return 0;
+        if(strcmp(argv1[i], argv2[j]) != 0)
+        {
+            return 0;
+        }
     }
     /* argv2 is longer than argv1 */
-    if(argv2[j]) return 0;
+    if(argv2[j])
+    {
+        return 0;
+    }
     /* if all tests passed, argv1 and argv2 are the same */
     return 1;
 }
@@ -148,11 +139,20 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit)
     static char  *p    = NULL;
     /* call from a new utility? */
     int new = 0;
-    if(!argi || !argv) new = 1;
+    if(!argi || !argv)
+    {
+        new = 1;
+    }
     else
     {
-        if(argc != __argc) new = 1;
-        else if(!same_argv(argv, __argv)) new = 1;
+        if(argc != __argc)
+        {
+            new = 1;
+        }
+        else if(!same_argv(argv, __argv))
+        {
+            new = 1;
+        }
     }
     
     if(new)
@@ -161,41 +161,75 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit)
          * we should have at least 2 args, the first is the name of
          * the calling utility.
          */
-        if(__argc == 1) { free_argv(&argv); return *__argi = 1, 0; }
+        if(__argc == 1)
+        {
+            free_argv(&argv);
+            return *__argi = 1, 0;
+        }
         struct symtab_entry_s *OPTIND = get_symtab_entry("OPTIND");
-        if(!OPTIND || !OPTIND->val) argi = 1;
+        if(!OPTIND || !OPTIND->val)
+        {
+            argi = 1;
+        }
         else
         {
             argi = atoi(OPTIND->val);
-            if(!argi) argi = 1;
-            else if(argi > __argc) argi = __argc;
+            if(!argi)
+            {
+                argi = 1;
+            }
+            else if(argi > __argc)
+            {
+                argi = __argc;
+            }
         }
-        if(argv) free_argv(&argv);   /* forget the old saved argv */
+        if(argv)
+        {
+            free_argv(&argv);   /* forget the old saved argv */
+        }
         ops  = __ops;
         argv = dup_argv(__argc, __argv);
         if(!argv)
         {
-            fprintf(stderr, "%s: failed to process argv: %s\r\n", argv[0], strerror(errno));
+            fprintf(stderr, "%s: failed to process argv: %s\n", argv[0], strerror(errno));
             free_argv(&argv);
             /* POSIX says non-interactive shell should exit on Utility syntax errors */
-            if(!option_set('i')) exit_gracefully(EXIT_FAILURE, NULL);
+            if(!option_set('i'))
+            {
+                exit_gracefully(EXIT_FAILURE, NULL);
+            }
             return -1;
         }
         argc = __argc;
         p    = argv[argi];
     }
-    if(ops != __ops && *ops == ':') argi++;
+    if(ops != __ops && *ops == ':')
+    {
+        argi++;
+    }
     
 loop:
     if(p == argv[argi])
     {
-        if(!p) { free_argv(&argv); return *__argi = argi, 0; }
+        if(!p)
+        {
+            free_argv(&argv);
+            return *__argi = argi, 0;
+        }
         if(*p != '-')
         {
             /* only accept '+' options when option string begins with '+' */
-            if(*p != '+' || *__ops != '+') { free_argv(&argv); return *__argi = argi, 0; }
+            if(*p != '+' || *__ops != '+')
+            {
+                free_argv(&argv);
+                return *__argi = argi, 0;
+            }
         }
-        if(strcmp(p, "--") == 0) { free_argv(&argv); return *__argi = argi+1, 0; }
+        if(strcmp(p, "--") == 0)
+        {
+            free_argv(&argv);
+            return *__argi = argi+1, 0;
+        }
     }
     ops      = __ops;
     __optarg = NULL;
@@ -203,14 +237,22 @@ loop:
     {
         while(*ops)
         {
-            if(*ops == ':') { ops++; continue; }
+            if(*ops == ':')
+            {
+                ops++;
+                continue;
+            }
             if(*p == *ops)
             {
                 char c = *p;
                 if(ops[1] == ':')
                 {
                     /* take the rest of this option string as the argument */
-                    if(p[1]) { __optarg = p+1; p = argv[++argi]; }
+                    if(p[1])
+                    {
+                        __optarg = p+1;
+                        p = argv[++argi];
+                    }
                     /* take the next argument as the option argument */
                     else
                     {
@@ -245,10 +287,13 @@ loop:
             free_argv(&argv);
             return *__argi = argi, -1;
         }
-        fprintf(stderr, "%s: unknown option: %c\r\n", argv[0], *p);
+        fprintf(stderr, "%s: unknown option: %c\n", argv[0], *p);
         free_argv(&argv);
         /* POSIX says non-interactive shell should exit on Utility syntax errors */
-        if(!option_set('i')) exit_gracefully(EXIT_FAILURE, NULL);
+        if(!option_set('i'))
+        {
+            exit_gracefully(EXIT_FAILURE, NULL);
+        }
         return -1;
     }
     

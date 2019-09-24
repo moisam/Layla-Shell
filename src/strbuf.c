@@ -25,20 +25,6 @@
 #include "symtab/string_hash.h"
 #include "debug.h"
 
-struct hashtab_s *str_hashes = NULL;
-char *empty_str = "";
-// unsigned char MAGIC[8] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00 /* 0xDEADBEEF */ };
-
-/* defined in symtab/string_hash.c */
-struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, unsigned int value);
-
-
-void init_str_hashtable()
-{
-    str_hashes = new_hashtable();
-}
-
-
 /*
  * the string buffer aims to create a pool of the frequently used strings, instead
  * of wasting malloc calls which will inevitably result in heap memory fragmentation
@@ -52,28 +38,72 @@ void init_str_hashtable()
  * point of it).
  */
 
+/* the strings buffer (hash table) */
+struct hashtab_s *str_hashes = NULL;
+
+/* dummy value for an empty string */
+char *empty_str = "";
+
+/* defined in symtab/string_hash.c */
+struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, unsigned int value);
+
+
+/*
+ * initialize the strings buffer.
+ */
+void init_str_hashtable()
+{
+    str_hashes = new_hashtable();
+}
+
+
+/*
+ * return an malloc'd copy of the given str.. call it directly if you want a private
+ * copy of str, one that you can modify at will.. also called by get_malloced_str() below.
+ * 
+ * returns the malloc'd str, or NULL if failed to alloc memory.
+ */
 char *__get_malloced_str(char *str)
 {
     char *str2 = (char *)malloc(strlen(str)+1);
-    if(!str2) return NULL;
+    if(!str2)
+    {
+        return NULL;
+    }
     strcpy(str2, str);
     return str2;
 }
 
+
+/*
+ * search for the given str in the string buffer.. if not found, __get_malloced_str()
+ * is called to alloc a new string, which added to the buffer and returned.
+ * 
+ * returns the strings buffer entry of str, or NULL if failed to alloc memory.
+ */
 char *get_malloced_str(char *str)
 {
-    if(!str) return NULL;
-    if(!*str) return empty_str;
-
+    /* null pointer passed. return error */
+    if(!str)
+    {
+        return NULL;
+    }
+    /* empty string passed. return the dummy empty string entry */
+    if(!*str)
+    {
+        return empty_str;
+    }
+    /* search the strings buffer for str */
     if(str_hashes)
     {
         struct hashitem_s *entry = get_hash_item(str_hashes, str);
-        if(entry)
+        if(entry)   /* entry found */
         {
+            /* increment the count of references to str */
             entry->refs++;
             return entry->name;
         }
-        else
+        else        /* entry not found. add a new entry */
         {
             entry = add_hash_itemb(str_hashes, str, 1);
             if(entry)
@@ -82,12 +112,24 @@ char *get_malloced_str(char *str)
             }
         }
     }
+    /* strings buffer is not operational. return an malloc'd string */
     return __get_malloced_str(str);
 }
 
+
+/*
+ * this function is similar to get_malloced_str(), except that it doesn't search
+ * the buffer for the whole str, it searches for the substring starting at the start
+ * index with the given length.
+ * 
+ * returns the strings buffer entry of str, or NULL if failed to alloc memory.
+ */
 char *get_malloced_strl(char *str, int start, int length)
 {
-    if(!str) return NULL;
+    if(!str)
+    {
+        return NULL;
+    }
     char *s1 = str+start;
     char tmp[length+1];
     strncpy(tmp, s1, length);
@@ -95,30 +137,23 @@ char *get_malloced_strl(char *str, int start, int length)
     return get_malloced_str(tmp);
 }
 
+
+/*
+ * decrement the count of str references in the strings buffer.. if the count
+ * reaches zero, the string is freed.
+ */
 void free_malloced_str(char *str)
 {
-    if(!str || str == empty_str) return;
-
+    if(!str || str == empty_str)
+    {
+        return;
+    }
+    /* search the strings buffer for str */
     if(str_hashes)
     {
         struct hashitem_s *entry = get_hash_item(str_hashes, str);
-        if(entry)
+        if(entry)   /* entry found */
         {
-#if 0
-            /*
-             * to avoid accidentally removing a hashed string when it was not actually
-             * alloc'd through us, we check the magic number we put at the start of each
-             * hashed string. this way, even if we were passed a string that wasn't hashed
-             * here, it wouldn't affect us.
-             */
-            unsigned char *mag = ((unsigned char *)str)-offsetof(struct hashitem_s, name);
-            /* this string is not ours. free and return */
-            if(memcmp(mag, MAGIC, 4) != 0)
-            {
-                free(str);
-                return;
-            }
-#endif
             /* this string is hashed. process it */
             entry->refs--;
             if(entry->refs == 0)
@@ -128,5 +163,6 @@ void free_malloced_str(char *str)
             return;
         }
     }
+    /* strings buffer is not operational. free the malloc'd string */
     free(str);
 }

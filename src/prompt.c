@@ -39,6 +39,7 @@
 #include "builtins/setx.h"
 #include "debug.h"
 
+/* buffer to use when processing a prompt string */
 char prompt[DEFAULT_LINE_MAX];
 
 #define PS1     "PS1"
@@ -50,98 +51,328 @@ char *weekday[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 char *month[]   = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
                     "Sep", "Oct", "Nov", "Dec" };
 
+/*
+ * return 1 if char c is an octal digit, 0 otherwise.
+ */
 static inline int is_octal(char c)
 {
-    if(c >= '0' && c <= '7') return 1;
+    if(c >= '0' && c <= '7')
+    {
+        return 1;
+    }
     return 0;
 }
 
+
+/*
+ * get the tty name. if using zsh's '%l' escape sequence, remove the /dev/tty or the /dev/
+ * prefix if the tty name starts with one of them. otherwise, get the basename of the tty
+ * device and add it to the buffer.
+ * 
+ * return value is the number of characters added to the buffer (length of used tty name).
+ */
+int get_ttyname(int rem_prefix)
+{
+    /* check if stdin or stderr is a terminal device */
+    int k = isatty(0) ? 0 : isatty(2) ? 2 : -1;
+    if(k >= 0)
+    {
+        char *s = ttyname(k);
+        if(!s)
+        {
+            return 0;
+        }
+       
+        if(rem_prefix)
+        {
+            /* remove the /dev/tty prefix, if any */
+            if(strstr(s, "/dev/tty") == s)
+            {
+                s += 8;
+            }
+            /* remove the /dev/ prefix, if any */
+            else if(strstr(s, "/dev/") == s)
+            {
+                s += 5;
+            }
+        }
+        else
+        {
+            s = basename(s);
+        }
+        strcat(prompt, s);
+        return strlen(s);
+    }
+    return 0;
+}
+
+
+/*
+ * get the current working directory name, formatted properly as required by the
+ * different escape sequences. this function parses POSIX \w and \W escape sequences,
+ * in addition to zsh %d, %/ and %~ escape sequences.
+ * 
+ * return value is the number of characters added to the buffer (length of cwd used).
+ */
+int get_pwd(char *pwd, char *escseq, int baseonly, int tildsub)
+{
+    if(!pwd)
+    {
+        strcat(prompt, escseq);
+        return strlen(escseq);
+    }
+    char *home = get_shell_varp("HOME", NULL);
+    if(home && *home)
+    {
+        int homelen = strlen(home);
+        /* home is abbreviated as ~ if requested */
+        if(strstr(pwd, home) == pwd)
+        {
+            /* pwd is home (we don't know if it ends in / or not) */
+            if(pwd[homelen] == '\0' || (pwd[homelen] == '/' && pwd[homelen+1] == '\0'))
+            {
+                if(tildsub)
+                {
+                    strcat(prompt, "~");
+                    return 1;
+                }
+                else
+                {
+                    strcat(prompt, home);
+                    return strlen(home);
+                }
+            }
+            /* full path with tilde substitution: '%~' (zsh) and '\w' (POSIX) */
+            if(!baseonly && tildsub)
+            {
+                strcat(prompt, "~");
+                pwd += homelen;
+                strcat(prompt, pwd);
+                return strlen(pwd)+1;
+            }
+        }
+    }
+    /* base name only: '\W' (POSIX) */
+    if(baseonly)
+    {
+        pwd = basename(pwd);
+        strcat(prompt, pwd);
+        return strlen(pwd);
+    }
+    /* full path with no tilde substitution: '%d' and '%/' (zsh) */
+    strcat(prompt, pwd);
+    return strlen(pwd);
+}
+
+
+/*
+ * get the index of the current history command. this function parses POSIX \! escape
+ * sequence, in addition to zsh %h escape sequence.
+ * return value is the number of characters added to the buffer.
+ */
+int get_histindex()
+{
+    char buf[32];
+    sprintf(buf, "%d", cmd_history_end+1);
+    strcat(prompt, buf);
+    return strlen(buf);
+}
+
+
+/*
+ * format the date according to the passed format string. this function parses POSIX \d and \D
+ * escape sequences, in addition to zsh %D, %w, %W escape sequences.
+ * return value is the number of characters added to the buffer.
+ */
+int get_date(char *fmt, struct tm *now)
+{
+    char buf[128];
+    if(strftime(buf, sizeof(buf), fmt, now))
+    {
+        strcat(prompt, buf);
+        return strlen(buf);
+    }
+    else
+    {
+        fprintf(stderr, "%s: strftime failed\n", SHELL_NAME);
+        return 0;
+    }
+}
+
+
+/*
+ * evaluate a prompt string, substituting both POSIX '\' and zsh '%' escape
+ * sequences, then performing word expansion on the prompt.
+ * 
+ * result is the malloc'd word-expanded prompt string.
+ */
 char *__evaluate_prompt(char *PS)
 {
-    if(!PS) return NULL;
-    prompt[0]  = '\0';
-    size_t i   = 0, j = 0, PS_len = strlen(PS);
+    if(!PS)
+    {
+        return NULL;
+    }
+    prompt[0] = '\0';
+    size_t i = 0, j = 0, PS_len = strlen(PS);
+    int k;
     time_t tim = time(NULL);
     struct tm *now = gmtime(&tim);
     /* temporary storage buffers for the loop below */
     char host[MAXHOSTNAMELEN];
-    char jobs[32];
-    char buf[16];
-    char *user, *pwd = get_symtab_entry("PWD")->val; /* = getenv("PWD");*/
-    char *s;
+    char buf[32];
+    char *user, *pwd = get_shell_varp("PWD", NULL);
+    char *s, c;
     
     do
     {
-        switch(PS[i])
+        switch((c = PS[i]))
         {
+            /*
+             * zsh has an option, PROMPT_PERCENT, which determines whether we recognize escape
+             * sequences that are introduced by the percent sign, instead of the backslash character.
+             * all of these are zsh non-POSIX extensions. as some of them are really useful, we include
+             * them here (well, most of them anyway). being POSIX-compliant and all, we don't enable
+             * this option by default.
+             * 
+             * for the complete list of zsh escape sequences, see section "Prompt Expansion" of the
+             * zsh manpage.
+             */
+            case '%':
+                if(!optionx_set(OPTION_PROMPT_PERCENT))
+                {
+                    /* just add the % char and continue */
+                    strcat_c(prompt, j++, PS[i]);
+                    break;
+                }
+                /*
+                 * NOTE: fall through to the next case, so that we can handle both POSIX and zsh
+                 * escape sequences using the same switch clause.
+                 * 
+                 * WARNING: DO NOT put any intervening cases (or a break statement) here!
+                 */
+                __attribute__((fallthrough));
+
+            /*
+             * normal POSIX escape sequences.
+             */
             case '\\':
                 i++;
                 switch(PS[i])
                 {
                     /* '\\':     the good ol' backslash */
                     case '\\':
-                        strcat_c(prompt, j++, '\\');
+                        strcat_c(prompt, j++, c);
+                        /* if(c != '\\') */ strcat_c(prompt, j++, '\\');
                         break;
                     
                     /* '\a':     a bell character       */
                     case 'a':
-                        strcat_c(prompt, j++, '\a');
+                        beep();
+                        //strcat_c(prompt, j++, '\a');
                         break;
                         
-                    /* '\d':     the date, in "Weekday Month Date" format
-                     *           (e.g., "Tue May 26")
-                     */
+                    /* '%c':     the basename of cwd (zsh) */
+                    case 'c':
+                    case 'C':
+                    case '.':
+                        if(c == '%')
+                        {
+                            sprintf(buf, "\\%c", PS[i]);
+                            j += get_pwd(pwd, buf, 1, (PS[i] == 'c') ? 1 : 0);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
+                        }
+                        break;
+                        
                     case 'd':
-                        strcat(prompt, weekday[now->tm_wday]);
-                        j += strlen(weekday[now->tm_wday]);
-                        strcat_c(prompt, j++, ' ');
-                        strcat(prompt, weekday[now->tm_mon]);
-                        j += strlen(weekday[now->tm_mon]);
-                        strcat_c(prompt, j++, ' ');
-                        char day[4];
-                        sprintf(day, "%d", now->tm_mday);
-                        strcat(prompt, day);
-                        j += strlen(day);
+                        if(c == '%')    /* handle zsh '%d' (full pwd path with no tilde substitution) */
+                        {
+                            sprintf(buf, "%%%c", PS[i]);
+                            j += get_pwd(pwd, buf, 0, 0);
+                            break;
+                        }
+                        
+                        /*
+                         * '\d':     the date, in "Weekday Month Date" format
+                         *           (e.g., "Tue May 26")
+                         */
+                        j += get_date("%a %b %d", now);
                         break;
                         
-                    /* '\D{format}':
-                     *  The FORMAT is passed to 'strftime', the result is added to prompt.
-                     *  An empty FORMAT results in a locale-specific time representation.
-                     *  The braces are required.
-                     */
-                    case 'D':
+                    case 'D':                        
+                        /*
+                         * '\D{format}':
+                         *  The FORMAT is passed to 'strftime', the result is added to prompt.
+                         *  An empty FORMAT results in a locale-specific time representation.
+                         *  The braces are required.
+                         */
+
                         /* missing '{'. forget the date and move along */
                         if(PS[i+1] != '{')
                         {
-                            strcat_c(prompt, j++, '\\');
-                            strcat_c(prompt, j++, 'D' );
-                            continue;
+                            if(c == '%')        /* zsh's '%D' (prints the date in yy-mm-dd format) */
+                            {
+                                j += get_date("%F", now);
+                            }
+                            else
+                            {
+                                strcat_c(prompt, j++, '\\');
+                                strcat_c(prompt, j++, 'D' );
+                            }
+                            break;
                         }
                         char *p = &PS[i+2];
                         char *p2 = p;
-                        while(*p2 && *p2 != '}') ;
+                        while(*p2 && *p2 != '}')
+                        {
+                            p2++;
+                        }
                         /* cannot find '}. again, forget the date and move along */
                         if(*p2 != '}')
                         {
                             strcat_c(prompt, j++, '\\');
                             strcat_c(prompt, j++, 'D' );
-                            continue;
+                            break;
                         }
                         /* format the date */
                         {
                             /* start an inner scope to avoid a 'switch jumps into scope of identifier with variably modified type' error */
-                            char buf[70];
                             int  fmtlen = p2-p;
-                            char fmt[fmtlen];
-                            strncpy(fmt, p, fmtlen-1);
-                            fmt[fmtlen-1] = '\0';
-                            if(strftime(buf, sizeof(buf), fmt, now))
+                            char fmt[fmtlen+1];
+                            strncpy(fmt, p, fmtlen);
+                            fmt[fmtlen] = '\0';
+                            if(c == '%')        /* replace zsh's extensions with strftime()'s notation */
                             {
-                                strcat(prompt, buf);
-                                j += (fmtlen-1);
+                                for(k = 0; k < fmtlen; k++)
+                                {
+                                    if(fmt[k] == '%')
+                                    {
+                                        switch(fmt[++k])
+                                        {
+                                            case 'f': fmt[k] = 'e'; break;
+                                            case 'K': fmt[k] = 'k'; break;
+                                            case 'L': fmt[k] = 'l'; break;
+                                            /* out of laziness, convert zsh's micro- and nano-secs format to secs since Unix epoch */
+                                            case '.':
+                                            case '1':
+                                            case '2':
+                                            case '3':
+                                            case '4':
+                                            case '5':
+                                            case '6':
+                                            case '7':
+                                            case '8':
+                                            case '9':
+                                                fmt[k] = 's'; break;
+                                        }
+                                    }
+                                }
                             }
-                            else fprintf(stderr, "%s: strftime failed\r\n", SHELL_NAME);
-                            i = (p2-p)+1;
+                            j += get_date(fmt, now);
+                            i += fmtlen+2;
                         }
                         break;
                         
@@ -153,49 +384,119 @@ char *__evaluate_prompt(char *PS)
                          */
                         break;
                         
-                    /* '\h':     the hostname, up to first dot '.' */
+                    /*
+                     * '%m':     the hostname, up to the first dot (zsh)
+                     *           but we won't implement the component count feature - see man zsh for more
+                     */
+                    case 'm':
+                        
+                    /* '\h':     the hostname, up to the first dot '.' */
                     case 'h': ;
-                        gethostname(host, MAXHOSTNAMELEN);
-                        if(strchr(host, '.'))
+                        if((c == '\\' && PS[i] == 'h') || (c == '%' && PS[i] == 'm'))
                         {
-                            char *p = host;
-                            while(*p && *p != '.') strcat_c(prompt, j++, *p++);
+                            gethostname(host, MAXHOSTNAMELEN);
+                            if(strchr(host, '.'))
+                            {
+                                char *p = host;
+                                while(*p && *p != '.')
+                                {
+                                    strcat_c(prompt, j++, *p++);
+                                }
+                            }
+                            else
+                            {
+                                strcat(prompt, host);
+                                j += strlen(host);
+                            }
+                        }
+                        else if(c == '%' && PS[i] == 'h')   /* handle zsh '%h' (history index number) */
+                        {
+                            j += get_histindex();
                         }
                         else
                         {
-                            strcat(prompt, host);
-                            j += strlen(host);
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
                         }
                         break;
+                        
+                    /* '%M':     the hostname (zsh) */
+                    case 'M':
                         
                     /* '\H':     the hostname */
                     case 'H':
-                        gethostname(host, MAXHOSTNAMELEN);
-                        strcat(prompt, host);
-                        j += strlen(host);
-                        break;
-                        
-                    /* '\j':     the number of current jobs */
-                    case 'j':
-                        sprintf(jobs, "%d", get_total_jobs());
-                        strcat(prompt, jobs);
-                        j += strlen(jobs);
-                        break;
-                        
-                    /* '\l':     The basename of the shell's terminal device name */
-                    case 'l':
-                        if(isatty(0))
+                        if((c == '\\' && PS[i] == 'H') || (c == '%' && PS[i] == 'M'))
                         {
-                            s = ttyname(0);
-                            if(s) s = basename(s);
-                            strcat(prompt, s);
-                            j += strlen(s);
+                            gethostname(host, MAXHOSTNAMELEN);
+                            strcat(prompt, host);
+                            j += strlen(host);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
                         }
                         break;
                         
-                    /* '\n':     (really you need an explanation?) */
-                    case 'n':
-                        strcat_c(prompt, j++, '\n');
+                    /* '%i':     line number of current command (zsh) */
+                    case 'i':
+                    case 'I':   /* zsh has differences between %i and %I. we treat them the same here */
+                        if(c == '%')
+                        {
+                            s = get_shell_varp("LINENO", "0");
+                            strcat(prompt, s);
+                            j += strlen(s);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
+                        }
+                        break;
+                        
+                    /*
+                     * '\j':     the number of current jobs.
+                     *           zsh has '%j', which is similar. we handle both cases here.
+                     */
+                    case 'j':
+                        sprintf(buf, "%d", get_total_jobs());
+                        strcat(prompt, buf);
+                        j += strlen(buf);
+                        break;
+                        
+                    /* '\l':     The basename of the shell's terminal device name
+                     *           '%l' does the same in zsh, except it removes /dev/ and /dev/tty if the
+                     *           terminal device name starts with either of the two.
+                     */
+                    case 'l':
+                        if(c == '\\')
+                        {
+                            j += get_ttyname(0);
+                        }
+                        else if(c == '%')
+                        {
+                            j += get_ttyname(1);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
+                        }
+                        break;
+                        
+                    /* '%L':     the value of $SHLVL (zsh) */
+                    case 'L':
+                        if(c == '%')
+                        {
+                            s = get_shell_varp("SHLVL", "0");
+                            strcat(prompt, s);
+                            j += strlen(s);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
+                        }
                         break;
                         
                     /* '\r':     (really you need an explanation?) */
@@ -206,54 +507,121 @@ char *__evaluate_prompt(char *PS)
                     /* '\s':     the name of the shell 'basename $0' */
                     case 's': ;
                         s = get_shell_varp("0", NULL);
-                        if(!s) break;
+                        if(!s)
+                        {
+                            break;
+                        }
+                        s = basename(s);
+                        if(!s)
+                        {
+                            break;
+                        }
                         strcat(prompt, s);
                         j += strlen(s);
                         break;
                         
-                    /* '\t':     the time, in 24-hour HH:MM:SS format */
                     case 't':
-                        sprintf(buf, "%d:%d:%d", now->tm_hour, now->tm_min, now->tm_sec);
-                        strcat(prompt, buf);
-                        j += strlen(buf);
+                        if(c == '%')        /* zsh's '%t' (prints the time in 12-hr AM/PM format) */
+                        {
+                            j += get_date("%r", now);
+                        }
+                        else                /* '\t':     the time, in 24-hour HH:MM:SS format */
+                        {
+                            j += get_date("%T", now);
+                        }
                         break;
                         
-                    /* '\T':     the time, in 12-hour HH:MM:SS format */
                     case 'T':
-                        sprintf(buf, "%d:%d:%d", (now->tm_hour%12), now->tm_min, now->tm_sec);
-                        strcat(prompt, buf);
-                        j += strlen(buf);
+                        if(c == '%')        /* zsh's '%T' (prints the time in 24-hr format, with no seconds) */
+                        {
+                            j += get_date("%R", now);
+                        }
+                        else                /* '\T':     the time, in 12-hour HH:MM:SS format */
+                        {
+                            j += get_date("%I:%M:%S", now);
+                        }
                         break;
                         
                     /* '\@':     the time, in 12-hour AM/PM format */
                     case '@': ;
-                        int hour = now->tm_hour%12;
-                        sprintf(buf, "%d:%d:%d %s", hour, now->tm_min, now->tm_sec,
-                                now->tm_hour < 12 ? "AM" : "PM");
-                        strcat(prompt, buf);
-                        j += strlen(buf);
+                        j += get_date("%r", now);
                         break;
                         
                     /* '\A':     the time, in 24-hour HH:MM format */
                     case 'A':
-                        sprintf(buf, "%d:%d", now->tm_hour, now->tm_min);
-                        strcat(prompt, buf);
-                        j += strlen(buf);
+                        j += get_date("%R", now);
                         break;
                         
-                    /* '\u':     the username of the current user */
-                    case 'u':
-                        user = get_shell_varp("USER", NULL);
-                        if(user && *user)
+                    /*
+                     * '%N':     the name of the currently executing source file or function (zsh)
+                     * '%x':     similar to %N, except that function and eval command names are not printed.
+                     *           instead, print the name of the file where they were defined.
+                     */
+                    case 'N':
+                        if(c == '%')
                         {
-                            strcat(prompt, user);
-                            j += strlen(user);
+                            if(src->srctype == SOURCE_FUNCTION || src->srctype == SOURCE_EVAL)
+                            {
+                                /* use $0, as it should hold the name of the function or eval command */
+                                s = get_shell_varp("0", SHELL_NAME);
+                                strcat(prompt, s);
+                                j += strlen(s);
+                                break;
+                            }
+                        }
+                        /* NOTE: fall through to handle '%N' if the current command is not a function or eval cmd */
+                        __attribute__((fallthrough));
+                        
+                    case 'x':
+                        if(c == '%')
+                        {
+                            if(src->srcname)
+                            {
+                                strcat(prompt, src->srcname);
+                                j += strlen(src->srcname);
+                            }
+                            else
+                            {
+                                /* if no file or function name, use $0 (as in zsh) */
+                                s = get_shell_varp("0", SHELL_NAME);
+                                strcat(prompt, s);
+                                j += strlen(s);
+                            }
                         }
                         else
                         {
-                            strcat_c(prompt, j++, '\\' );
+                            strcat_c(prompt, j++, c    );
                             strcat_c(prompt, j++, PS[i]);
                         }
+                        break;
+                        
+                    /* '\n':     (really you need an explanation?) */
+                    case 'n':
+                        if(c == '\\')
+                        {
+                            strcat_c(prompt, j++, '\n');
+                            break;
+                        }
+                        /* NOTE: fall through to handle '%n' */
+                        __attribute__((fallthrough));
+                        
+                    /*
+                     * '\u':     the username of the current user. zsh has '%n', which prints
+                     *           the value of $USERNAME (we're using $USER here - same thing).
+                     */
+                    case 'u':
+                        if((c == '\\' && PS[i] == 'u') || (c == '%' && PS[i] == 'n'))
+                        {
+                            user = get_shell_varp("USER", NULL);
+                            if(user && *user)
+                            {
+                                strcat(prompt, user);
+                                j += strlen(user);
+                                break;
+                            }
+                        }
+                        strcat_c(prompt, j++, c    );
+                        strcat_c(prompt, j++, PS[i]);
                         break;
                         
                     /* '\v':     shell version */
@@ -268,24 +636,14 @@ char *__evaluate_prompt(char *PS)
                      *           '$PROMPT_DIRTRIM' variable)
                      */
                     case 'w':
-                        if(pwd)
+                        if(c == '\\')
                         {
-                            struct symtab_entry_s *home = get_symtab_entry("HOME");
-                            if(home && home->val)
-                            {
-                                if(strcmp(pwd, home->val) == 0)
-                                {
-                                    strcat_c(prompt, j++, '~');
-                                    break;
-                                }
-                            }
-                            strcat(prompt, pwd);
-                            j += strlen(pwd);
+                            sprintf(buf, "\\%c", PS[i]);
+                            j += get_pwd(pwd, buf, 0, 1);
                         }
-                        else
+                        else        /* zsh's '%w' (prints the date in day-dd format) */
                         {
-                            strcat_c(prompt, j++, '\\' );
-                            strcat_c(prompt, j++, PS[i]);
+                            j += get_date("%a-%d", now);
                         }
                         break;
                         
@@ -295,38 +653,54 @@ char *__evaluate_prompt(char *PS)
                      *  TODO:    use the $PROMPT_DIRTRIM variable as bash does.
                      */
                     case 'W':
-                        if(pwd)
+                        if(c == '\\')
                         {
-                            struct symtab_entry_s *home = get_symtab_entry("HOME");
-                            if(home && home->val)
-                            {
-                                if(strcmp(pwd, home->val) == 0)
-                                {
-                                    strcat_c(prompt, j++, '~');
-                                    break;
-                                }
-                            }
-                            char *slash = strrchr(pwd, '/');
-                            if(slash)
-                            {
-                                /* PWD is sys root? */
-                                if((slash == pwd) && (pwd[1] == '\0')) strcat_c(prompt, j++, '/');
-                                else
-                                {
-                                    strcat(prompt, slash+1);
-                                    j += strlen(slash+1);
-                                }
-                            }
-                            else
-                            {
-                                strcat(prompt, pwd);
-                                j += strlen(pwd);
-                            }
+                            sprintf(buf, "\\%c", PS[i]);
+                            j += get_pwd(pwd, buf, 1, 1);
+                        }
+                        else        /* zsh's '%W' (prints the date in mm/dd/yy format) */
+                        {
+                            j += get_date("%D", now);
                         }
                         break;
                         
-                    /* '\#':     the command number of this command */
+                    /*
+                     * '%y':     the name of the tty device without the /dev/ prefix (zsh).
+                     *           we simply use the basename of the tty device.
+                     */
+                    case 'y':
+                        if(c == '%')
+                        {
+                            j += get_ttyname(0);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
+                        }
+                        break;
+                        
                     case '#':
+                        /*
+                         * handle zsh's '%#' escape sequence. if the shell is running with privileges (we simply
+                         * check if it's running as root), print #, otherwise print %.
+                         */
+                        if(c == '%')
+                        {
+                            if(isroot())
+                            {
+                                strcat_c(prompt, j++, '#');
+                            }
+                            else
+                            {
+                                strcat_c(prompt, j++, '%');
+                            }
+                            break;
+                        }
+                        __attribute__((fallthrough));
+                        
+                        /* '\#':     the command number of this command */
+
                         /*
                          * we currently use the same number as that of the history list. we should
                          * maintain a separate list for the newly entered commands.
@@ -334,11 +708,39 @@ char *__evaluate_prompt(char *PS)
                          * TODO: Add this.
                          */
                         
-                    /* '\!':     the history number of this command */
+                    /*
+                     * '\!':     the history number of this command.
+                     *           zsh has '%!', which is similar. we handle both cases here.
+                     */
                     case '!':
-                        sprintf(buf, "%d", cmd_history_end);
-                        strcat(prompt, buf);
-                        j += strlen(buf);
+                        j += get_histindex();
+                        break;
+                        
+                    case '*':
+                        if(c == '%')        /* zsh's '%*' (prints the time in 24-hr format, with seconds) */
+                        {
+                            j += get_date("%T", now);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
+                        }
+                        break;
+                        
+                    /* '%?':     exit status of last command executed (zsh) */
+                    case '?':
+                        if(c == '%')
+                        {
+                            s = get_shell_varp("?", "0");
+                            strcat(prompt, s);
+                            j += strlen(s);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
+                        }
                         break;
                         
                     /* '\$':     if superuser, then '#', else '$' */
@@ -349,10 +751,19 @@ char *__evaluate_prompt(char *PS)
                          * the root user.
                          */
                         s = get_shell_varp("PROMPTCHARS", "$#");
-                        if(!s || strlen(s) != 2) s = "$#";
+                        if(!s || strlen(s) != 2)
+                        {
+                            s = "$#";
+                        }
                         
-                        if(isroot()) strcat_c(prompt, j++, s[1]);
-                        else         strcat_c(prompt, j++, s[0]);
+                        if(isroot())
+                        {
+                            strcat_c(prompt, j++, s[1]);
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, s[0]);
+                        }
                         break;
                         
                     /* '\[':     Begin a sequence of non-printing characters.
@@ -379,6 +790,41 @@ char *__evaluate_prompt(char *PS)
                          */
                         break;
                         
+                    case '~':
+                    case '/':
+                        if(c == '%')
+                        {
+                            sprintf(buf, "%%%c", PS[i]);
+                            if(PS[i] == '/')    /* handle zsh '%/' (full pwd path with no tilde substitution) */
+                            {
+                                j += get_pwd(pwd, buf, 0, 0);
+                            }
+                            else                /* handle zsh '%~' (full pwd path with tilde substitution) */
+                            {
+                                j += get_pwd(pwd, buf, 0, 1);
+                            }
+                        }
+                        else
+                        {
+                            strcat_c(prompt, j++, c    );
+                            strcat_c(prompt, j++, PS[i]);
+                        }
+                        break;
+                        
+                    /* recognize these two if the escape sequence begins with '%' */
+                    case '%':                           /* %% */
+                    case ')':                           /* %) */
+                        if(c == '%')
+                        {
+                            strcat_c(prompt, j++, PS[i]);
+                            break;
+                        }
+                        /*
+                         * NOTE: fall through to the next case.
+                         * WARNING: DO NOT put any intervening cases (or a break statement) here!
+                         */
+                        __attribute__((fallthrough));
+                        
                     /********************************************/
                     /* none of the above                        */
                     /********************************************/
@@ -387,8 +833,14 @@ char *__evaluate_prompt(char *PS)
                         if(is_octal(PS[i]))
                         {
                             int octal = PS[i]-'0';
-                            if(is_octal(PS[i+1])) octal = (octal*8) + (PS[++i]-'0');
-                            if(is_octal(PS[i+1])) octal = (octal*8) + (PS[++i]-'0');
+                            if(is_octal(PS[i+1]))
+                            {
+                                octal = (octal*8) + (PS[++i]-'0');
+                            }
+                            if(is_octal(PS[i+1]))
+                            {
+                                octal = (octal*8) + (PS[++i]-'0');
+                            }
                             strcat_c(prompt, j++, octal);
                         }
                         else
@@ -400,26 +852,37 @@ char *__evaluate_prompt(char *PS)
                 }
                 break;
                 
+            /*
+             * zsh has an option, PROMPT_BANG, which determines whether we substitute bangs '!'
+             * during prompt expansion. as we're trying to comply with POSIX as much as possible,
+             * we enable this option by default (POSIX doesn't actually specify this option).
+             */
             case '!': /* valid only for PS1 */
+                if(!optionx_set(OPTION_PROMPT_BANG))
+                {
+                    strcat_c(prompt, j++, PS[i]);
+                    break;
+                }
                 i++;
-                if(PS[i] == '!') strcat_c(prompt, j++, '!');
+                if(PS[i] == '!')
+                {
+                    strcat_c(prompt, j++, '!');
+                }
                 else
                 {
                     /* 
                      * we should replace '!' with history index of the next command, 
-                     *  as per POSIX. They say:
+                     * as per POSIX. They say:
                      *     "The shell shall replace each instance of the character '!' in 
                      *      PS1 with the history file number of the next command to be 
                      *      typed."
                      */
-                    int hist_next = cmd_history_end;
-                    char str[32];
-                    sprintf(str, "%d", hist_next);
-                    strcat(prompt, str);
-                    j += strlen(str);
+                    sprintf(buf, "%d", cmd_history_end);
+                    strcat(prompt, buf);
+                    j += strlen(buf);
                 }
                 break;
-
+                
             default:
                 strcat_c(prompt, j++, PS[i]);
                 break;
@@ -427,9 +890,9 @@ char *__evaluate_prompt(char *PS)
     } while(++i < PS_len);
     
     /************************************************
-     * now do POSIX style on the prompt. that means
-     * parameter expansion, command substitution,
-     * arithmetic expansion, and quote removal.
+     * now do POSIX style on the prompt. that means parameter expansion, command
+     * substitution, arithmetic expansion, and quote removal (but don't remove
+     * whitespace chars).
      ************************************************/
     return word_expand_to_str(prompt);
 }
@@ -439,10 +902,19 @@ char *__evaluate_prompt(char *PS)
  */
 void repeat_first_char(char *PS)
 {
-    if(!PS || !*PS) return;
+    if(!PS || !*PS)
+    {
+        return;
+    }
     int count = get_callframe_count();
-    if(count <= 0) return;
-    while(count--) putchar(*PS);
+    if(count <= 0)
+    {
+        return;
+    }
+    while(count--)
+    {
+        putchar(*PS);
+    }
 }
 
 
@@ -467,16 +939,28 @@ void evaluate_prompt(char *which)
             {
                 strcpy(prompt, "$ ");      /* default PS1 */
                 if(isroot())
+                {
                     prompt[0] = '#';       /* default PS1 for root */
+                }
                 else
+                {
                     prompt[0] = '$';       /* default PS1 for non-root */
+                }
             }
             else if(which[2] == '2')
-                 prompt[0] = '>';           /* default PS2 */
-            else prompt[0] = '+';           /* default PS4 */
+            {
+                prompt[0] = '>';           /* default PS2 */
+            }
+            else
+            {
+                prompt[0] = '+';           /* default PS4 */
+            }
         }
         set_terminal_color(COL_WHITE, COL_DEFAULT);
-        if(which[2] == '3') repeat_first_char(prompt);
+        if(which[2] == '4')
+        {
+            repeat_first_char(prompt);
+        }
         fprintf(stderr, "%s", prompt);
         return;
     }
@@ -486,19 +970,30 @@ void evaluate_prompt(char *which)
     if(optionx_set(OPTION_PROMPT_VARS))
     {
         char *pr = __evaluate_prompt(PS);
-        if(!pr) return;
-        if(which[2] == '3') repeat_first_char(pr);
+        if(!pr)
+        {
+            return;
+        }
+        if(which[2] == '4')
+        {
+            repeat_first_char(pr);
+        }
         fprintf(stderr, "%s", pr);
         free(pr);
     }
     else
     {
-        if(which[2] == '3') repeat_first_char(PS);
+        if(which[2] == '4')
+        {
+            repeat_first_char(PS);
+        }
         fprintf(stderr, "%s", PS);
     }
 }
 
-/* print command line prompt */
+/* 
+ * print the primary prompt $PS1.
+ */
 void print_prompt()
 {
     /* command to execute before printing $PS1 (bash) */
@@ -510,19 +1005,25 @@ void print_prompt()
     evaluate_prompt(PS1);
 }
 
-/* print secondary prompt */
+/*
+ * print secondary prompt $PS2.
+ */
 void print_prompt2()
 {
     evaluate_prompt(PS2);
 }
 
-/* print select prompt */
+/*
+ * print the select loop prompt $PS3.
+ */
 void print_prompt3()
 {
     evaluate_prompt(PS3);
 }
 
-/* print 'execution trace' prompt */
+/*
+ * print 'execution trace' prompt $PS4.
+ */
 void print_prompt4()
 {
     evaluate_prompt(PS4);
