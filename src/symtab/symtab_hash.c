@@ -29,11 +29,12 @@
 #include "../debug.h"
 #include "symtab.h"
 
-struct symtab_stack_s symtab_stack;
-int symtab_level;
+struct symtab_stack_s symtab_stack;     /* the symbol tables stack */
+int    symtab_level;                    /* current level in the stack */
 
 /*
- * all defined in string_hash.c.
+ * we will use FNV-1a hashing.. the following variables and functions implement
+ * this hashing function.. all of the following are defined in string_hash.c.
  */
 extern const uint32_t fnv1a_prime;
 extern const uint32_t fnv1a_seed ;
@@ -41,13 +42,18 @@ extern uint32_t fnv1a_hash_byte(unsigned char b, uint32_t hash);
 extern uint32_t fnv1a(char *text, uint32_t hash);
 
 /*
- * TODO: If you want to use another hashing algorithm,
- *       change the function call to fnv1a() to any other 
- *       function of your liking.
+ * calculate (hash) a string of text to obtain the index of its bucket in the
+ * hash table.. returns the hashed index.
+ * 
+ * TODO: If you want to use another hashing algorithm, change the function
+ *       call to fnv1a() to any other function of your liking.
  */
 uint32_t calc_symhash(struct symtab_s *table, char *text)
 {
-    if(!table || !text) return 0;
+    if(!table || !text)
+    {
+        return 0;
+    }
     return fnv1a(text, fnv1a_seed) % table->size;
 }
 
@@ -55,26 +61,37 @@ uint32_t calc_symhash(struct symtab_s *table, char *text)
  * Functions for manipulating hash tables.
  *****************************************/
 
+/*
+ * allocate a new hash table and initialize its structure.
+
+ * returns the table struct, or exits the shell in error if the table
+ * could not be allocated.
+ */
 struct symtab_s *alloc_hash_table()
 {
     struct symtab_s *table = malloc(sizeof(struct symtab_s));
     if(!table)
     {
-        exit_gracefully(EXIT_FAILURE, "Fatal error: No memory for global symbol table");
+        exit_gracefully(EXIT_FAILURE, "fatal error: not enough memory for allocating the symbol table");
     }
-    table->size  = HASHTABLE_INIT_SIZE;
-    table->used  = 0;
+    table->size  = HASHTABLE_INIT_SIZE;     /* start with default table size */
+    table->used  = 0;                       /* empty buckets list */
     size_t itemsz = HASHTABLE_INIT_SIZE * sizeof(struct symtab_entry_s *);
-    table->items = malloc(itemsz);
+    table->items = malloc(itemsz);          /* alloc space for buckets */
     if(!table->items)
     {
         free(table);
-        exit_gracefully(EXIT_FAILURE, "Fatal error: No memory for global symbol table");
+        exit_gracefully(EXIT_FAILURE, "fatal error: not enough memory for allocating the symbol table");
     }
-    memset(table->items, 0, itemsz);
+    memset(table->items, 0, itemsz);        /* init buckets list */
     return table;
 }
 
+
+/*
+ * initialize the symbol table stack.. called on shell startup..
+ * does not return.. if there is an error, the shell exits.
+ */
 void init_symtab()
 {
     struct symtab_s *table = alloc_hash_table();
@@ -86,6 +103,13 @@ void init_symtab()
     symtab_stack.symtab_list[0] = table;
 }
 
+
+/*
+ * alloc memory for a new symbol table structure and give it the passed level.
+ * returns a pointer to the newly alloc'ed symbol table.. doesn't return in case
+ * of error, as this function calls alloc_hash_table() and the latter doesn't
+ * return on error.
+ */
 struct symtab_s *new_symtab(int level)
 {
     struct symtab_s *table = alloc_hash_table();
@@ -93,13 +117,21 @@ struct symtab_s *new_symtab(int level)
     return table;
 }
 
+
+/*
+ * push a symbol table on top the stack.
+ */
 void symtab_stack_add(struct symtab_s *symtab)
 {
     symtab_stack.symtab_list[symtab_stack.symtab_count++] = symtab;
     symtab_stack.local_symtab = symtab;
 }
 
-/* create an empty symbol table and push on top of stack */
+
+/*
+ * create an empty symbol table and push on top the stack.
+ * returns the newly pushed symbol table.
+ */
 struct symtab_s *symtab_stack_push()
 {
     struct symtab_s *st = new_symtab(++symtab_level);
@@ -107,66 +139,113 @@ struct symtab_s *symtab_stack_push()
     return st;
 }
 
-/* push an existing symbol table on top of stack */
-struct symtab_s *symtab_stack_pushe(struct symtab_s *st)
-{
-    ++symtab_level;
-    symtab_stack_add(st);
-    return st;
-}
 
+/*
+ * pop the symbol table on top the stack, which we use as the local symbol
+ * table.. this happens when we finish executing a builtin utility or shell
+ * function, in order to exit the local scope and return to the global scope.
+ * returns the popped symbol table, or NULL if the stack is empty.
+ */
 struct symtab_s *symtab_stack_pop()
 {
     /* can't pop past the global table */
-    if(symtab_stack.symtab_count == 0) return (struct symtab_s *)NULL;
+    if(symtab_stack.symtab_count == 0)
+    {
+        return (struct symtab_s *)NULL;
+    }
+    /* get the table on top the stack (the last table) */
     struct symtab_s *st = symtab_stack.symtab_list[symtab_stack.symtab_count-1];
-    symtab_stack.symtab_list[--symtab_stack.symtab_count] = 0;
+    /* remove it from the stack */
+    symtab_stack.symtab_list[--symtab_stack.symtab_count] = NULL;
     symtab_level--;
+    /* empty stack. adjust symbol table pointers */
     if(symtab_stack.symtab_count == 0)
     {
         symtab_stack.local_symtab  = (struct symtab_s *)NULL;
         symtab_stack.global_symtab = (struct symtab_s *)NULL;
     }
-    else symtab_stack.local_symtab = symtab_stack.symtab_list[symtab_stack.symtab_count-1];
+    else
+    {
+        /* stack not empty. adjust the local symbol table pointer */
+        symtab_stack.local_symtab = symtab_stack.symtab_list[symtab_stack.symtab_count-1];
+    }
     return st;
 }
 
+
+/*
+ * release the memory used to store a symbol table structure, as well as the
+ * memory used to store the strings of key/value pairs we have stored in
+ * the table.
+ */
 void free_symtab(struct symtab_s *symtab)
 {
-    if(!symtab || !symtab->items) return;
+    if(!symtab || !symtab->items)
+    {
+        return;
+    }
+    /* check if there are used buckets in the hash table */
     if(symtab->used)
     {
         struct symtab_entry_s **h1 = symtab->items;
         struct symtab_entry_s **h2 = symtab->items + symtab->size;
+        /* iterate through the buckets list */
         for( ; h1 < h2; h1++)
         {
+            /* each bucket contains a linked list of items. iterate through them */
             struct symtab_entry_s *entry = *h1;
             while(entry)
             {
                 struct symtab_entry_s *next = entry->next;
-                if(entry->name) free_malloced_str(entry->name);
-                if(entry->val ) free_malloced_str(entry->val );
-                if(entry->func_body) free_node_tree(entry->func_body);
+                /* free the key string */
+                if(entry->name)
+                {
+                    free_malloced_str(entry->name);
+                }
+                /* free the value string */
+                if(entry->val)
+                {
+                    free_malloced_str(entry->val);
+                }
+                /* if it's a function, free its function body */
+                if(entry->func_body)
+                {
+                    free_node_tree(entry->func_body);
+                }
+                /* free the entry itself and move to the next entry */
                 free(entry);
                 entry = next;
             }
         }
     }
+    /* free the buckets list */
     free(symtab->items);
+    /* and the symbol table itself */
     free(symtab);
 }
 
 
+/*
+ * add a string to a symbol table.. creates an entry for the string, adds it to
+ * the table, and then returns the new entry.. in case of insufficient memory,
+ * this function exits the shell instead of returning NULL.
+ */
 struct symtab_entry_s *__add_to_symtab(char *symbol, struct symtab_s *st)
 {
-    if(!st) return NULL;
+    if(!st)
+    {
+        return NULL;
+    }
+    /* alloc memory for the struct */
     struct symtab_entry_s *entry = (struct symtab_entry_s *)malloc
                                     (sizeof(struct symtab_entry_s));
     if(!entry)
     {
         exit_gracefully(EXIT_FAILURE, "Fatal error: No memory for new symbol table entry");
     }
+    /* and initialize it */
     memset((void *)entry, 0, sizeof(struct symtab_entry_s));
+    /* get an malloc'd copy of the key string */
     entry->name = get_malloced_str(symbol);
     /*
      * we are acting on the premise that a newly added variable
@@ -183,47 +262,93 @@ struct symtab_entry_s *__add_to_symtab(char *symbol, struct symtab_s *st)
     return entry;
 }
 
+
+/*
+ * remove an entry from a symbol table, given pointers to the entry and the
+ * symbol table.
+ */
 void __rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab)
 {
+    /* calc the key hash and get the table's bucket */
     int index = calc_symhash(symtab, entry->name);
     struct symtab_entry_s *e = symtab->items[index];
     struct symtab_entry_s *p = NULL;
+    /*
+     * as the bucket can contain more than one entry, our target entry can
+     * be anywhere in the bucket's linked list.. iterate through the items
+     * until we find our entry.
+     */
     while(e)
     {
         if(e == entry)
         {
-            /* if this is the first item in the list, adjust the table
+            /*
+             * if this is the first item in the list, adjust the table
              * pointer to point to the next item. Otherwise, ajust
              * the previous item's pointer to point to the next item.
              */
-            if(!p) symtab->items[index] = e->next;
-            else   p->next = e->next;
-            /* free the memory used by this entry */
-            if(entry->val) free_malloced_str(entry->val);
-            if(entry->func_body) free_node_tree(entry->func_body);
+            if(!p)
+            {
+                symtab->items[index] = e->next;
+            }
+            else
+            {
+                p->next = e->next;
+            }
+            /* free the memory used by this entry's value */
+            if(entry->val)
+            {
+                free_malloced_str(entry->val);
+            }
+            /* if it's a function, free the function body */
+            if(entry->func_body)
+            {
+                free_node_tree(entry->func_body);
+            }
+            /* free the key string */
             free_malloced_str(entry->name);
+            /* free the entry itself */
+            free(entry);
+            /* decrement the count of used entries in the table */
             symtab->used--;
             break;
         }
+        /* check the next entry */
         p = e, e = e->next;
     }
-    free(entry);
 }
 
+
+/*
+ * remove an entry from the local symbol table.
+ */
 void rem_from_symtab(struct symtab_entry_s *entry)
 {
-    struct symtab_s *symtab = symtab_stack.local_symtab;
-    __rem_from_symtab(entry, symtab);
+    __rem_from_symtab(entry, symtab_stack.local_symtab);
 }
 
+
+/*
+ * add a string to the local symbol table.. first checks if the string is already
+ * in the table or not, so as not to duplicate an entry.. if not, creates an entry
+ * for the string, adds it to the table, and then returns the new entry.. in case of
+ * insufficient memory, this function exits the shell instead of returning NULL.
+ */
 struct symtab_entry_s *add_to_symtab(char *symbol)
 {
-    if(!symbol || *symbol == '\0') return 0;
+    if(!symbol || *symbol == '\0')
+    {
+        return 0;
+    }
     struct symtab_s *st = symtab_stack.local_symtab;
-
     /* do not duplicate an existing entry */
     struct symtab_entry_s *entry = NULL;
-    if((entry = __do_lookup(symbol, st))) return entry;
+    if((entry = __do_lookup(symbol, st)))
+    {
+        /* entry exists. return it */
+        return entry;
+    }
+    /* entry does not exists. add it */
     entry = __add_to_symtab(symbol, st);
     /* local var inherits value and attribs of global var of the same name (bash) */
     if(optionx_set(OPTION_LOCAL_VAR_INHERIT) && st != symtab_stack.global_symtab)
@@ -236,57 +361,118 @@ struct symtab_entry_s *add_to_symtab(char *symbol)
             symtab_entry_setval(entry, entry2->val);
         }
     }
+    /* return the new entry */
     return entry;
 }
 
+
+/*
+ * search for a string in a symbol table.
+ * returns the entry for the given string, or NULL if its not found.
+ */
 struct symtab_entry_s *__do_lookup(char *str, struct symtab_s *symtab)
 {
-    if(!str || !symtab) return (struct symtab_entry_s *)NULL;
+    if(!str || !symtab)
+    {
+        return (struct symtab_entry_s *)NULL;
+    }
+    /* hash the key string */
     int index = calc_symhash(symtab, str);
     struct symtab_entry_s *entry = symtab->items[index];
+    /* search the bucket's linked list for our string */
     while(entry)
     {
-        if(is_same_str(entry->name, str)) return entry;
+        /* found the string */
+        if(is_same_str(entry->name, str))
+        {
+            return entry;
+        }
+        /* no match. check the next entry in the bucket */
         entry = entry->next;
     }
+    /* string not found in the table. return NULL */
     return (struct symtab_entry_s *)NULL;
 }
 
+/*
+ * search for a string in the local symbol table.
+ * returns the entry for the given string, or NULL if its not found.
+ */
 struct symtab_entry_s *get_local_symtab_entry(char *str)
 {
     return __do_lookup(str, symtab_stack.local_symtab);
 }
 
+
+/*
+ * search for a string in the symbol table stack, starting at the top (the local
+ * symbol table), and checking every table, in turn, until we reach the bottom
+ * (the global symbol table.. if the entry is found at any level (any symbol table
+ * in the stack), this entry is returned and the search stops.. otherwise, we check
+ * the table at the higher level, and so on until we reach the global symbol table.
+ *
+ * returns the entry for the given string, or NULL if its not found.
+ */
 struct symtab_entry_s *get_symtab_entry(char *str)
 {
     int i = symtab_stack.symtab_count-1;
     do
     {
+        /* start with the local symtab */
         struct symtab_s *symtab = symtab_stack.symtab_list[i];
+        /* search for the key */
         struct symtab_entry_s *entry = __do_lookup(str, symtab);
-        if(entry) return entry;
-    } while(--i >= 0);
+        /* entry found */
+        if(entry)
+        {
+            return entry;
+        }
+    } while(--i >= 0);      /* move up one level */
+    /* nothing found */
     return (struct symtab_entry_s *)NULL;
 }
 
+
+/*
+ * return a pointer to the local symbol table (this changes as we change
+ * scope by calling functions and builtin utilities).
+ */
 struct symtab_s *get_local_symtab()
 {
     return symtab_stack.local_symtab;
 }
 
+
+/*
+ * return a pointer to the global symbol table (this stays the same as long
+ * as the shell is running).
+ */
 struct symtab_s *get_global_symtab()
 {
     return symtab_stack.global_symtab;
 }
 
+
+/*
+ * return a pointer to the symbol table stack.
+ */
 struct symtab_stack_s *get_symtab_stack()
 {
     return &symtab_stack;
 }
 
+
+/*
+ * set the value string for the given entry, freeing the old entry's value (if any).
+ */
 void symtab_entry_setval(struct symtab_entry_s *entry, char *val)
 {
-    if(entry->val) free_malloced_str(entry->val);
+    /* free old value */
+    if(entry->val)
+    {
+        free_malloced_str(entry->val);
+    }
+    /* new value is NULL */
     if(!val)
     {
         entry->val = NULL;
@@ -295,23 +481,26 @@ void symtab_entry_setval(struct symtab_entry_s *entry, char *val)
     {
         char *val2 = get_malloced_str(val);
         entry->val = val2;
-        if     (flag_set(entry->flags, FLAG_ALLCAPS )) strupper(val2);
-        else if(flag_set(entry->flags, FLAG_ALLSMALL)) strlower(val2);
+        /* FLAG_ALLCAPS means we should transform all letters in value to capital */
+        if(flag_set(entry->flags, FLAG_ALLCAPS))
+        {
+            strupper(val2);
+        }
+        /* FLAG_ALLSMALL means we should transform all letters in value to small */
+        else if(flag_set(entry->flags, FLAG_ALLSMALL))
+        {
+            strlower(val2);
+        }
     }
 }
 
-struct symtab_s *symtab_clone(struct symtab_s *symtab)
-{
-    if(!symtab) return (struct symtab_s *)NULL;
-    struct symtab_s *clone = new_symtab(symtab->level);
-    memcpy((void *)clone, (void *)symtab, sizeof(struct symtab_s));
-    return clone;
-}
 
 /*
- * merge symbol table entries with the global symbol table.
- * useful for builtin utilities that need to merge their
- * local variable definitions with the global pool of shell vars.
+ * merge symbol table entries with the global symbol table.. useful for builtin
+ * utilities that need to merge their local variable definitions with the global
+ * pool of shell variables.. this gives the illusion that builtin utilities and
+ * functions defined their variables at the global level, while allowing these
+ * tools to define their local variable that are not shared with the shell.
  */
 void merge_global(struct symtab_s *symtab)
 {
@@ -323,15 +512,16 @@ void merge_global(struct symtab_s *symtab)
      * is merged with the caller's, and so on until the last command (the first to be executed) finishes
      * execution, in which case its symbol table is merged with the global symbol table.
      */
-    //struct symtab_s *global = get_global_symtab();
     struct symtab_s *global = get_local_symtab();
     if(symtab->used)
     {
         struct symtab_entry_s **h1 = symtab->items;
         struct symtab_entry_s **h2 = symtab->items + symtab->size;
+        /* loop on the symbol table buckets */
         for( ; h1 < h2; h1++)
         {
             struct symtab_entry_s *entry = *h1;
+            /* each bucket has one or more entries. loop through them */
             while(entry)
             {
                 /* don't merge explicitly declared local variables */
@@ -346,46 +536,77 @@ void merge_global(struct symtab_s *symtab)
                     int i;
                     for(i = 0; i < special_var_count; i++)
                     {
-                        if(strcmp(special_vars[i].name, entry->name) == 0) break;
+                        if(strcmp(special_vars[i].name, entry->name) == 0)
+                        {
+                            break;
+                        }
                     }
-                    if(i < special_var_count) set_special_var(entry->name, entry->val);
+                    if(i < special_var_count)
+                    {
+                        set_special_var(entry->name, entry->val);
+                    }
                     else
                     {
+                        /* find the global entry for this local entry */
                         struct symtab_entry_s *gentry = __do_lookup(entry->name, global);
-                        if(!gentry) gentry = __add_to_symtab(entry->name, global);
+                        /* no global entry found. create a new one */
+                        if(!gentry)
+                        {
+                            gentry = __add_to_symtab(entry->name, global);
+                        }
+                        /* overwrite the global entry's value with the local one */
                         if(gentry)
                         {
                             /* don't overwrite readonly variables */
-                            if(!flag_set(gentry->flags, FLAG_READONLY)) symtab_entry_setval(gentry, entry->val);
+                            if(!flag_set(gentry->flags, FLAG_READONLY))
+                            {
+                                symtab_entry_setval(gentry, entry->val);
+                            }
                         }
                     }
                 }
+                /* move on to the next entry */
                 entry = entry->next;
             }
         }
     }
 }
 
+
+/*
+ * return a string that describes the given symbol type.. used in debugging to
+ * help us print debug messages.
+ */
 char *get_symbol_type_str(enum symbol_type type)
 {
     switch(type)
     {
-        case SYM_STR:    return "SYM_STR" ;
-        case SYM_CHR:    return "SYM_CHR" ;
-        case SYM_FUNC:   return "SYM_FUNC";
+        case SYM_STR:
+            return "SYM_STR" ;
+            
+        case SYM_CHR:
+            return "SYM_CHR" ;
+            
+        case SYM_FUNC:
+            return "SYM_FUNC";
     }
     return "UNKNOWN";
 }
 
+
+/*
+ * dump the local symbol table, by printing the symbols, their keys and values.
+ * used in debugging the shell, as well as when we invoke `dump symtab`.
+ */
 void dump_local_symtab()
 {
     struct symtab_s *symtab = symtab_stack.local_symtab;
     int i = 0;
     int indent = symtab->level << 2;
-    fprintf(stderr, "%*sSymbol table [Level %d]:\r\n", indent, " ", symtab->level);
-    fprintf(stderr, "%*s===========================\r\n", indent, " ");
-    fprintf(stderr, "%*s  No               Symbol                    Val\r\n", indent, " ");
-    fprintf(stderr, "%*s------ -------------------------------- ------------\r\n", indent, " ");
+    fprintf(stderr, "%*sSymbol table [Level %d]:\n", indent, " ", symtab->level);
+    fprintf(stderr, "%*s===========================\n", indent, " ");
+    fprintf(stderr, "%*s  No               Symbol                    Val\n", indent, " ");
+    fprintf(stderr, "%*s------ -------------------------------- ------------\n", indent, " ");
     if(symtab->used)
     {
         struct symtab_entry_s **h1 = symtab->items;
@@ -395,11 +616,11 @@ void dump_local_symtab()
             struct symtab_entry_s *entry = *h1;
             while(entry)
             {
-                fprintf(stderr, "%*s[%04d] %-32s '%s'\r\n", indent, " ", 
+                fprintf(stderr, "%*s[%04d] %-32s '%s'\n", indent, " ", 
                         i++, entry->name, entry->val);
                 entry = entry->next;
             }
         }
     }
-    fprintf(stderr, "%*s------ -------------------------------- ------------\r\n", indent, " ");
+    fprintf(stderr, "%*s------ -------------------------------- ------------\n", indent, " ");
 }

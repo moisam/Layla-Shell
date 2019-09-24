@@ -28,10 +28,10 @@
 
 struct symtab_s
 {
-    int    level;
-    int    size;
-    int    used;
-    struct symtab_entry_s **items;
+    int    level;       /* table level (in the stack) */
+    int    size;        /* total # of buckets */
+    int    used;        /* # of used buckets */
+    struct symtab_entry_s **items;  /* the bucket list (pun intended) */
 };
 
 #endif

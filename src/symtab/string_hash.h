@@ -24,26 +24,30 @@
 
 
 #ifndef HASHTABLE_INIT_SIZE
-#define HASHTABLE_INIT_SIZE     256
+#define HASHTABLE_INIT_SIZE     256     /* initial size of the string buffer */
 #endif
 
-
+/* the structure to hold a hashed string */
 struct hashitem_s
 {
-    char   *name;
+    char   *name;               /* string key */
     union
     {
-        char *val;
-        unsigned int refs;   /* used by the string buffer in strbuf.c */
+        char *val;              /* string value */
+        unsigned int refs;      /*
+                                 * number of references to this string.. used by
+                                 * the string buffer in strbuf.c.
+                                 */
     };
-    struct  hashitem_s *next;
+    struct  hashitem_s *next;   /* pointer to the next item */
 };
 
+/* string hash table structure */
 struct hashtab_s
 {
-    int     size;
-    int     used;
-    struct  hashitem_s **items;
+    int     size;               /* maximum number of buckets */
+    int     used;               /* number of used buckets */
+    struct  hashitem_s **items; /* the buckets array */
 };
 
 struct hashtab_s *new_hashtable();
