@@ -38,12 +38,18 @@ enum token_type
         TOKEN_ASSIGNMENT_WORD,
         TOKEN_NAME,
         TOKEN_NEWLINE,
-        TOKEN_IO_NUMBER,
+        TOKEN_IO_NUMBER,        /* number preceding an I/O operator */
         /* POSIX Operators */
-        TOKEN_AND_IF, TOKEN_OR_IF, TOKEN_DSEMI,
-        TOKEN_DLESS, TOKEN_DGREAT, TOKEN_LESSAND, TOKEN_GREATAND,
-        TOKEN_LESSGREAT, TOKEN_DLESSDASH,
-        TOKEN_CLOBBER,
+        TOKEN_AND_IF,           /* '&&' */
+        TOKEN_OR_IF,            /* '||' */
+        TOKEN_DSEMI,            /* ';;' */
+        TOKEN_DLESS,            /* '<<' */
+        TOKEN_DGREAT,           /* '>>' */
+        TOKEN_LESSAND,          /* '<&' */
+        TOKEN_GREATAND,         /* '>&' */
+        TOKEN_LESSGREAT,        /* '<>' */
+        TOKEN_DLESSDASH,        /* '<<-' */
+        TOKEN_CLOBBER,          /* '>|' */
         /* POSIX Shell Keywords */
         TOKEN_KEYWORD_IF,
         TOKEN_KEYWORD_THEN,
@@ -57,14 +63,14 @@ enum token_type
         TOKEN_KEYWORD_WHILE,
         TOKEN_KEYWORD_UNTIL,
         TOKEN_KEYWORD_FOR,
-        TOKEN_KEYWORD_LBRACE,
-        TOKEN_KEYWORD_RBRACE,
-        TOKEN_KEYWORD_BANG,
+        TOKEN_KEYWORD_LBRACE,   /* '{' (yes, that's a POSIX keyword) */
+        TOKEN_KEYWORD_RBRACE,   /* '}' (ditto) */
+        TOKEN_KEYWORD_BANG,     /* '!' (ditto) */
         TOKEN_KEYWORD_IN,
         /* non-POSIX Shell Keywords and Operators */
-        TOKEN_KEYWORD_SELECT,
-        TOKEN_KEYWORD_FUNCTION,
-        TOKEN_KEYWORD_TIME,
+        TOKEN_KEYWORD_SELECT,   /* the 'select' keyword */
+        TOKEN_KEYWORD_FUNCTION, /* the 'function' keyword */
+        TOKEN_KEYWORD_TIME,     /* the 'time' keyword */
         TOKEN_SEMI_AND,         /* ';&'  */
         TOKEN_SEMI_SEMI_AND,    /* ';;&' */
         TOKEN_SEMI_OR,          /* ';|', equivalent in function to ';;&'  */
@@ -73,11 +79,13 @@ enum token_type
         TOKEN_ANDGREAT,         /* '&>'  */
         TOKEN_AND_GREAT_GREAT,  /* '&>>' */
         /* others */
-        TOKEN_OPENBRACE, TOKEN_CLOSEBRACE,
-        TOKEN_PIPE,
-        TOKEN_LESS, TOKEN_GREAT,
-        TOKEN_SEMI,
-        TOKEN_AND,
+        TOKEN_OPENBRACE,        /* '(' */
+        TOKEN_CLOSEBRACE,       /* ')' */
+        TOKEN_PIPE,             /* '|' */
+        TOKEN_LESS,             /* '<' */
+        TOKEN_GREAT,            /* '>' */
+        TOKEN_SEMI,             /* ';' */
+        TOKEN_AND,              /* '&' */
         TOKEN_INTEGER,
         /* special case for ElIf-Else-Fi keywords, used by the parser */
         TOKEN_KEYWORDS_ELIF_ELSE_FI,
@@ -89,27 +97,29 @@ enum token_type
         TOKEN_KEYWORD_NA
 };
 
+/* the token struct that is returned by the lexical scanner */
 struct token_s
 {
-        enum   token_type type;
-        long   lineno, charno;
-        long   linestart;
-        struct source_s *src;
-        int    text_len;
-        char   *text;
+        enum   token_type type;     /* type of token */
+        long   lineno, charno;      /* line and char number where token is found */
+        long   linestart;           /* start of line where token is found (for error msgs) */
+        struct source_s *src;       /* source of input */
+        int    text_len;            /* length of token text */
+        char   *text;               /* token text */
 };
 
+/* the special EOF token, which indicates the end of input */
 extern struct token_s eof_token;
 
+/* functions to manipulate tokes */
 char  *get_token_description(enum token_type type);
 void   set_token_type(struct token_s *tok);
-// void dump_tokens();
 struct token_s *tokenize(struct source_s *src);
 struct token_s *get_current_token();
 struct token_s *get_previous_token();
 struct token_s *dup_token(struct token_s *tok);
 void   free_token(struct token_s *tok);
-int    is_token_of_type(struct token_s *tok, int type);
+int    is_token_of_type(struct token_s *tok, enum token_type type);
 int    is_keyword(char *str);
 int    is_separator_tok(enum token_type type);
 

@@ -29,17 +29,27 @@
 
 struct source_s
 {
-    char *filename;
-    char *buffer;
-    long bufsize;
-    long curline, 		/* current line in source */
-         curchar, 		/* current char in source */
-         curpos,		/* absolute char position in source */
-         curlinestart;	/* absolute start of current line in source */
+    /* values for the srctype field below */
+#define SOURCE_CMDSTR           1
+#define SOURCE_STDIN            2
+#define SOURCE_DOTFILE          3
+#define SOURCE_FIFO             4
+#define SOURCE_EVAL             5
+#define SOURCE_FCCMD            6
+#define SOURCE_EXTERNAL_FILE    7
+#define SOURCE_FUNCTION         8
+    int  srctype;       /* the type of this input source */
+    char *srcname;      /* for functions and external files */
+    char *buffer;       /* the input text */
+    long bufsize;       /* size of the input text */
+    long curline,       /* current line in source */
+         curchar,       /* current char in source */
+         curpos,        /* absolute char position in source */
+         curlinestart;  /* absolute start of current line in source */
     long wstart;        /* start of currently parsed commandline */
 };
 
-
+/* functions to manipulate input sources */
 char peek_char(struct source_s *src);
 char next_char(struct source_s *src);
 char prev_char(struct source_s *src);

@@ -22,12 +22,16 @@
 #ifndef KEYWORDS_H
 #define KEYWORDS_H
 
+#include <stdlib.h>
+
+/* structure to store the shell command language keywords */
 struct keyword_s
 {
-    int   len;
-    char *str;
+    size_t  len;      /* text length */
+    char   *str;      /* keyword text */
 };
 
+/* the shell command language keywords */
 struct keyword_s keywords[] =
 {
     /* POSIX keywords */
@@ -52,9 +56,10 @@ struct keyword_s keywords[] =
     { 8, "function" },
     { 4, "time"     },
 };
-
+/* keyword count */
 static int keyword_count = sizeof(keywords)/sizeof(struct keyword_s);
 
+/* shell command language operators */
 char *operators[] =
 {
     "&&" ,
@@ -69,7 +74,6 @@ char *operators[] =
     ">|" ,
     ">!" ,  /* zsh extension, equivalent to >| */
 };
-
 //static int operator_count = sizeof(operators)/sizeof(char *);
 
 #endif
