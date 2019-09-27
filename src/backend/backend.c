@@ -1792,11 +1792,11 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                 		if(*s == '(')
                 		{
                 		    arg--;
-                            match = strncmp(arg, "))", 2);
+                            match = !strncmp(arg, "))", 2);
                 		}
                 		else
                 		{
-                		    match = strncmp(arg, "]", 1);
+                		    match = !strncmp(arg, "]", 1);
                 		}
                 		/* convert `((expr))` and `$[expr]` to `let "expr"` */
                 		if(match)
