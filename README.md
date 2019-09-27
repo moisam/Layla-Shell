@@ -1,5 +1,6 @@
 # About
-Layla shell is a POSIX-compliant GNU/Linux shell. It aims to implement the
+Layla shell is a GNU/Linux shell that includes features borrowed from
+bash, ksh, tcsh and zsh (to a lesser extent). Layla shell aims to implement the
 full functionality specified in the POSIX Shell & Utilities volume. This
 volume describes the Shell Command Language, the general terminal interface,
 and the builtin utilities of compliant shells. The full POSIX standard is
