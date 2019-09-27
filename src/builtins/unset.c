@@ -52,9 +52,41 @@ int unset(int argc, char *argv[])
     {
         return 0;
     }
-    int i      = 0;
     int is_var = 1;
     int res    = 0;
+    int v = 1, c;
+    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
+    argi = 0;   /* defined in args.c */
+    /*
+     * recognize the options defined by POSIX if we are running in --posix mode,
+     * or all possible options if running in the regular mode.
+     */
+    char *opts = option_set('P') ? "fv" : "fhv";
+    /****************************
+     * process the options
+     ****************************/
+    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    {
+        switch(c)
+        {
+            case 'h':
+                print_help(argv[0], SPECIAL_BUILTIN_UNSET, 0, 0);
+                return 0;
+
+            case 'f':
+                is_var = 0;
+                break;
+
+            case 'v':
+                is_var = 1;
+                break;
+        }
+    }
+    /* unknown option */
+    if(c == -1)
+    {
+        return 2;
+    }
     
     /*
      * pop our local symbol table, so that we will unset variables in the caller's
@@ -63,27 +95,9 @@ int unset(int argc, char *argv[])
      */
     struct symtab_s *symtab = symtab_stack_pop();
     
-    while(++i < argc)
+    for( ; v < argc; v++)
     {
-        char *arg = argv[i];
-        if(arg[0] == '-')
-        {
-            /* arguments are variable names */
-            if(strcmp(arg, "-v") == 0)
-            {
-                is_var = 1;
-                continue;
-            }
-            /* arguments are function names */
-            if(strcmp(arg, "-f") == 0)
-            {
-                is_var = 0;
-                continue;
-            }
-            fprintf(stderr, "%s: unknown option: %s\n", UTILITY, arg);
-            symtab_stack_push(symtab);
-            return 2;
-        }
+        char *arg = argv[v];
         /* check we are not trying to unset one of the special variables */
         if(strlen(arg) == 1)
         {
@@ -102,6 +116,7 @@ int unset(int argc, char *argv[])
                     continue;
             }
         }
+        /* remove the shell variable with the given name */
         if(is_var)
         {
             struct symtab_entry_s *entry;
@@ -112,10 +127,10 @@ int unset(int argc, char *argv[])
                 continue;
             }
             /*
-             * localvar_unset causes variables defined in previous scopes to be unset for the duration
-             * of the current function call. after the call finishes, variables are unmasked, they
-             * retrieve their previous values. we achieve this effect by simply adding a NULL-valued
-             * entry to the local symbol table, masking the global symbol table's entry. we don't remove
+             * 'localvar_unset' causes variables defined in previous scopes to be unset for the duration
+             * of the current function call.. after the call finishes, variables are unmasked, they
+             * retrieve their previous values.. we achieve this effect by simply adding a NULL-valued
+             * entry to the local symbol table, masking the global symbol table's entry.. we don't remove
              * the variable from the local symbol table as this might unmask a global variable with the
              * same name.
              */
@@ -127,7 +142,7 @@ int unset(int argc, char *argv[])
                 }
                 if(entry)
                 {
-                    if(entry->flags & FLAG_READONLY )
+                    if(entry->flags & FLAG_READONLY)
                     {
                         fprintf(stderr, "%s: unable to unset '%s': readonly variable\n", UTILITY, arg);
                         res = 1;
@@ -140,7 +155,7 @@ int unset(int argc, char *argv[])
             {
                 if((entry = get_symtab_entry(arg)))
                 {
-                    if(entry->flags & FLAG_READONLY )
+                    if(entry->flags & FLAG_READONLY)
                     {
                         fprintf(stderr, "%s: unable to unset '%s': readonly variable\n", UTILITY, arg);
                         res = 1;
@@ -148,16 +163,24 @@ int unset(int argc, char *argv[])
                     }
                     rem_from_symtab(entry);
                 }
+                /* now remove the variable/function definition from the environment */
+                if(unsetenv(arg) != 0)
+                {
+                    fprintf(stderr, "%s: unable to unset '%s': %s\n", UTILITY, arg, strerror(errno));
+                    res = 1;
+                }
             }
         }
+        /* remove the shell function with the given name */
         else
         {
             unset_func(arg);
-        }
-        if(unsetenv(arg) != 0)
-        {
-            fprintf(stderr, "%s: unable to unset '%s': %s\n", UTILITY, arg, strerror(errno));
-            res = 1;
+            /* now remove the variable/function definition from the environment */
+            if(unsetenv(arg) != 0)
+            {
+                fprintf(stderr, "%s: unable to unset '%s': %s\n", UTILITY, arg, strerror(errno));
+                res = 1;
+            }
         }
     }
     /*

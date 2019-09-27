@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <sys/wait.h>
 #include "../cmd.h"
+#include "../debug.h"
 
 #define UTILITY         "wait"
 
@@ -219,7 +220,14 @@ read_next2:
     {
         pid = atoi(arg);
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(job->tty_attr && isatty(0))
+        if(pid == 0)
+        {
+            fprintf(stderr, "%s: invalid pid: %s\n", UTILITY, arg);
+            res = 127;
+            goto read_next2;
+        }
+        job = get_job_by_any_pid(pid);
+        if(job && job->tty_attr && isatty(0))
         {
             tcsetattr(0, TCSANOW, job->tty_attr);
         }

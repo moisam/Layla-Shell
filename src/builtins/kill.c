@@ -26,7 +26,7 @@
 #include <errno.h>
 #include <wait.h>
 #include "../cmd.h"
-#include "../signames.h"
+#include "../sig.h"
 #include "../debug.h"
 
 #define UTILITY     "kill"

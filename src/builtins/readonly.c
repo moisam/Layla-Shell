@@ -135,20 +135,16 @@ int readonly(int argc, char *argv[])
     int v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
     argi = 0;   /* defined in args.c */
+    /*
+     * recognize the options defined by POSIX if we are running in --posix mode,
+     * or all possible options if running in the regular mode.
+     */
+    char *opts = option_set('P') ? "p" : "hvp";
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvp", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
     {
-        /*
-         * when in --posix mode, we recognize only the options defined by POSIX: -p.
-         */
-        if(option_set('P') && c != 'p')
-        {
-            fprintf(stderr, "%s: option -%c unrecognized in --posix mode\n", UTILITY, c);
-            c = -1;
-            break;
-        }
         /* parse the option */
         switch(c)
         {

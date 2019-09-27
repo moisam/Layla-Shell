@@ -28,14 +28,15 @@
 #include <errno.h>
 #include "../cmd.h"
 #include "../symtab/string_hash.h"
-#include "../signames.h"
+#include "../sig.h"
 #include "../debug.h"
 
 #define UTILITY             "trap"
 
 /*
  * flag is set when we are executing a trap, to prevent exit() et al. from
- * recuresively calling traps.
+ * recuresively calling traps.. the value of this flag equals the signal
+ * number plus 1, so that EXIT will set this flag to 1, SIGHUP to 2, etc.
  */
 int executing_trap = 0;
 
@@ -185,9 +186,15 @@ void trap_handler(int signum)
     {
         return;
     }
+    /* prevent recursive execution of traps */
+    if(executing_trap == signum+1)
+    {
+        return;
+    }
+    /* execute the trap command */
     if(trap->action_str)
     {
-        executing_trap = 1;
+        executing_trap = signum+1;
         /*
          * POSIX says the action argument shall be processed in a manner equivalent to
          * us calling:
@@ -198,10 +205,9 @@ void trap_handler(int signum)
         eval(2, argv);
         executing_trap = 0;
     }
-    /* make sure we reset the signal handler so no funny business happens */
     if(signum > 0 && signum < ERR_TRAP_NUM)
     {
-        signal(signum, trap_handler);
+        signal_received = 1;
     }
 }
 
@@ -463,34 +469,41 @@ int trap(int argc, char **argv)
                 v++;
                 break;
             }
-            if(strcmp(argv[v], "-h") == 0)
+            /*
+             * as POSIX doesn't define any options for the trap builtin utility,
+             * we don't recognize options in the --posix mode.
+             */
+            if(!option_set('P'))
             {
-                print_help(argv[0], SPECIAL_BUILTIN_TRAP, 0, 0);
-                return 0;
-            }
-            if(strcmp(argv[v], "-v") == 0)
-            {
-                printf("%s", shell_ver);
-                return 0;
-            }
-            if(strcmp(argv[v], "-p") == 0)
-            {
-                purge_traps();
-                return 0;
-            }
-            if(strcmp(argv[v], "-l") == 0)
-            {
-                int i;
-                printf("0\tEXIT\n");
-                for(i = 1; i < total_signames; i++)
+                if(strcmp(argv[v], "-h") == 0)
                 {
-                    printf("%d\t%s\n", i, signames[i]+3);   /* print without the SIG prefix */
+                    print_help(argv[0], SPECIAL_BUILTIN_TRAP, 0, 0);
+                    return 0;
                 }
-                printf("32\tERR\n");
-                printf("33\tCHLD\n");
-                printf("34\tDEBUG\n");
-                printf("35\tRETURN\n");
-                return 0;
+                if(strcmp(argv[v], "-v") == 0)
+                {
+                    printf("%s", shell_ver);
+                    return 0;
+                }
+                if(strcmp(argv[v], "-p") == 0)
+                {
+                    purge_traps();
+                    return 0;
+                }
+                if(strcmp(argv[v], "-l") == 0)
+                {
+                    int i;
+                    printf("0\tEXIT\n");
+                    for(i = 1; i < total_signames; i++)
+                    {
+                        printf("%d\t%s\n", i, signames[i]+3);   /* print without the SIG prefix */
+                    }
+                    printf("32\tERR\n");
+                    printf("33\tCHLD\n");
+                    printf("34\tDEBUG\n");
+                    printf("35\tRETURN\n");
+                    return 0;
+                }
             }
             fprintf(stderr, "%s: unknown option: %s\n", UTILITY, argv[v]);
             return 2;
@@ -635,22 +648,21 @@ int trap(int argc, char **argv)
             goto invalid_trap;
         }
         
-        /* 
-         * POSIX says signals ignored on entry to a non-interactive shell 
-         * cannot be trapped or reset.
-         */
         struct sigaction *default_sigact = get_sigaction(i);
-        if(i > 0 && i < total_signames && !option_set('i') && default_sigact->sa_handler == SIG_IGN)
-        {
-            continue;
-        }
-        /* get a copy of the sigaction struct */
         struct sigaction sigact;
-        sigact.sa_handler = default_sigact->sa_handler;
-        sigact.sa_sigaction = default_sigact->sa_sigaction;
-        sigact.sa_restorer = default_sigact->sa_restorer;
-        sigemptyset(&sigact.sa_mask);
-        sigact.sa_flags = 0;
+        if(i > 0 && i < total_signames)
+        {
+            /*
+             * POSIX says signals ignored on entry to a non-interactive shell
+             * cannot be trapped or reset.
+             */
+            if(!option_set('i') && default_sigact->sa_handler == SIG_IGN)
+            {
+                continue;
+            }
+            sigemptyset(&sigact.sa_mask);
+            sigact.sa_flags = 0;
+        }
         
         /* remove the old action string and set the new one */
         if(trap->action_str)
@@ -664,11 +676,15 @@ int trap(int argc, char **argv)
         {
             /* set action to the default action */
             case ACTION_DEFAULT:
+                /* handle the special traps: EXIT, ERR, DEBUG, CHILD, RETURN */
                 if(i >= ERR_TRAP_NUM || i == 0)
                 {
                     trap->action = ACTION_DEFAULT;
                     break;
                 }
+                /* restore the signal action to the default we've got from our parent process */
+                sigact.sa_handler = default_sigact->sa_handler;
+                sigact.sa_sigaction = default_sigact->sa_sigaction;
                 if(sigaction(i, &sigact, NULL) != 0)
                 {
                     fprintf(stderr, "%s: failed to reset trap to default: %s\n", UTILITY, strerror(errno));
@@ -730,11 +746,13 @@ int trap(int argc, char **argv)
                 
             /* set action to the ignore action */
             case ACTION_IGNORE:
+                /* handle the special traps: EXIT, ERR, DEBUG, CHILD, RETURN */
                 if(i >= ERR_TRAP_NUM || i == 0)
                 {
                     trap->action = ACTION_IGNORE;
                     break;
                 }                
+                /* ignore the signal */
                 sigact.sa_handler = SIG_IGN;
                 if(sigaction(i, &sigact, NULL) != 0)
                 {
@@ -747,13 +765,17 @@ int trap(int argc, char **argv)
                 }
                 break;
                 
+            /* set action to the command execute action */
             case ACTION_EXECUTE:
+                /* handle the special traps: EXIT, ERR, DEBUG, CHILD, RETURN */
                 if(i >= ERR_TRAP_NUM || i == 0)
                 {
                     trap->action = ACTION_EXECUTE;
                     trap->action_str = get_malloced_str(actionstr);
                     break;
                 }
+                /* set the signal handler to our trap function */
+                sigact.sa_handler = trap_handler;
                 if(sigaction(i, &sigact, NULL) != 0)
                 {
                     fprintf(stderr, "%s: failed to set trap: %s\n", UTILITY, strerror(errno));
