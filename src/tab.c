@@ -321,11 +321,42 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
     {
         i--;
     }
+    /* get start of cur word */
+    int endme = 0;
+    while(i != 0)
+    {
+        switch(cmdbuf[i])
+        {
+            case '@':
+            case '~':
+            case '$':
+                endme = 1;
+                break;
+
+            default:
+                if(isspace(cmdbuf[i]))
+                {
+                    if(cmdbuf[i-1]  != '\\')
+                    {
+                        endme = 1;
+                        break;
+                    }
+                }
+                break;
+        }
+        if(endme)
+        {
+            break;
+        }
+        i--;
+    }
+#if 0
     while(!isspace(cmdbuf[i]) && cmdbuf[i] != '@' && 
           cmdbuf[i] != '~' && cmdbuf[i] != '$' && i != 0)
     {
-        i--;   /* get start of cur word */
+        i--;
     }
+#endif
     if(isspace(cmdbuf[i]))
     {
         i++;
@@ -397,12 +428,28 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
     /* copy the word we are about to tab-complete */
     char  tmp[j-i+2];    /* 2 chars for '\0' and possible trailing '*' */
     int   eword = j;
-    strncpy(tmp, cmdbuf+i, j-i);
-    tmp[j-i] = '\0';
     int   res = 0;
     char *cmds[MAX_CMDS];
-    char *p;
+    char *p, *p2, *p3;
     char *comm_prefix = NULL;
+
+    /* copy the word, handling backslash-escaped chars */
+    p  = cmdbuf+i;
+    p2 = tmp;
+    p3 = p+j;
+    while(p < p3)
+    {
+        /* check the backslash is not the last char in the word */
+        if(*p == '\\' && p[1])
+        {
+            /* skip the backslash */
+            p++;
+        }
+        *p2++ = *p++;
+    }
+    *p2 = '\0';
+    //strncpy(tmp, cmdbuf+i, j-i);
+    //tmp[j-i] = '\0';
     
     /*
      * auto-completion for host names.
@@ -623,7 +670,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         }
         glob_t glob;
         char **matches = NULL;
-        char *slash = strchr(tmp, '/');
+        char *slash = strrchr(tmp, '/');
         if(slash)       /* file name has a slash char */
         {
             *slash = '\0';
