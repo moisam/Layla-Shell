@@ -42,9 +42,9 @@ set(CMAKE_C_FLAGS "-Wall -Wextra")
 # the source files
 
 add_executable(lsh   main.c wordexp.c       cmdline.c               helpfunc.c   initsh.c
-                     jobs.c prompt.c        args.c                  params.c  signames.c tab.c
+                     jobs.c prompt.c        args.c                  params.c  sig.c tab.c
                      debug.c                kbdevent2.c             shunt.c      alphalist.c
-                     early_environ.h        cmd.h                   signames.h   braceexp.c
+                     early_environ.h        cmd.h                   sig.h   braceexp.c
                      debug.h                kbdevent.h              cpu.h     ostype.h   vars.c
                      vi.c vi.h vi_keys.c    comptype.h  strbuf.c    popen.c   functab.c
                      scanner/lexical.c      scanner/source.c
