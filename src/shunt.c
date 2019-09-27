@@ -934,9 +934,17 @@ struct symtab_entry_s *get_var(char *s, int *chars)
         s2++;
     }
     int len = s2-ss;
+    /* empty var name */
+    if(len == 0)
+    {
+        *chars = s2-s;
+        return NULL;
+    }
+    /* copy the name */
     char name[len+1];
     strncpy(name, ss, len);
     name[len] = '\0';
+    /* get the symbol table entry for that var */
     struct symtab_entry_s *e = get_symtab_entry(name);
     if(!e)
     {
@@ -980,10 +988,39 @@ char *arithm_expand(char *__expr)
     struct  op_s *op     = NULL;
     int     n1, n2;
     struct  op_s *lastop = &startop;
-    char *baseexp = __expr;
-    nopstack = 0; nnumstack = 0; error = 0;
-    expr = __expr;
+    /*
+     * get a copy of __expr without the $(( and )).
+     */
+    int baseexp_len = strlen(__expr);
+    char *baseexp = malloc(baseexp_len+1);
+    if(!baseexp)
+    {
+        fprintf(stderr, "%s: insufficient memory for arithmetic expansion\n", SHELL_NAME);
+        return NULL;
+    }
+    /* lose the $(( */
+    if(__expr[0] == '$' && __expr[1] == '(')
+    {
+        strcpy(baseexp, __expr+3);
+        baseexp_len -= 3;
+    }
+    else
+    {
+        strcpy(baseexp, __expr  );
+    }
+    /* and the )) */
+    if(baseexp[baseexp_len-1] == ')' && baseexp[baseexp_len-2] == ')')
+    {
+        baseexp[baseexp_len-2] = '\0';
+    }
+    /* init our stacks */
+    nopstack = 0;
+    nnumstack = 0;
+    /* clear the error flag */
+    error = 0;
+    expr = baseexp;
     
+    /* and go ... */
     for( ; *expr; )
     {
         if(!tstart)
@@ -1004,7 +1041,7 @@ char *arithm_expand(char *__expr)
                     else if(op->op != '(' && !op->unary)
                     {
                         fprintf(stderr, "%s: illegal use of binary operator (%c)\n", SHELL_NAME, op->op);
-                        return NULL;
+                        goto err;
                     }
                 }
                 /* fix the pre-post ++/-- dilemma */
@@ -1027,7 +1064,7 @@ char *arithm_expand(char *__expr)
                 shunt_op(op);
                 if(error)
                 {
-                    return NULL;
+                    goto err;
                 }
                 lastop = op;
                 expr += op->chars;
@@ -1043,7 +1080,7 @@ char *arithm_expand(char *__expr)
             else
             {
                 fprintf(stderr, "%s: Syntax error near: %s\n", SHELL_NAME, expr);
-                return NULL;
+                goto err;
             }
         }
         else
@@ -1059,7 +1096,7 @@ char *arithm_expand(char *__expr)
                 push_numstackl(n1);
                 if(error)
                 {
-                    return NULL;
+                    goto err;
                 }
                 tstart = NULL;
                 lastop = NULL;
@@ -1071,13 +1108,13 @@ char *arithm_expand(char *__expr)
                 if(!n1)
                 {
                     fprintf(stderr, "%s: Failed to add symbol near: %s\n", SHELL_NAME, tstart);
-                    return NULL;
+                    goto err;
                 }
                 error = 0;
                 push_numstackv(n1);
                 if(error)
                 {
-                    return NULL;
+                    goto err;
                 }
                 tstart = NULL;
                 lastop = NULL;
@@ -1090,7 +1127,7 @@ char *arithm_expand(char *__expr)
                 push_numstackl(n1);
                 if(error)
                 {
-                    return NULL;
+                    goto err;
                 }
                 tstart = NULL;
 
@@ -1114,7 +1151,7 @@ char *arithm_expand(char *__expr)
                 shunt_op(op);
                 if(error)
                 {
-                    return NULL;
+                    goto err;
                 }
                 lastop = op;
                 expr += op->chars;
@@ -1122,7 +1159,7 @@ char *arithm_expand(char *__expr)
             else
             {
                 fprintf(stderr, "%s: Syntax error near: %s\n", SHELL_NAME, expr);
-                return NULL;
+                goto err;
             }
         }
     }
@@ -1140,7 +1177,7 @@ char *arithm_expand(char *__expr)
         }
         if(error)
         {
-            return NULL;
+            goto err;
         }
     }
 
@@ -1150,12 +1187,12 @@ char *arithm_expand(char *__expr)
         op = pop_opstack();
         if(error)
         {
-            return NULL;
+            goto err;
         }
         struct stack_item_s n1 = pop_numstack();
         if(error)
         {
-            return NULL;
+            goto err;
         }
         if(op->unary)
         {
@@ -1166,20 +1203,20 @@ char *arithm_expand(char *__expr)
             struct stack_item_s n2 = pop_numstack();
             if(error)
             {
-                return NULL;
+                goto err;
             }
             push_numstackl(op->eval(&n2, &n1));
         }
         if(error)
         {
-            return NULL;
+            goto err;
         }
     }
 
     if(nnumstack != 1)
     {
         fprintf(stderr, "%s: Number stack has %d elements after evaluation. Should be 1.\n", SHELL_NAME, nnumstack);
-        return NULL;
+        goto err;
     }
 
     char res[64];
@@ -1191,5 +1228,10 @@ char *arithm_expand(char *__expr)
      * this is what bash does with the (( expr )) compound command.
      */
     set_exit_status(!numstack[0].val, 0);
+    free(baseexp);
     return res2;
+
+err:
+    free(baseexp);
+    return NULL;
 }

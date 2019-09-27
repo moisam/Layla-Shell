@@ -69,6 +69,9 @@ int   startup_finished = 0;     /*
 extern struct source_s  __src;
 extern int    read_stdin     ;
 
+/* defined in kbdevent2.c */
+struct termios tty_attr_old;
+
 
 /*
  * POSIX says an interactive shell must read the $ENV shell variable,
@@ -490,6 +493,12 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
     /* init shell variables */
     init_shell_vars(pw->pw_name, pw->pw_gid, argv[0]);
   
+    /* get the current terminal attributes */
+    if(tcgetattr(0, &tty_attr_old) == -1)
+    {
+        return;
+    }
+
     if(!init_tty)
     {
         return;
@@ -706,6 +715,7 @@ char parse_options(int argc, char **argv)
     /* automatically save history on exit */
     set_optionx(OPTION_SAVE_HIST           , 1);
     set_optionx(OPTION_PROMPT_PERCENT      , 1);
+    set_option('d', 1);
     
     /* now read command-line options */
     struct symtab_entry_s *entry;
@@ -818,6 +828,8 @@ char parse_options(int argc, char **argv)
                 {
                     /* enable POSIX strict behavior */
                     set_option('P', 1);
+                    /* reset non-POSIX options */
+                    reset_non_posix_options();
                     /* stop parsing the other options */
                     end_loop = 1;
                     i++;

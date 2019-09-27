@@ -43,8 +43,14 @@ pid_t  tty_pid;
 struct source_s  __src;
 struct source_s *src = &__src;
 
-int    read_stdin       = 1;    /* flag to indicate if we are reading from stdin */
-int    SIGINT_received  = 0;    /* flag to break out of loops when SIGINT is received */
+/* flag to indicate if we are reading from stdin */
+int    read_stdin       = 1;
+
+/* flag to break out of loops when SIGINT is received */
+int    SIGINT_received  = 0;
+
+/* flag to indicate a signal was received and handled by trap_handler() */
+int    signal_received  = 0;
 
 #define CLOCKID CLOCK_REALTIME
 
@@ -53,8 +59,8 @@ void kill_input();
 extern int do_periodic;
 
 /* defined in initsh.c */
-extern int   noprofile;        /* do not load login scripts */
-extern int   norc     ;        /* do not load rc scripts */
+extern int   noprofile;        /* if set, do not load login scripts */
+extern int   norc     ;        /* if set, do not load rc scripts */
 
 /* defined in backend/backend.c */
 extern int cur_loop_level;
@@ -80,10 +86,7 @@ static void SIGALRM_handler(int sig __attribute__((unused)),
 void SIGINT_handler(int signum __attribute__((unused)))
 {
     SIGINT_received = 1;
-    if(option_set('i'))
-    {
-        kill_input();
-    }
+    signal_received = 1;
     /* force break from any running loop */
     if(cur_loop_level)
     {
@@ -98,6 +101,7 @@ void SIGINT_handler(int signum __attribute__((unused)))
 void SIGQUIT_handler(int signum)
 {
     fprintf(stderr, "%s: received signal %d\n", SHELL_NAME, signum);
+    signal_received = 1;
 }
 
 
@@ -309,6 +313,7 @@ int main(int argc, char **argv)
             }
         }
     }
+
     set_signal_handler(SIGHUP, SIGHUP_handler);
 
     /* not in privileged mode? reset ids (bash) */
@@ -507,7 +512,7 @@ int do_cmd()
         if(!noexec)
         {
             do_translation_unit(root);
-            if(isatty(0))
+            if(read_stdin /* isatty(0) */)
             {
                 term_canon(0);
             }

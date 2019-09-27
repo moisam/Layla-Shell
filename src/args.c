@@ -65,8 +65,8 @@ void free_argv(char ***__argv)
     {
         return;
     }
-    int i;
-    for(i = 0; argv[i]; i++)
+    int i = 0;
+    for( ; argv[i]; i++)
     {
         if(argv[i])
         {

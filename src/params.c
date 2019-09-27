@@ -467,7 +467,11 @@ void set_pos_paramsp(char **p)
     }
     count = i;
     /* get the shell parameter $# */
-    struct symtab_entry_s *entry = add_to_symtab("#");
+    struct symtab_entry_s *entry = get_symtab_entry("#");
+    if(!entry)
+    {
+        entry = add_to_symtab("#");
+    }
     if(!entry)
     {
         return;

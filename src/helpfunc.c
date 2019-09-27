@@ -833,7 +833,8 @@ int is_builtin(char *cmd)
 
 
 /*
- * return 1 if the given cmd name is an enabled builtin utility, 0 otherwise.
+ * return 1 if the given cmd name is an enabled special builtin utility, -1 if it
+ * is an enabled regular builtin utility, 0 otherwise.
  */
 int is_enabled_builtin(char *cmd)
 {
@@ -855,7 +856,7 @@ int is_enabled_builtin(char *cmd)
         if(strcmp(regular_builtins[j].name, cmd) == 0 &&
            flag_set(regular_builtins[j].flags, BUILTIN_ENABLED))
         {
-            return 1;
+            return -1;
         }
     }
     return 0;

@@ -57,11 +57,6 @@ char VLNEXT_KEY;
  */
 int rawon()
 {
-    /* get the current terminal attributes */
-    if(tcgetattr(0, &tty_attr_old) == -1)
-    {
-        return 0;
-    }
     /* get the special control keys */
     ERASE_KEY  = tty_attr_old.c_cc[VERASE];
     KILL_KEY   = tty_attr_old.c_cc[VKILL ];

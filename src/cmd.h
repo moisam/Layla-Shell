@@ -293,6 +293,7 @@ struct symtab_entry_s *get_pos_param(int i);
 extern struct source_s  __src;
 extern struct source_s *src;
 extern int    SIGINT_received;
+extern int    signal_received;
 int    do_cmd();
 int    read_file(char *filename, struct source_s *src);
 
@@ -659,6 +660,7 @@ int    __return(int argc, char **argv);
 /* builtins/set.c */
 int    option_set(char which);
 void   reset_options();
+void   reset_non_posix_options();
 void   set_option(char option, int set);
 int    do_options(char *ops, char *extra);
 int    set(int argc, char *argv[]);

@@ -284,6 +284,17 @@ char *read_cmd()
     /* loop to read user input */
     while(1)
     {
+        /*
+         * check if we received a signal for which we have a trap set.
+         * if so, clear the input buffer and reprint the prompt string.
+         */
+        if(signal_received)
+        {
+            kill_input();
+            signal_received = 0;
+            continue;
+        }
+
         /***********************
          * get next key stroke
          ***********************/
@@ -343,11 +354,6 @@ char *read_cmd()
                 else if(c == KILL_KEY)      /* default ^U */
                 {
                     do_kill_key();
-                }
-                else if(c == INTR_KEY)      /* default ^C */
-                {
-                    print_ctrl_key(INTR_KEY);
-                    kill_input();
                 }
                 else if(c == VLNEXT_KEY)
                 {
@@ -659,46 +665,6 @@ _process:
                 
         } /* end switch */
     } /* end while */
-}
-
-
-/*
- * check if the command line contains a shell keyword.
- *
- * returns a pointer to the substring starting with the keyword.
- */
-char *has_keyword(char **__cmd, char *word)
-{
-    char *p;
-    char *cmd = *__cmd;
-    if(!(p = strstr(cmd, word)))
-    {
-        if(incomplete_cmd)
-        {
-            cmd = cmdbuf;
-            if(!(p = strstr(cmd, word)))
-            {
-                return 0;
-            }
-        }
-        else
-        {
-            return 0;
-        }
-    }
-    /* check it's really a keyword: the following char should be whitespace... */
-    int len = strlen(word);
-    if(p[len] && !isspace(p[len]))
-    {
-        return 0;
-    }
-    /* ...and the preceding char should be whitespace */
-    if(p != cmd && !isspace(p[-1]))
-    {
-        return 0;
-    }
-    *__cmd = cmd;
-    return p;
 }
 
 
@@ -1033,35 +999,6 @@ check:
     {
         return 1;
     }
-    /*
-    char *p;
-    if((p = has_keyword(&cmd, "for"  )) ||
-       (p = has_keyword(&cmd, "while")) ||
-       (p = has_keyword(&cmd, "until")))
-    {
-        cmd = p;
-        if(!(p = has_keyword(&cmd, "done")))
-        {
-            return 1;
-        }
-    }
-    if((p = has_keyword(&cmd, "if")))
-    {
-        cmd = p;
-        if(!(p = has_keyword(&cmd, "fi")))
-        {
-            return 1;
-        }
-    }
-    if((p = has_keyword(&cmd, "case")))
-    {
-        cmd = p;
-        if(!(p = has_keyword(&cmd, "esac")))
-        {
-            return 1;
-        }
-    }
-    */
     return 0;
 }
 

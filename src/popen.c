@@ -55,11 +55,11 @@ void init_subshell()
     /* forget about all aliases (they are an interactive feature, anyway) */
     unset_all_aliases();
 
-    /* export environment variables and functions */
-    do_export_vars();
-
     /* indicate we are in a subshell */
     inc_subshell_var();
+
+    /* export environment variables and functions */
+    do_export_vars();
 
     /*
      * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
@@ -124,6 +124,11 @@ FILE *popenr(char *cmd)
     
     if((pid = fork_child()) == 0)     /* child process */
     {
+        char *cmd2 = word_expand_to_str(cmd);
+        if(cmd2)
+        {
+            cmd = cmd2;
+        }
         
         /* init our subshell environment */
         init_subshell();

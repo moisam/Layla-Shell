@@ -32,7 +32,7 @@
 #include <sys/wait.h>
 #include "cmd.h"
 #include "symtab/symtab.h"
-#include "signames.h"
+#include "sig.h"
 #include "error/error.h"
 #include "debug.h"
 
@@ -159,6 +159,8 @@ void set_job_exit_status(struct job *job, pid_t pid, int status)
 {
     if(!job)
     {
+        /* if job control is not active, set $? anyway */
+        set_exit_status(status, 1);
         return;
     }
     if(option_set('l'))    /* the pipefail option */
@@ -360,13 +362,13 @@ void __output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_d
         fprintf(out, "[%d]%c %s     %s\n",
                  job->job_num, current, statstr, job->commandstr);
     }
+    /* mark the job as notified */
+    job->flags |= JOB_FLAG_NOTIFIED;
     /* remove the job from the jobs table if it exited normally or by receiving a signal */
     if(rip_dead && (WIFSIGNALED(status) || WIFEXITED(status)))
     {
         kill_job(job);
     }
-    /* mark the job as notified */
-    job->flags |= JOB_FLAG_NOTIFIED;
 }
 
 /*
@@ -978,7 +980,8 @@ int rip_dead(pid_t pid)
  */
 struct job *get_job_by_pid(pid_t pgid)
 {
-    if(!pgid)
+    /* job control must be on */
+    if(!option_set('m') || !pgid)
     {
         return NULL;
     }
@@ -1000,7 +1003,8 @@ struct job *get_job_by_pid(pid_t pgid)
  */
 struct job *get_job_by_any_pid(pid_t pid)
 {
-    if(!pid)
+    /* job control must be on */
+    if(!option_set('m') || !pid)
     {
         return NULL;
     }
@@ -1029,7 +1033,8 @@ struct job *get_job_by_any_pid(pid_t pid)
  */
 struct job *get_job_by_jobid(int n)
 {
-    if(!n)
+    /* job control must be on */
+    if(!option_set('m') || !n)
     {
         return NULL;
     }
@@ -1052,7 +1057,8 @@ struct job *get_job_by_jobid(int n)
  */
 int set_cur_job(struct job *job)
 {
-    if(!job)
+    /* job control must be on */
+    if(!option_set('m') || !job)
     {
         return 0;
     }
@@ -1084,6 +1090,22 @@ int set_cur_job(struct job *job)
  */
 struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, int is_bg)
 {
+    /* set the $! special parameter */
+    if(is_bg)
+    {
+        //struct symtab_entry_s *entry = add_to_symtab("!");
+        char buf[12];
+        sprintf(buf, "%d", pgid);
+        //symtab_entry_setval(entry, buf);
+        set_shell_varp("!", buf);
+    }
+
+    /* job control must be on */
+    if(!option_set('m'))
+    {
+        return NULL;
+    }
+
     /* find an empty slot in the jobs table */
     struct job *job, *j2;
     for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
@@ -1120,17 +1142,11 @@ struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, i
                     job->proc_count = pid_count;
                 }
             }
-            if(is_bg)
-            {
-                struct symtab_entry_s *entry = add_to_symtab("!");
-                char buf[12];
-                sprintf(buf, "%d", pgid);
-                symtab_entry_setval(entry, buf);
-            }
             total_jobs++;
             return job;
         }
     }
+    fprintf(stderr, "%s: jobs table is full\n", SHELL_NAME);
     return NULL;
 }
 
@@ -1143,6 +1159,12 @@ struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, i
  */
 int kill_job(struct job *job)
 {
+    /* job control must be on */
+    if(!option_set('m'))
+    {
+        return 0;
+    }
+
     int res = 0;
     struct job *job2;
     if(job)
