@@ -89,7 +89,6 @@ int   match_ignore(char *pattern, char *filename);
 void  save_std(int fd);
 void  restore_std();
 
-extern int do_restore_std;
 /* redirect.c */
 int   redirect_prep_node(struct node_s *child, struct io_file_s *io_files);
 int   redirect_prep(struct node_s *node, struct io_file_s *io_files);
@@ -104,6 +103,24 @@ int   do_io_redirect(struct node_s *node, struct io_file_s *io_file);
 /* coprocess file descriptors */
 extern int rfiledes[];
 extern int wfiledes[];
+
+/*
+ * flag to indicate we want to restore the standard streams after executing an
+ * internal command or function.
+ */
+extern int do_restore_std;
+
+/* if set, break was encountered in a loop */
+extern int req_break;
+
+/* if set, continue was encountered in a loop */
+extern int req_continue;
+
+/* current loop level (number of nested loops) */
+extern int cur_loop_level;
+
+/* requested loop level (requested via break or continue) */
+extern int req_loop_level;
 
 
 #define ERR_TRAP_OR_EXIT()                          \

@@ -42,7 +42,11 @@
 #include "../kbdevent.h"
 #include "../builtins/setx.h"
 
-int cur_func_level = 0;     /* current function level (number of nested function calls) */
+/* current function level (number of nested function calls) */
+int cur_func_level = 0;
+
+/* declared in main.c   */
+extern int read_stdin;
 
 
 /*
@@ -550,17 +554,29 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
             setpgid(pid, 0);
             struct job *job;
             char *cmdstr = get_cmdstr(node);
-            if(!(job = add_job(pid, (pid_t[]){pid}, 1, cmdstr, 1)))
+            /* add new job, or set $! if job control is off */
+            job = add_job(pid, (pid_t[]){pid}, 1, cmdstr, 1);
+            /*
+             * if job control is on, set the current job, or complain if the
+             * job couldn't be added.
+             */
+            if(option_set('m'))
             {
-                BACKEND_RAISE_ERROR(FAILED_TO_ADD_JOB, NULL, NULL);
-                if(cmdstr)
+                if(!job)
                 {
-                    free(cmdstr);
+                    BACKEND_RAISE_ERROR(FAILED_TO_ADD_JOB, NULL, NULL);
+                    if(cmdstr)
+                    {
+                        free(cmdstr);
+                    }
+                    //return 0;
                 }
-                return 0;
+                else
+                {
+                    set_cur_job(job);
+                    fprintf(stderr, "[%d] %u\n", job->job_num, pid);
+                }
             }
-            set_cur_job(job);
-            fprintf(stderr, "[%d] %u\n", job->job_num, pid);
             set_exit_status(0, 0);
             /*
              * give the child process a headstart, in case the scheduler decided to run us first.
@@ -819,7 +835,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
                 }
             }
             /* only restore tty to canonical mode if we are reading from it */
-            if(isatty(0))
+            if(read_stdin /* isatty(0) */)
             {
                 term_canon(1);
             }
@@ -858,21 +874,35 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
 
     /* TODO: use correct command str */
     char *cmdstr = get_cmdstr(node);
+
     /* $! will be set in add_job() */
-    struct job *job = add_job(pid, all_pids, count, cmdstr, !fg);
-    set_cur_job(job);
+    struct job *job = NULL;
+
+    /* add new job, or set $! if job control is off */
+    job = add_job(pid, all_pids, count, cmdstr, !fg);
+    /*
+     * if job control is on, set the current job.
+     */
+    if(option_set('m'))
+    {
+        set_cur_job(job);
+    }
+
+    /* free temp memory */
     if(cmdstr)
     {
         free(cmdstr);
     }
-    
-    /* run the last command ourselves -- bash extension */
+    /* run the last command in this process if extended option 'lastpipe' is set (bash) */
     if(lastpipe)
     {
         do_command(cmd, redirect_list, 0);
-        set_pid_exit_status(job, pid, exit_status);
-        job->child_exitbits |= 1;       /* mark our entry as done */
-        job->child_exits++;
+        if(job)
+        {
+            set_pid_exit_status(job, pid, exit_status);
+            job->child_exitbits |= 1;       /* mark our entry as done */
+            job->child_exits++;
+        }
         close(0);   /* restore stdin */
         open("/dev/tty", O_RDWR);
     }
@@ -925,19 +955,30 @@ int  do_term(struct node_s *node, struct node_s *redirect_list)
         }
         else if(pid > 0)
         {
-            struct job *job;
+            struct job *job = NULL;
             char *cmdstr = get_cmdstr(node->first_child);
-            if(!(job = add_job(pid, (pid_t[]){pid}, 1, cmdstr, 1)))
-            {
-                BACKEND_RAISE_ERROR(FAILED_TO_ADD_JOB, NULL, NULL);
-                if(cmdstr)
-                {
-                    free(cmdstr);
-                }
-                return 0;
-            }
-            set_cur_job(job);
+            /* add new job, or set $! if job control is off */
+            job = add_job(pid, (pid_t[]){pid}, 1, cmdstr, 1);
             set_exit_status(0, 0);
+            /*
+             * if job control is on, set the current job.
+             */
+            if(option_set('m'))
+            {
+                if(!job)
+                {
+                    BACKEND_RAISE_ERROR(FAILED_TO_ADD_JOB, NULL, NULL);
+                    if(cmdstr)
+                    {
+                        free(cmdstr);
+                    }
+                    return 0;
+                }
+                else
+                {
+                    set_cur_job(job);
+                }
+            }
             if(cmdstr)
             {
                 free(cmdstr);
@@ -994,8 +1035,15 @@ int  do_compound_list(struct node_s *node, struct node_s *redirect_list)
     int res = 0;
     while(node)
     {
+        /* execute the first term (or list) */
         res = do_term(node, redirect_list);
+        /* error executing the term */
         if(!res)
+        {
+            break;
+        }
+        /* break or continue encountered inside a loop's do-done group */
+        if(cur_loop_level && (req_break || req_continue))
         {
             break;
         }
@@ -1399,7 +1447,6 @@ int do_special_builtin(int argc, char **argv)
             int (*func)(int, char **) = (int (*)(int, char **))special_builtins[j].func;
             int status = do_exec_cmd(argc, argv, NULL, func);
             set_exit_status(status, 0);
-            dump_local_symtab();
             return 1;
         }
     }
@@ -1476,7 +1523,10 @@ void save_std(int fd)
  */
 void restore_std()
 {
-    if(!do_restore_std) return;
+    if(!do_restore_std)
+    {
+        return;
+    }
     if(saved_stdin >= 0)
     {
         fflush(stdin);
@@ -1877,13 +1927,17 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     }
     
     //int  builtin =  is_builtin(argv[0]);
+    /*
+     * this call returns 1 if argv[0] is a special builtin utility, -1 if argv[0]
+     * is a regular builtin utility, and 0 otherwise.
+     */
     int builtin  = is_enabled_builtin(argv[0]);
+    /* this call returns 1 if argv[0] is a defined shell function, 0 otherwise */
     int function = is_function(argv[0]);
     struct symtab_entry_s *entry;
 
     if(total_redirects == -1 /* redir_fail */)
     {
-        
         /*
          * POSIX says non-interactive shell shall exit on redirection errors with
          * special builtins, may exit with compound commands and functions, and shall
@@ -2009,11 +2063,13 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
 // redir:
     if(child_pid == 0)
     {
+#if 0
         /* only restore tty to canonical mode if we are reading from it */
-        if(isatty(0) && getpgrp() == tcgetpgrp(0))
+        if(read_stdin && /* isatty(0) && */ getpgrp() == tcgetpgrp(0))
         {
             term_canon(1);
         }
+#endif
         
         /*
          * we need to handle the special case of coproc, as this command opens
@@ -2060,6 +2116,12 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
             return 1;
         }
         
+        /* only restore tty to canonical mode if we are reading from it */
+        if(isatty(0))
+        {
+            term_canon(1);
+        }
+
         /*
          * bash/tcsh have a useful non-POSIX extension where '%n' equals 'fg %n'
          * and '%n &' equals bg %n'.
@@ -2142,93 +2204,12 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
              * non-interactive shells exit if a special builtin returned non-zero
              * or error status (except if it is break, continue, or return).
              */
-            if(exit_status && builtin && i == 0)
+            if(exit_status && builtin > 0 && i == 0)
             {
                 EXIT_IF_NONINTERACTIVE();
             }
             return res;
         }
-
-#if 0
-        /* STEP 1: The command has no slash(es) in its name   */
-        if(!strchr(argv[0], '/'))
-        {
-            /* STEP 1-A: check for special builtin utilities      */
-            if(do_special_builtin(argc, argv))
-            {
-                int res = 1;
-                i = 0;
-                if(((strcmp(argv[0], "break"   ) == 0) ||
-                    (strcmp(argv[0], "continue") == 0) ||
-                    (strcmp(argv[0], "return"  ) == 0)))
-                {
-                    if(exit_status == 0)
-                    {
-                        /*
-                         * we force our caller to break any loops by returning
-                         * a zero (error) status.
-                         */
-                        res = 0;
-                    }
-                    i = 1;
-                }
-                free_argv(argc, argv);
-                if(savestd && total_redirects)
-                {
-                    redirect_restore();
-                }
-                MERGE_GLOBAL_SYMTAB();
-                /* 
-                 * non-interactive shells exit if a special builtin returned non-zero 
-                 * or error status (except if it is break, continue, or return).
-                 */
-                if(exit_status && i == 0)
-                {
-                    EXIT_IF_NONINTERACTIVE();
-                }
-                return res;
-            }
-            /* STEP 1-B: check for internal functions             */
-            if(do_function_definition(argc, argv))
-            {
-                free_argv(argc, argv);
-                if(savestd && total_redirects)
-                {
-                    redirect_restore();
-                }
-                MERGE_GLOBAL_SYMTAB();
-                return 1;
-            }
-            /* STEP 1-C: check for regular builtin utilities      */
-            if(do_regular_builtin(argc, argv))
-            {
-                free_argv(argc, argv);
-                if(savestd && total_redirects)
-                {
-                    redirect_restore();
-                }
-                MERGE_GLOBAL_SYMTAB();
-                return 1;
-            }
-            /* STEP 1-D: checked for in exec_cmd()                */
-        }
-        
-        do_exec_cmd(argc, argv, NULL, NULL);
-        /* NOTE: we should NEVER come back here, unless there is error of course!! */
-        BACKEND_RAISE_ERROR(FAILED_TO_EXEC, argv[0], strerror(errno));
-        if(errno == ENOEXEC)
-        {
-            exit(EXIT_ERROR_NOEXEC);
-        }
-        else if(errno == ENOENT)
-        {
-            exit(EXIT_ERROR_NOENT);
-        }
-        else
-        {
-            exit(EXIT_FAILURE);
-        }
-#endif
     }
     /* ... and parent countinues over here ...    */
 
@@ -2260,12 +2241,14 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     }
     PRINT_EXIT_STATUS(status);
 
-    //if(src->filename == stdin_filename)
-    if(isatty(0))
+#if 0
+    /* only restore tty to canonical mode if the child process read from it */
+    if(read_stdin /* isatty(0) */)
     {
         term_canon(0);
         update_row_col();
     }
+#endif
 
 
     /* if we forked, we didn't hash the utility's path in our
@@ -2296,7 +2279,10 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     run_alias_cmd("postcmd");
     
     /* check winsize and update $LINES and $COLUMNS (bash) after running external cmds */
-    if(optionx_set(OPTION_CHECK_WINSIZE)) get_screen_size();
+    if(optionx_set(OPTION_CHECK_WINSIZE))
+    {
+        get_screen_size();
+    }
     
     set_underscore_val(argv[argc-1], 0);    /* last argument to previous command */
     free_argv(argc, argv);
@@ -2347,6 +2333,10 @@ int  do_translation_unit(struct node_s *node)
     {
         return 0;
     }
+    if(read_stdin)
+    {
+        term_canon(1);
+    }
     struct node_s *child = node;
     if(node->type == NODE_PROGRAM)
     {
@@ -2391,5 +2381,10 @@ int  do_translation_unit(struct node_s *node)
     fflush(stdout);
     fflush(stderr);
     SIGINT_received = 0;
+    if(read_stdin)
+    {
+        term_canon(0);
+        update_row_col();
+    }
     return 0;
 }

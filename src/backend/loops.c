@@ -44,8 +44,8 @@
 
 int cur_loop_level = 0;     /* current loop level (number of nested loops) */
 int req_loop_level = 0;     /* requested loop level */
-int req_break      = 0;     /* break was encountered in a loop */
-int req_continue   = 0;     /* continue was encountered in a loop */
+int req_break      = 0;     /* if set, break was encountered in a loop */
+int req_continue   = 0;     /* if set, continue was encountered in a loop */
 
 /*
  * this function handles the break builtin utility, which is used to break out
