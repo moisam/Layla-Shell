@@ -1,0 +1,58 @@
+
+The Layla shell (lsh) can be started in the POSIX mode, where extra features and extensions that are not defined by POSIX are all disabled. You can start lsh in POSIX mode by passing the --posix command line option when invoking the shell:
+
+$ lsh --posix
+
+Or after the shell is up and running, by invoking:
+
+$ set -o posix
+
+Or
+
+$ set -P
+
+When lsh is running in POSIX mode, certain things happen. For example, some builtin utilities are disabled, some shell language constructs are not recognized, anod so on. The following list summarizes the things that change in the shell's behavior when you run it in the POSIX mode:
+
+- The noglob and the - command modifiers have no effect on executed commands.
+- The arithmetic version of the for loop is not recognized by the parser.
+- The following special builtin utilities are disabled by default (you can enable any of them by running 'enable -s utility', replacing utility with the utility's name):
+  local    logout    repeat    setx    suspend
+
+- The following regular builtin utilities are disabled by default (you can enable any of them by running 'enable -r utility', replacing utility with the utility's name):
+  bugreport    builtin    caller    coproc      declare    dirs        disown
+  dump         echo       glob      history     hup        let         mail
+  memusage     nice       nohup     notify      popd       printenv    pushd
+  setenv       stop       unlimit   unsetenv    ver        whence
+
+- The select keyword is not recognized by the parser.
+- The ;& and ;| case conditional terminators are not recognized by the parser.
+- The function keyword is not recognized as a keyword. Functions cannot be defined as:
+  function fname { list; }
+
+Instead, function definitions must take the form defined by POSIX, which is:
+  fname () { list; }
+
+- Dot files with no '/' in their names are searched for in the $PATH and, if not found, an error message is printed and the dot utility returns with non-zero exit status. When in non-POSIX mode, dot files with no '/' in their names are searched for in the $PATH only if the extended option 'sourcepath' is set (using `setx -s sourcepath`) and, if not found, such files are searched for in the current working directory by appending './' to the dot file name.
+- The read builtin utility doesn't use the $REPLY variable by default. It requires at least one argument specifying the shell variable to use to store read input.
+- The return, shift and times special builtin utilities each print an error message if it is passed more than one argument. In non-POSIX mode, these utilities just ignore the extra arguments.
+- The regular and special builtin utilities recognize only the command line options defined by POSIX for each utility. The table below shows the options recognized and unrecognized by each utility when the shell is in the POSIX mode. Options that are not recognized result in error:
+
+Utility           Recognized options           Unrecognized options
+break             -                            -
+colon             -                            -
+continue          -                            -
+dot               -                            -
+eval              -                            -
+exec              -                            a, c, h, l, v
+exit              -                            -
+export            p                            f, h, n, v
+readonly          p                            h, v
+return            -                            -
+set               all set options are recognized in --posix mode
+shift             -                            -
+times             -                            -
+trap              -                            h, l, p, v
+unset             f, v                         h
+
+- The following extended shell options are turned off (they can be turned on by invoking the `set` builtin utility): braceexpand, dumpast, errtrace, histexpand, keyword, pipefail, braceexpand, quit, restricted, onecmd, functrace, history, privileged.
+
