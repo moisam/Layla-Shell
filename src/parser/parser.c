@@ -232,7 +232,7 @@ char *get_cmdwords(struct token_s *tok, int wstart)
     }
     struct source_s *src = tok->src;
     /* find the end of the command string */
-    int wend = tok->linestart+tok->charno-tok->text_len;
+    int wend = tok->linestart + tok->charno - tok->text_len;
     /* at the very first word we would have a -ve position */
     if(wstart < 0)
     {
@@ -244,7 +244,7 @@ char *get_cmdwords(struct token_s *tok, int wstart)
         wstart++;
     }
     /* ignore spaces after the command string */
-    while(isspace(src->buffer[wend  ]))
+    while(isspace(src->buffer[wend]))
     {
         wend--;
     }

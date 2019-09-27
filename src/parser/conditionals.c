@@ -79,7 +79,13 @@ struct node_s *parse_case_item(struct token_s *tok)
     /* skip optional newlines */
     while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
     {
+        tok->src->wstart = tok->src->curpos;
         tok = tokenize(tok->src);
+    }
+    /* the next command begins after the ')' char */
+    if(tok->src->buffer[tok->src->wstart] == ')')
+    {
+        tok->src->wstart++;
     }
     /*
      * if we're running in POSIX mode, we only identify ';;' or 'esac' as
