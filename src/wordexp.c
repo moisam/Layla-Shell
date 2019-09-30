@@ -2241,7 +2241,7 @@ struct word_s *word_expand_one_word(char *orig_word)
                             break;
                         }
                         /* otherwise, extract the expression and substitute its value */
-                        func = (*p == '[') ? arithm_expand : var_expand;
+                        func = (c == '[') ? arithm_expand : var_expand;
                         /*
                          *  calling var_expand() might return an INVALID_VAR result which
                          *  makes the following call fail.

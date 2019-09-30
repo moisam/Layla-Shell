@@ -989,7 +989,8 @@ char *arithm_expand(char *__expr)
     int     n1, n2;
     struct  op_s *lastop = &startop;
     /*
-     * get a copy of __expr without the $(( and )).
+     * get a copy of __expr without the $(( and )), or the $[ and ]
+     * if we're given the obsolete arithmetic expansion operator.
      */
     int baseexp_len = strlen(__expr);
     char *baseexp = malloc(baseexp_len+1);
@@ -1003,16 +1004,28 @@ char *arithm_expand(char *__expr)
     {
         strcpy(baseexp, __expr+3);
         baseexp_len -= 3;
+        /* and the )) */
+        if(baseexp[baseexp_len-1] == ')' && baseexp[baseexp_len-2] == ')')
+        {
+            baseexp[baseexp_len-2] = '\0';
+        }
+    }
+    /* lose the $[ */
+    else if(__expr[0] == '$' && __expr[1] == '[')
+    {
+        strcpy(baseexp, __expr+2);
+        baseexp_len -= 2;
+        /* and the ] */
+        if(baseexp[baseexp_len-1] == ']')
+        {
+            baseexp[baseexp_len-1] = '\0';
+        }
     }
     else
     {
-        strcpy(baseexp, __expr  );
+        strcpy(baseexp, __expr);
     }
-    /* and the )) */
-    if(baseexp[baseexp_len-1] == ')' && baseexp[baseexp_len-2] == ')')
-    {
-        baseexp[baseexp_len-2] = '\0';
-    }
+
     /* init our stacks */
     nopstack = 0;
     nnumstack = 0;
