@@ -277,52 +277,55 @@ void dump_node_tree(struct node_s *root, int level)
         return;
     }
     int indent = level << 2;
-    printf("%*sNODE: type '%s', val_type '%s', val '", indent, " ", get_node_type_str(root->type), get_node_val_type_str(root->val_type));
+    fprintf(stderr, "%*sNODE: type '%s', val_type '%s', val '", indent, " ",
+            get_node_type_str(root->type),
+            get_node_val_type_str(root->val_type));
+
     switch(root->val_type)
     {
         case VAL_SINT   :
-            printf("%ld" , root->val.sint   );
+            fprintf(stderr, "%ld" , root->val.sint   );
             break;
             
         case VAL_UINT   :
-            printf("%lu" , root->val.uint   );
+            fprintf(stderr, "%lu" , root->val.uint   );
             break;
             
         case VAL_SLLONG :
-            printf("%lld", root->val.sllong );
+            fprintf(stderr, "%lld", root->val.sllong );
             break;
             
         case VAL_ULLONG :
-            printf("%llu", root->val.ullong );
+            fprintf(stderr, "%llu", root->val.ullong );
             break;
             
         case VAL_FLOAT  :
-            printf("%f"  , root->val.sfloat );
+            fprintf(stderr, "%f"  , root->val.sfloat );
             break;
             
         case VAL_LDOUBLE:
-            printf("%Lg" , root->val.ldouble);
+            fprintf(stderr, "%Lg" , root->val.ldouble);
             break;
             
         case VAL_CHR    :
-            printf("%c"  , root->val.chr    );
+            fprintf(stderr, "%c"  , root->val.chr    );
             break;
             
         case VAL_STR    :
-            printf("%s"  , root->val.str    );
+            fprintf(stderr, "%s"  , root->val.str    );
             break;
             
         default:
             break;
     }
-    printf("'\n");
+    fprintf(stderr, "'\n");
     struct node_s *child = root->first_child;
     while(child)
     {
         dump_node_tree(child, level+1);
         child = child->next_sibling;
     }
-    fflush(stdout);
+    fflush(stderr);
 }
 
 

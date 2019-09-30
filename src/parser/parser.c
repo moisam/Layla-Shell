@@ -249,7 +249,7 @@ char *get_cmdwords(struct token_s *tok, int wstart)
         wend--;
     }
     /* make sure we get the last char in the command string */
-    if(!isspace(src->buffer[wend]))
+    while(src->buffer[wend] && !isspace(src->buffer[wend]))
     {
         wend++;
     }
@@ -572,8 +572,8 @@ struct node_s *parse_pipe_sequence(struct token_s *tok)
         if(tok->type == TOKEN_PIPE || tok->type == TOKEN_PIPE_AND)
         {
             enum token_type type = tok->type;
-            tok = tokenize(tok->src);
             tok->src->wstart = tok->src->curpos;
+            tok = tokenize(tok->src);
             /* skip optional newlines */
             while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
             {
