@@ -561,6 +561,27 @@ static inline int __do_restricted(int onoff)
 
 
 /*
+ * if the shell is started in the --posix mode, clear all non-POSIX options.
+ */
+void reset_non_posix_options()
+{
+    options.braceexpand = 0;
+    options.dumpast     = 0;
+    options.errtrace    = 0;
+    options.histexpand  = 0;
+    options.keyword     = 0;
+    options.pipefail    = 0;
+    options.braceexpand = 0;
+    options.quit        = 0;
+    options.restricted  = 0;
+    options.onecmd      = 0;
+    options.functrace   = 0;
+    options.history     = 0;
+    __do_privileged(0);
+}
+
+
+/*
  * process the 'ops' string, which is an options string we got from the command
  * line (on shell startup) or from the set builtin utility.. we process the string,
  * char by char, set or unset the option represented by each char.. if the string is
@@ -588,7 +609,7 @@ int do_options(char *ops, char *extra)
                 break;
 
             case 'B':
-                options.braceexpand= onoff;
+                options.braceexpand = onoff;
                 break;
 
             case 'C':
@@ -824,16 +845,16 @@ int do_options(char *ops, char *extra)
                 }
                 else
                 {
-                    purge_options(onoff);
-                    break;
+                    fprintf(stderr, "%s: unknown option: %s\n", UTILITY, extra);
+                    return -1;
                 }
                 res = 1;
                 break;
 
+            /* unrecognized option */
             default:
                 fprintf(stderr, "%s: unknown option: %c\n", UTILITY, *ops);
                 return -1;
-                break;
         }
         ops++;
     }

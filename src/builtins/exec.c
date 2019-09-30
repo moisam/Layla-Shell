@@ -31,9 +31,6 @@
 
 #define UTILITY             "exec"
 
-/* defined in export.c */
-void do_export_table(struct symtab_s *symtab);
-
 
 /*
  * the exec builtin utility (POSIX).. used to execute commands in the current shell
@@ -126,7 +123,7 @@ int exec(int argc, char **argv)
     {
         clearenv();
         struct symtab_s *symtab = get_local_symtab();
-        do_export_table(symtab);
+        do_export_table(symtab, EXPORT_VARS_EXPORTED_ONLY);
     }
     /* get the command name */
     char *cmd = get_malloced_str(argv[v]);
@@ -184,7 +181,7 @@ int exec(int argc, char **argv)
      */
     if(cenv)
     {
-        do_export_vars();
+        do_export_vars(EXPORT_VARS_EXPORTED_ONLY);
     }
     
     /* return appropriate failure result */

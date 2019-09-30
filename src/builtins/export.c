@@ -327,8 +327,13 @@ int export(int argc, char *argv[])
  * forked process.. we export only the variables and functions that have the
  * export flag on, or those which are declared locally (if the command is run
  * from inside a function), or variables declared as part of the command prefix.
+ *
+ * the force_export_all flag, if non-zero, forces export of all variables and
+ * functions, even if they are not marked for export.. this flag is set when we
+ * fork a subshell, so that the new process has a replica of all variables and
+ * functions, local and global.
  */
-void do_export_table(struct symtab_s *symtab)
+void do_export_table(struct symtab_s *symtab, int force_export_all)
 {
     /* sanity check */
     if(!symtab)
@@ -354,8 +359,10 @@ void do_export_table(struct symtab_s *symtab)
             
             while(entry)
             {
-                /* export global variables */
-                if(flag_set(entry->flags, FLAG_EXPORT    ) ||
+                /* force export everything */
+                if(force_export_all                        ||
+                   /* export global variables */
+                   flag_set(entry->flags, FLAG_EXPORT    ) ||
                    /* export vars declared on the commandline before/after the command name */
                    flag_set(entry->flags, FLAG_CMD_EXPORT) ||
                    /*
@@ -415,11 +422,14 @@ void do_export_table(struct symtab_s *symtab)
 
 
 /*
- * this function is called after a new command process is forked,
- * right before it exec's, to save all export variables to the
- * environment of the new command.
+ * this function is called after a new command process is forked, right before
+ * it exec's, to save all export variables to the environment of the new
+ * command.. in this case, the 'force_export_all' flag will be zero.
+ *
+ * the function is also called when we fork a subshell, in which case
+ * 'force_export_all' will be non-zero.
  */
-void do_export_vars()
+void do_export_vars(int force_export_all)
 {
     /*
      * we will start by reading vars from the global symbol table,
@@ -432,10 +442,10 @@ void do_export_vars()
     for(i = 0; i < stack->symtab_count; i++)
     {
         struct symtab_s *symtab = stack->symtab_list[i];
-        do_export_table(symtab);
+        do_export_table(symtab, force_export_all);
     }
     /*
      * now export the functions.
      */
-    do_export_table(func_table);
+    do_export_table(func_table, force_export_all);
 }

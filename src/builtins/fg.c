@@ -60,7 +60,10 @@ void __fg(struct job *job)
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
         if(job->tty_attr)
         {
-            tcsetattr(0, TCSANOW, job->tty_attr);
+            if(tcsetattr(0, TCSAFLUSH, job->tty_attr) == -1)
+            {
+                fprintf(stderr, "%s: failed to restore terminal attributes\n", SHELL_NAME);
+            }
         }
     }
     /* continue the job and wait for it */
