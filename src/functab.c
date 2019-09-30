@@ -76,8 +76,7 @@ struct symtab_entry_s *add_func(char *name)
     if(entry)
     {
         entry->val_type = SYM_FUNC;
-        /* all functions are marked for export */
-        entry->flags |= FLAG_EXPORT;
+        /*// all functions are marked for export */
     }
     return entry;
 }

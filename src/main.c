@@ -233,6 +233,10 @@ int main(int argc, char **argv)
         char *s1 = s;
         while(*s1)
         {
+            while(*s1 && *s1 == ':')
+            {
+                s1++;
+            }
             char *s2 = s1+1;
             while(*s2 && *s2 != ':')
             {

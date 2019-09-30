@@ -641,7 +641,18 @@ void   purge_quoted(char *prefix, char *name, char *val);
 int    export(int argc, char *argv[]);
 int    set(int argc, char *argv[]);
 int    is_list_terminator(char *c);
-void   do_export_vars();
+void   do_export_vars(int force_export_all);
+void   do_export_table(struct symtab_s *symtab, int force_export_all);
+
+/*
+ * flags for the 'force_export_all' parameter of the do_export_vars()
+ * and do_export_table() functions.
+ */
+
+/* export only the variables/functions marked for export */
+#define EXPORT_VARS_EXPORTED_ONLY       (1 << 0)
+/* export everything (used only by subshells) */
+#define EXPORT_VARS_FORCE_ALL           (1 << 1)
 
 /* builtins/hash.c */
 extern struct hashtab_s *utility_hashes;

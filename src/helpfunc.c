@@ -985,9 +985,11 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
                 dup2(1, 2);
             }
         }
+
         /* export variables and execute the command */
-        do_export_vars();
+        do_export_vars(EXPORT_VARS_EXPORTED_ONLY);
         do_exec_cmd(argc, argv, use_path, NULL);
+
         /* NOTE: we should NEVER come back here, unless there is error of course!! */
         fprintf(stderr, "%s: failed to exec '%s': %s\n", UTILITY, argv[0], strerror(errno));
         if(errno == ENOEXEC)

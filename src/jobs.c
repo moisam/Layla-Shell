@@ -38,6 +38,9 @@
 
 #define UTILITY         "jobs"
 
+/* declared in kbdevent2.c */
+extern struct termios tty_attr_old;
+
 /* jobs table for all the jobs running under this shell */
 struct job __jobs[MAX_JOBS];
 
@@ -66,7 +69,9 @@ struct
     pid_t pid;
     int   status;
 } deadlist[32];
+
 int listindex = 0;
+
 
 /*
  * set the exit status of the last command executed in both the global
@@ -902,7 +907,21 @@ void notice_termination(pid_t pid, int status)
         {
             if((job->tty_attr = malloc(sizeof(struct termios))))
             {
-                tcgetattr(0, job->tty_attr);
+                /*
+                 * if the job is a background job, we can't just save the current terminal attributes,
+                 * as these will be the ones set by the shell (i.e. non-canonical mode).. in this case,
+                 * we save the terminal attributes we received when the shell was started.
+                 */
+                if(!flag_set(job->flags, JOB_FLAG_FORGROUND))
+                {
+                    memcpy(job->tty_attr, &tty_attr_old, sizeof(struct termios));
+                }
+                else if(tcgetattr(0, job->tty_attr) == -1)
+                {
+                    /* failed to get tty attributes. lose the memory used for the struct */
+                    free(job->tty_attr);
+                    job->tty_attr = NULL;
+                }
             }
         }
         else

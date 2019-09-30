@@ -59,7 +59,7 @@ void init_subshell()
     inc_subshell_var();
 
     /* export environment variables and functions */
-    do_export_vars();
+    do_export_vars(EXPORT_VARS_FORCE_ALL);
 
     /*
      * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
@@ -154,11 +154,6 @@ FILE *popenr(char *cmd)
     
     if((pid = fork_child()) == 0)     /* child process */
     {
-        char *cmd2 = word_expand_to_str(cmd);
-        if(cmd2)
-        {
-            cmd = cmd2;
-        }
         
         /* init our subshell environment */
         init_subshell();
