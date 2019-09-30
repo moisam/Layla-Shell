@@ -100,7 +100,37 @@ void inc_subshell_var()
     {
         entry = add_to_symtab("SUBSHELL");
     }
+    entry->flags |= FLAG_EXPORT;
     symtab_entry_setval(entry, buf);
+}
+
+
+/*
+ * set the value of $SHLVL to that of $SUBSHELL.
+ */
+void set_shlvl_var()
+{
+    /*
+     * increment the shell nesting level (bash and tcsh).
+     * tcsh resets it to 1 in login shells.
+     */
+    struct symtab_entry_s *entry = get_symtab_entry("SHLVL");
+    if(!entry)
+    {
+        entry = add_to_symtab("SHLVL");
+    }
+    if(!entry)
+    {
+        return;
+    }
+
+    char buf[8];
+    sprintf(buf, "%d", subshell_level);
+    symtab_entry_setval(entry, buf);
+
+    /* bash doesn't mark $SHLVL as readonly. but better safe than sorry */
+    entry->flags |= FLAG_READONLY;
+    entry->flags |= FLAG_EXPORT;
 }
 
 

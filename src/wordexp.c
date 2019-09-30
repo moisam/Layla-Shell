@@ -394,7 +394,7 @@ int substitute_word(char **pstart, char **p, size_t len, char *(func)(char *), i
         free(tmp);
     }
     /* adjust our pointer to point to the new string */
-    (*p) = (*pstart)+i+len;
+    (*p) = (*pstart)+i+len-1;
     return 1;
 }
 
@@ -1490,7 +1490,8 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
         long count = pos_param_count()+1;
         if(count <= 0)          /* no positional parameters */
         {
-            return NULL;
+            //return NULL;
+            return __get_malloced_str("");
         }
         /* we have two colons in the substitution (so we have offset and length) */
         if(tmp2)
@@ -1616,7 +1617,7 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
         }
     }
     /* return the result */
-    return p;
+    return p ? : __get_malloced_str("");
 }
 
 

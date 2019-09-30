@@ -715,7 +715,7 @@ char parse_options(int argc, char **argv)
     /* automatically save history on exit */
     set_optionx(OPTION_SAVE_HIST           , 1);
     set_optionx(OPTION_PROMPT_PERCENT      , 1);
-    set_option('d', 1);
+    //set_option('d', 1); //
     
     /* now read command-line options */
     struct symtab_entry_s *entry;

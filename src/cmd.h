@@ -127,6 +127,7 @@ void    print_prompt4();
 /* popen.c */
 FILE   *popenr(char *cmd);
 void    init_subshell();
+void    set_shlvl_var();
 
 /* initsh.c */
 extern  int  null_environ_index;

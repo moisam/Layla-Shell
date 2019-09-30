@@ -394,13 +394,15 @@ int main(int argc, char **argv)
             symtab_entry_setval(entry, ppid_str);
             entry->flags |= FLAG_READONLY;
         }
-        
-        /*
-         * speed up the startup of subshells by omitting some features that are used
-         * for interactive shells, like command history, aliases and dirstacks. in this
-         * case, we only init these features if this is NOT a subshell.
-         */
-        
+    }
+
+    /*
+     * speed up the startup of subshells by omitting some features that are used
+     * for interactive shells, like command history, aliases and dirstacks. in this
+     * case, we only init these features if this is NOT a subshell.
+     */
+    if(option_set('i'))
+    {
         /* init history */
         init_history();
 
@@ -409,56 +411,6 @@ int main(int argc, char **argv)
     
         /* get us some useful alias definitions */
         init_aliases();
-        
-        /* disable some builtin extensions in the posix '-P' mode */
-        if(option_set('P'))
-        {
-            /* special builtins */
-            special_builtins[SPECIAL_BUILTIN_LOCAL    ].flags &= ~BUILTIN_ENABLED;
-            special_builtins[SPECIAL_BUILTIN_LOGOUT   ].flags &= ~BUILTIN_ENABLED;
-            special_builtins[SPECIAL_BUILTIN_REPEAT   ].flags &= ~BUILTIN_ENABLED;
-            special_builtins[SPECIAL_BUILTIN_SETX     ].flags &= ~BUILTIN_ENABLED;
-            special_builtins[SPECIAL_BUILTIN_SUSPEND  ].flags &= ~BUILTIN_ENABLED;
-            /* regular builtins */
-            regular_builtins[REGULAR_BUILTIN_BUGREPORT].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_BUILTIN  ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_CALLER   ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_COPROC   ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_DECLARE  ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_DIRS     ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_DISOWN   ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_DUMP     ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_ECHO     ].flags &= ~BUILTIN_ENABLED;
-            /*
-             * we won't disable the 'enable' builtin so the user can selectively enable builtins
-             * when they're in the POSIX mode. if you insist on disabling ALL non-POSIX builtins,
-             * uncomment the next line.
-             */
-            //regular_builtins[REGULAR_BUILTIN_ENABLE   ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_GLOB     ].flags &= ~BUILTIN_ENABLED;
-            /*
-             * the 'help' builtin should also be available, even in POSIX mode. if you want to
-             * disable it in POSIX mode, uncomment the next line.
-             */
-            //regular_builtins[REGULAR_BUILTIN_HELP     ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_HISTORY  ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_HUP      ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_LET      ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_MAIL     ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_MEMUSAGE ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_NICE     ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_NOHUP    ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_NOTIFY   ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_POPD     ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_PRINTENV ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_PUSHD    ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_SETENV   ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_STOP     ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_UNLIMIT  ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_UNSETENV ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_VER      ].flags &= ~BUILTIN_ENABLED;
-            regular_builtins[REGULAR_BUILTIN_WHENCE   ].flags &= ~BUILTIN_ENABLED;
-        }
     }
     else
     {
@@ -466,7 +418,60 @@ int main(int argc, char **argv)
         set_optionx(OPTION_EXPAND_ALIASES      , 0);
         set_optionx(OPTION_SAVE_HIST           , 0);
     }
+
+    /* disable some builtin extensions in the posix '-P' mode */
+    if(option_set('P'))
+    {
+        /* special builtins */
+        special_builtins[SPECIAL_BUILTIN_LOCAL    ].flags &= ~BUILTIN_ENABLED;
+        special_builtins[SPECIAL_BUILTIN_LOGOUT   ].flags &= ~BUILTIN_ENABLED;
+        special_builtins[SPECIAL_BUILTIN_REPEAT   ].flags &= ~BUILTIN_ENABLED;
+        special_builtins[SPECIAL_BUILTIN_SETX     ].flags &= ~BUILTIN_ENABLED;
+        special_builtins[SPECIAL_BUILTIN_SUSPEND  ].flags &= ~BUILTIN_ENABLED;
+        /* regular builtins */
+        regular_builtins[REGULAR_BUILTIN_BUGREPORT].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_BUILTIN  ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_CALLER   ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_COPROC   ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_DECLARE  ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_DIRS     ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_DISOWN   ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_DUMP     ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_ECHO     ].flags &= ~BUILTIN_ENABLED;
+        /*
+         * we won't disable the 'enable' builtin so the user can selectively enable builtins
+         * when they're in the POSIX mode. if you insist on disabling ALL non-POSIX builtins,
+         * uncomment the next line.
+         */
+        //regular_builtins[REGULAR_BUILTIN_ENABLE   ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_GLOB     ].flags &= ~BUILTIN_ENABLED;
+        /*
+         * the 'help' builtin should also be available, even in POSIX mode. if you want to
+         * disable it in POSIX mode, uncomment the next line.
+         */
+        //regular_builtins[REGULAR_BUILTIN_HELP     ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_HISTORY  ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_HUP      ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_LET      ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_MAIL     ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_MEMUSAGE ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_NICE     ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_NOHUP    ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_NOTIFY   ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_POPD     ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_PRINTENV ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_PUSHD    ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_SETENV   ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_STOP     ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_UNLIMIT  ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_UNSETENV ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_VER      ].flags &= ~BUILTIN_ENABLED;
+        regular_builtins[REGULAR_BUILTIN_WHENCE   ].flags &= ~BUILTIN_ENABLED;
+    }
+
+    /* set the exit status to 0 */
     exit_status = EXIT_SUCCESS;
+
     /* now we can enforce the restricted mode, as startup scripts are all read and executed */
     startup_finished = 1;
     

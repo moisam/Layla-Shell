@@ -558,13 +558,14 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
         /* first function name */
         entry = add_to_symtab("FUNCNAME");
         symtab_entry_setval(entry, "main");
-        entry->flags = FLAG_READONLY;
+        entry->flags = FLAG_READONLY | FLAG_EXPORT;
   
         /* incremented for each subshell invocation -- similar to $BASH_SUBSHELL */
         entry = add_to_symtab("SUBSHELL");
         symtab_entry_setval(entry, "0");
-        entry->flags = FLAG_READONLY;
+        entry->flags = FLAG_READONLY | FLAG_EXPORT;
     }
+    set_shlvl_var();
     
     /*
      * $_ (or underscore) is an obscure variable that shells love to assign 
@@ -602,20 +603,6 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
     
     /* make $SHELLOPTS readonly (bash) */
     entry = get_symtab_entry("SHELLOPTS");
-    if(entry)
-    {
-        entry->flags |= FLAG_READONLY;
-    }
-    
-    /*
-     * increment the shell nesting level (bash and tcsh).
-     * tcsh resets it to 1 in login shells.
-     */
-    entry = add_to_symtab("SHLVL");
-    sprintf(buf, "%d", subshell_level);
-    symtab_entry_setval(entry, buf);
-    
-    /* bash doesn't mark $SHLVL as readonly. but better safe than sorry */
     if(entry)
     {
         entry->flags |= FLAG_READONLY;

@@ -1213,6 +1213,16 @@ char *arithm_expand(char *__expr)
         }
     }
 
+    /* empty arithmetic expression result */
+    if(!nnumstack)
+    {
+        /*return false as the result */
+        set_exit_status(1, 0);
+        free(baseexp);
+        return NULL;
+    }
+
+    /* we must have only 1 item on the stack now */
     if(nnumstack != 1)
     {
         fprintf(stderr, "%s: Number stack has %d elements after evaluation. Should be 1.\n", SHELL_NAME, nnumstack);
