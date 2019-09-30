@@ -276,7 +276,6 @@ void update_row_col()
     {
         c = getchar();
     }
-    debug ("row=%d, col=%d\n", terminal_row, terminal_col);
     sigprocmask(SIG_UNBLOCK, &intmask, NULL);
 }
 
