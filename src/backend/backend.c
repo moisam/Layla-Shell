@@ -551,7 +551,6 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
         }
         else if(pid > 0)
         {
-            setpgid(pid, 0);
             struct job *job;
             char *cmdstr = get_cmdstr(node);
             /* add new job, or set $! if job control is off */
@@ -562,6 +561,7 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
              */
             if(option_set('m'))
             {
+                setpgid(pid, 0);
                 if(!job)
                 {
                     BACKEND_RAISE_ERROR(FAILED_TO_ADD_JOB, NULL, NULL);
@@ -585,7 +585,7 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
              * would be worth our while using vfork() instead of fork().
              * TODO: use vfork() in this function and in do_complete_command() instead of fork().
              */
-            sleep(1);
+            usleep(1);
             /*
             int status;
             if(waitpid(pid, &status, WNOHANG) > 0)
@@ -602,7 +602,10 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
         }
         else
         {
-            setpgid(0, pid);
+            if(option_set('m'))
+            {
+                setpgid(0, pid);
+            }
             asynchronous_prologue();
             int res = do_and_or(cmd, redirects, 0);
             if(!res)
@@ -807,9 +810,12 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     if(option_set('m'))
     {
         setpgid(pid, pid);
-        if(pid != tty_pid)
+        if(fg)
         {
-            tcsetpgrp(0, pid);
+            if(pid != tty_pid)
+            {
+                tcsetpgrp(0, pid);
+            }
         }
     }
     all_pids[count++] = pid;
@@ -835,10 +841,6 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
                 }
             }
             /* only restore tty to canonical mode if we are reading from it */
-            if(read_stdin /* isatty(0) */)
-            {
-                term_canon(1);
-            }
             reset_nonignored_traps();
             /* first command of pipeline */
             close(1);   /* stdout */
@@ -2117,10 +2119,6 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
         }
         
         /* only restore tty to canonical mode if we are reading from it */
-        if(isatty(0))
-        {
-            term_canon(1);
-        }
 
         /*
          * bash/tcsh have a useful non-POSIX extension where '%n' equals 'fg %n'
