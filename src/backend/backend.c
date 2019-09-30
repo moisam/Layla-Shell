@@ -153,11 +153,12 @@ _wait:
     /* collect the status. if stopped, add as background job */
     if(option_set('m') && (WIFSTOPPED(status) || WIFSIGNALED(status)))
     {
+        /* command doesn't have a job yet. create a new job */
         if(!job)
         {
             /* TODO: use correct command str */
             char *cmdstr = get_cmdstr(cmd);
-            job = add_job(pid, (pid_t[]){pid}, 1, cmdstr, 1);
+            job = add_job(getpgid(pid), (pid_t[]){pid}, 1, cmdstr, 1);
             if(cmdstr)
             {
                 free(cmdstr);
@@ -363,6 +364,17 @@ void do_exec_script(char *path, int argc, char **argv)
  */
 int do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, char **))
 {
+    /*
+    int i = 0;      //
+    while(i <= argc) //
+    {   //
+        i++;    //
+    }   //
+    for(i = 0; i < 1000; i++) printf("*");  //
+    printf("\n"); //
+    fflush(stdout); //
+    fflush(stderr); //
+    */
 
     if(internal_cmd)
     {
@@ -553,8 +565,12 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
         {
             struct job *job;
             char *cmdstr = get_cmdstr(node);
-            /* add new job, or set $! if job control is off */
-            job = add_job(pid, (pid_t[]){pid}, 1, cmdstr, 1);
+            /*
+             * add as a new job if job control is on, or set $! if job control is off.
+             * we add the job giving it the tty's pgid, then reset that to the
+             * job's pgid if the '-m' option is set (see code below).
+             */
+            job = add_job(tty_pid, (pid_t[]){pid}, 1, cmdstr, 1);
             /*
              * if job control is on, set the current job, or complain if the
              * job couldn't be added.
@@ -573,6 +589,7 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
                 }
                 else
                 {
+                    job->pgid = pid;
                     set_cur_job(job);
                     fprintf(stderr, "[%d] %u\n", job->job_num, pid);
                 }
@@ -880,14 +897,22 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     /* $! will be set in add_job() */
     struct job *job = NULL;
 
-    /* add new job, or set $! if job control is off */
-    job = add_job(pid, all_pids, count, cmdstr, !fg);
+    /*
+     * add as a new job if job control is on, or set $! if job control is off.
+     * we add the job giving it the tty's pgid, then reset that to the
+     * job's pgid if the '-m' option is set (see code below).
+     */
+    job = add_job(tty_pid, all_pids, count, cmdstr, !fg);
     /*
      * if job control is on, set the current job.
      */
     if(option_set('m'))
     {
-        set_cur_job(job);
+        if(job)
+        {
+            job->pgid = pid;
+            set_cur_job(job);
+        }
     }
 
     /* free temp memory */
@@ -959,8 +984,12 @@ int  do_term(struct node_s *node, struct node_s *redirect_list)
         {
             struct job *job = NULL;
             char *cmdstr = get_cmdstr(node->first_child);
-            /* add new job, or set $! if job control is off */
-            job = add_job(pid, (pid_t[]){pid}, 1, cmdstr, 1);
+            /*
+             * add as a new job if job control is on, or set $! if job control is off.
+             * we add the job giving it the tty's pgid, then reset that to the
+             * job's pgid if the '-m' option is set (see code below).
+             */
+            job = add_job(tty_pid, (pid_t[]){pid}, 1, cmdstr, 1);
             set_exit_status(0, 0);
             /*
              * if job control is on, set the current job.
@@ -978,6 +1007,8 @@ int  do_term(struct node_s *node, struct node_s *redirect_list)
                 }
                 else
                 {
+                    setpgid(pid, pid);
+                    job->pgid = pid;
                     set_cur_job(job);
                 }
             }
@@ -989,6 +1020,10 @@ int  do_term(struct node_s *node, struct node_s *redirect_list)
         }
         else
         {
+            if(option_set('m'))
+            {
+                setpgid(0, 0);
+            }
             asynchronous_prologue();
             struct node_s *child = node->first_child;
             int res = do_and_or(child, redirect_list, 0);
@@ -2058,7 +2093,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
             }
         }
         reset_nonignored_traps();
-        do_export_vars();
+        do_export_vars(EXPORT_VARS_EXPORTED_ONLY);
     }
     
    
