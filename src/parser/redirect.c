@@ -198,8 +198,10 @@ struct node_s *parse_io_file(struct token_s *tok)
  */
 struct node_s *parse_io_herestr(struct token_s *tok)
 {
+    struct source_s *src = tok->src;
+
     /* skip any optional spaces before the here-string */
-    char *cmd = tok->src->buffer+tok->src->curpos+1;
+    char *cmd = src->buffer + src->curpos+1;
     while(*cmd && isspace(*cmd) && *cmd != '\n')
     {
         cmd++;
