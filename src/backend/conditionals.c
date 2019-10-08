@@ -60,7 +60,7 @@
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_case_item(struct node_s *node, char *word, struct node_s *redirect_list)
+int  do_case_item(struct source_s *src, struct node_s *node, char *word, struct node_s *redirect_list)
 {
     /* 
      * the root node is a NODE_CASE_ITEM. we need to iterate its 
@@ -81,7 +81,7 @@ int  do_case_item(struct node_s *node, char *word, struct node_s *redirect_list)
                 }
                 if(commands)
                 {
-                    int res = do_compound_list(commands, redirect_list);
+                    int res = do_compound_list(src, commands, redirect_list);
                     ERR_TRAP_OR_EXIT();
                 }
                 free(pat_str);
@@ -106,7 +106,7 @@ int  do_case_item(struct node_s *node, char *word, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_case_clause(struct node_s *node, struct node_s *redirect_list)
+int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node || !node->first_child)
     {
@@ -149,7 +149,7 @@ int  do_case_clause(struct node_s *node, struct node_s *redirect_list)
     
     while(item)
     {
-        if(do_case_item(item, word, NULL /* redirect_list */))
+        if(do_case_item(src, item, word, NULL /* redirect_list */))
         {
             /* check for case items ending in ';&' */
             if(item->val_type == VAL_CHR && item->val.chr == '&')
@@ -172,7 +172,7 @@ int  do_case_clause(struct node_s *node, struct node_s *redirect_list)
                 }
                 if(commands)
                 {
-                    int res = do_compound_list(commands, redirect_list);
+                    int res = do_compound_list(src, commands, redirect_list);
                     ERR_TRAP_OR_EXIT();
                 }
             }
@@ -207,7 +207,7 @@ fin:
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_if_clause(struct node_s *node, struct node_s *redirect_list)
+int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -237,7 +237,7 @@ int  do_if_clause(struct node_s *node, struct node_s *redirect_list)
         }
     }
 
-    if(!do_compound_list(clause, NULL /* redirect_list */))
+    if(!do_compound_list(src, clause, NULL /* redirect_list */))
     {
         if(local_redirects)
         {
@@ -247,7 +247,7 @@ int  do_if_clause(struct node_s *node, struct node_s *redirect_list)
     }
     if(exit_status == 0)
     {
-        res = do_compound_list(_then, NULL /* redirect_list */);
+        res = do_compound_list(src, _then, NULL /* redirect_list */);
         ERR_TRAP_OR_EXIT();
         if(local_redirects)
         {
@@ -265,7 +265,7 @@ int  do_if_clause(struct node_s *node, struct node_s *redirect_list)
     }
     if(_else->type == NODE_IF)
     {
-        res = do_if_clause(_else, NULL /* redirect_list */);
+        res = do_if_clause(src, _else, NULL /* redirect_list */);
         ERR_TRAP_OR_EXIT();
         if(local_redirects)
         {
@@ -273,7 +273,7 @@ int  do_if_clause(struct node_s *node, struct node_s *redirect_list)
         }
         return res;
     }
-    res = do_compound_list(_else, NULL /* redirect_list */);
+    res = do_compound_list(src, _else, NULL /* redirect_list */);
     ERR_TRAP_OR_EXIT();
     if(local_redirects)
     {

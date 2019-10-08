@@ -58,12 +58,13 @@ void redirect_proc_do(char *cmdline, char op, char *tmpname)
         cmdline[i] = ' ';
         sprintf(buf, "{ %s} %c%s", cmdline+1, (op == '>') ? '<' : '>', tmpname);
         cmdline[i] = c;
-        __src.buffer   = buf;
-        __src.bufsize  = j;
-        __src.curpos   = -2;
-        __src.srctype = SOURCE_FIFO;
-        __src.srcname = NULL;
-        do_cmd();
+        struct source_s src;
+        src.buffer   = buf;
+        src.bufsize  = j;
+        src.curpos   = -2;
+        src.srctype = SOURCE_FIFO;
+        src.srcname = NULL;
+        parse_and_execute(&src);
         unlink(tmpname);
         exit(exit_status);
     }

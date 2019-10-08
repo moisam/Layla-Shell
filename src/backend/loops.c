@@ -138,7 +138,7 @@ char **__make_list(struct word_s *first_tok, int *token_count)
     while(t)
     {
         glob_t glob;
-        char **matches = filename_expand(cwd, t->data, &glob);
+        char **matches = get_filename_matches(t->data, &glob);
         if(!matches || !matches[0])
         {
             globfree(&glob);
@@ -316,7 +316,7 @@ char **get_word_list(struct node_s *wordlist, int *_count)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_for_clause2(struct node_s *node, struct node_s *redirect_list)
+int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -396,7 +396,7 @@ int  do_for_clause2(struct node_s *node, struct node_s *redirect_list)
         /* perform the loop body */
         if(atol(str2))
         {
-            if(!do_do_group(commands, NULL))
+            if(!do_do_group(src, commands, NULL))
             {
                 res = 1;
             }
@@ -457,7 +457,7 @@ int  do_for_clause2(struct node_s *node, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_for_clause(struct node_s *node, struct node_s *redirect_list)
+int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -466,7 +466,7 @@ int  do_for_clause(struct node_s *node, struct node_s *redirect_list)
     struct node_s *index = node->first_child;
     if(index->type == NODE_ARITHMETIC_EXPR)
     {
-        return do_for_clause2(node, redirect_list);
+        return do_for_clause2(src, node, redirect_list);
     }
 
     struct node_s *wordlist = index->next_sibling;
@@ -532,7 +532,7 @@ int  do_for_clause(struct node_s *node, struct node_s *redirect_list)
             res = 0;
             goto end;
         }
-        if(!do_do_group(commands, NULL /* redirect_list */))
+        if(!do_do_group(src, commands, NULL /* redirect_list */))
         {
             res = 1;
         }
@@ -558,7 +558,10 @@ int  do_for_clause(struct node_s *node, struct node_s *redirect_list)
         res = 1;
     }
 end:
-    for(i = 0; i < count; i++) free_malloced_str(list[i]);
+    for(i = 0; i < count; i++)
+    {
+        free_malloced_str(list[i]);
+    }
     //free(list[0]);
     free(list);
     cur_loop_level--;
@@ -578,7 +581,7 @@ end:
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_select_clause(struct node_s *node, struct node_s *redirect_list)
+int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -635,7 +638,7 @@ int  do_select_clause(struct node_s *node, struct node_s *redirect_list)
     }
     for(;;)
     {
-        print_prompt3();
+        print_prompt3(src);
         if(__read(2, (char *[]){ "read", "REPLY" }) != 0)
         {
             res = 0;
@@ -670,7 +673,7 @@ int  do_select_clause(struct node_s *node, struct node_s *redirect_list)
             continue;
         }
         __set(index_name, list[sel-1], 0, 0, 0);
-        if(!do_do_group(commands, NULL /* redirect_list */))
+        if(!do_do_group(src, commands, NULL /* redirect_list */))
         {
             res = 1;
         }
@@ -724,7 +727,7 @@ int  do_select_clause(struct node_s *node, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_while_clause(struct node_s *node, struct node_s *redirect_list)
+int  do_while_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -753,7 +756,7 @@ int  do_while_clause(struct node_s *node, struct node_s *redirect_list)
     
     do
     {
-        if(!do_compound_list(clause, NULL /* redirect_list */))
+        if(!do_compound_list(src, clause, NULL /* redirect_list */))
         {
             cur_loop_level--;
             if(local_redirects)
@@ -764,7 +767,7 @@ int  do_while_clause(struct node_s *node, struct node_s *redirect_list)
         }
         if(exit_status == 0)
         {
-            if(!do_do_group(commands, NULL /* redirect_list */))
+            if(!do_do_group(src, commands, NULL /* redirect_list */))
             {
                 res = 1;
             }
@@ -821,7 +824,7 @@ int  do_while_clause(struct node_s *node, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_until_clause(struct node_s *node, struct node_s *redirect_list)
+int  do_until_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -850,7 +853,7 @@ int  do_until_clause(struct node_s *node, struct node_s *redirect_list)
 
     do
     {
-        if(!do_compound_list(clause, NULL /* redirect_list */))
+        if(!do_compound_list(src, clause, NULL /* redirect_list */))
         {
             cur_loop_level--;
             if(local_redirects)
@@ -874,7 +877,7 @@ int  do_until_clause(struct node_s *node, struct node_s *redirect_list)
         }
         else
         {
-            if(!do_do_group(commands, NULL /* redirect_list */))
+            if(!do_do_group(src, commands, NULL /* redirect_list */))
             {
                 res = 1;
             }

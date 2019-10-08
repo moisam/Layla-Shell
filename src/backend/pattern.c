@@ -36,28 +36,6 @@
 #include "../error/error.h"
 #include "../debug.h"
 
-struct char_class_s
-{
-    char *name;
-    int   namelen;
-    int (*func)(int c);
-} char_class[] = 
-{
-    { "alnum" , 7, isalnum  },
-    { "alpha" , 7, isalpha  },
-    { "blank" , 7, isblank  },
-    { "cntrl" , 7, iscntrl  },
-    { "digit" , 7, isdigit  },
-    { "graph" , 7, isgraph  },
-    { "lower" , 7, islower  },
-    { "print" , 7, isprint  },
-    { "punct" , 7, ispunct  },
-    { "space" , 7, isspace  },
-    { "upper" , 7, isupper  },
-    { "xdigit", 8, isxdigit },
-};
-const int char_class_count = sizeof(char_class)/sizeof(struct char_class_s);
-
 
 /*
  * check if the string *p has any regular expression (regex) characters,
@@ -92,6 +70,7 @@ int has_regex_chars(char *p, size_t len)
     }
     return 0;
 }
+
 
 /*
  * find the shortest or longest prefix of str that matches
@@ -141,6 +120,7 @@ int match_prefix(char *pattern, char *str, int longest)
     return 0;
 }
 
+
 /*
  * find the shortest or longest suffix of str that matches
  * pattern, depending on the value of longest.
@@ -184,9 +164,13 @@ int match_suffix(char *pattern, char *str, int longest)
     return 0;
 }
 
+
 /*
+ * check if the string str matches the given pattern.
  * print_err is a flag that tells us if we should output an
  * error message in case no match was found.
+ *
+ * returns 1 if we have a match, 0 otherwise.
  */
 int match_filename(char *pattern, char *str, int print_err, int ignore)
 {
@@ -244,7 +228,7 @@ struct stat   statbuf;
 struct dirent **eps;
 
 /*
- * scans the provided path to look for input files.
+ * scan the provided path to look for input files.
  */
 int scan_dir(char *path, int report_err)
 {
@@ -263,6 +247,7 @@ int scan_dir(char *path, int report_err)
         return 0;
     }
 }
+
 
 char *__next_path    = NULL;
 
@@ -324,48 +309,44 @@ loop:
  * perform pathname (or filename) expansion, matching files in the given *dir to the
  * given *path, which is treated as a regex pattern that specifies which filename(s)
  * we should match.
+ *
  * returns a char ** pointer to the list of matched filenames, or NULL if nothing matched.
  */
-char **filename_expand(char *dir, char *path, glob_t *matches)
+char **get_filename_matches(char *pattern, glob_t *matches)
 {
     /* to guard our caller from trying to free an unused struct in case of expansion failure */
     matches->gl_pathc = 0;
     matches->gl_pathv = NULL;
+
     if(option_set('f'))
     {
         return NULL;
     }
-    if(!dir || !path)
+
+    if(!pattern)
     {
         return NULL;
     }
-    if(strcmp(dir, cwd) != 0)
-    {
-        if(chdir(dir) == -1)
-        {
-            return NULL;
-        }
-    }
+
     char *fignore = get_shell_varp("GLOBIGNORE", NULL);
-    //glob_t matches;
+
     /* set up the flags */
-    int flags = GLOB_NOESCAPE;
+    int flags = 0;
     if(optionx_set(OPTION_ADD_SUFFIX)) flags |= GLOB_MARK  ;
     if(optionx_set(OPTION_DOT_GLOB  )) flags |= GLOB_PERIOD;
     if(option_set('B')) flags |= GLOB_BRACE;
+
     /* perform the match */
     if(optionx_set(OPTION_GLOB_ASCII_RANGES)) setlocale(LC_ALL, "C");
-    int res = glob(path, flags, NULL, matches);
+    int res = glob(pattern, flags, NULL, matches);
     if(optionx_set(OPTION_GLOB_ASCII_RANGES)) setlocale(LC_ALL, "");
+
     if(res != 0)
     {
         globfree(matches);
-        if(dir != cwd)
-        {
-            chdir(cwd);
-        }
         return NULL;
     }
+
     size_t i;
     if(fignore)
     {
@@ -384,12 +365,10 @@ char **filename_expand(char *dir, char *path, glob_t *matches)
             }
         }
     }
-    if(dir != cwd)
-    {
-        chdir(cwd);
-    }
+
     return matches->gl_pathv;
 }
+
 
 /*
  * test filename against a colon-separated pattern field to determine if it matches one of the

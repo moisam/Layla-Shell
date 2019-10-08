@@ -21,6 +21,7 @@
 
 /* macro definitions needed to use sig*() and setenv() */
 #define _POSIX_C_SOURCE 200112L
+
 /* for uslepp(), but also _POSIX_C_SOURCE shouldn't be >= 200809L */
 #define _XOPEN_SOURCE   500
 
@@ -80,9 +81,6 @@ do {                                                \
 
 /* defined in jobs.c */
 int rip_dead(pid_t pid);
-
-/* defined in redirect.c */
-int __redirect_do(struct io_file_s *io_files, int do_savestd);
 
 /* defined in builtins/coproc.c */
 int    coproc(int argc, char **argv, struct io_file_s *io_files);
@@ -203,6 +201,7 @@ _wait:
     return status;
 }
 
+
 /*
  * POSIX defines how background jobs should handle signals
  * and read from /dev/null.
@@ -230,6 +229,7 @@ void asynchronous_prologue()
     }
 }
 
+
 /*
  * set the value of the underscore '$_' variable.
  */
@@ -243,6 +243,7 @@ static inline void set_underscore_val(char *val, int set_env)
     symtab_entry_setval(entry, val);
     if(set_env) setenv("_", val, 1);
 }
+
 
 /*
  * get the first line of a script file, which should read like:
@@ -276,6 +277,7 @@ char *get_first_line(char *path)
     fclose(f);
     return res;
 }
+
 
 /*
  * if a command file is not executable, try to execute it as a shell script by
@@ -351,6 +353,7 @@ void do_exec_script(char *path, int argc, char **argv)
         }
     }
 }
+
 
 /*
  * last part of the POSIX algorithm for command search and execution. this function handles
@@ -503,9 +506,9 @@ char *get_cmdstr(struct node_s *cmd)
  * in running the nodetree, it doesn't mean the commands were ran successfully (you need to
  * check the exit_status variable's value to get the exit status of the last command executed).
  */
-int  do_complete_command(struct node_s *node)
+int  do_complete_command(struct source_s *src, struct node_s *node)
 {
-    return do_list(node, NULL);
+    return do_list(src, node, NULL);
 }
 
 
@@ -518,7 +521,7 @@ int  do_complete_command(struct node_s *node)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_list(struct node_s *node, struct node_s *redirect_list)
+int  do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -526,7 +529,7 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
     }
     if(node->type != NODE_LIST)
     {
-        return do_and_or(node, NULL, 1);
+        return do_and_or(src, node, NULL, 1);
     }
     struct node_s *cmd = last_child(node);
     struct node_s *redirects = (cmd && cmd->type == NODE_IO_REDIRECT_LIST) ? cmd : redirect_list;
@@ -624,29 +627,30 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
                 setpgid(0, pid);
             }
             asynchronous_prologue();
-            int res = do_and_or(cmd, redirects, 0);
+            int res = do_and_or(src, cmd, redirects, 0);
             if(!res)
             {
                 exit(exit_status);
             }
             if(cmd->next_sibling)
             {
-                do_list(cmd->next_sibling, redirects);
+                do_list(src, cmd->next_sibling, redirects);
             }
             exit(exit_status);
         }
     }
-    int res = do_and_or(cmd, redirects, 1 /* wait */);
+    int res = do_and_or(src, cmd, redirects, 1 /* wait */);
     if(!res)
     {
         return 0;
     }
     if(cmd->next_sibling)
     {
-        return do_list(cmd->next_sibling, redirects);
+        return do_list(src, cmd->next_sibling, redirects);
     }
     return res;
 }
+
 
 /*
  * execute and AND-OR list, which consists of one or more pipelines, joined by
@@ -655,7 +659,7 @@ int  do_list(struct node_s *node, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_and_or(struct node_s *node, struct node_s *redirect_list, int fg)
+int  do_and_or(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg)
 {
     if(!node)
     {
@@ -663,7 +667,7 @@ int  do_and_or(struct node_s *node, struct node_s *redirect_list, int fg)
     }
     if(node->type != NODE_ANDOR)
     {
-        return do_pipeline(node, redirect_list, fg);
+        return do_pipeline(src, node, redirect_list, fg);
     }
     node = node->first_child;
     struct node_s *cmd = node;
@@ -671,7 +675,7 @@ int  do_and_or(struct node_s *node, struct node_s *redirect_list, int fg)
     int esave = option_set('e');
     set_option('e', 0);
 loop:
-    res = do_pipeline(cmd, redirect_list, fg);
+    res = do_pipeline(src, cmd, redirect_list, fg);
     /* exit on failure? only applicable for last command in AND-OR chain */
     if((!res || exit_status) && !node->next_sibling && esave)
     {
@@ -715,6 +719,7 @@ loop2:
     }
 }
 
+
 /*
  * execute a pipeline, which consists of a group of commands joined by the
  * pipe operator '|'. for each pipe operator, we create a two-way pipe. we join
@@ -725,7 +730,7 @@ loop2:
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_pipeline(struct node_s *node, struct node_s *redirect_list, int fg)
+int  do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg)
 {
     if(!node)
     {
@@ -737,7 +742,7 @@ int  do_pipeline(struct node_s *node, struct node_s *redirect_list, int fg)
         is_bang = 1;
         node = node->first_child;
     }
-    int res = do_pipe_sequence(node, redirect_list, fg);
+    int res = do_pipe_sequence(src, node, redirect_list, fg);
     if(res && is_bang)
     {
         set_exit_status(!exit_status, 0);
@@ -759,13 +764,14 @@ int  do_pipeline(struct node_s *node, struct node_s *redirect_list, int fg)
     return res;
 }
 
+
 /*
  * execute a pipe sequence, which is a pipeline without the optional bang '!' operator.
  * 
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
+int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg)
 {
     if(!node)
     {
@@ -773,7 +779,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     }
     if(node->type != NODE_PIPE)
     {
-        return do_command(node, redirect_list, fg);
+        return do_command(src, node, redirect_list, fg);
     }
     struct node_s *cmd = node->first_child;
     pid_t pid;
@@ -815,7 +821,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
             close(filedes[0]);
             close(filedes[1]);
             /* standard input now comes from pipe */
-            do_command(cmd, redirect_list, 0);
+            do_command(src, cmd, redirect_list, 0);
             exit(exit_status);
         }
         else if(pid < 0)
@@ -873,7 +879,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
                 close(filedes2[0]);
                 close(filedes2[1]);
             }
-            do_command(cmd, redirect_list, 0);
+            do_command(src, cmd, redirect_list, 0);
             exit(exit_status);
         }
         else if(pid2 < 0)
@@ -923,7 +929,7 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     /* run the last command in this process if extended option 'lastpipe' is set (bash) */
     if(lastpipe)
     {
-        do_command(cmd, redirect_list, 0);
+        do_command(src, cmd, redirect_list, 0);
         if(job)
         {
             set_pid_exit_status(job, pid, exit_status);
@@ -955,13 +961,14 @@ int  do_pipe_sequence(struct node_s *node, struct node_s *redirect_list, int fg)
     }
 }
 
+
 /*
  * execute a term, which consists of one or more AND-OR lists.
  * 
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_term(struct node_s *node, struct node_s *redirect_list)
+int  do_term(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -969,7 +976,7 @@ int  do_term(struct node_s *node, struct node_s *redirect_list)
     }
     if(node->type != NODE_TERM)
     {
-        return do_and_or(node, redirect_list, 1);
+        return do_and_or(src, node, redirect_list, 1);
     }
     int wait = (node->val.chr == '&') ? 0 : 1;
     if(!wait)
@@ -1026,30 +1033,31 @@ int  do_term(struct node_s *node, struct node_s *redirect_list)
             }
             asynchronous_prologue();
             struct node_s *child = node->first_child;
-            int res = do_and_or(child, redirect_list, 0);
+            int res = do_and_or(src, child, redirect_list, 0);
             if(!res)
             {
                 exit(exit_status);
             }
             if(child->next_sibling)
             {
-                do_term(child->next_sibling, redirect_list);
+                do_term(src, child->next_sibling, redirect_list);
             }
             exit(exit_status);
         }
     }
     struct node_s *child = node->first_child;
-    int res = do_and_or(child, redirect_list, 1 /* wait */);
+    int res = do_and_or(src, child, redirect_list, 1 /* wait */);
     if(!res)
     {
         return 0;
     }
     if(child->next_sibling)
     {
-        return do_term(child->next_sibling, redirect_list);
+        return do_term(src, child->next_sibling, redirect_list);
     }
     return res;
 }
+
 
 /*
  * execute a compound list, which forms the body of most compound commands,
@@ -1058,7 +1066,7 @@ int  do_term(struct node_s *node, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_compound_list(struct node_s *node, struct node_s *redirect_list)
+int  do_compound_list(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -1066,14 +1074,14 @@ int  do_compound_list(struct node_s *node, struct node_s *redirect_list)
     }
     if(node->type != NODE_LIST)
     {
-        return do_term(node, redirect_list);
+        return do_term(src, node, redirect_list);
     }
     node = node->first_child;
     int res = 0;
     while(node)
     {
         /* execute the first term (or list) */
-        res = do_term(node, redirect_list);
+        res = do_term(src, node, redirect_list);
         /* error executing the term */
         if(!res)
         {
@@ -1089,13 +1097,14 @@ int  do_compound_list(struct node_s *node, struct node_s *redirect_list)
     return res;
 }
 
+
 /*
  * execute a nodetree in a subshell.
  * 
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_subshell(struct node_s *node, struct node_s *redirect_list)
+int  do_subshell(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -1141,10 +1150,11 @@ int  do_subshell(struct node_s *node, struct node_s *redirect_list)
     }
 
     /* do the actual commands */
-    do_compound_list(subshell, NULL /* redirect_list */);
+    do_compound_list(src, subshell, NULL /* redirect_list */);
     /* no need to pop symtab or restore traps as we are exiting anyway */
     exit(exit_status);
 }
+
 
 /*
  * execute a compound list of commands that has been enclosed between the 'do' and 'done'
@@ -1153,54 +1163,15 @@ int  do_subshell(struct node_s *node, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_do_group(struct node_s *node, struct node_s *redirect_list)
+int  do_do_group(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     /*
      * this will take care of executing ERR trap for while, until, 
      * select and for loops.
      */
-    int res = do_compound_list(node, redirect_list);
+    int res = do_compound_list(src, node, redirect_list);
     ERR_TRAP_OR_EXIT();
     return res;
-}
-
-
-/*
- * convert a tree of tokens into a command string (i.e. re-create the original command line
- * from the token tree.
- * 
- * returns the malloc'd command string, or NULL if there is an error.
- */
-char *__tok_to_str(struct word_s *tok)
-{
-    if(!tok)
-    {
-        return NULL;
-    }
-    size_t len = 0;
-    struct word_s *t = tok;
-    while(t)
-    {
-        t->len = strlen(t->data);
-        len += t->len+1;
-        t    = t->next;
-    }
-    char *str = (char *)malloc(len+1);
-    if(!str)
-    {
-        return NULL;
-    }
-    char *str2 = str;
-    t = tok;
-    while(t)
-    {
-        sprintf(str2, "%s ", t->data);
-        str2 += t->len+1;
-        t     = t->next;
-    }
-    /* remove the last separator */
-    str2[-1] = '\0';
-    return str;
 }
 
 
@@ -1210,9 +1181,9 @@ char *__tok_to_str(struct word_s *tok)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_brace_group(struct node_s *node, struct node_s *redirect_list)
+int  do_brace_group(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
-    int res = do_compound_list(node, redirect_list);
+    int res = do_compound_list(src, node, redirect_list);
     ERR_TRAP_OR_EXIT();
     return res;
 }
@@ -1225,7 +1196,7 @@ int  do_brace_group(struct node_s *node, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_compound_command(struct node_s *node, struct node_s *redirect_list)
+int  do_compound_command(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
@@ -1233,14 +1204,14 @@ int  do_compound_command(struct node_s *node, struct node_s *redirect_list)
     }
     switch(node->type)
     {
-        case NODE_SUBSHELL: return do_subshell     (node, redirect_list);
-        case NODE_FOR     : return do_for_clause   (node, redirect_list);
-        case NODE_CASE    : return do_case_clause  (node, redirect_list);
-        case NODE_IF      : return do_if_clause    (node, redirect_list);
-        case NODE_WHILE   : return do_while_clause (node, redirect_list);
-        case NODE_UNTIL   : return do_until_clause (node, redirect_list);
-        case NODE_SELECT  : return do_select_clause(node, redirect_list);
-        case NODE_LIST    : return do_brace_group  (node, redirect_list);
+        case NODE_SUBSHELL: return do_subshell     (src, node, redirect_list);
+        case NODE_FOR     : return do_for_clause   (src, node, redirect_list);
+        case NODE_CASE    : return do_case_clause  (src, node, redirect_list);
+        case NODE_IF      : return do_if_clause    (src, node, redirect_list);
+        case NODE_WHILE   : return do_while_clause (src, node, redirect_list);
+        case NODE_UNTIL   : return do_until_clause (src, node, redirect_list);
+        case NODE_SELECT  : return do_select_clause(src, node, redirect_list);
+        case NODE_LIST    : return do_brace_group  (src, node, redirect_list);
         default           : return 0;
     }
 }
@@ -1253,7 +1224,7 @@ int  do_compound_command(struct node_s *node, struct node_s *redirect_list)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_function_body(struct node_s *func)
+int  do_function_body(struct source_s *src, struct node_s *func)
 {
     struct node_s *child    = func->first_child;
     struct node_s *prev     = child;
@@ -1270,7 +1241,7 @@ int  do_function_body(struct node_s *func)
         redirect = child;
         child->prev_sibling->next_sibling = NULL;
     }
-    int res = do_compound_command(func, redirect);
+    int res = do_compound_command(src, func, redirect);
     if(redirect)
     {
         /* 
@@ -1306,7 +1277,7 @@ int  do_function_body(struct node_s *func)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_function_definition(int argc, char **argv)
+int  do_function_definition(struct source_s *src, int argc, char **argv)
 {
     if(!argv[0])
     {
@@ -1345,20 +1316,19 @@ int  do_function_definition(int argc, char **argv)
             }
             else
             {
-                struct source_s save_src = __src;
-                src->srctype  = SOURCE_FUNCTION;
+                struct source_s src2;
+                src2.srctype  = SOURCE_FUNCTION;
                 //src->srcname  = argv[0];
-                src->buffer   = f;
-                src->bufsize  = strlen(f);
-                src->curpos   = -2;
-                struct token_s *tok = tokenize(src);
+                src2.buffer   = f;
+                src2.bufsize  = strlen(f);
+                src2.curpos   = -2;
+                struct token_s *tok = tokenize(&src2);
                 struct node_s *body = parse_function_body(tok);
                 if(body)
                 {
                     func->func_body = body;
                 }
                 func->val_type = SYM_FUNC;
-                __src = save_src;
             }
         }
         else
@@ -1423,7 +1393,7 @@ int  do_function_definition(int argc, char **argv)
             err = save_trap("ERR");
         }
     }
-    do_function_body(func->func_body);
+    do_function_body(src, func->func_body);
     /*
      * execute any EXIT trap set by the function, before restoring our shell's 
      * EXIT trap to its original value.
@@ -1554,6 +1524,7 @@ void save_std(int fd)
     }
 }
 
+
 /*
  * after a builtin utility or a shell function finishes execution, restore the
  * standard streams if there were any I/O redirections.
@@ -1631,7 +1602,7 @@ static inline void free_argv(int argc, char **argv)
  * shell) returns 1 on success and 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int dofork)
+int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int dofork)
 {
     struct io_file_s io_files[FOPEN_MAX];
     int i;
@@ -1883,7 +1854,6 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
                 if(!w)
                 {
                     free_argv(argc, argv);
-                    free_all_words(w);
                     set_option('f', saved_noglob);
                     return 0;
                 }
@@ -2017,7 +1987,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     
     if(option_set('x'))
     {
-        print_prompt4();
+        print_prompt4(src);
         for(i = 0; i < argc; i++)
         {
             fprintf(stderr, "%s ", argv[i]);
@@ -2057,7 +2027,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
     }
     
     /* expand $PS0 and print the result (bash) */
-    char *pr = __evaluate_prompt(get_shell_varp("PS0", NULL));
+    char *pr = evaluate_prompt(get_shell_varp("PS0", NULL));
     if(pr)
     {
         fprintf(stderr, "%s", pr);
@@ -2153,7 +2123,6 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
             return 1;
         }
         
-        /* only restore tty to canonical mode if we are reading from it */
 
         /*
          * bash/tcsh have a useful non-POSIX extension where '%n' equals 'fg %n'
@@ -2192,7 +2161,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
         }
         
         /* POSIX Command Search and Execution Algorithm:      */
-        search_and_exec(argc, argv, NULL, SEARCH_AND_EXEC_DOFUNC|SEARCH_AND_EXEC_MERGE_GLOBAL);
+        search_and_exec(src, argc, argv, NULL, SEARCH_AND_EXEC_DOFUNC|SEARCH_AND_EXEC_MERGE_GLOBAL);
         if(dofork)
         {
             BACKEND_RAISE_ERROR(FAILED_TO_EXEC, argv[0], strerror(errno));
@@ -2331,7 +2300,7 @@ int  do_simple_command(struct node_s *node, struct node_s *redirect_list, int do
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_command(struct node_s *node, struct node_s *redirect_list, int fork)
+int  do_command(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fork)
 {
     if(!node)
     {
@@ -2339,85 +2308,16 @@ int  do_command(struct node_s *node, struct node_s *redirect_list, int fork)
     }
     else if(node->type == NODE_COMMAND)
     {
-        int res = do_simple_command(node, redirect_list, fork);
+        int res = do_simple_command(src, node, redirect_list, fork);
         return res;
     }
     else if(node->type == NODE_FUNCTION)
     {
-        return do_simple_command(node, redirect_list, fork);
+        return do_simple_command(src, node, redirect_list, fork);
     }
     else if(node->type == NODE_TIME)
     {
-        return __time(node->first_child);
+        return __time(src, node->first_child);
     }
-    return do_compound_command(node, redirect_list);
-}
-
-
-/*
- * execute a translation unit, one command at a time.
- * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
- * the relation between this result and the exit status of the commands executed).
- */
-int  do_translation_unit(struct node_s *node)
-{
-    if(!node)
-    {
-        return 0;
-    }
-    if(read_stdin)
-    {
-        term_canon(1);
-    }
-    struct node_s *child = node;
-    if(node->type == NODE_PROGRAM)
-    {
-        child = child->first_child;
-    }
-    while(child)
-    {
-        if(!do_complete_command(child))
-        {
-            /* we got return stmt */
-            if(return_set)
-            {
-                return_set = 0;
-                /*
-                 * we should return from dot files AND functions. calling return outside any
-                 * function/script should cause the shell to exit.
-                 */
-                if(src->srctype == SOURCE_STDIN)
-                {
-                    exit_gracefully(exit_status, NULL);
-                }
-                break;
-            }
-        }
-        fflush(stdout);
-        fflush(stderr);
-        /*
-         * POSIX does not specify the -t (or onecmd) option, as it says
-         * it is mainly used with here-documents. this flag causes the
-         * shell to read and execute only one command before exiting.
-         * it is not clear what exactly constitutes 'one command'.
-         * here, we just execute the first node tree (which might be the
-         * whole program) and exit.
-         * TODO: fix this behaviour.
-         */
-        if(option_set('t'))
-        {
-            exit_gracefully(exit_status, NULL);
-        }
-        child = child->next_sibling;
-    }
-    fflush(stdout);
-    fflush(stderr);
-    SIGINT_received = 0;
-    if(read_stdin)
-    {
-        term_canon(0);
-        update_row_col();
-    }
-    return 0;
+    return do_compound_command(src, node, redirect_list);
 }
