@@ -32,9 +32,6 @@
 
 #define UTILITY             "coproc"
 
-/* defined in ../backend/redirect.c */
-int __redirect_do(struct io_file_s *io_files);
-
 /*
  * the coprocess uses two pipes: one for reading by the coprocess (written to
  * by the shell), the other for writing by the coprocess (read by the shell).
@@ -99,7 +96,7 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
         close(wfiledes[0]);
         close(wfiledes[1]);
         /* perform any I/O redirections */
-        __redirect_do(io_files);
+        __redirect_do(io_files, 0);
         errno = 0;
         /*
          * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
@@ -126,7 +123,7 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
         /* increment the $SUBSHELL variable so we know we're in a subshell */
         inc_subshell_var();
         /* execute the command */
-        int res = search_and_exec(argc-1, &argv[1], NULL, SEARCH_AND_EXEC_DOFUNC);
+        int res = search_and_exec(NULL, argc-1, &argv[1], NULL, SEARCH_AND_EXEC_DOFUNC);
         /* if we returned, the command was not executed */
         if(errno)
         {

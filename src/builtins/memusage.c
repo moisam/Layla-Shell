@@ -316,7 +316,11 @@ void print_mu_traps()
 void print_mu_inputbuf()
 {
     printf("* Input buffer: ");
-    output_size(src->bufsize);
+    /*
+     * TODO: output the correct input buffer's size.
+     */
+    //output_size(src->bufsize);
+    printf("0 bytes");
     printf("\n");
 }
 

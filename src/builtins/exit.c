@@ -227,30 +227,32 @@ void exit_gracefully(int stat, char *errmsg)
     sigaddset(&intmask, SIGTERM);
     sigprocmask(SIG_BLOCK, &intmask, NULL);
     
+    struct source_s src;
+
     /* perform logout scripts on login shell's exit */
     if(option_set('L'))
     {
         /* local logout scripts */
-        if(read_file("~/.lshlogout", src))
+        if(read_file("~/.lshlogout", &src))
         {
-            do_cmd();
-            free(src->buffer);
+            parse_and_execute(&src);
+            free(src.buffer);
         }
-        else if(read_file("~/.logout", src))
+        else if(read_file("~/.logout", &src))
         {
-            do_cmd();
-            free(src->buffer);
+            parse_and_execute(&src);
+            free(src.buffer);
         }
         /* global logout scripts */
-        if(read_file("/etc/lshlogout", src))
+        if(read_file("/etc/lshlogout", &src))
         {
-            do_cmd();
-            free(src->buffer);
+            parse_and_execute(&src);
+            free(src.buffer);
         }
-        else if(read_file("/etc/logout", src))
+        else if(read_file("/etc/logout", &src))
         {
-            do_cmd();
-            free(src->buffer);
+            parse_and_execute(&src);
+            free(src.buffer);
         }
     }
     sigprocmask(SIG_UNBLOCK, &intmask, NULL);

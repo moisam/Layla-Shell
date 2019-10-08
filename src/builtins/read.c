@@ -387,7 +387,7 @@ int __read(int argc, char **argv)
         {
             if(isatty(0) && option_set('i'))
             {
-                print_prompt2();
+                print_prompt2(NULL);
             }
         }
         else
@@ -443,7 +443,7 @@ int __read(int argc, char **argv)
     if(v >= argc)
     {
         entry = add_to_symtab("REPLY");
-        char *str = __tok_to_str(first);
+        char *str = wordlist_to_str(first);
         symtab_entry_setval(entry, str);
         free(str);
         goto end;
@@ -499,7 +499,7 @@ loop2:
          *       fields using spaces!.
          * TODO: fix this to proper behaviour!.
          */
-        char *str = __tok_to_str(t);
+        char *str = wordlist_to_str(t);
         symtab_entry_setval(entry, str);
         free(str);
     }

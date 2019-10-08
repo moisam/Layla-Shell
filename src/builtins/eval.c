@@ -81,15 +81,24 @@ int eval(int argc, char **argv)
         strcat(cmd, " "    );
     }
     cmd[len-2] = '\0';
+
     /* parse and execute the buffer */
-    struct source_s save_src = __src;
-    __src.buffer   = cmd;
-    __src.bufsize  = len-1;
-    __src.srctype  = SOURCE_EVAL;
-    __src.curpos   = -2;
-    do_cmd();
-    /* restore the previous input source */
-    __src          = save_src;
+    struct source_s src;
+    src.buffer   = cmd;
+    src.bufsize  = len-1;
+    src.srctype  = SOURCE_EVAL;
+    src.curpos   = -2;
+    src.srcname = NULL;
+    src.curline = 1;
+
+    /* add a new entry to the callframe stack to reflect the new scope we're entering */
+    callframe_push(callframe_new(argv[1], src.srcname, src.curline));
+
+    parse_and_execute(&src);
+
+    /* pop the callframe entry we've added to the stack */
+    callframe_popf();
+
     /* return the last command's exit status */
     return exit_status;
 }

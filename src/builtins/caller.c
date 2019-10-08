@@ -61,6 +61,16 @@ struct callframe_s *callframe_new(char *funcname, char *srcfile, int lineno)
 
 
 /*
+ * get a pointer to the current callframe.
+ * returns the current callframe, or NULL if the stack is empty.
+ */
+struct callframe_s *get_cur_callframe()
+{
+    return cur_callframe;
+}
+
+
+/*
  * push a callframe on top the call stack.
  * returns 1 on success, 0 on error.
  */
@@ -105,6 +115,7 @@ struct callframe_s *callframe_pop()
     /* return the popped callframe */
     return cf;
 }
+
 
 /*
  * pop a callframe off the call stack and free its structure.

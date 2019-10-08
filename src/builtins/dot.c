@@ -62,9 +62,16 @@ int dot(int argc, char **argv)
         return 1;
     }
     /* get the dot file path */
-    char *file = argv[1];
-    char *path = NULL;
-    struct source_s save_src = __src;
+    char *file  = argv[1];
+    char *path  = NULL;
+
+    /*
+     * we will set src.srcname and src.curline et al. in the call to
+     * read_file() below.
+     */
+    struct source_s src;
+    src.buffer  = NULL;
+
     /* does the dot filename has slashes in it? */
     if(strchr(file, '/'))
     {
@@ -76,7 +83,7 @@ int dot(int argc, char **argv)
             return 2;
         }
         /* try to read the dot file */
-        if(!read_file(file, src))
+        if(!read_file(file, &src))
         {
             goto err;
         }
@@ -115,7 +122,7 @@ int dot(int argc, char **argv)
             return 127;
         }
         /* try to read the dot file */
-        if(!read_file(path, src))
+        if(!read_file(path, &src))
         {
             goto err;
         }
@@ -125,7 +132,7 @@ int dot(int argc, char **argv)
             free_malloced_str(path);
         }
     }
-    src->srctype = SOURCE_DOTFILE;
+    src.srctype = SOURCE_DOTFILE;
     set_exit_status(0, 0);
     
     /* save current positional parameters */
@@ -169,10 +176,10 @@ int dot(int argc, char **argv)
     }
     
     /* add a new entry to the callframe stack to reflect the new scope we're entering */
-    callframe_push(callframe_new(file, save_src.srcname, save_src.curline));
+    callframe_push(callframe_new(file, src.srcname, src.curline));
 
     /* now execute the dot script */
-    do_cmd();
+    parse_and_execute(&src);
     
     /* bash executes RETURN traps when dot script finishes */
     trap_handler(RETURN_TRAP_NUM);
@@ -208,8 +215,8 @@ int dot(int argc, char **argv)
         }
         free(pos);
     }
+    free(src.buffer);
     /* and return */
-    __src = save_src;
     return exit_status;
     
 err:
@@ -217,6 +224,10 @@ err:
     if(path)
     {
         free_malloced_str(path);
+    }
+    if(src.buffer)
+    {
+        free(src.buffer);
     }
     return EXIT_ERROR_NOENT;    /* exit status: 127 */
 }

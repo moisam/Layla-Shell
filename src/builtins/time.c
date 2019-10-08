@@ -90,7 +90,7 @@ void print_time(int l, int p, int hrs, int mins, double secs)
  * explanation on how to use this utility.
  */
 
-int __time(struct node_s *cmd)
+int __time(struct source_s *src, struct node_s *cmd)
 {
     int     res = 0;
     /* use POSIX format by default if running in the --posix mode */
@@ -117,7 +117,7 @@ int __time(struct node_s *cmd)
     rstart = get_cur_time();
 
     /* execute the command(s) */
-    res = !do_complete_command(cmd);
+    res = !do_complete_command(src, cmd);
     
     /* get end time */
     en_time = times(&en_cpu);

@@ -104,7 +104,7 @@ int repeat(int argc, char **argv)
     /* execute the command(s) */
     while(count-- > 0)
     {
-        v = search_and_exec(cargc, cargv, NULL, SEARCH_AND_EXEC_DOFORK|SEARCH_AND_EXEC_DOFUNC);
+        v = search_and_exec(NULL, cargc, cargv, NULL, SEARCH_AND_EXEC_DOFORK|SEARCH_AND_EXEC_DOFUNC);
     }
     /* free the local symbol table */
     free_symtab(symtab_stack_pop());

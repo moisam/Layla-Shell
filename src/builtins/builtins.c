@@ -1040,6 +1040,108 @@ int special_builtin_count = sizeof(special_builtins)/sizeof(struct builtin_s);
 
 #define UTILITY             "builtin"
 
+
+/*
+ * return 1 if the given cmd name is a defined function, 0 otherwise.
+ */
+int is_function(char *cmd)
+{
+    return get_func(cmd) ? 1 : 0;
+}
+
+
+/*
+ * return 1 if the given cmd name is a builtin utility, 0 otherwise.
+ */
+int is_builtin(char *cmd)
+{
+    return is_special_builtin(cmd) ? 1 : is_regular_builtin(cmd);
+}
+
+
+/*
+ * return 1 if the given cmd name is an enabled special builtin utility, -1 if it
+ * is an enabled regular builtin utility, 0 otherwise.
+ */
+int is_enabled_builtin(char *cmd)
+{
+    if(!cmd)
+    {
+        return 0;
+    }
+    int     j;
+    for(j = 0; j < special_builtin_count; j++)
+    {
+        if(strcmp(special_builtins[j].name, cmd) == 0 &&
+           flag_set(special_builtins[j].flags, BUILTIN_ENABLED))
+        {
+            return 1;
+        }
+    }
+    for(j = 0; j < regular_builtin_count; j++)
+    {
+        if(strcmp(regular_builtins[j].name, cmd) == 0 &&
+           flag_set(regular_builtins[j].flags, BUILTIN_ENABLED))
+        {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+
+/*
+ * return 1 if the given cmd name is a special builtin utility, 0 otherwise.
+ */
+int is_special_builtin(char *cmd)
+{
+    if(!cmd)
+    {
+        return 0;
+    }
+    size_t  cmdlen = strlen(cmd);
+    int     j;
+    for(j = 0; j < special_builtin_count; j++)
+    {
+        if(special_builtins[j].namelen != cmdlen)
+        {
+            continue;
+        }
+        if(strcmp(special_builtins[j].name, cmd) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+/*
+ * return 1 if the given cmd name is a regular builtin utility, 0 otherwise.
+ */
+int is_regular_builtin(char *cmd)
+{
+    if(!cmd)
+    {
+        return 0;
+    }
+    size_t  cmdlen = strlen(cmd);
+    int     j;
+    for(j = 0; j < regular_builtin_count; j++)
+    {
+        if(regular_builtins[j].namelen != cmdlen)
+        {
+            continue;
+        }
+        if(strcmp(regular_builtins[j].name, cmd) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
 /*
  * print the list of builtins. depending on the value of the 'which' parameter,
  * the function may print the list of special, regular, or all builtins.

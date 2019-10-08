@@ -187,7 +187,8 @@ char *compare_exprs(char *__e1, char *__e2, int op)
      *       as any other arithmetic expr enclosed in $(( )) or (( )).
      */
     char *strend = NULL, *err = NULL;
-    char *e1 = arithm_expand(__e1), *e2 = NULL;
+    char *e1 = arithm_expand(__e1);
+    char *e2 = NULL;
     /* failed to perform arithmetic expansion on e1 */
     if(!e1)
     {

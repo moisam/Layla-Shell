@@ -41,7 +41,7 @@ char *default_path = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin";
  * if the command name contains a slash '/', we treat it as the pathname of
  * the external command we should execute.
  */
-int search_and_exec(int cargc, char **cargv, char *PATH, int flags)
+int search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH, int flags)
 {
     int dofork = flag_set(flags, SEARCH_AND_EXEC_DOFORK);
     int dofunc = flag_set(flags, SEARCH_AND_EXEC_DOFUNC);
@@ -60,7 +60,7 @@ int search_and_exec(int cargc, char **cargv, char *PATH, int flags)
         /* NOTE: Step 1-B is suppressed under 'command' invocation */
         if(dofunc)
         {
-            if(do_function_definition(cargc, cargv))
+            if(do_function_definition(src, cargc, cargv))
             {
                 //free_symtab(symtab_stack_pop());
                 return 0;
@@ -260,5 +260,5 @@ int command(int argc, char **argv)
      */
     int    cargc = argc-i;
     char **cargv = &argv[i];
-    return search_and_exec(cargc, cargv, PATH, SEARCH_AND_EXEC_DOFORK);
+    return search_and_exec(NULL, cargc, cargv, PATH, SEARCH_AND_EXEC_DOFORK);
 }

@@ -403,7 +403,7 @@ check_bounds:
     if(direct_exec)
     {
         int replace = 1;
-        struct source_s save_src = __src;
+        struct source_s src;
         for( ; first <= last; first++)
         {
             /*
@@ -429,33 +429,31 @@ check_bounds:
                     tmp[rep-cmd] = '\0';
                     strcat(tmp, new);
                     strcat(tmp, rep+oldlen);
-                    __src.buffer   = tmp;
+                    src.buffer   = tmp;
                 }
                 else
                 {
-                    __src.buffer   = cmd_history[first].cmd;
+                    src.buffer   = cmd_history[first].cmd;
                 }
-                __src.bufsize  = strlen(__src.buffer)-1;
-                __src.srctype  = SOURCE_FCCMD;
-                __src.srcname  = NULL;
-                __src.curpos   = -2;
+                src.bufsize  = strlen(src.buffer)-1;
+                src.srctype  = SOURCE_FCCMD;
+                src.srcname  = NULL;
+                src.curpos   = -2;
                 /* parse and execute */
-                do_cmd();
+                parse_and_execute(&src);
                 replace = 0;
             }
             else
             {
                 /* execute the command without replacement */
-                __src.buffer   = cmd_history[first].cmd;
-                __src.bufsize  = strlen(cmd_history[first].cmd)-1;
-                __src.srctype  = SOURCE_FCCMD;
-                __src.srcname  = NULL;
-                __src.curpos   = -2;
-                do_cmd();
+                src.buffer   = cmd_history[first].cmd;
+                src.bufsize  = strlen(cmd_history[first].cmd)-1;
+                src.srctype  = SOURCE_FCCMD;
+                src.srcname  = NULL;
+                src.curpos   = -2;
+                parse_and_execute(&src);
             }
         }
-        /* restore the input source */
-        __src = save_src;
         /* free the editor name */
         if(editor)
         {
@@ -586,17 +584,16 @@ check_bounds:
             line_max = DEFAULT_LINE_MAX;
         }
         char cmd[line_max];
-        struct source_s save_src = __src;
+        struct source_s src;
         while(fgets(cmd, line_max-1, f))
         {
-            __src.buffer   = cmd;
-            __src.bufsize  = strlen(cmd)-1;
-            __src.srctype  = SOURCE_FCCMD;
-            __src.srcname  = NULL;
-            __src.curpos   = -2;
-            do_cmd();
+            src.buffer   = cmd;
+            src.bufsize  = strlen(cmd)-1;
+            src.srctype  = SOURCE_FCCMD;
+            src.srcname  = NULL;
+            src.curpos   = -2;
+            parse_and_execute(&src);
         }
-        __src = save_src;
         fclose(f);
     }
     close(tmp);
