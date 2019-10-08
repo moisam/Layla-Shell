@@ -47,6 +47,7 @@ add_executable(lsh   main.c wordexp.c       cmdline.c               helpfunc.c  
                      early_environ.h        cmd.h                   sig.h   braceexp.c
                      debug.h                kbdevent.h              cpu.h     ostype.h   vars.c
                      vi.c vi.h vi_keys.c    comptype.h  strbuf.c    popen.c   functab.c
+                     strings.c              terminal.c
                      scanner/lexical.c      scanner/source.c
                      scanner/scanner.h      scanner/source.h        scanner/keywords.h
                      parser/node.c          parser/parser.c         parser/conditionals.c
