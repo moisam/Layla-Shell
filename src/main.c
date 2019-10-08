@@ -39,10 +39,6 @@
 /* process group id of the command line interpreter */
 pid_t  tty_pid;
 
-/* the source input struct */
-struct source_s  __src;
-struct source_s *src = &__src;
-
 /* flag to indicate if we are reading from stdin */
 int    read_stdin       = 1;
 
@@ -55,7 +51,7 @@ int    signal_received  = 0;
 #define CLOCKID CLOCK_REALTIME
 
 /* defined in cmdline.c */
-void kill_input();
+void kill_input(struct source_s *src);
 extern int do_periodic;
 
 /* defined in initsh.c */
@@ -208,8 +204,15 @@ int main(int argc, char **argv)
     /* get the umask */
     init_umask();
     
+    /*
+     * if we have a script file name or a command string passed to us, initsh() will
+     * load it into the following source struct.
+     */
+    struct source_s src;
+    memset(&src, 0, sizeof(struct source_s));
+
     /* parse the command line options, if any */
-    char islogin = parse_options(argc, argv);
+    char islogin = parse_options(argc, argv, &src);
     set_option('L', islogin ? 1 : 0);
     if(islogin)
     {
@@ -363,6 +366,7 @@ int main(int argc, char **argv)
      * to ksh behaviour.
      */
 
+
     /* init environ and finish initialization */
     initsh(argc, argv, read_stdin);
     
@@ -486,27 +490,185 @@ int main(int argc, char **argv)
     }
     else
     {
-        do_cmd();
+        parse_and_execute(&src);
     }
     //exit_gracefully(exit_status, NULL);
     __exit(1, (char *[]){ "exit", NULL });
 }
 
 
+#define SAVE_TO_HISTORY_AND_PRINT(cmd)      \
+do {                                        \
+    if(save_hist)                           \
+    {                                       \
+        save_to_history((cmd));             \
+    }                                       \
+    if(option_set('v'))                     \
+    {                                       \
+        fprintf(stderr, "%s\n", (cmd));     \
+    }                                       \
+} while(0)
+
+
 /*
- * parse and execute the translation unit we have in the global source_s struct.
+ * parse and execute the translation unit we have in the passed source_s struct.
  * 
  * returns 1.
  */
-int do_cmd()
+int parse_and_execute(struct source_s *src)
 {
-    struct node_s   *root = (struct node_s *)NULL;
-    eof_token.src         = src;
-    /* parse the translation unit */
-    root = parse_translation_unit();
-    /* if parsed successfully */
-    if(root)
+    eof_token.src = src;
+
+    /*
+     * parse and execute the translation unit, one command at a time.
+     */
+
+    /* skip any leading whitespace chars */
+    skip_white_spaces(src);
+
+    /* save the start of this line */
+    src->wstart = src->curpos;
+
+    /*
+     * the -n option means read commands but don't execute them.
+     * only effective in non-interactive shells (POSIX says interactive shells
+     * may safely ignore it). this option is good for checking a script for
+     * syntax errors.
+     */
+    int noexec = (option_set('n') && !option_set('i'));
+    int i      = src->curpos;
+    int res    = 1;             /* the result of parsing/executing */
+    struct token_s  *tok  = tokenize(src);
+
+    /* skip any leading comments/newlines */
+    while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
     {
+        /* skip comments and newlines */
+        if(tok->type == TOKEN_COMMENT || tok->type == TOKEN_NEWLINE)
+        {
+            i = src->curpos;
+            /* save the start of this line */
+            src->wstart = src->curpos;
+            tok = tokenize(tok->src);
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    /* reached EOF or error getting next token */
+    if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
+    {
+        return 0;
+    }
+
+    /* first time ever? keep a track of the first char of the current command line */
+    if(i < 0)
+    {
+        i = 0;
+    }
+
+    /*
+     * determine if we're going to save commands to the history list.
+     * we save history commands when the shell is interactive and we're reading
+     * from stdin.
+     */
+    int save_hist = option_set('i') && src->srctype == SOURCE_STDIN;
+
+    /* clear the parser's error flag */
+    parser_err = 0;
+
+    /* restore the terminal's canonical mode if needed */
+    if(read_stdin)
+    {
+        term_canon(1);
+    }
+
+    /* loop parsing and executing commands */
+    while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
+    {
+        /* parse the next command */
+        struct node_s *cmd = parse_complete_command(tok);
+        tok = get_current_token();
+
+        /* parser encountered an error */
+        if(parser_err)
+        {
+            if(cmd)
+            {
+                free_node_tree(cmd);
+            }
+            res = 0;
+            break;
+        }
+
+        /* input consisted of empty lines and/or comments with no commands */
+        if(!cmd)
+        {
+            break;
+        }
+
+        /* we've got a command. now are we going to execute it? */
+        if(noexec)
+        {
+            free_node_tree(cmd);
+            continue;
+        }
+
+        if(!cmd->lineno)
+        {
+            cmd->lineno = src->curline;
+        }
+
+        /* add command to the history list and echo it (if -v option is set) */
+        switch(cmd->type)
+        {
+            case NODE_TIME:
+                /* the real command is the first child of the 'time' node */
+                if(cmd->first_child)
+                {
+                    cmd = cmd->first_child;
+                    /* fall through to the next case */
+                }
+                else
+                {
+                    /* 'time' word with no timed command */
+                    SAVE_TO_HISTORY_AND_PRINT("time");
+                    break;
+                }
+                /* fall through to the next case */
+                __attribute__((fallthrough));
+
+            case NODE_COMMAND:
+            case NODE_LIST:
+                if(cmd->val.str)
+                {
+                    SAVE_TO_HISTORY_AND_PRINT(cmd->val.str);
+                    break;
+                }
+                /* fall through to the next case */
+                __attribute__((fallthrough));
+
+            default:
+                ;
+                int j = src->curpos-(tok->text_len);
+                while(src->buffer[j] == '\n')
+                {
+                    j--;
+                }
+                /* copy command line to buffer */
+                char buf[j-i+1];
+                int k = 0;
+                do
+                {
+                    buf[k++] = src->buffer[i++];
+                } while(i < j);
+                buf[k] = '\0';
+                SAVE_TO_HISTORY_AND_PRINT(buf);
+                break;
+        }
+
         /*
          * dump the Abstract Source Tree (AST) of this translation unit.
          * note that we are using an extended option '-d' which is not
@@ -514,22 +676,94 @@ int do_cmd()
          */
         if(option_set('d'))
         {
-            dump_node_tree(root, 1);
+            dump_node_tree(cmd, 1);
         }
-        /* -n option means read commands but don't execute them */
-        int noexec = (option_set('n') && !option_set('i'));
-        if(!noexec)
+
+        /* now execute the command */
+        if(!do_complete_command(src, cmd))
         {
-            do_translation_unit(root);
-            if(read_stdin /* isatty(0) */)
+            /* we've got a return statement */
+            if(return_set)
             {
-                term_canon(0);
+                return_set = 0;
+                /*
+                 * we should return from dot files AND functions. calling return outside any
+                 * function/script should cause the shell to exit.
+                 */
+                if(src->srctype == SOURCE_STDIN)
+                {
+                    exit_gracefully(exit_status, NULL);
+                }
+            }
+            /* failed to execute command. bail out */
+            else
+            {
+                res = 0;
+            }
+            free_node_tree(cmd);
+            break;
+        }
+        free_node_tree(cmd);
+        fflush(stdout);
+        fflush(stderr);
+
+        /*
+         * POSIX does not specify the -t (or onecmd) option, as it says it is
+         * mainly used with here-documents. this flag causes the shell to read
+         * and execute only one command before exiting.. it is not clear what
+         * exactly constitutes 'one command'.. here, we just execute the first
+         * node tree we've got and exit.
+         */
+        if(option_set('t'))
+        {
+            exit_gracefully(exit_status, NULL);
+        }
+
+        /*
+         * prepare for parsing the next command.
+         * skip optional newline and comment tokens.
+         */
+        while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
+        {
+            if(tok->type == TOKEN_COMMENT || tok->type == TOKEN_NEWLINE)
+            {
+                tok = tokenize(tok->src);
+            }
+            else
+            {
+                break;
             }
         }
-        /* free the parsed nodetree */
-        free_node_tree(root);
+
+        /* reached EOF or error getting next token */
+        if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
+        {
+            break;
+        }
+
+        /* keep a track of the first char of the current command line */
+        i = src->curpos-(tok->text_len);
+        while(src->buffer[i] == '\n')
+        {
+            i++;
+        }
+        /* save the start of this line */
+        src->wstart = src->curpos-(tok->text_len);
     }
-    return 1;
+
+    /* finished parsing and executing commands */
+    fflush(stdout);
+    fflush(stderr);
+    SIGINT_received = 0;
+
+    /* restore the terminal's non-canonical mode if needed */
+    if(read_stdin)
+    {
+        term_canon(0);
+        update_row_col();
+    }
+
+    return res;
 }
 
 

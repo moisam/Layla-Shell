@@ -206,7 +206,7 @@ int get_date(char *fmt, struct tm *now)
  * 
  * result is the malloc'd word-expanded prompt string.
  */
-char *__evaluate_prompt(char *PS)
+char *evaluate_prompt(char *PS)
 {
     if(!PS)
     {
@@ -560,7 +560,16 @@ char *__evaluate_prompt(char *PS)
                     case 'N':
                         if(c == '%')
                         {
-                            if(src->srctype == SOURCE_FUNCTION || src->srctype == SOURCE_EVAL)
+                            struct callframe_s *cf = get_cur_callframe();
+                            s = cf ? cf->funcname : NULL;
+                            if(s)
+                            {
+                                strcat(prompt, s);
+                                j += strlen(s);
+                                break;
+                            }
+#if 0
+                            if(src && (src->srctype == SOURCE_FUNCTION || src->srctype == SOURCE_EVAL))
                             {
                                 /* use $0, as it should hold the name of the function or eval command */
                                 s = get_shell_varp("0", SHELL_NAME);
@@ -568,6 +577,7 @@ char *__evaluate_prompt(char *PS)
                                 j += strlen(s);
                                 break;
                             }
+#endif
                         }
                         /* NOTE: fall through to handle '%N' if the current command is not a function or eval cmd */
                         __attribute__((fallthrough));
@@ -575,11 +585,20 @@ char *__evaluate_prompt(char *PS)
                     case 'x':
                         if(c == '%')
                         {
-                            if(src->srcname)
+                            struct callframe_s *cf = get_cur_callframe();
+                            s = cf ? cf->srcfile : NULL;
+                            if(s)
+                            {
+                                strcat(prompt, s);
+                                j += strlen(s);
+                            }
+#if 0
+                            if(src && src->srcname)
                             {
                                 strcat(prompt, src->srcname);
                                 j += strlen(src->srcname);
                             }
+#endif
                             else
                             {
                                 /* if no file or function name, use $0 (as in zsh) */
@@ -921,7 +940,7 @@ void repeat_first_char(char *PS)
 /* 
  * Parse the PS1 variable to get the prompt.
  */
-void evaluate_prompt(char *which)
+void do_print_prompt(char *which)
 {
     struct symtab_entry_s *entry = get_symtab_entry(which);
     char *PS = entry->val;      /* getenv(which); */
@@ -969,7 +988,7 @@ void evaluate_prompt(char *which)
     /* bash extension to decide whether or not to evaluate prompt strings */
     if(optionx_set(OPTION_PROMPT_VARS))
     {
-        char *pr = __evaluate_prompt(PS);
+        char *pr = evaluate_prompt(PS);
         if(!pr)
         {
             return;
@@ -1002,7 +1021,7 @@ void print_prompt()
     {
         command(2, (char *[]){ "command", cmd, NULL });
     }
-    evaluate_prompt(PS1);
+    do_print_prompt(PS1);
 }
 
 /*
@@ -1010,7 +1029,7 @@ void print_prompt()
  */
 void print_prompt2()
 {
-    evaluate_prompt(PS2);
+    do_print_prompt(PS2);
 }
 
 /*
@@ -1018,7 +1037,7 @@ void print_prompt2()
  */
 void print_prompt3()
 {
-    evaluate_prompt(PS3);
+    do_print_prompt(PS3);
 }
 
 /*
@@ -1026,5 +1045,5 @@ void print_prompt3()
  */
 void print_prompt4()
 {
-    evaluate_prompt(PS4);
+    do_print_prompt(PS4);
 }

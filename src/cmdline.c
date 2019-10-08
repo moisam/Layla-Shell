@@ -90,12 +90,12 @@ static int __heredocs = 0;                 /* count heredocs */
  * kill input by emptying the command buffer, printing a newline followed by
  * the first prompt, and updating the cursor position.
  */
-void kill_input()
+void kill_input(struct source_s *src)
 {
     cmdbuf_index = 0;
     cmdbuf_end   = 0;
     fprintf(stderr, "\n");
-    print_prompt();
+    print_prompt(src);
     cmdbuf[0]    = '\0';
     update_row_col();
     start_row    = get_terminal_row();
@@ -103,58 +103,83 @@ void kill_input()
 }
 
 /*
- * main shell REPL (Read-Execute-Print-Loop).
+ * main interactive shell REPL (Read-Execute-Print-Loop).
  */
 void cmdline()
 {
     char *cmd;
     //int  stat = EXIT_SUCCESS;
+
     /* clear the screen */
     if(optionx_set(OPTION_CLEAR_SCREEN))
     {
         clear_screen();
     }
+
     /* print welcome message */
     fprintf(stdout, "\n\nWelcome to Layla shell\n\n");
+
     /* clear heredoc marks */
     int i;
-    for(i = 0; i < FOPEN_MAX; i++) heredoc_mark[i] = NULL;
+    for(i = 0; i < FOPEN_MAX; i++)
+    {
+        heredoc_mark[i] = NULL;
+    }
+
+
+    /* prepare our source struct */
+    struct source_s src;
+    src.buffer   = NULL;
+    src.bufsize  = 0;
+    src.srctype  = SOURCE_STDIN;
+    src.srcname  = NULL;
+    src.curpos   = -2;
+
     /* REPL loop */
     do
     {
         cmd_history_index = cmd_history_end;
+
         /* check on child processes before printing the next $PS1 */
         if(option_set('m'))
         {
             check_on_children();
         }
+
         /* check for mail */
         if(check_for_mail())
         {
             mail(2, (char *[]){"mail", "-q", NULL});
         }
+
         /* in tcsh, special alias periodic is run every tperiod minutes */
         if(do_periodic)
         {
             run_alias_cmd("periodic");
             do_periodic = 0;
         }
+
         /* in tcsh, special alias precmd is run before printing the next command prompt */
         run_alias_cmd("precmd");
+
         /* print the first prompt $PS1 */
-        print_prompt();
+        print_prompt(&src);
+
         /* check if we're ready to read from the terminal */
         if(!ready_to_read(0))
         {
             break;
         }
+
         /*
          * turn canonical mode off (might have been turned on by the last command
          * we executed).
          */
         term_canon(0);
+
         /* read the next command line */
-        cmd = read_cmd();
+        cmd = read_cmd(&src);
+
         /* no input (EOF) */
         if(!cmd)
         {
@@ -170,25 +195,23 @@ void cmdline()
             /* if we return from __exit(), it means we have pending jobs */
             continue;
         }
+
         /* we've got an empty line */
         if(cmd[0] == '\0' || strcmp(cmd, "\n") == 0)
         {
             continue;
         }
+
         /* fill in the source struct */
-        __src.buffer   = cmd;
-        __src.bufsize  = cmdbuf_end;
-        __src.srctype  = SOURCE_STDIN;
-        if(__src.srcname)
-        {
-            free_malloced_str(__src.srcname);
-        }
-        __src.srcname  = NULL;
-        __src.curpos   = -2;
+        src.buffer   = cmd;
+        src.bufsize  = cmdbuf_end;
+        src.curpos   = -2;
+
         /* and execute the command line */
-        do_cmd();
+        parse_and_execute(&src);
     } while(1);
 }
+
 
 /*
  * extend the command buffer by the given amount of bytes.
@@ -214,7 +237,7 @@ int ext_cmdbuf(size_t howmuch)
  * returns a pointer to the buffer if the command is read successfully,
  * NULL if there's no input or EOF is reached.
  */
-char *read_cmd()
+char *read_cmd(struct source_s *src)
 {
     cmdbuf_index = 0;
     cmdbuf_end   = 0;
@@ -290,7 +313,7 @@ char *read_cmd()
          */
         if(signal_received)
         {
-            kill_input();
+            kill_input(src);
             signal_received = 0;
             continue;
         }
@@ -477,7 +500,7 @@ char *read_cmd()
                 else
                 {
                     /* this procedure will do command auto-completion */
-                    do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end);
+                    do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end, src);
                 }
                 break;
 
@@ -542,7 +565,7 @@ char *read_cmd()
                  */
                 if(option_set('y'))
                 {
-                    c = vi_cmode();
+                    c = vi_cmode(src);
                 }
                 if(c != '\n' && c != '\r')
                 {
@@ -573,7 +596,7 @@ char *read_cmd()
                             cmdbuf_index = 0;
                             cmdbuf_end   = 0;
                             cmdbuf[0] = '\0';
-                            print_prompt();
+                            print_prompt(src);
                             update_row_col();
                             start_col = get_terminal_col();
                             start_row = get_terminal_row();
@@ -614,7 +637,7 @@ char *read_cmd()
                 cmdbuf[cmdbuf_end+1] = '\0';
                 if(is_incomplete_cmd(incomplete_cmd ? 0 : 1))
                 {
-                    print_prompt2();
+                    print_prompt2(src);
                     char *tmp = (char *)0;
                     size_t sz = strlen(cmdbuf)+1;
                     if(incomplete_cmd)

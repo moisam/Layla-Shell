@@ -37,10 +37,10 @@
 #include "debug.h"
 
 /* defined in cmdline.c */
-extern char     *cmdbuf      ;
-extern uint16_t  cmdbuf_index;
-extern uint16_t  cmdbuf_end  ;
-extern uint16_t  cmdbuf_size ;
+// extern char     *cmdbuf      ;
+// extern uint16_t  cmdbuf_index;
+// extern uint16_t  cmdbuf_end  ;
+// extern uint16_t  cmdbuf_size ;
 extern long      CMD_BUF_SIZE;
 extern int       terminal_row;
 extern int       terminal_col;
@@ -422,7 +422,7 @@ void free_bufs()
  * respectively, so that cmdline() would execute the command line.. returns
  * zero otherwise.
  */
-int vi_cmode()
+int vi_cmode(struct source_s *src)
 {
     int  c, c2;
     int  tabs   = 0;
@@ -1626,7 +1626,7 @@ select:
                                                  * POSIX says this operator performs word expansions, while
                                                  * ksh says it generates a list of matching commands/file names.
                                                  */
-                do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end);
+                do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end, src);
                 count = 0;
                 break;
                 
@@ -1646,7 +1646,7 @@ select:
                     buf[count  ] =  '*';
                     buf[count+1] = '\0';
                 }
-                pp = filename_expand(cwd, p, &glob);
+                pp = get_filename_matches(p, &glob);
                 if(!pp || !pp[0])
                 {
                     globfree(&glob);
@@ -1697,7 +1697,7 @@ select:
                     buf[count  ] =  '*';
                     buf[count+1] = '\0';
                 }
-                pp = filename_expand(cwd, p, &glob);
+                pp = get_filename_matches(p, &glob);
                 if(!pp || !pp[0])
                 {
                     globfree(&glob);
@@ -1845,7 +1845,7 @@ select:
 
             case '\f':                          /* ^L - linefeed and print cur line */
                 clear_screen();
-                print_prompt();
+                print_prompt(src);
                 update_row_col();
                 start_row = get_terminal_row();
                 start_col = get_terminal_col();
@@ -1863,7 +1863,7 @@ select:
                 
             case CTRLV_KEY:
                 printf("\n%s\n", shell_ver);
-                print_prompt();
+                print_prompt(src);
                 update_row_col();
                 start_row = terminal_row;
                 start_col = terminal_col;

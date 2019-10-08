@@ -117,8 +117,8 @@ struct word_s
  
 /* prompt.c */
 extern  char prompt[];
-char   *__evaluate_prompt(char *PS);
-void    evaluate_prompt();
+char   *evaluate_prompt(char *PS);
+void    do_print_prompt(char *which);
 void    print_prompt();
 void    print_prompt2();
 void    print_prompt3();
@@ -135,7 +135,7 @@ extern  int  startup_finished;
 void    initsh(int argc, char **argv, int init_tty);
 void    init_login();
 void    init_rc();
-char    parse_options(int argc, char **argv);
+char    parse_options(int argc, char **argv, struct source_s *src);
 
 /* cmdline.c */
 extern  int       terminal_row, terminal_col;
@@ -148,7 +148,7 @@ extern  uint16_t  cmdbuf_size ;           /* actual malloc'd size */
 extern  timer_t   timerid     ;
 void    cmdline();
 int     ext_cmdbuf();
-char   *read_cmd();
+char   *read_cmd(struct source_s *src);
 int     is_incomplete_cmd();
 size_t  glue_cmd_pieces();
 
@@ -156,14 +156,13 @@ size_t  glue_cmd_pieces();
 void    init_str_hashtable();
 char   *__get_malloced_str(char *str);
 char   *get_malloced_str(char *str);
+char   *get_malloced_strl(char *str, int start, int length);
 void    free_malloced_str(char *str);
 
-/* helpfunc.c */
-int     beep();
-int     strupper(char *str);
-int     strlower(char *str);
-void    _itoa(char *str, int num);
-void    strcat_c(char *str, int pos, char chr);
+/* terminal.c */
+int     echoon(int fd);
+int     echooff(int fd);
+void    term_canon(int on);
 int     get_screen_size();
 void    move_cur(int row, int col);
 void    clear_screen();
@@ -173,34 +172,34 @@ int     get_terminal_row();
 int     get_terminal_col();
 int     set_terminal_col(int col);
 int     set_terminal_row(int row);
+
+/* strings.c */
+int     strupper(char *str);
+int     strlower(char *str);
+void    _itoa(char *str, int num);
+void    strcat_c(char *str, int pos, char chr);
 size_t  remove_escaped_newlines(char *buf);
-void    term_canon(int on);
-char   *get_malloced_strl(char *str, int start, int length);
 int     is_same_str(char *s1, char *s2);
+char   *strchr_any(char *string, char *chars);
+char   *list_to_str(char **list, int dofree);
+char   *quote_val(char *val, int add_quotes);
+int     get_linemax();
+int     check_buffer_bounds(int *count, int *len, char ***names);
+
+/* helpfunc.c */
+int     beep();
 char   *search_path(char *file, char *use_path, int exe_only);
-int     is_function(char *cmd);
-int     is_builtin(char *cmd);
-int     is_enabled_builtin(char *cmd);
-int     is_special_builtin(char *cmd);
-int     is_regular_builtin(char *cmd);
 void    save_signals();
 void    reset_signals();
 int     fork_command(int argc, char **argv, char *use_path, char *UTILITY,
                      int flags, int flagarg);
 int     isroot();
-char   *strchr_any(char *string, char *chars);
-char   *list_to_str(char **list, int dofree);
-char   *quote_val(char *val, int add_quotes);
-int     echoon(int fd);
-int     echooff(int fd);
 int     file_exists(char *path);
-int     get_linemax();
 char   *get_tmp_filename();
 char   *get_shell_varp(char *name, char *def_val);
 int     get_shell_vari(char *name, int def_val);
 long    get_shell_varl(char *name, int def_val);
 void    set_shell_varp(char *name, char *val);
-int     check_buffer_bounds(int *count, int *len, char ***names);
 
 /* flags for fork_command() */
 #define FORK_COMMAND_DONICE     (1 << 0)
@@ -216,37 +215,28 @@ int     is_restrict_var(char *name);
 size_t  __get_next_token(char *str, struct word_s *t);
 void    __do_alias(struct word_s *tok);
 void    do_alias_substitution(struct word_s *tok);
-// char   *__do_command(char *cmd, int backquoted);
-// char   *__do_arithmetic(char *__expr);
-// char   *__do_var(char *__var_name, struct word_s **tokens);
-// char   *__substitute(char *s, char *val, size_t start, size_t end);
-// void    __substitute_var(struct word_s *tok, char *val, size_t start, size_t end);
 size_t  find_closing_quote(char *data, int sq_nesting);
 size_t  find_closing_brace(char *data);
-// char   *tilde_expand(char *s, size_t *_i, int in_var_assign);
 void    delete_char_at(char *str, size_t index);
+char   *substitute_str(char *s1, char *s2, size_t start, size_t end);
 void    purge_tokens(struct word_s *tok);
-// struct  word_s *word_expand(struct word_s *head, struct word_s **tail,
-//                                int in_heredoc, int flags);
-// struct  word_s *__make_fields(char *str);
-// struct  word_s *make_head_tail_tokens(struct word_s *tok, struct word_s *fld,
-//                                         size_t len, size_t i, size_t j);
+char   *get_all_vars(char *prefix);
+char   *get_quoted_str(char *val, int add_quotes);
+char   *pos_params_expand(char *tmp, int in_double_quotes);
+
 struct  word_s *word_expand(char *orig_word);
 char   *word_expand_to_str(char *word);
-char   *get_all_vars(char *prefix);
-
+char   *wordlist_to_str(struct word_s *word);
 void    free_all_words(struct word_s *first);
-struct  word_s *field_split(char *str);
 struct  word_s *make_word(char *word);
-char   *get_quoted_str(char *val, int add_quotes);
+
 char   *tilde_expand(char *s);
 char   *command_substitute(char *__cmd);
 char   *ansic_expand(char *str);
 char   *var_expand(char *__var_name);
 struct  word_s *pathnames_expand(struct word_s *words);
 void    remove_quotes(struct word_s *wordlist);
-char   *pos_params_expand(char *tmp, int in_double_quotes);
-char   *substitute_str(char *s1, char *s2, size_t start, size_t end);
+struct  word_s *field_split(char *str);
 
 /* shunt.c */
 char   *arithm_expand(char *__expr);
@@ -256,7 +246,7 @@ char    get_xdigit(char c);
 char  **brace_expand(char *str, size_t *count);
 
 /* tab.c */
-int do_tab(char *cmdbuf, uint16_t *cmdbuf_index, uint16_t *cmdbuf_end);
+int do_tab(char *cmdbuf, uint16_t *cmdbuf_index, uint16_t *cmdbuf_end, struct source_s *src);
 
 /* args.c */
 extern char **shell_argv;
@@ -291,11 +281,10 @@ void   set_pos_paramsp(char **p);
 struct symtab_entry_s *get_pos_param(int i);
 
 /* main.c */
-extern struct source_s  __src;
-extern struct source_s *src;
-extern int    SIGINT_received;
-extern int    signal_received;
-int    do_cmd();
+extern int SIGINT_received;
+extern int signal_received;
+extern int read_stdin;
+int    parse_and_execute(struct source_s *src);
 int    read_file(char *filename, struct source_s *src);
 
 /* functab.c */
@@ -408,11 +397,17 @@ struct builtin_s
 };
 
 /* builtins/builtins.c */
-extern int      regular_builtin_count;
+extern int    regular_builtin_count;
 extern struct builtin_s regular_builtins[];
-extern int      special_builtin_count;
+extern int    special_builtin_count;
 extern struct builtin_s special_builtins[];
+
 int    builtin(int argc, char *argv[]);
+int    is_function(char *cmd);
+int    is_builtin(char *cmd);
+int    is_enabled_builtin(char *cmd);
+int    is_special_builtin(char *cmd);
+int    is_regular_builtin(char *cmd);
 
 /* builtins/help.c */
 extern char shell_ver[];
@@ -448,7 +443,7 @@ char  *get_home();
 
 /* builtins/command.c */
 int    command(int argc, char *argv[]);
-int    search_and_exec(int cargc, char **cargv, char *PATH, int flags);
+int    search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH, int flags);
 
 /* flags for the search_and_exec() function */
 /* fork new processes to execute external commands */
@@ -548,6 +543,7 @@ struct callframe_s
 
 int    caller(int argc, char **argv);
 struct callframe_s *callframe_new(char *funcname, char *srcfile, int lineno);
+struct callframe_s *get_cur_callframe();
 int    callframe_push(struct callframe_s *cf);
 struct callframe_s *callframe_pop();
 void   callframe_popf();
@@ -697,7 +693,7 @@ int    __times(int argc, char *argv[]);
  */
 //int    __time(int argc, char *argv[]);
 #include "parser/node.h"
-int    __time(struct node_s *cmd);
+int    __time(struct source_s *src, struct node_s *cmd);
 double get_cur_time();
 
 /* builtins/trap.c */

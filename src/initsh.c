@@ -65,10 +65,6 @@ int   startup_finished = 0;     /*
                                  * only when the shell is fully operational.
                                  */
 
-/* defined in main.c */
-extern struct source_s  __src;
-extern int    read_stdin     ;
-
 /* defined in kbdevent2.c */
 struct termios tty_attr_old;
 
@@ -101,15 +97,16 @@ int check_env_file()
         return 0;
     }
     /* read the file */
-    if(!read_file(ENV, src))
+    struct source_s src;
+    if(!read_file(ENV, &src))
     {
         fprintf(stderr, "%s: failed to read '%s': %s\n", SHELL_NAME, ENV, strerror(errno));
         return 0;
     }
     /* and execute it */
-    do_cmd();
+    parse_and_execute(&src);
     /* free the buffer */
-    free(src->buffer);
+    free(src.buffer);
     return 1;
 }
 
@@ -597,37 +594,38 @@ void init_login()
     }
 
     /* read global init script */
-    if(read_file("/etc/profile", src))
+    struct source_s src;
+    if(read_file("/etc/profile", &src))
     {
-        do_cmd();
-        free(src->buffer);
+        parse_and_execute(&src);
+        free(src.buffer);
     }
     /* ksh disables processing of ~/.profile in the privileged mode */
     if(!option_set('p'))
     {
         /* read the local init scripts, if any */
-        if(read_file(".profile", src))
+        if(read_file(".profile", &src))
         {
-            do_cmd();
-            free(src->buffer);
+            parse_and_execute(&src);
+            free(src.buffer);
         }
-        if(read_file("~/.profile", src))
+        if(read_file("~/.profile", &src))
         {
-            do_cmd();
-            free(src->buffer);
+            parse_and_execute(&src);
+            free(src.buffer);
         }
     }
 
     /* finally, read our lsh login scripts */
-    if(read_file("/etc/lshlogin", src))
+    if(read_file("/etc/lshlogin", &src))
     {
-        do_cmd();
-        free(src->buffer);
+        parse_and_execute(&src);
+        free(src.buffer);
     }
-    if(read_file("~/.lshlogin", src))
+    if(read_file("~/.lshlogin", &src))
     {
-        do_cmd();
-        free(src->buffer);
+        parse_and_execute(&src);
+        free(src.buffer);
     }
 }
 
@@ -637,16 +635,17 @@ void init_login()
 void init_rc()
 {
     /* read global init script */
-    if(read_file("/etc/lshrc", src))
+    struct source_s src;
+    if(read_file("/etc/lshrc", &src))
     {
-        do_cmd();
-        free(src->buffer);
+        parse_and_execute(&src);
+        free(src.buffer);
     }
     /* read the local init script */
-    if(!norc && read_file(rcfile, src))
+    if(!norc && read_file(rcfile, &src))
     {
-        do_cmd();
-        free(src->buffer);
+        parse_and_execute(&src);
+        free(src.buffer);
     }
     /* ksh disables executing the $ENV file in the privileged mode */
     if(!option_set('p'))
@@ -669,7 +668,7 @@ void init_rc()
  * Parse command-line arguments and set the shell
  * options accordingly.
  */
-char parse_options(int argc, char **argv)
+char parse_options(int argc, char **argv, struct source_s *src)
 {
     /* reset all options */
     reset_options();
@@ -917,11 +916,11 @@ char parse_options(int argc, char **argv)
             exit(EXIT_SUCCESS);
         }
         /* otherwise, read it */
-        __src.buffer   = argv[i++];
-        __src.bufsize  = strlen(__src.buffer);
-        __src.srctype  = SOURCE_CMDSTR;
-        __src.srcname  = NULL;
-        __src.curpos   = -2;
+        src->buffer   = argv[i++];
+        src->bufsize  = strlen(src->buffer);
+        src->srctype  = SOURCE_CMDSTR;
+        src->srcname  = NULL;
+        src->curpos   = -2;
         if(i >= argc)
         {
             /* $0 is the name of the shell or shell script */
@@ -935,7 +934,7 @@ char parse_options(int argc, char **argv)
         }
         /* similar to $BASH_EXECUTION_STRING (bash) and $command (tcsh) */
         entry = add_to_symtab("COMMAND_STRING");
-        symtab_entry_setval(entry, __src.buffer);
+        symtab_entry_setval(entry, src->buffer);
     }
     /* the '-c' option was not supplied */
     else

@@ -627,7 +627,7 @@ int replace_and_run(int startat, int argc, char **argv)
     char **cargv = &argv[2];
     /* push a local symbol table on top of the stack */
     symtab_stack_push();
-    int res = search_and_exec(cargc, cargv, NULL, SEARCH_AND_EXEC_DOFORK|SEARCH_AND_EXEC_DOFUNC);
+    int res = search_and_exec(NULL, cargc, cargv, NULL, SEARCH_AND_EXEC_DOFORK|SEARCH_AND_EXEC_DOFUNC);
     /* free the local symbol table */
     free_symtab(symtab_stack_pop());
     /* return the result */
