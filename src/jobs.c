@@ -74,44 +74,6 @@ int listindex = 0;
 
 
 /*
- * set the exit status of the last command executed in both the global
- * exit_status variable and the $? shell variable.
- * 
- * the domacros flag tells us if we should examine the status
- * argument to extract the actual exit status. if the flag is 0,
- * we set the exit status to status, otherwise we use wait.h macros
- * to get the status.
- */
-void set_exit_status(int status, int domacros)
-{
-    if(domacros)
-    {
-        /* we need to extract the exit status code */
-        if(WIFEXITED(status))
-        {
-            status = WEXITSTATUS(status);
-        }
-        else if(WIFSIGNALED(status))
-        {
-            status = WTERMSIG(status) + 128;
-        }
-        else if(WIFSTOPPED(status))
-        {
-            status = WSTOPSIG(status) + 128;
-        }
-    }
-    char status_str[10];
-    _itoa(status_str, status);
-    struct symtab_entry_s *entry = get_symtab_entry("?");
-    if(entry)
-    {
-        symtab_entry_setval(entry, status_str);
-    }
-    exit_status = status;
-}
-
-
-/*
  * update the job table entry with the exit status of the process with the
  * given pid.
  */
@@ -165,7 +127,7 @@ void set_job_exit_status(struct job *job, pid_t pid, int status)
     if(!job)
     {
         /* if job control is not active, set $? anyway */
-        set_exit_status(status, 1);
+        set_exit_status(status);
         return;
     }
     if(option_set('l'))    /* the pipefail option */
@@ -835,7 +797,7 @@ void check_on_children()
     /* check for children who died but are not yet reported */
     while(1)
     {
-        pid_t pid = waitpid(-1, &status, WAIT_FLAG|WNOHANG);
+        pid_t pid = waitpid(-1, &status, WUNTRACED|WNOHANG);
         if(pid <= 0)
         {
             break;

@@ -51,7 +51,7 @@ int    signal_received  = 0;
 #define CLOCKID CLOCK_REALTIME
 
 /* defined in cmdline.c */
-void kill_input(struct source_s *src);
+void kill_input();
 extern int do_periodic;
 
 /* defined in initsh.c */
@@ -121,7 +121,7 @@ void SIGCHLD_handler(int signum __attribute__((unused)))
     while(1)
     {
         status = 0;
-        pid = waitpid(-1, &status, WAIT_FLAG|WNOHANG);
+        pid = waitpid(-1, &status, WUNTRACED|WNOHANG);
         //if(WIFEXITED(status)) status = WEXITSTATUS(status);
         if(pid <= 0)
         {
@@ -212,7 +212,7 @@ int main(int argc, char **argv)
     memset(&src, 0, sizeof(struct source_s));
 
     /* parse the command line options, if any */
-    char islogin = parse_options(argc, argv, &src);
+    int islogin = parse_shell_args(argc, argv, &src);
     set_option('L', islogin ? 1 : 0);
     if(islogin)
     {

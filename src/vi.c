@@ -422,7 +422,7 @@ void free_bufs()
  * respectively, so that cmdline() would execute the command line.. returns
  * zero otherwise.
  */
-int vi_cmode(struct source_s *src)
+int vi_cmode()
 {
     int  c, c2;
     int  tabs   = 0;
@@ -1626,7 +1626,7 @@ select:
                                                  * POSIX says this operator performs word expansions, while
                                                  * ksh says it generates a list of matching commands/file names.
                                                  */
-                do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end, src);
+                do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end);
                 count = 0;
                 break;
                 
@@ -1845,7 +1845,7 @@ select:
 
             case '\f':                          /* ^L - linefeed and print cur line */
                 clear_screen();
-                print_prompt(src);
+                print_prompt();
                 update_row_col();
                 start_row = get_terminal_row();
                 start_col = get_terminal_col();
@@ -1863,7 +1863,7 @@ select:
                 
             case CTRLV_KEY:
                 printf("\n%s\n", shell_ver);
-                print_prompt(src);
+                print_prompt();
                 update_row_col();
                 start_row = terminal_row;
                 start_col = terminal_col;

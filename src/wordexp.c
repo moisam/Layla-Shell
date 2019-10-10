@@ -1120,17 +1120,6 @@ char *var_expand(char *__var_name)
     int   pos_params = 0;
     char  buf[32];
 
-    /* check if the requested varname is a special variable name and get its value */
-    tmp = get_special_var(var_name);
-    if(!tmp)
-    {
-        /* varname is not a special variable name. check if its a normal variable */
-        tmp = get_shell_varp(var_name, empty_val);
-    }
-
-    /* save a pointer to the variable's value (we'll use it below) */
-    orig_val = tmp;
-
     /* handle the $@ and $* special parameters as a special case */
     if(strcmp(var_name, "@") == 0 || strcmp(var_name, "*") == 0)
     {
@@ -1138,6 +1127,7 @@ char *var_expand(char *__var_name)
         if(get_length)
         {
             sprintf(buf, "%d", pos_param_count());
+            return __get_malloced_str(buf);
         }
         /* return the contents of $* or $@ */
         return pos_params_expand(var_name, 0);
@@ -1148,6 +1138,17 @@ char *var_expand(char *__var_name)
     {
         return __get_stdin_var(get_length);
     }
+
+    /* check if the requested varname is a special variable name and get its value */
+    tmp = get_special_var(var_name);
+    if(!tmp)
+    {
+        /* varname is not a special variable name. check if its a normal variable */
+        tmp = get_shell_varp(var_name, empty_val);
+    }
+
+    /* save a pointer to the variable's value (we'll use it below) */
+    orig_val = tmp;
     
 
     /*
@@ -1185,7 +1186,7 @@ char *var_expand(char *__var_name)
                     
                 case '=':          /* assign the variable a value */
                     /* 
-                     * only variables, not positional or special parameters can be
+                     * only variables, neither positional nor special parameters can be
                      * assigned this way.
                      */
                     if(is_pos_param(var_name) || is_special_param(var_name))
@@ -2311,9 +2312,11 @@ struct word_s *word_expand_one_word(char *orig_word)
                         expanded = 1;
                         break;
                         
+                    /*
+                     * special variable substitution.
+                     */
                     case '#':
                         /*
-                         * special variable substitution.
                          * $#@ and $#* both give the same result as $# (ksh extension).
                          */
                         if(p[2] == '@' || p[2] == '*')
@@ -2492,6 +2495,15 @@ struct word_s *pathnames_expand(struct word_s *words)
         return words;
     }
 
+    /*
+     *  make sure we don't add / after directory names in the expanded fields.
+     *  this option is mainly of use to interactive shells, when performing tab
+     *  completion for filenames.. it shouldn't be used in pathname expansion,
+     *  so we turn it off here.
+     */
+    int save_addsuffix = optionx_set(OPTION_ADD_SUFFIX);
+    set_optionx(OPTION_ADD_SUFFIX, 0);
+
     struct word_s *w = words;
     struct word_s *pw = NULL;
     while(w)
@@ -2533,6 +2545,9 @@ struct word_s *pathnames_expand(struct word_s *words)
             if(optionx_set(OPTION_FAIL_GLOB))
             {
                 fprintf(stderr, "%s: file globbing failed for %s\n", SHELL_NAME, p);
+                /* restore the flag to its saved value */
+                set_optionx(OPTION_ADD_SUFFIX, save_addsuffix);
+                /* return failure */
                 return NULL;
             }
         }
@@ -2588,6 +2603,9 @@ struct word_s *pathnames_expand(struct word_s *words)
         pw = w;
         w = w->next;
     }
+    /* restore the flag to its saved value */
+    set_optionx(OPTION_ADD_SUFFIX, save_addsuffix);
+    /* return the extended wordlist */
     return words;
 }
 

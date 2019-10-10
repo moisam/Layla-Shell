@@ -278,10 +278,9 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         /* tell the terminal who's the foreground pgid now */
         tcsetpgrp(0, child_pid);
     }
-    //pid_t resid;
+
     int   status;
-    //resid = waitpid(child_pid, &status, WAIT_FLAG);
-    waitpid(child_pid, &status, WAIT_FLAG);
+    waitpid(child_pid, &status, WUNTRACED);
     if(WIFSTOPPED(status) && option_set('m'))
     {
         struct job *job = add_job(child_pid, (pid_t[]){child_pid}, 1, argv[0], 0);
@@ -290,7 +289,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
     }
     else
     {
-        set_exit_status(status, 1);
+        set_exit_status(status);
         struct job *job = get_job_by_any_pid(child_pid);
         if(job)
         {

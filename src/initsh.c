@@ -668,7 +668,7 @@ void init_rc()
  * Parse command-line arguments and set the shell
  * options accordingly.
  */
-char parse_options(int argc, char **argv, struct source_s *src)
+int parse_shell_args(int argc, char **argv, struct source_s *src)
 {
     /* reset all options */
     reset_options();
@@ -719,8 +719,8 @@ char parse_options(int argc, char **argv, struct source_s *src)
     /* now read command-line options */
     struct symtab_entry_s *entry;
     int    i             = 1;
-    int    expect_cmdstr = 0;
     int    param         = 0;
+    int    expect_cmdstr = 0;
     char   islogin       = 0;
     char   end_loop      = 0;
 

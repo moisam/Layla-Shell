@@ -42,6 +42,6 @@ extern char *savebuf     ;
 extern int   savebuf_size;
 
 /* vi.c */
-int vi_cmode(struct source_s *src);
+int vi_cmode();
 
 #endif

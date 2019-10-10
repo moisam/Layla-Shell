@@ -29,7 +29,7 @@
 #include "getkey.h"
 #include "builtins/setx.h"
 #include "symtab/symtab.h"
-#include "backend/backend.h"    /* get_filename_matches() */
+#include "backend/backend.h"
 #include "vi.h"
 #include "debug.h"
 
@@ -51,6 +51,57 @@ int    match_hostname(char *name, char **matches, int max);
 int    match_username(char *name, char **matches, int max);
 char **get_hostnames();
 char **get_usernames();
+
+
+/*
+ * perform auto-completion for filenames, matching files in the given *dir to the
+ * given *path, which is treated as a regex pattern that specifies which filename(s)
+ * we should match.. this happens when the user hits tab after entering a partial
+ * command name.. this process is similar to pathname expansion, which is done by
+ * get_filename_matches() (see backend/pattern.c).
+ *
+ * returns a char ** pointer to the list of matched filenames, or NULL if nothing matched.
+ */
+char **get_name_matches(char *dir, char *path, glob_t *matches)
+{
+    /* to guard our caller from trying to free an unused struct in case of expansion failure */
+    matches->gl_pathc = 0;
+    matches->gl_pathv = NULL;
+
+    if(!dir || !path)
+    {
+        return NULL;
+    }
+
+    if(strcmp(dir, cwd) != 0)
+    {
+        if(chdir(dir) == -1)
+        {
+            return NULL;
+        }
+    }
+
+    /* set up the flags */
+    int flags = 0;
+    if(optionx_set(OPTION_ADD_SUFFIX)) flags |= GLOB_MARK  ;
+
+    /* perform the match */
+    if(glob(path, flags, NULL, matches) != 0)
+    {
+        globfree(matches);
+        if(dir != cwd)
+        {
+            chdir(cwd);
+        }
+        return NULL;
+    }
+
+    if(dir != cwd)
+    {
+        chdir(cwd);
+    }
+    return matches->gl_pathv;
+}
 
 
 /*
@@ -307,7 +358,7 @@ char *get_common_prefix(char **cmds, int count)
  * 
  * returns 1 if tab completion is successful, 0 and beep otherwise.
  */
-int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struct source_s *src)
+int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
 {
     extern int start_row, start_col;
     uint16_t cmdbuf_index = *__cmdbuf_index;
@@ -670,8 +721,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struc
         }
         glob_t glob;
         char **matches = NULL;
-        matches = get_filename_matches(tmp, &glob);
-#if 0
+
         char *slash = strrchr(tmp, '/');
         if(slash)       /* file name has a slash char */
         {
@@ -682,11 +732,11 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struc
             {
                 if(*dir)
                 {
-                    matches = get_filename_matches(dir, slash+1, &glob);
+                    matches = get_name_matches(dir, slash+1, &glob);
                 }
                 else
                 {
-                    matches = get_filename_matches("/", slash+1, &glob);
+                    matches = get_name_matches("/", slash+1, &glob);
                 }
                 free(dir);
             }
@@ -694,20 +744,19 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struc
             {
                 if(*tmp)
                 {
-                    matches = get_filename_matches(tmp, slash+1, &glob);
+                    matches = get_name_matches(tmp, slash+1, &glob);
                 }
                 else
                 {
-                    matches = get_filename_matches("/", slash+1, &glob);
+                    matches = get_name_matches("/", slash+1, &glob);
                 }
             }
             *slash = '/';
         }
         else            /* file name with no slash chars */
         {
-            matches = get_filename_matches(cwd, tmp, &glob);
+            matches = get_name_matches(cwd, tmp, &glob);
         }
-#endif
         
         if(matches)
         {
@@ -734,7 +783,6 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struc
                 globfree(&glob);
                 if(res == 1)        /* found one match */
                 {
-#if 0
                     if(slash)
                     {
                         p = cmds[0]+strlen(slash+1);
@@ -743,8 +791,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struc
                     {
                         p = cmds[0]+strlen(tmp);
                     }
-#endif
-                    p = cmds[0]+strlen(tmp);
+
                     if(star)
                     {
                         p--;
@@ -756,7 +803,6 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struc
                 comm_prefix = get_common_prefix(cmds, res);
                 if(comm_prefix)
                 {
-#if 0
                     if(slash)
                     {
                         p = comm_prefix+strlen(slash+1);
@@ -765,8 +811,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struc
                     {
                         p = comm_prefix+strlen(tmp);
                     }
-#endif
-                    p = comm_prefix+strlen(tmp);
+
                     if(star)
                     {
                         p--;
@@ -790,7 +835,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end, struc
     }
 
     printf("\n");
-    print_prompt(src);
+    print_prompt();
     update_row_col();
     start_row = get_terminal_row();
     start_col = get_terminal_col();

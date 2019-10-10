@@ -90,12 +90,12 @@ static int __heredocs = 0;                 /* count heredocs */
  * kill input by emptying the command buffer, printing a newline followed by
  * the first prompt, and updating the cursor position.
  */
-void kill_input(struct source_s *src)
+void kill_input()
 {
     cmdbuf_index = 0;
     cmdbuf_end   = 0;
     fprintf(stderr, "\n");
-    print_prompt(src);
+    print_prompt();
     cmdbuf[0]    = '\0';
     update_row_col();
     start_row    = get_terminal_row();
@@ -163,7 +163,7 @@ void cmdline()
         run_alias_cmd("precmd");
 
         /* print the first prompt $PS1 */
-        print_prompt(&src);
+        print_prompt();
 
         /* check if we're ready to read from the terminal */
         if(!ready_to_read(0))
@@ -178,7 +178,7 @@ void cmdline()
         term_canon(0);
 
         /* read the next command line */
-        cmd = read_cmd(&src);
+        cmd = read_cmd();
 
         /* no input (EOF) */
         if(!cmd)
@@ -237,7 +237,7 @@ int ext_cmdbuf(size_t howmuch)
  * returns a pointer to the buffer if the command is read successfully,
  * NULL if there's no input or EOF is reached.
  */
-char *read_cmd(struct source_s *src)
+char *read_cmd()
 {
     cmdbuf_index = 0;
     cmdbuf_end   = 0;
@@ -313,7 +313,7 @@ char *read_cmd(struct source_s *src)
          */
         if(signal_received)
         {
-            kill_input(src);
+            kill_input();
             signal_received = 0;
             continue;
         }
@@ -500,7 +500,7 @@ char *read_cmd(struct source_s *src)
                 else
                 {
                     /* this procedure will do command auto-completion */
-                    do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end, src);
+                    do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end);
                 }
                 break;
 
@@ -565,7 +565,7 @@ char *read_cmd(struct source_s *src)
                  */
                 if(option_set('y'))
                 {
-                    c = vi_cmode(src);
+                    c = vi_cmode();
                 }
                 if(c != '\n' && c != '\r')
                 {
@@ -596,7 +596,7 @@ char *read_cmd(struct source_s *src)
                             cmdbuf_index = 0;
                             cmdbuf_end   = 0;
                             cmdbuf[0] = '\0';
-                            print_prompt(src);
+                            print_prompt();
                             update_row_col();
                             start_col = get_terminal_col();
                             start_row = get_terminal_row();
@@ -637,7 +637,7 @@ char *read_cmd(struct source_s *src)
                 cmdbuf[cmdbuf_end+1] = '\0';
                 if(is_incomplete_cmd(incomplete_cmd ? 0 : 1))
                 {
-                    print_prompt2(src);
+                    print_prompt2();
                     char *tmp = (char *)0;
                     size_t sz = strlen(cmdbuf)+1;
                     if(incomplete_cmd)

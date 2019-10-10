@@ -40,10 +40,6 @@ static const char NL  = '\n';
 /* process group id of the command line interpreter */
 extern pid_t tty_pid;
 
-/* flag to pass to waitpid() */
-// #define WAIT_FLAG       (WEXITED|WSTOPPED|WCONTINUED|WUNTRACED /* |WNOHANG */)
-#define WAIT_FLAG       (WUNTRACED)
-
 /* I/O file redirection flags */
 #define W_FLAG      (O_RDWR | O_CREAT | O_TRUNC )
 #define A_FLAG      (O_RDWR | O_CREAT | O_APPEND)
@@ -119,23 +115,23 @@ struct word_s
 extern  char prompt[];
 char   *evaluate_prompt(char *PS);
 void    do_print_prompt(char *which);
-void    print_prompt();
-void    print_prompt2();
-void    print_prompt3();
-void    print_prompt4();
+void    print_prompt(void);
+void    print_prompt2(void);
+void    print_prompt3(void);
+void    print_prompt4(void);
 
 /* popen.c */
 FILE   *popenr(char *cmd);
-void    init_subshell();
-void    set_shlvl_var();
+void    init_subshell(void);
+void    set_shlvl_var(void);
 
 /* initsh.c */
 extern  int  null_environ_index;
 extern  int  startup_finished;
 void    initsh(int argc, char **argv, int init_tty);
-void    init_login();
-void    init_rc();
-char    parse_options(int argc, char **argv, struct source_s *src);
+void    init_login(void);
+void    init_rc(void);
+int     parse_shell_args(int argc, char **argv, struct source_s *src);
 
 /* cmdline.c */
 extern  int       terminal_row, terminal_col;
@@ -146,14 +142,14 @@ extern  uint16_t  cmdbuf_end  ;           /* index of last entered key */
 extern  uint16_t  cmdbuf_size ;           /* actual malloc'd size */
 // #define          CMD_BUF_SIZE	 ((LINE_MAX)-1)
 extern  timer_t   timerid     ;
-void    cmdline();
-int     ext_cmdbuf();
-char   *read_cmd(struct source_s *src);
-int     is_incomplete_cmd();
-size_t  glue_cmd_pieces();
+void    cmdline(void);
+int     ext_cmdbuf(size_t howmuch);
+char   *read_cmd();
+int     is_incomplete_cmd(int first_time);
+size_t  glue_cmd_pieces(void);
 
 /* strbuf.c */
-void    init_str_hashtable();
+void    init_str_hashtable(void);
 char   *__get_malloced_str(char *str);
 char   *get_malloced_str(char *str);
 char   *get_malloced_strl(char *str, int start, int length);
@@ -163,13 +159,13 @@ void    free_malloced_str(char *str);
 int     echoon(int fd);
 int     echooff(int fd);
 void    term_canon(int on);
-int     get_screen_size();
+int     get_screen_size(void);
 void    move_cur(int row, int col);
-void    clear_screen();
+void    clear_screen(void);
 void    set_terminal_color(int FG, int BG);
-void    update_row_col();
-int     get_terminal_row();
-int     get_terminal_col();
+void    update_row_col(void);
+int     get_terminal_row(void);
+int     get_terminal_col(void);
 int     set_terminal_col(int col);
 int     set_terminal_row(int row);
 
@@ -183,19 +179,19 @@ int     is_same_str(char *s1, char *s2);
 char   *strchr_any(char *string, char *chars);
 char   *list_to_str(char **list, int dofree);
 char   *quote_val(char *val, int add_quotes);
-int     get_linemax();
+int     get_linemax(void);
 int     check_buffer_bounds(int *count, int *len, char ***names);
 
 /* helpfunc.c */
-int     beep();
+int     beep(void);
 char   *search_path(char *file, char *use_path, int exe_only);
-void    save_signals();
-void    reset_signals();
+void    save_signals(void);
+void    reset_signals(void);
 int     fork_command(int argc, char **argv, char *use_path, char *UTILITY,
                      int flags, int flagarg);
-int     isroot();
+int     isroot(void);
 int     file_exists(char *path);
-char   *get_tmp_filename();
+char   *get_tmp_filename(void);
 char   *get_shell_varp(char *name, char *def_val);
 int     get_shell_vari(char *name, int def_val);
 long    get_shell_varl(char *name, int def_val);
@@ -246,7 +242,7 @@ char    get_xdigit(char c);
 char  **brace_expand(char *str, size_t *count);
 
 /* tab.c */
-int do_tab(char *cmdbuf, uint16_t *cmdbuf_index, uint16_t *cmdbuf_end, struct source_s *src);
+int do_tab(char *cmdbuf, uint16_t *cmdbuf_index, uint16_t *cmdbuf_end);
 
 /* args.c */
 extern char **shell_argv;
@@ -275,10 +271,12 @@ struct word_s *get_all_pos_params(char which, int quoted);
 struct word_s *get_pos_params(char which, int quoted, int offset, int count);
 char  *get_all_pos_params_str(char which, int quoted);
 char  *get_pos_params_str(char which, int quoted, int offset, int count);
-int    pos_param_count();
-char **get_pos_paramsp();
+int    pos_param_count(void);
+char **get_pos_paramsp(void);
 void   set_pos_paramsp(char **p);
 struct symtab_entry_s *get_pos_param(int i);
+void   set_exit_status(int status);
+// void   set_exit_status(int status, int domacros);
 
 /* main.c */
 extern int SIGINT_received;
@@ -290,7 +288,7 @@ int    read_file(char *filename, struct source_s *src);
 /* functab.c */
 #include "symtab/symtab.h"
 extern struct symtab_s *func_table;
-void   init_functab();
+void   init_functab(void);
 struct symtab_entry_s *get_func(char *name);
 struct symtab_entry_s *add_func(char *name);
 void   unset_func(char *name);
@@ -302,7 +300,7 @@ struct var_s
     char *val ;
 };
 
-void   init_rand();
+void   init_rand(void);
 char  *get_special_var(char *name);
 int    set_special_var(char *name, char *val);
 
@@ -331,13 +329,13 @@ extern   char hist_file[];
 // int      get_history_count();
 // FILE    *get_history_file();
 // uint32_t get_cmd_history(int index);
-char    *get_last_cmd_history();
+char    *get_last_cmd_history(void);
 void     clear_history(int start, int end);
 // void     add_to_history_file(char *cmd_buf, size_t len);
 char    *save_to_history(char *cmd_buf);
-void     flush_history();
-void     init_history();
-void     remove_newest();
+void     flush_history(void);
+void     init_history(void);
+void     remove_newest(void);
 int      history(int argc, char **argv);
 
 /* builtins/hist_expand.c */
@@ -428,10 +426,10 @@ struct alias_s
 extern struct alias_s __aliases[MAX_ALIASES];
 extern char   *null_alias;
 int    alias(int argc, char *argv[]);
-void   init_aliases();
+void   init_aliases(void);
 int    valid_alias_name(char *name);
 void   run_alias_cmd(char *alias);
-void   unset_all_aliases();
+void   unset_all_aliases(void);
 
 /* builtins/bg.c */
 int    bg(int argc, char **argv);
@@ -439,7 +437,7 @@ int    bg(int argc, char **argv);
 /* builtins/cd.c */
 extern char *cwd;
 int    cd(int argc, char *argv[]);
-char  *get_home();
+char  *get_home(void);
 
 /* builtins/command.c */
 int    command(int argc, char *argv[]);
@@ -474,16 +472,15 @@ struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, i
 pid_t *get_malloced_pids(pid_t pids[], int pid_count);
 int    kill_job(struct job *j);
 int    start_job(struct job *myjob);
-void   check_on_children();
+void   check_on_children(void);
 void   notice_termination(pid_t pid, int status);
 int    set_cur_job(struct job *job);
 int    jobs(int argc, char **argv);
 int    get_jobid(char *jobid_str);
-int    get_total_jobs();
-void   set_exit_status(int status, int domacros);
+int    get_total_jobs(void);
 void   set_job_exit_status(struct job *job, pid_t pid, int status);
 void   set_pid_exit_status(struct job *job, pid_t pid, int status);
-int    pending_jobs();
+int    pending_jobs(void);
 void   kill_all_jobs(int signum, int flag);
 
 /* builtins/kill.c */
@@ -506,7 +503,7 @@ int    true(int argc, char **argv);
 int    type(int argc, char **argv);
 
 /* builtins/umask.c */
-void   init_umask();
+void   init_umask(void);
 int    __umask(int argc, char **argv);
 
 /* builtins/ulimit.c */
@@ -514,7 +511,7 @@ int    __ulimit(int argc, char **argv);
 
 /* builtins/unalias.c */
 int    unalias(int argc, char **argv);
-void   unalias_all();
+void   unalias_all(void);
 
 /* builtins/wait.c */
 int    __wait(int argc, char **argv);
@@ -543,11 +540,11 @@ struct callframe_s
 
 int    caller(int argc, char **argv);
 struct callframe_s *callframe_new(char *funcname, char *srcfile, int lineno);
-struct callframe_s *get_cur_callframe();
+struct callframe_s *get_cur_callframe(void);
 int    callframe_push(struct callframe_s *cf);
-struct callframe_s *callframe_pop();
-void   callframe_popf();
-int    get_callframe_count();
+struct callframe_s *callframe_pop(void);
+void   callframe_popf(void);
+int    get_callframe_count(void);
 
 /* builtins/dirstack.c */
 #define FLAG_DIRSTACK_SEPARATE_LINES        (1 << 0)    /* print each entry on a separate line */
@@ -564,14 +561,14 @@ struct dirstack_ent_s
     struct dirstack_ent_s *next, *prev;
 };
 
-int    init_dirstack();
+int    init_dirstack(void);
 void   save_dirstack(char *__path);
 int    load_dirstackp(char *val);
 int    load_dirstack(char *__path);
 struct dirstack_ent_s *get_dirstack_entryn(int n, struct dirstack_ent_s **__prev);
 struct dirstack_ent_s *get_dirstack_entry(char *nstr, struct dirstack_ent_s **__prev);
 void   purge_dirstack(int flags);
-char  *purge_dirstackp();
+char  *purge_dirstackp(void);
 int    dirs(int argc, char **argv);
 int    pushd(int argc, char **argv);
 int    popd(int argc, char **argv);
@@ -582,14 +579,14 @@ extern int stack_count;
 /**********************************
  * some builtin utility extensions
  **********************************/
-int    dump();
-int    ver();
-//int    halt();
+int    dump(int argc, char **argv);
+int    ver(int argc, char **argv);
+//int    halt(void);
 int    help(int argc, char **argv);
-//int    reboot();
-//int    print_system_date();
+//int    reboot(void);
+//int    print_system_date(void);
 int    mail(int argc, char **argv);
-int    check_for_mail();
+int    check_for_mail(void);
 int    test(int argc, char **argv);
 int    echo(int argc, char **argv);
 int    __glob(int argc, char **argv);
@@ -613,7 +610,7 @@ void   do_echo(int v, int argc, char **argv, int flags);
 /******************************************/
 
 /* builtins/colon.c */
-int    colon();
+int    colon(int argc, char **argv);
 
 /* builtins/dot.c */
 int    dot(int argc, char **argv);
@@ -652,7 +649,7 @@ void   do_export_table(struct symtab_s *symtab, int force_export_all);
 
 /* builtins/hash.c */
 extern struct hashtab_s *utility_hashes;
-void   init_utility_hashtable();
+void   init_utility_hashtable(void);
 int    hash_utility(char *utility, char *path);
 void   unhash_utility(char *utility);
 char  *get_hashed_path(char *utility);
@@ -667,13 +664,13 @@ int    __return(int argc, char **argv);
 
 /* builtins/set.c */
 int    option_set(char which);
-void   reset_options();
-void   reset_non_posix_options();
+void   reset_options(void);
+void   reset_non_posix_options(void);
 void   set_option(char option, int set);
 int    do_options(char *ops, char *extra);
 int    set(int argc, char *argv[]);
 int    __set(char *name_buf, char *val_buf, int set_global, int set_flags, int unset_flags);
-void   symtab_save_options();
+void   symtab_save_options(void);
 char   short_option(char *long_option);
 int    is_short_option(char which);
 
@@ -694,7 +691,7 @@ int    __times(int argc, char *argv[]);
 //int    __time(int argc, char *argv[]);
 #include "parser/node.h"
 int    __time(struct source_s *src, struct node_s *cmd);
-double get_cur_time();
+double get_cur_time(void);
 
 /* builtins/trap.c */
 struct trap_item_s
@@ -712,17 +709,17 @@ struct trap_item_s
 #define TRAP_COUNT      36      /* 31 signals + EXIT + ERR + CHLD + DEBUG + RETURN */
 
 extern int executing_trap;
-void   init_traps();
-void   reset_nonignored_traps();
+void   init_traps(void);
+void   reset_nonignored_traps(void);
 int    trap(int argc, char **argv);
 void   trap_handler(int signum);
-void   save_traps();
-void   restore_traps();
+void   save_traps(void);
+void   restore_traps(void);
 struct trap_item_s *save_trap(char *name);
 void   restore_trap(char *name, struct trap_item_s *saved);
 struct trap_item_s *get_trap_item(char *trap);
-void   block_traps();
-void   unblock_traps();
+void   block_traps(void);
+void   unblock_traps(void);
 
 /* some special trap numbers (similar to a signal's number) */
 #define ERR_TRAP_NUM    32

@@ -37,6 +37,43 @@ int get_supp_groups(char *name, gid_t gid, gid_t **_supp_groups, int *_n);
 
 
 /*
+ * set the exit status of the last command executed in both the global
+ * exit_status variable and the $? shell variable.
+ *
+ * the domacros flag tells us if we should examine the status
+ * argument to extract the actual exit status. if the flag is 0,
+ * we set the exit status to status, otherwise we use wait.h macros
+ * to get the status.
+ */
+void set_exit_status(int status)
+{
+    /* we need to extract the exit status code */
+    if(WIFEXITED(status))
+    {
+        status = WEXITSTATUS(status);
+    }
+    else if(WIFSIGNALED(status))
+    {
+        status = WTERMSIG(status) + 128;
+    }
+    else if(WIFSTOPPED(status))
+    {
+        status = WSTOPSIG(status) + 128;
+    }
+    status &= 0xff;
+
+    char status_str[16];
+    _itoa(status_str, status);
+    struct symtab_entry_s *entry = get_symtab_entry("?");
+    if(entry)
+    {
+        symtab_entry_setval(entry, status_str);
+    }
+    exit_status = status;
+}
+
+
+/*
  * return the symbol table entry for positional parameter i,
  * which is the value of shell variable $i.
  */
@@ -49,26 +86,26 @@ struct symtab_entry_s *get_pos_param(int i)
 
 
 /*
- * return 1 if var_name is a valid positional parameter name, 0 otherwise.
+ * return 1 if name is a valid positional parameter name, 0 otherwise.
  * this function only checks the validity of the name, it does not check if
  * the positional parameter is actually set or not.
  */
-int is_pos_param(char *var_name)
+int is_pos_param(char *name)
 {
     /*
      * one-digit positional parameters, $0-$9 (although $0 is technically
      * a special parameter, not a positional parameter).
      */
-    if(var_name[1] == '\0')
+    if(name[1] == '\0')
     {
-        if(var_name[0] >= '0' && var_name[0] <= '9')
+        if(name[0] >= '0' && name[0] <= '9')
         {
             return 1;
         }
         return 0;
     }
     /* multi-digit positional parameter names must consist solely of digits */
-    char *p = var_name;
+    char *p = name;
     while(*p >= '0' && *p <= '9')
     {
         p++;
@@ -82,18 +119,18 @@ int is_pos_param(char *var_name)
 
 
 /*
- * return 1 if var_name is a valid special parameter name, 0 otherwise.
+ * return 1 if name is a valid special parameter name, 0 otherwise.
  * this function only checks the validity of the name, it does not check if
  * the special parameter is actually set or not.
  */
-int is_special_param(char *var_name)
+int is_special_param(char *name)
 {
     /* all special parameters have one-letter names */
-    if(var_name[1] == '\0')
+    if(name[1] == '\0')
     {
-        if(var_name[0] == '#' || var_name[0] == '?' || var_name[0] == '-' ||
-           var_name[0] == '$' || var_name[0] == '!' || var_name[0] == '@' ||
-           var_name[0] == '*')
+        if(name[0] == '#' || name[0] == '?' || name[0] == '-' ||
+           name[0] == '$' || name[0] == '!' || name[0] == '@' ||
+           name[0] == '*')
         {
             return 1;
         }
@@ -298,11 +335,13 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
 {
     char   separator  = ' ';
     char *IFS = get_shell_varp("IFS", NULL);
+
     /* if $IFS is unset, separate using ' ' */
     if(IFS)
     {
         separator = *IFS;
     }
+
     size_t len  = 0;
     int    i    = offset;
     int    last = i+count;
@@ -315,19 +354,6 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
 
     if(which == '*' || (which == '@' && !quoted))
     {
-        i = offset;
-        while(i < last)
-        {
-            sprintf(buf, "%d", i);
-            size_t len2 = strlen(get_shell_varp(buf, ""));
-            len += len2+1; /* 1 for the separator */
-            i++;
-        }
-        params = (char *)malloc(len+1);
-        if(!params)
-        {
-            return NULL;
-        }
         /*
          * $* expands each param to a separate word, while "$*" expands to the params
          * separated by the first $IFS char, i.e. "$1c$2c$3c...".
@@ -336,77 +362,72 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
         {
             separator = ' ';
         }
-        p1 = params;
-        i = offset;
-        while(i < last)
-        {
-            sprintf(buf, "%d", i);
-            char *p2 = get_shell_varp(buf, "");
-            len = strlen(p2);
-            while((*p1++ = *p2++))
-            {
-                ;
-            }
-            /* as per POSIX, if IFS first char is NULL, concatenate params */
-            if(!separator)
-            {
-                p1--;
-            }
-            else
-            {
-                p1[-1] = separator;
-            }
-            i++;
-        }
+        quoted = 0;
     }
     else
     {
-        i = offset;
-        while(i < last)
-        {
-            sprintf(buf, "%d", i);
-            size_t len2 = strlen(get_shell_varp(buf, ""));
-            len += len2+3; /* 3 for the separator and two quotes */
-            i++;
-        }
-        params = (char *)malloc(len+1);
-        if(!params)
-        {
-            return NULL;
-        }
         /*
          * "$@" expands to "$1" "$2" "$3"...
          * we'll expand "$@" to $1" "$2" "$3, i.e. omitting the very first and
          * very last quotes, as we will use the quote chars from the original word.
          */
-        p1 = params;
-        i = offset;
         separator = '\0';
-        while(i < last)
+        quoted = 1;
+    }
+
+    /* get the total length */
+    i = offset;
+    while(i < last)
+    {
+        sprintf(buf, "%d", i);
+        size_t len2 = strlen(get_shell_varp(buf, ""));
+        if(quoted)
         {
-            sprintf(buf, "%d", i);
-            char *p2 = get_shell_varp(buf, "");
-            len = strlen(p2);
-            while((*p1++ = *p2++))
-            {
-                ;
-            }
-            p1--;
-            /* add " " after the param value (except for the last param) */
-            if(i < last-1)
+            len2 += 2;          /* 2 for the quotes */
+        }
+        len += len2+1; /* 1 for the separator */
+        i++;
+    }
+
+    /* allocate memory */
+    params = (char *)malloc(len+1);
+    if(!params)
+    {
+        return NULL;
+    }
+
+    p1 = params;
+    i = offset;
+    while(i < last)
+    {
+        sprintf(buf, "%d", i);
+        char *p2 = get_shell_varp(buf, "");
+        len = strlen(p2);
+        while((*p1++ = *p2++))
+        {
+            ;
+        }
+        p1--;
+
+        /* for every param except the last ... */
+        if(i < last-1)
+        {
+            /* ... add " " after the param value if being quoted */
+            if(quoted)
             {
                 *p1++ = '"';
                 *p1++ = ' ';
                 *p1++ = '"';
             }
-            i++;
+            /* ... or if not quoted, concatenate params if first IFS char is null */
+            else if(separator)
+            {
+                *p1++ = separator;
+            }
         }
+        i++;
     }
     *p1 = '\0';
-    if(separator)
-    {
-        p1[-1] = '\0';
-    }
     return params;
 }
 

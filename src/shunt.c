@@ -1230,7 +1230,7 @@ char *arithm_expand(char *__expr)
     if(!nnumstack)
     {
         /*return false as the result */
-        set_exit_status(1, 0);
+        set_exit_status(1);
         free(baseexp);
         return NULL;
     }
@@ -1250,7 +1250,7 @@ char *arithm_expand(char *__expr)
      * which is inverted, i.e. non-zero result is true (or zero exit status) and vice versa.
      * this is what bash does with the (( expr )) compound command.
      */
-    set_exit_status(!numstack[0].val, 0);
+    set_exit_status(!numstack[0].val);
     free(baseexp);
     return res2;
 
