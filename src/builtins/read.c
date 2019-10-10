@@ -387,7 +387,7 @@ int __read(int argc, char **argv)
         {
             if(isatty(0) && option_set('i'))
             {
-                print_prompt2(NULL);
+                print_prompt2();
             }
         }
         else

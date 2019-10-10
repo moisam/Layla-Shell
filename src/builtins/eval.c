@@ -41,7 +41,7 @@ int eval(int argc, char **argv)
      * set the exit status to zero, so that if we had to return prematurely, we'll
      * have the exit status set.
      */
-    set_exit_status(0, 0);
+    set_exit_status(0);
     if(argc == 1)
     {
         return 0;

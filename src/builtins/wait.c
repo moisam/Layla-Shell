@@ -141,7 +141,7 @@ int __wait(int argc, char **argv)
                     set_pid_exit_status(job, pid, res);
                 }
                 set_job_exit_status(job, job->pgid, job->status);
-                set_exit_status(res, 1);
+                set_exit_status(res);
                 notice_termination(pid, res);
                 if(wait_any)
                 {
@@ -257,7 +257,7 @@ read_next2:
             res = rip_dead(pid);
         }
     }
-    set_exit_status(res, 1);
+    set_exit_status(res);
     notice_termination(pid, res);
     if(wait_any)
     {

@@ -133,7 +133,7 @@ int dot(int argc, char **argv)
         }
     }
     src.srctype = SOURCE_DOTFILE;
-    set_exit_status(0, 0);
+    set_exit_status(0);
     
     /* save current positional parameters */
     char **pos = NULL;
