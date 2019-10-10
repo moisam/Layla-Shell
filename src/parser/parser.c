@@ -1080,7 +1080,7 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
     if(is_special_builtin(tok->text))
     {
         PARSER_RAISE_ERROR_DESC(INVALID_FUNC_NAME, tok, tok->text);
-        set_exit_status(1, 0);
+        set_exit_status(1);
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
@@ -1138,7 +1138,7 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
     tok->linestart = l; tok->charno = c;
     symtab_entry_setval(func, cmdline);
     free_malloced_str(cmdline);
-    set_exit_status(0, 0);
+    set_exit_status(0);
     /*
      * we are not going to execute the function body right now, so return a dummy nodetree
      * to let the caller know we parsed the function definition successfully.
@@ -1147,7 +1147,7 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
     
 err:
     PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, err_tok);
-    set_exit_status(1, 0);
+    set_exit_status(1);
     rem_from_symtab(func);
     EXIT_IF_NONINTERACTIVE();
     return NULL;
