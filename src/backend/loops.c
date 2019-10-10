@@ -340,7 +340,7 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
     struct node_s *commands = expr3->next_sibling;
     if(!commands)
     {
-        set_exit_status(0, 0);
+        set_exit_status(0);
         return 1;
     }
     /* redirects specific to the loop should override global ones */
@@ -479,7 +479,7 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
                               index->next_sibling;
     if(!commands)
     {
-        set_exit_status(0, 0);
+        set_exit_status(0);
         return 1;
     }
     /* redirects specific to the loop should override global ones */
@@ -502,7 +502,7 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
     int i;
     if(!count || !list)
     {
-        set_exit_status(0, 0);
+        set_exit_status(0);
         redirect_restore();
         return 1;
     }
@@ -598,7 +598,7 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
                               index->next_sibling;
     if(!commands)
     {
-        set_exit_status(0, 0);
+        set_exit_status(0);
         return 1;
     }
     /* redirects specific to the loop should override global ones */
@@ -620,7 +620,7 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
     int i;
     if(!count || !list)
     {
-        set_exit_status(0, 0);
+        set_exit_status(0);
         redirect_restore();
         return 1;
     }
@@ -638,7 +638,7 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
     }
     for(;;)
     {
-        print_prompt3(src);
+        print_prompt3();
         if(__read(2, (char *[]){ "read", "REPLY" }) != 0)
         {
             res = 0;
@@ -797,7 +797,7 @@ int  do_while_clause(struct source_s *src, struct node_s *node, struct node_s *r
         {
             if(first_round)
             {
-                set_exit_status(0, 0);
+                set_exit_status(0);
             }
             cur_loop_level--;
             if(local_redirects)
@@ -866,7 +866,7 @@ int  do_until_clause(struct source_s *src, struct node_s *node, struct node_s *r
         {
             if(first_round)
             {
-                set_exit_status(0, 0);
+                set_exit_status(0);
             }
             cur_loop_level--;
             if(local_redirects)

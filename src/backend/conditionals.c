@@ -187,7 +187,7 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
         }
         item = item->next_sibling;
     }
-    set_exit_status(0, 0);
+    set_exit_status(0);
     
 fin:
     free(word);

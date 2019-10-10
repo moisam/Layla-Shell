@@ -332,7 +332,6 @@ char **get_filename_matches(char *pattern, glob_t *matches)
 
     /* set up the flags */
     int flags = 0;
-    if(optionx_set(OPTION_ADD_SUFFIX)) flags |= GLOB_MARK  ;
     if(optionx_set(OPTION_DOT_GLOB  )) flags |= GLOB_PERIOD;
     if(option_set('B')) flags |= GLOB_BRACE;
 

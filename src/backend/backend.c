@@ -134,7 +134,7 @@ int wait_on_child(pid_t pid, struct node_s *cmd, struct job *job)
     pid_t res;
     
 _wait:
-    res = waitpid(pid, &status, WAIT_FLAG);
+    res = waitpid(pid, &status, WUNTRACED);
     /*
      * error fetching child exit status. of all the possible causes,
      * most probably is the fact that there is no children (in our case).
@@ -168,7 +168,7 @@ _wait:
     }
     else
     {
-        set_exit_status(status, 1);
+        set_exit_status(status);
         set_pid_exit_status(job, pid, status);
         //if(pid == job->pgid) set_job_exit_status(job, status);
         set_job_exit_status(job, pid, status);
@@ -346,7 +346,7 @@ void do_exec_script(char *path, int argc, char **argv)
     else
     {
         int status = 0;
-        waitpid(pid, &status, WAIT_FLAG);
+        waitpid(pid, &status, WUNTRACED);
         if(first)
         {
             free_malloced_str(first);
@@ -597,7 +597,7 @@ int  do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_
                     fprintf(stderr, "[%d] %u\n", job->job_num, pid);
                 }
             }
-            set_exit_status(0, 0);
+            set_exit_status(0);
             /*
              * give the child process a headstart, in case the scheduler decided to run us first.
              * we wouldn't need to do this if we used vfork() instead of fork(), but the former has
@@ -745,7 +745,7 @@ int  do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redir
     int res = do_pipe_sequence(src, node, redirect_list, fg);
     if(res && is_bang)
     {
-        set_exit_status(!exit_status, 0);
+        set_exit_status(!exit_status);
     }
     /* exit on failure? */
     if(!is_bang && (!res || exit_status))
@@ -950,13 +950,13 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
             tcsetpgrp(0, tty_pid);
         }
         PRINT_EXIT_STATUS(status);
-        set_exit_status(status, 1);
+        set_exit_status(status);
         return !status;
     }
     else
     {
         fprintf(stderr, "[%d] %u %s\n", job->job_num, pid, job->commandstr);
-        set_exit_status(0, 0);
+        set_exit_status(0);
         return 1;
     }
 }
@@ -997,7 +997,7 @@ int  do_term(struct source_s *src, struct node_s *node, struct node_s *redirect_
              * job's pgid if the '-m' option is set (see code below).
              */
             job = add_job(tty_pid, (pid_t[]){pid}, 1, cmdstr, 1);
-            set_exit_status(0, 0);
+            set_exit_status(0);
             /*
              * if job control is on, set the current job.
              */
@@ -1453,7 +1453,7 @@ int do_special_builtin(int argc, char **argv)
             }
             int (*func)(int, char **) = (int (*)(int, char **))special_builtins[j].func;
             int status = do_exec_cmd(argc, argv, NULL, func);
-            set_exit_status(status, 0);
+            set_exit_status(status);
             return 1;
         }
     }
@@ -1487,7 +1487,7 @@ int do_regular_builtin(int argc, char **argv)
             }
             int (*func)(int, char **) = (int (*)(int, char **))regular_builtins[j].func;
             int status = do_exec_cmd(argc, argv, NULL, func);
-            set_exit_status(status, 0);
+            set_exit_status(status);
             return 1;
         }
     }
@@ -1987,7 +1987,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
     
     if(option_set('x'))
     {
-        print_prompt4(src);
+        print_prompt4();
         for(i = 0; i < argc; i++)
         {
             fprintf(stderr, "%s ", argv[i]);
@@ -2088,8 +2088,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
             flag_set(special_builtins[REGULAR_BUILTIN_COPROC].flags, BUILTIN_ENABLED))
         {
             int res = coproc(argc, argv, io_files);
-            set_exit_status(res, 0);
-            //while(argc--) free_malloced_str(argv[argc]);
+            set_exit_status(res);
             free_argv(argc, argv);
             return !res;
         }
