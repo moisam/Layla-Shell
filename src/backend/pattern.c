@@ -291,7 +291,7 @@ loop:
        those is not seen as a file but as a dir. So wipe out the struct to
        prevent this from happening.
      */
-    memset((void *)&statbuf, 0, sizeof(struct stat));
+    memset(&statbuf, 0, sizeof(struct stat));
     char *name = eps[index]->d_name;
     lstat(name, &statbuf);
     /* skip dot and dot-dot */

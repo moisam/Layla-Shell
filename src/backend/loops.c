@@ -121,6 +121,7 @@ int __continue(int argc, char **argv)
     req_continue = req_loop_level;
     return 0;
 }
+
 #define ARG_COUNT   0x1000
 /*
  * peform word expansion on the list items and create a char ** array
@@ -180,7 +181,7 @@ char **__make_list(struct word_s *first_tok, int *token_count)
     {
         return NULL;
     }
-    char **argv = (char **)malloc((count+1) * sizeof(char *));
+    char **argv = malloc((count+1) * sizeof(char *));
     if(!argv)
     {
         while(--count >= 0)
@@ -406,7 +407,8 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
             }
             if(req_break)
             {
-                req_break--, endme = 1;
+                req_break--;
+                endme = 1;
             }
             if(req_continue >= 1)
             {

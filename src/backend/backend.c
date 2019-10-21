@@ -83,7 +83,7 @@ do {                                                \
 int rip_dead(pid_t pid);
 
 /* defined in builtins/coproc.c */
-int    coproc(int argc, char **argv, struct io_file_s *io_files);
+int coproc(int argc, char **argv, struct io_file_s *io_files);
 
 /* defined below */
 char *get_cmdstr(struct node_s *cmd);
@@ -1321,7 +1321,7 @@ int  do_function_definition(struct source_s *src, int argc, char **argv)
                 //src->srcname  = argv[0];
                 src2.buffer   = f;
                 src2.bufsize  = strlen(f);
-                src2.curpos   = -2;
+                src2.curpos   = INIT_SRC_POS;
                 struct token_s *tok = tokenize(&src2);
                 struct node_s *body = parse_function_body(tok);
                 if(body)
@@ -1623,7 +1623,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
     
     /*
      * push a local symbol table so that any variable assignments won't affect the shell
-     * proper. if the simple command we're executing is a builtin or a function, we'll
+     * proper.. if the simple command we're executing is a builtin or a function, we'll
      * merge that local symbol table with the shell's global symbol table before we return.
      */
     symtab_stack_push();
@@ -1687,65 +1687,65 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
                     }
                     strncpy(name, child->val.str, len);
                     name[len] = '\0';
-                    /*
-                     * support bash extended += operator. currently we only add
-                     * strings, we don't support numeric addition. so 1+=2 will give
-                     * you "12", not "3".
-                     */
-                    int add = 0;
-                    if(name[len-1] == '+')
+                    if(is_name(name))
                     {
-                        name[len-1] = '\0';
-                        add = 1;
-                        len--;
-                    }
-                    /* is this shell restricted? */
-                    if(startup_finished && option_set('r') && is_restrict_var(name))
-                    {
-                        /* r-shells can't set/unset SHELL, ENV, FPATH, or PATH */
-                        fprintf(stderr, "%s: restricted shells can't set %s\n", SHELL_NAME, name);
-                        free(name);
-                        /* POSIX says non-interactive shells exit on var assignment errors */
-                        EXIT_IF_NONINTERACTIVE();
-                        break;
-                    }
-                    else if(is_pos_param(name) || is_special_param(name))
-                    {
-                        fprintf(stderr, "%s: error setting/unsetting '%s' is not allowed\n", SHELL_NAME, name);
-                        free(name);
-                        EXIT_IF_NONINTERACTIVE();
-                        break;
-                    }
-                    /* regular shell and normal variable. set the value */
-                    char *val = word_expand_to_str(s+1);
-                    struct symtab_entry_s *entry = get_local_symtab_entry(name);
-                    char *old_val = NULL;
-                    if(!entry)
-                    {
-                        if(add)
+                        /*
+                         * support bash extended += operator. currently we only add
+                         * strings, we don't support numeric addition. so 1+=2 will give
+                         * you "12", not "3".
+                         */
+                        int add = 0;
+                        if(name[len-1] == '+')
                         {
-                            /* if there is a global var with that name, save its value */
-                            struct symtab_entry_s *gentry = get_symtab_entry(name);
-                            if(gentry && gentry->val)
-                            {
-                                old_val = get_malloced_str(gentry->val);
-                            }
+                            name[len-1] = '\0';
+                            add = 1;
+                            len--;
                         }
+
+                        /* is this shell restricted? */
+                        if(startup_finished && option_set('r') && is_restrict_var(name))
+                        {
+                            /* r-shells can't set/unset SHELL, ENV, FPATH, or PATH */
+                            fprintf(stderr, "%s: restricted shells can't set %s\n", SHELL_NAME, name);
+                            free(name);
+                            /* POSIX says non-interactive shells exit on var assignment errors */
+                            EXIT_IF_NONINTERACTIVE();
+                            break;
+                        }
+
+                        /* can't set positional and special params that way */
+                        if(is_pos_param(name) || is_special_param(name))
+                        {
+                            fprintf(stderr, "%s: error setting/unsetting '%s' is not allowed\n", SHELL_NAME, name);
+                            free(name);
+                            EXIT_IF_NONINTERACTIVE();
+                            break;
+                        }
+
+                        /* can't set readonly variables */
+                        struct symtab_entry_s *entry = get_symtab_entry(name);
+                        if(entry && flag_set(entry->flags, FLAG_READONLY))
+                        {
+                            fprintf(stderr, "%s: cannot set '%s': readonly variable\n", SHELL_NAME, name);
+                            free(name);
+                            EXIT_IF_NONINTERACTIVE();
+                            break;
+                        }
+
+                        /* get the variable's old value */
+                        char *old_val = NULL;
+                        if(add && entry)
+                        {
+                            old_val = get_malloced_str(entry->val);
+                        }
+
+                        /* word-expand the value */
+                        char *val = word_expand_to_str(s+1);
+
+                        /* add local entry */
                         entry = add_to_symtab(name);
-                    }
-                    if(entry->val)
-                    {
-                        /* release the local var's value, if any */
-                        if(old_val)
-                        {
-                            free_malloced_str(old_val);
-                        }
-                        /* save the local var's old value */
-                        old_val = entry->val;
-                        entry->val = NULL;
-                    }
-                    if(!flag_set(entry->flags, FLAG_READONLY))
-                    {
+
+                        /* regular shell and normal variable. set the value */
                         if(add && old_val)
                         {
                             s = malloc(strlen(old_val)+strlen(val)+1);
@@ -1753,23 +1753,22 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
                             {
                                 strcpy(s, old_val);
                                 strcat(s, val);
-                                free_malloced_str(old_val);
                                 free(val);
                                 entry->val = get_malloced_str(s);
                                 free(s);
                             }
+                            free_malloced_str(old_val);
                         }
                         else
                         {
                             entry->val = get_malloced_str(val);
                             free(val);
+                            if(old_val)
+                            {
+                                free_malloced_str(old_val);
+                            }
                         }
                         entry->flags |= FLAG_CMD_EXPORT;
-                    }
-                    else
-                    {
-                        BACKEND_RAISE_ERROR(ASSIGNMENT_TO_READONLY, name, NULL);
-                        EXIT_IF_NONINTERACTIVE();
                     }
                     free(name);
                     break;
@@ -2160,7 +2159,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
         }
         
         /* POSIX Command Search and Execution Algorithm:      */
-        search_and_exec(src, argc, argv, NULL, SEARCH_AND_EXEC_DOFUNC|SEARCH_AND_EXEC_MERGE_GLOBAL);
+        search_and_exec(src, argc, argv, NULL, SEARCH_AND_EXEC_DOFUNC);
         if(dofork)
         {
             BACKEND_RAISE_ERROR(FAILED_TO_EXEC, argv[0], strerror(errno));
@@ -2305,18 +2304,17 @@ int  do_command(struct source_s *src, struct node_s *node, struct node_s *redire
     {
         return 0;
     }
-    else if(node->type == NODE_COMMAND)
+
+    switch(node->type)
     {
-        int res = do_simple_command(src, node, redirect_list, fork);
-        return res;
+        case NODE_COMMAND:
+        case NODE_FUNCTION:
+            return do_simple_command(src, node, redirect_list, fork);
+
+        case NODE_TIME:
+            return __time(src, node->first_child);
+
+        default:
+            return do_compound_command(src, node, redirect_list);
     }
-    else if(node->type == NODE_FUNCTION)
-    {
-        return do_simple_command(src, node, redirect_list, fork);
-    }
-    else if(node->type == NODE_TIME)
-    {
-        return __time(src, node->first_child);
-    }
-    return do_compound_command(src, node, redirect_list);
 }

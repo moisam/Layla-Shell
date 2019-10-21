@@ -61,7 +61,7 @@ void redirect_proc_do(char *cmdline, char op, char *tmpname)
         struct source_s src;
         src.buffer   = buf;
         src.bufsize  = j;
-        src.curpos   = -2;
+        src.curpos   = INIT_SRC_POS;
         src.srctype = SOURCE_FIFO;
         src.srcname = NULL;
         parse_and_execute(&src);
