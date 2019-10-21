@@ -45,7 +45,7 @@
  * explanation on how to use this utility.
  */
 
-int unset(int argc, char *argv[])
+int unset(int argc, char **argv)
 {
     /* no arguments. bail out */
     if(argc == 1)
@@ -93,29 +93,17 @@ int unset(int argc, char *argv[])
      * scope.. this will give the caller the intended behaviour, as calling unset
      * should unset variables in the caller's scope, not in the unset utility's scope.
      */
-    struct symtab_s *symtab = symtab_stack_pop();
+    //struct symtab_s *symtab = symtab_stack_pop();
     
     for( ; v < argc; v++)
     {
         char *arg = argv[v];
-        /* check we are not trying to unset one of the special variables */
-        if(strlen(arg) == 1)
+        /* ignore empty arguments */
+        if(!arg || !*arg)
         {
-            switch(arg[0])
-            {
-                case '@':
-                case '*':
-                case '#':
-                case '?':
-                case '-':
-                case '$':
-                case '!':
-                case '0':
-                    fprintf(stderr, "%s: unable to unset '%s': special parameter\n", UTILITY, arg);
-                    res = 1;
-                    continue;
-            }
+            continue;
         }
+
         /* remove the shell variable with the given name */
         if(is_var)
         {
@@ -123,6 +111,12 @@ int unset(int argc, char *argv[])
             if(is_special_param(arg))
             {
                 fprintf(stderr, "%s: unable to unset '%s': special parameter\n", UTILITY, arg);
+                res = 1;
+                continue;
+            }
+            if(is_pos_param(arg))
+            {
+                fprintf(stderr, "%s: unable to unset '%s': positional parameter\n", UTILITY, arg);
                 res = 1;
                 continue;
             }
@@ -155,13 +149,13 @@ int unset(int argc, char *argv[])
             {
                 if((entry = get_symtab_entry(arg)))
                 {
-                    if(entry->flags & FLAG_READONLY)
+                    if(flag_set(entry->flags, FLAG_READONLY))
                     {
                         fprintf(stderr, "%s: unable to unset '%s': readonly variable\n", UTILITY, arg);
                         res = 1;
                         continue;
                     }
-                    rem_from_symtab(entry);
+                    rem_from_any_symtab(entry);
                 }
                 /* now remove the variable/function definition from the environment */
                 if(unsetenv(arg) != 0)
@@ -187,6 +181,6 @@ int unset(int argc, char *argv[])
      * restore our local symbol table, so that do_simple_command() or whoever called us
      * can pop the local symbol table correctly.
      */
-    symtab_stack_push(symtab);
+    //symtab_stack_push(symtab);
     return res;
 }

@@ -640,7 +640,7 @@ start:
         if(*curpath != '/' && pwd && *pwd)
         {
             /* add 2 to the length for possible '/' */
-            char *path = (char *)malloc(pwdlen+strlen(curpath)+2);
+            char *path = malloc(pwdlen+strlen(curpath)+2);
             if(path)
             {
                 /* check for trailing '/' and add one if needed */

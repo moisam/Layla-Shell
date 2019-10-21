@@ -97,14 +97,14 @@ int getopts(int argc, char **argv)
          *  get a copy of all positional parameters in addition to special param $0.
          *  effectively, we will be working on an array similar to a C program's argv.
          */
-        args = (char **)malloc((count+2) * sizeof(char *));
+        args = malloc((count+2) * sizeof(char *));
         if(!args)
         {
             fprintf(stderr, "%s: insufficient memory to load args\n", UTILITY);
             return 5;
         }
         free_args = 1;
-        memset((void *)args, 0, (count+2) * sizeof(char *));
+        memset(args, 0, (count+2) * sizeof(char *));
         args[0] = param0->val;
         if(count)
         {

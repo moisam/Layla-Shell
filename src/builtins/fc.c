@@ -438,7 +438,7 @@ check_bounds:
                 src.bufsize  = strlen(src.buffer)-1;
                 src.srctype  = SOURCE_FCCMD;
                 src.srcname  = NULL;
-                src.curpos   = -2;
+                src.curpos   = INIT_SRC_POS;
                 /* parse and execute */
                 parse_and_execute(&src);
                 replace = 0;
@@ -450,7 +450,7 @@ check_bounds:
                 src.bufsize  = strlen(cmd_history[first].cmd)-1;
                 src.srctype  = SOURCE_FCCMD;
                 src.srcname  = NULL;
-                src.curpos   = -2;
+                src.curpos   = INIT_SRC_POS;
                 parse_and_execute(&src);
             }
         }
@@ -591,7 +591,7 @@ check_bounds:
             src.bufsize  = strlen(cmd)-1;
             src.srctype  = SOURCE_FCCMD;
             src.srcname  = NULL;
-            src.curpos   = -2;
+            src.curpos   = INIT_SRC_POS;
             parse_and_execute(&src);
         }
         fclose(f);

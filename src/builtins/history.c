@@ -750,7 +750,7 @@ char *save_to_history(char *cmd_buf)
     
     if(optionx_set(OPTION_CMD_HIST))
     {
-        if(!(cmd_history[cmd_history_end].cmd = (char *)malloc(len+1)))
+        if(!(cmd_history[cmd_history_end].cmd = malloc(len+1)))
         {
             errno = ENOMEM;
             return "";
@@ -809,7 +809,7 @@ char *save_to_history(char *cmd_buf)
         }
         if(p < pend)
         {
-            if(!(cmd_history[cmd_history_end].cmd = (char *)malloc(len+1)))
+            if(!(cmd_history[cmd_history_end].cmd = malloc(len+1)))
             {
                 errno = ENOMEM;
                 return "";

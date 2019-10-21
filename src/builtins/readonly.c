@@ -70,7 +70,7 @@ void purge_readonlys()
 
                 while(entry)
                 {
-                    if(entry->flags & FLAG_READONLY)
+                    if(flag_set(entry->flags, FLAG_READONLY))
                     {
                         /* check the lower symbol tables don't have the same variable defined */
                         struct symtab_entry_s *entry2 = get_symtab_entry(entry->name);
@@ -179,9 +179,54 @@ int readonly(int argc, char *argv[])
     for( ; v < argc; v++)
     {
         char *arg = argv[v];
-        if(do_declare_var(arg, 0, FLAG_READONLY, 0, SPECIAL_BUILTIN_READONLY) != 0)
+        /* check if arg contains an equal sign */
+        char *equals = strchr(arg, '=');
+        /* if yes, get the value part */
+        char *val    = equals ? equals+1 : NULL;
+        /*
+         *  get the variable name.. if there is an equal sign, the name is
+         *  the part before the equal sign, otherwise it is the whole string.
+         */
+        size_t name_len = equals ? (size_t)(equals-arg) : strlen(arg);
+        char name_buf[name_len+1];
+        strncpy(name_buf, arg, name_len);
+        name_buf[name_len] = '\0';
+
+        /* positional and special parameters can't be set like this */
+        if(is_pos_param(name_buf) || is_special_param(name_buf))
         {
             res = 1;
+            fprintf(stderr, "readonly: error setting/unsetting '%s' is not allowed\n", name_buf);
+            continue;
+        }
+
+        /* check for an entry anywhere in the symbol table stack */
+        struct symtab_entry_s *entry = get_symtab_entry(name_buf);
+        if(!entry)
+        {
+            /* no entry. add new one to the local symbol table */
+            entry = add_to_symtab(name_buf);
+        }
+
+        if(entry)
+        {
+            /* set the value, if any */
+            if(val)
+            {
+                /* make sure we're not setting an already readonly variable */
+                if(flag_set(entry->flags, FLAG_READONLY))
+                {
+                    fprintf(stderr," readonly: cannot set %s: readonly variable\n", name_buf);
+                    res = 1;
+                }
+                else
+                {
+                    symtab_entry_setval(entry, val);
+                }
+            }
+
+            /* set the flags */
+            entry->flags |= FLAG_READONLY;
         }
     }
     return res;

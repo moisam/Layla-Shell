@@ -35,16 +35,6 @@
 
 
 /*
- * return 1 if c is a capital letter, 0 otherwise.
- */
-int is_capital(char c)
-{
-  if(c >= 'A' && c <= 'Z') return 1;
-  return 0;
-}
-
-
-/*
  * find the proper quoting character for the given string value.
  * then print the quoted string to stdout.
  *
@@ -103,61 +93,88 @@ void purge_quoted(char *prefix, char *name, char *val)
 
 
 /*
- * print all the exported variables and/or functions.
+ * print all the exported variables.
  */
-void purge_exports(struct symtab_s *symtab)
+void purge_exports(void)
 {
+    int i;
     /* use an alpha list to sort variables alphabetically */
     struct alpha_list_s list;
     init_alpha_list(&list);
+    struct symtab_stack_s *stack = get_symtab_stack();
+
+    for(i = 0; i < stack->symtab_count; i++)
+    {
+        struct symtab_s *symtab = stack->symtab_list[i];
+        /*
+         * for all but the local symbol table, we check the table lower down in the
+         * stack to see if there is a local variable defined with the same name as
+         * a global variable.. if that is the case, the local variable takes precedence
+         * over the global variable, and we skip printing the global variable as we
+         * will print the local variable when we reach the local symbol table.
+         */
 
 #ifdef USE_HASH_TABLES
-    
-    if(symtab->used)
-    {
-        struct symtab_entry_s **h1 = symtab->items;
-        struct symtab_entry_s **h2 = symtab->items + symtab->size;
-        for( ; h1 < h2; h1++)
+
+        if(symtab->used)
         {
-            struct symtab_entry_s *entry = *h1;
+            struct symtab_entry_s **h1 = symtab->items;
+            struct symtab_entry_s **h2 = symtab->items + symtab->size;
+            for( ; h1 < h2; h1++)
+            {
+                struct symtab_entry_s *entry = *h1;
 
 #else
 
-        struct symtab_entry_s *entry  = symtab->first;
-        
+                struct symtab_entry_s *entry  = symtab->first;
+
 #endif
-        
-            while(entry)
-            {
-                char *prefix = (entry->val_type == SYM_FUNC) ? "declare -x -f" : "export";
-                char *str = NULL;
-                if(entry->val == NULL)
+
+                while(entry)
                 {
-                    str = alpha_list_make_str("%s %s", prefix, entry->name);
-                }
-                else
-                {
-                    char *val = quote_val(entry->val, 1);
-                    if(val)
+                    if(flag_set(entry->flags, FLAG_EXPORT))
                     {
-                        str = alpha_list_make_str("%s %s=%s", prefix, entry->name, val);
-                        free(val);
+                        struct symtab_entry_s *entry2 = get_symtab_entry(entry->name);
+                        /* check we got an entry that is different from this one */
+                        if(entry2 != entry)
+                        {
+                            /* we have a local variable with the same name. skip this one */
+                            entry = entry->next;
+                            continue;
+                        }
+
+                        char *prefix = (entry->val_type == SYM_FUNC) ? "declare -x -f" : "export";
+                        char *str = NULL;
+                        if(entry->val == NULL)
+                        {
+                            str = alpha_list_make_str("%s %s", prefix, entry->name);
+                        }
+                        else
+                        {
+                            char *val = quote_val(entry->val, 1);
+                            if(val)
+                            {
+                                str = alpha_list_make_str("%s %s=%s", prefix, entry->name, val);
+                                free(val);
+                            }
+                            else
+                            {
+                                str = alpha_list_make_str("%s %s=", prefix, entry->name);
+                            }
+                        }
+                        add_to_alpha_list(&list, str);
                     }
-                    else
-                    {
-                        str = alpha_list_make_str("%s %s=", prefix, entry->name);
-                    }
+                    entry = entry->next;
                 }
-                add_to_alpha_list(&list, str);
-                entry = entry->next;
-            }
-    
+
 #ifdef USE_HASH_TABLES
-    
+
+            }
         }
-    }
-        
+
 #endif
+
+    }
 
     print_alpha_list(&list);
     free_alpha_list(&list);
@@ -175,7 +192,7 @@ void purge_exports(struct symtab_s *symtab)
  * explanation on how to use this utility.
  */
 
-int export(int argc, char *argv[])
+int export(int argc, char **argv)
 {
     int v = 1, c, unexport = 0;
     int funcs = 0;      /* if set, work on the functions table */
@@ -206,11 +223,11 @@ int export(int argc, char *argv[])
             case 'p':
                 if(funcs)
                 {
-                    purge_exports(func_table);
+                    purge_exported_funcs();
                 }
                 else
                 {
-                    purge_exports(get_global_symtab());
+                    purge_exports();
                 }
                 return 0;
                 
@@ -236,18 +253,17 @@ int export(int argc, char *argv[])
     {
         if(funcs)
         {
-            purge_exports(func_table);
+            purge_exported_funcs();
         }
         else
         {
-            purge_exports(get_global_symtab());
+            purge_exports();
         }
         return 0;
     }
     
     /* process the argument list */
     int res = 0;
-    int flags = unexport ? 0 : FLAG_EXPORT;
     struct symtab_s *globsymtab = get_global_symtab();
     for( ; v < argc; v++)
     {
@@ -275,7 +291,7 @@ int export(int argc, char *argv[])
             else
             {
                 /* search for name in the global symbol table */
-                entry = __do_lookup(name_buf, globsymtab);
+                entry = do_lookup(name_buf, globsymtab);
             }
             /* unexport the entry */
             if(entry)
@@ -312,9 +328,51 @@ int export(int argc, char *argv[])
                 }
             }
             /* name is a variable */
-            else if(do_declare_var(arg, 1, flags, 0, SPECIAL_BUILTIN_EXPORT) != 0)
+            else
             {
-                res = 1;
+                /* get the value part */
+                char *val    = equals ? equals+1 : NULL;
+
+                /* positional and special parameters can't be set like this */
+                if(is_pos_param(name_buf) || is_special_param(name_buf))
+                {
+                    res = 1;
+                    fprintf(stderr, "export: error setting/unsetting '%s' is not allowed\n", name_buf);
+                    continue;
+                }
+
+                /* check for an entry anywhere in the symbol table stack */
+                struct symtab_entry_s *entry = get_symtab_entry(name_buf);
+                if(!entry)
+                {
+                    /* no entry. add new one to the local symbol table */
+                    entry = add_to_symtab(name_buf);
+                }
+
+                if(entry)
+                {
+                    /* set the value, if any */
+                    if(val)
+                    {
+                        /* make sure we're not setting an already readonly variable */
+                        if(flag_set(entry->flags, FLAG_READONLY))
+                        {
+                            fprintf(stderr," readonly: cannot set %s: readonly variable\n", name_buf);
+                            res = 1;
+                        }
+                        else
+                        {
+                            symtab_entry_setval(entry, val);
+                            /* set the flags */
+                            entry->flags |= FLAG_EXPORT;
+                        }
+                    }
+                    else
+                    {
+                        /* set the flags */
+                        entry->flags |= FLAG_EXPORT;
+                    }
+                }
             }
         }
     }
@@ -433,13 +491,13 @@ void do_export_vars(int force_export_all)
 {
     /*
      * we will start by reading vars from the global symbol table,
-     * then work our way up to the local symbol table. this ensures
+     * then work our way up to the local symbol table.. this ensures
      * that locally defined variables overwrite globally defined
      * variables of the same name.
      */
-    int i;
+    int i = 0;
     struct symtab_stack_s *stack = get_symtab_stack();
-    for(i = 0; i < stack->symtab_count; i++)
+    for( ; i < stack->symtab_count; i++)
     {
         struct symtab_s *symtab = stack->symtab_list[i];
         do_export_table(symtab, force_export_all);

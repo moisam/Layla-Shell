@@ -105,8 +105,8 @@ struct stat statbuf2;
 char *compare_files(char *f1, char *f2, int op)
 {
     /* stat the two files */
-    memset((void *)&statbuf , 0, sizeof(struct stat));
-    memset((void *)&statbuf2, 0, sizeof(struct stat));
+    memset(&statbuf , 0, sizeof(struct stat));
+    memset(&statbuf2, 0, sizeof(struct stat));
     int res1 = lstat(f1, &statbuf );
     int res2 = lstat(f2, &statbuf2);
     /* perform the comparison operator */
@@ -471,7 +471,7 @@ char *test_file(char *arg, int op)
 {
     uid_t euid = geteuid();
     gid_t egid = getegid();
-    memset((void *)&statbuf, 0, sizeof(struct stat));
+    memset(&statbuf, 0, sizeof(struct stat));
     /* stat the file */
     int res = lstat(arg, &statbuf);
     /* perform the test */

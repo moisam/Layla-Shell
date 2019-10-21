@@ -66,7 +66,7 @@ int eval(int argc, char **argv)
     /* account for the null terminating char */
     len++;
     /* alloc the buffer */
-    cmd = (char *)malloc(len);
+    cmd = malloc(len);
     if(!cmd)
     {
         fprintf(stderr, "eval: insufficient memory\n");
@@ -87,7 +87,7 @@ int eval(int argc, char **argv)
     src.buffer   = cmd;
     src.bufsize  = len-1;
     src.srctype  = SOURCE_EVAL;
-    src.curpos   = -2;
+    src.curpos   = INIT_SRC_POS;
     src.srcname = NULL;
     src.curline = 1;
 

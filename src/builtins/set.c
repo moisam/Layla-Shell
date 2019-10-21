@@ -330,7 +330,7 @@ int option_set(char which)
  */
 void reset_options()
 {
-    memset((void *)&options, 0, sizeof(options));
+    memset(&options, 0, sizeof(options));
 }
 
 
@@ -863,36 +863,6 @@ int do_options(char *ops, char *extra)
 
 
 /*
- * reset the positional parameters by setting the value of each parameter to
- * NULL, followed by setting the value of $# to zero.
- */
-void reset_pos_params()
-{
-    /* unset all positional params */
-    struct symtab_entry_s *hash = get_symtab_entry("#");
-    if(hash && hash->val)
-    {
-        int params = atoi(hash->val);
-        if(params != 0)
-        {
-            int  j = 1;
-            char buf[32];
-            for( ; j <= params; j++)
-            {
-                sprintf(buf, "%d", j);
-                struct symtab_entry_s *entry = get_symtab_entry(buf);
-                if(entry && entry->val)
-                {
-                    symtab_entry_setval(entry, NULL);
-                }
-            }
-        }
-        symtab_entry_setval(hash, "0");
-    }
-}
-
-
-/*
  * the set builtin utility (POSIX).. used to set and unset shell options and
  * positional parameters.
  *
@@ -903,9 +873,9 @@ void reset_pos_params()
  * explanation on how to use this utility.
  */
 
-int set(int argc, char *argv[])
+int set(int argc, char **argv)
 {
-    int i;
+    int i = 1;
 
     /* no arguments. print the list of defined shell variables */
     if(argc == 1)
@@ -994,34 +964,35 @@ int set(int argc, char *argv[])
     int params = 0;
     char buf[32];
     struct symtab_entry_s *entry;
-    /*
-     * special option '--': reset positional parameters and stop parsing options.
-     */
-    if(strcmp(argv[1], "--") == 0)
-    {
-        reset_pos_params();
-        i = 2;
-        goto read_arguments;
-    }
-
-    /*
-     *  special option '-': reset positional parameters, turn the -x and -v options off,
-     *  and stop parsing options.
-     */
-    if(strcmp(argv[1], "-") == 0)
-    {
-        reset_pos_params();
-        i = 2;
-        set_option('x', 0);
-        set_option('v', 0);
-        goto read_arguments;
-    }
   
-    /* parse the rest of options */
+    /* parse options */
     for(i = 1; i < argc; i++)
     {
         if(argv[i][0] == '-' || argv[i][0] == '+')
         {
+            /*
+             * special option '--': reset positional parameters and stop parsing options.
+             */
+            if(strcmp(argv[i], "--") == 0)
+            {
+                reset_pos_params();
+                i++;
+                break;
+            }
+
+            /*
+             *  special option '-': reset positional parameters, turn the -x and -v options off,
+             *  and stop parsing options.
+             */
+            if(strcmp(argv[i], "-") == 0)
+            {
+                reset_pos_params();
+                set_option('x', 0);
+                set_option('v', 0);
+                i++;
+                break;
+            }
+
             int skip = do_options(argv[i], argv[i+1]);
             /* error parsing option */
             if(skip < 0)
@@ -1036,7 +1007,6 @@ int set(int argc, char *argv[])
         }
     }
   
-read_arguments:
     /* set the positional parameters */
     for( ; i < argc; i++)
     {
@@ -1085,7 +1055,7 @@ int __set(char* name_buf, char* val_buf, int set_global, int set_flags, int unse
     
     /* now to normal variables */
     struct symtab_s *globsymtab = get_global_symtab();
-    struct symtab_entry_s *entry1 = __do_lookup(name_buf, globsymtab);
+    struct symtab_entry_s *entry1 = do_lookup(name_buf, globsymtab);
     struct symtab_entry_s *entry2 = get_local_symtab_entry(name_buf);
     
     /* the -a option automatically sets the export flag for all variables */
@@ -1101,25 +1071,25 @@ int __set(char* name_buf, char* val_buf, int set_global, int set_flags, int unse
          * remove the variable from local symbol table (if any is set),
          * and add it to the global symbol table.
          */
-        if(entry1 && entry1 == entry2)
+        if(!entry1 || entry1 != entry2)
         {
-            goto setval;
-        }
-        if(!entry1)
-        {
-            entry1 = __add_to_symtab(name_buf, globsymtab);
-        }
-        if(entry2)
-        {
-            /* free old value */
-            if(entry1->val)
+            if(!entry1)
             {
-                free(entry1->val);
+                entry1 = __add_to_symtab(name_buf, globsymtab);
             }
-            /* store new value */
-            entry1->val = get_malloced_str(entry2->val);
-            /* remove the local variable, as we have added it to the global symbol table */
-            rem_from_symtab(entry2);
+
+            if(entry2)
+            {
+                /* free old value */
+                if(entry1->val)
+                {
+                    free(entry1->val);
+                }
+                /* store new value */
+                entry1->val = get_malloced_str(entry2->val);
+                /* remove the local variable, as we have added it to the global symbol table */
+                rem_from_symtab(entry2, get_local_symtab());
+            }
         }
     }
     else
@@ -1131,7 +1101,6 @@ int __set(char* name_buf, char* val_buf, int set_global, int set_flags, int unse
         }
     }
 
-setval:
     /* can't set readonly variables */
     if(flag_set(entry1->flags, FLAG_READONLY))
     {

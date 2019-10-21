@@ -42,9 +42,10 @@
  * explanation on how to use this utility.
  */
 
-int shift(int argc, char *argv[])
+int shift(int argc, char **argv)
 {
-    if(argc > 2)
+    /* extra arguments produce an error in --posix mode */
+    if(option_set('P') && argc > 2)
     {
         fprintf(stderr, "%s: too many arguments\n", UTILITY);
         return 1;
@@ -52,7 +53,7 @@ int shift(int argc, char *argv[])
     struct symtab_entry_s *hash = get_symtab_entry("#");
     int params = atoi(hash->val);
     int shift = 1;
-    if(argc == 2)
+    if(argc >= 2)
     {
         shift = atoi(argv[1]);
         if(shift > params || shift < 0)

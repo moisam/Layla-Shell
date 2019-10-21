@@ -21,6 +21,7 @@
 
 #define _XOPEN_SOURCE   500     /* fdopen() */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -108,6 +109,212 @@ int ready_to_read(int fd)
     {
         return 0;
     }
+}
+
+
+/*
+ * add a new shell variable with the given name, and assign it the given value.
+ * val_len is the length of the value string.. backslash is used as an escape
+ * character, unless suppress_esc is non-zero.
+ *
+ * returns 1 on success, 0 on error.
+ */
+int read_set_var(char *name, char *val, int val_len, int suppress_esc)
+{
+    char *tmp = malloc(val_len+1);
+    /* TODO: do something better than bailing out here */
+    if(!tmp)
+    {
+        fprintf(stderr, "%s: insufficient memory for field splitting\n", UTILITY);
+        return 0;
+    }
+    strncpy(tmp, val, val_len);
+    tmp[val_len] = '\0';
+
+    /* add the variable we will save input to */
+    struct symtab_entry_s *entry = get_symtab_entry(name);
+    if(!entry)
+    {
+        entry = add_to_symtab(name);
+    }
+    if(!entry)
+    {
+        fprintf(stderr, "%s: failed to add variable: %s\n", UTILITY, name);
+        free(tmp);
+        return 0;
+    }
+
+    /* we can't save input in a readonly variable */
+    if(flag_set(entry->flags, FLAG_READONLY))
+    {
+        fprintf(stderr, "%s: failed to set '%s': readonly variable\n", UTILITY, name);
+        free(tmp);
+        return 0;
+    }
+
+    /* remove escaped chars */
+    if(!suppress_esc)
+    {
+        char *p = tmp;
+        /* remove backslashes */
+        while(*p)
+        {
+            if(*p == '\\')
+            {
+                delete_char_at(p, 0);
+            }
+            /* beware of a hanging backslash */
+            if(*p)
+            {
+                p++;
+            }
+        }
+    }
+
+    /* save the field's value */
+    symtab_entry_setval(entry, tmp);
+    free(tmp);
+    return 1;
+}
+
+
+/*
+ * convert the input of the read builtin utility into separate fields.
+ * this function works similar to field_split(), except it doesn't treat
+ * quotes in any special way, and treats backslash as an escape character
+ * only if the suppress_esc is zero.
+ *
+ * returns 0 on success, 1 on failure.
+ */
+int read_field_split(char *str, int var_count, char **var_names, int suppress_esc)
+{
+    struct symtab_entry_s *entry = get_symtab_entry("IFS");
+    char *IFS = entry ? entry->val : NULL;
+    /* POSIX says no IFS means: "space/tab/NL" */
+    if(!IFS)
+    {
+        IFS = " \t\n";
+    }
+    /* POSIX says empty IFS means no field splitting */
+    if(IFS[0] == '\0')
+    {
+        return 1;
+    }
+    /* get the IFS spaces and delimiters separately */
+    char IFS_space[64];
+    char IFS_delim[64];
+    if(strcmp(IFS, " \t\n") == 0)   /* "standard" IFS */
+    {
+        IFS_space[0] = ' ' ;
+        IFS_space[1] = '\t';
+        IFS_space[2] = '\n';
+        IFS_space[3] = '\0';
+        IFS_delim[0] = '\0';
+    }
+    else                            /* "custom" IFS */
+    {
+        char *p  = IFS;
+        char *sp = IFS_space;
+        char *dp = IFS_delim;
+        do
+        {
+            if(isspace(*p))
+            {
+                *sp++ = *p++;
+            }
+            else
+            {
+                *dp++ = *p++;
+            }
+        } while(*p);
+        *sp = '\0';
+        *dp = '\0';
+    }
+
+    size_t len = strlen(str);
+    int i = 0;
+    var_count--;
+
+    /* skip any leading whitespaces in the string */
+    skip_IFS_whitespace(&str, IFS_space);
+
+    /* create the fields */
+    char *p1 = str, *p2 = str;
+    while(*p2)
+    {
+        /* stop parsing if we reached the penultimate variable */
+        if(i == var_count)
+        {
+            break;
+        }
+
+        /* skip escaped chars */
+        if(*p2 == '\\')
+        {
+            p2++;
+            /* beware of a hanging backslash */
+            if(*p2)
+            {
+                p2++;
+            }
+        }
+
+        /*
+         * delimit the field if we have an IFS space or delimiter char, or if
+         * we reached the end of the input string.
+         */
+        if(!*p2 || is_IFS_char(*p2, IFS_space) || is_IFS_char(*p2, IFS_delim))
+        {
+            /* copy the field text */
+            size_t len2 = p2-p1;
+            if(!read_set_var(var_names[i], p1, len2, suppress_esc))
+            {
+                return 1;
+            }
+
+            /* skip trailing IFS spaces/delimiters */
+            while(*p2 && is_IFS_char(*p2, IFS_space))
+            {
+                p2++;
+            }
+            while(*p2 && is_IFS_char(*p2, IFS_delim))
+            {
+                p2++;
+            }
+            while(*p2 && is_IFS_char(*p2, IFS_space))
+            {
+                p2++;
+            }
+
+            /* prepare for the next field */
+            i++;
+            p1 = p2;
+        }
+        else
+        {
+            p2++;
+        }
+    }
+
+    /*
+     * we have some value remaining from the input string. store it in the
+     * next variable.
+     */
+    if(*p1)
+    {
+        len -= (p1-str);
+        if(!read_set_var(var_names[i++], p1, len, suppress_esc))
+        {
+            return 1;
+        }
+    }
+
+    /* set the remaining variables to empty strings */
+    for( ; i <= var_count; i++)
+    {
+        read_set_var(var_names[i], "", 0, suppress_esc);
+    }
+    return 0;
 }
 
 
@@ -339,11 +546,11 @@ int __read(int argc, char **argv)
             {
                 if(*p == '\\')
                 {
-                    delete_char_at(p, 0);
-                    if(*p == '\n')
+                    if(*++p == '\n')
                     {
                         read_more = 1;
-                        delete_char_at(p, 0);
+                        /* remove the \\n sequence */
+                        p[-1] = '\0';
                     }
                 }
                 /* beware of a hanging backslash */
@@ -367,7 +574,7 @@ int __read(int argc, char **argv)
         /* now save input in malloc'd buffer */
         if(!in)
         {
-            in = (char *)malloc(buflen+1);
+            in = malloc(total+1);
             if(in)
             {
                 strcpy(in, buf);
@@ -375,17 +582,22 @@ int __read(int argc, char **argv)
         }
         else
         {
-            in = (char *)realloc(in, buflen+strlen(in)+1);
-            if(in)
+            char *in2 = realloc(in, total+1);
+            if(in2)
             {
-                strcat(in, buf);
+                strcat(in2, buf);
+                in = in2;
+            }
+            else
+            {
+                break;
             }
         }
     
         /* print PS2 if we need more input */
         if(read_more)
         {
-            if(isatty(0) && option_set('i'))
+            if(isatty(infd) && option_set('i'))
             {
                 print_prompt2();
             }
@@ -420,101 +632,27 @@ int __read(int argc, char **argv)
         save_to_history(in);
     }
 
-    /* perform field splitting */
-    struct word_s *first = field_split(in);
-    if(!first)
+    /* remove the trailing '\n' */
+    if(in[total-1] == '\n')
     {
-        /* no field splitting done. remove '\n' and save. */
-        int len = strlen(in);
-        if(in[len-1] == '\n')
-        {
-            in[len-1] = '\0';
-        }
-        first = make_word(in);
-        //free(in);
-        //return 2;
+        in[total-1] = '\0';
     }
-    
-    struct word_s *t = first;
-    struct symtab_entry_s *entry;
+
     int res = 0;
-    
     /* called with no args? set the $REPLY variable and exit */
     if(v >= argc)
     {
-        entry = add_to_symtab("REPLY");
-        char *str = wordlist_to_str(first);
-        symtab_entry_setval(entry, str);
-        free(str);
-        goto end;
-    }
-    
-loop2:
-    /* add the variable we will save input to */
-    entry = add_to_symtab(argv[v]);
-    if(!entry)
-    {
-        fprintf(stderr, "%s: failed to add variable: %s\n", UTILITY, argv[v]);
-        res = 2; goto end;
-    }
-    /* we can't save input in a readonly variable */
-    if(flag_set(entry->flags, FLAG_READONLY))
-    {
-        fprintf(stderr, "%s: failed to assign to variable '%s': readonly variable\n", UTILITY, argv[v]);
-        res = 2; goto end;
-    }
-    /* save the next field */
-    symtab_entry_setval(entry, t->data);
-    v++;
-    struct word_s *next = t->next;
-    /* fields are less than vars. set the rest of vars to empty strings */
-    if(!next)
-    {
-        for( ; v < argc; v++)
-        {
-            entry = add_to_symtab(argv[v]);
-            if(!entry)
-            {
-                fprintf(stderr, "%s: failed to add variable: %s\n", UTILITY, argv[v]);
-                res = 2;
-                goto end;
-            }
-            /* we can't save input in a readonly variable */
-            if(flag_set(entry->flags, FLAG_READONLY))
-            {
-                fprintf(stderr, "%s: failed to assign to variable '%s': readonly variable\n", UTILITY, argv[v]);
-                res = 2;
-                goto end;
-            }
-            symtab_entry_setval(entry, "");
-        }
-    }
-    /* vars are less than fields */
-    else if(v >= argc)
-    {
-        /*
-         * NOTE: we are taking the easy road here. POSIX says we should 
-         *       concatenate the remaining fields with proper delimiters,
-         *       and ignore trailing IFS whitespace. we just glue the
-         *       fields using spaces!.
-         * TODO: fix this to proper behaviour!.
-         */
-        char *str = wordlist_to_str(t);
-        symtab_entry_setval(entry, str);
-        free(str);
+        res = read_field_split(in, 1, (char *[]){ "REPLY" }, suppress_esc);
     }
     else
     {
-        t = next;
-        if(t)
-        {
-            goto loop2;
-        }
+        res = read_field_split(in, argc-v, &argv[v], suppress_esc);
     }
-    
-end:
-    free_all_words(first);
+
+    /* free buffer */
     free(in);
+    
+    /* restore $TMOUT value */
     if(timeout)
     {
         symtab_entry_setval(TMOUT_entry, TMOUT);
@@ -523,9 +661,13 @@ end:
             free_malloced_str(TMOUT);
         }
     }
+
+    /* turn echo off */
     if(echo_off)
     {
         echoon(infd);
     }
+
+    /* return the result */
     return res;
 }

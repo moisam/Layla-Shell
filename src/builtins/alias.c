@@ -213,7 +213,7 @@ int set_alias(char *name, char *val)
     /* save the alias name */
     if(!__aliases[i].name)
     {
-        __aliases[i].name = (char *)malloc(len+1);
+        __aliases[i].name = malloc(len+1);
         if(!__aliases[i].name)
         {
             goto memerr;
@@ -226,7 +226,7 @@ int set_alias(char *name, char *val)
         free(__aliases[i].val);
     }
     /* save the new value */
-    __aliases[i].val = (char *)malloc(strlen(val)+1);
+    __aliases[i].val = malloc(strlen(val)+1);
     if(!__aliases[i].val)
     {
         goto memerr;
