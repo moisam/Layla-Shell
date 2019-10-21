@@ -37,14 +37,14 @@
  */
 struct node_s *new_node(enum node_type_e type)
 {
-    struct node_s *node = (struct node_s *)malloc(sizeof(struct node_s));
+    struct node_s *node = malloc(sizeof(struct node_s));
     if(!node)
     {
         //exit_gracefully(EXIT_FAILURE, "fatal error: Not enough memory for parser node struct");
         return NULL;
     }
     /* initialize the struct */
-    memset((void *)node, 0, sizeof(struct node_s));
+    memset(node, 0, sizeof(struct node_s));
     /* set the node type */
     node->type = type;
     /* return the node struct */
@@ -444,7 +444,7 @@ char *cmd_nodetree_to_str(struct node_s *root)
     {
         return NULL;
     }
-    char *str = (char *)malloc(len+1);
+    char *str = malloc(len+1);
     if(!str)
     {
         return NULL;

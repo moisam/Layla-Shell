@@ -35,7 +35,7 @@
 /*********************************************/
 
 /* pointer to the current function definition we're parsing */
-struct symtab_entry_s *current_func = (struct symtab_entry_s *)NULL;
+struct symtab_entry_s *current_func = NULL;
 
 /* dummy struct to indicate func definitions in src */
 struct node_s __node_func_def;
@@ -1148,7 +1148,7 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
 err:
     PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, err_tok);
     set_exit_status(1);
-    rem_from_symtab(func);
+    rem_from_symtab(func, func_table);
     EXIT_IF_NONINTERACTIVE();
     return NULL;
 }

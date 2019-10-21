@@ -570,7 +570,7 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
         heredoc_len = end - nl;
     }
     /* now get the heredoc proper */
-    char *heredoc = (char *)malloc(heredoc_len+1);
+    char *heredoc = malloc(heredoc_len+1);
     if(!heredoc)        /* insufficient memory */
     {
         BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "storing here-document", NULL);
@@ -613,7 +613,7 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
     /* make sure our cur_token is synced to the new src position */
     tokenize(src);
     /* save the heredoc body */
-    struct word_s *t = (struct word_s *)malloc(sizeof(struct word_s));
+    struct word_s *t = malloc(sizeof(struct word_s));
     if(!t)      /* insufficient memory */
     {
         BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "parsing heredoc", NULL);
