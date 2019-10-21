@@ -46,7 +46,7 @@ void init_symtab()
     {
         exit_gracefully(EXIT_FAILURE, "Fatal error: No memory for global symbol table");
     }
-    memset((void *)global_symtab, 0, sizeof(struct symtab_s));
+    memset(global_symtab, 0, sizeof(struct symtab_s));
     symtab_stack.global_symtab  = global_symtab;
     symtab_stack.local_symtab   = global_symtab;
     symtab_stack.symtab_list[0] = global_symtab;
@@ -67,7 +67,7 @@ struct symtab_s *new_symtab(int level)
     {
         exit_gracefully(EXIT_FAILURE, "Fatal error: No memory for new symbol table");
     }
-    memset((void *)symtab, 0, sizeof(struct symtab_s));
+    memset(symtab, 0, sizeof(struct symtab_s));
     symtab->level = level;
     return symtab;
 }
@@ -105,7 +105,7 @@ struct symtab_s *symtab_stack_pop()
     /* can't pop past the global table */
     if(symtab_stack.symtab_count == 0)
     {
-        return (struct symtab_s *)NULL;
+        return NULL;
     }
     /* get the table on top the stack (the last table) */
     struct symtab_s *st = symtab_stack.symtab_list[symtab_stack.symtab_count-1];
@@ -115,8 +115,8 @@ struct symtab_s *symtab_stack_pop()
     /* empty stack. adjust symbol table pointers */
     if(symtab_stack.symtab_count == 0)
     {
-        symtab_stack.local_symtab  = (struct symtab_s *)NULL;
-        symtab_stack.global_symtab = (struct symtab_s *)NULL;
+        symtab_stack.local_symtab  = NULL;
+        symtab_stack.global_symtab = NULL;
     }
     else
     {
@@ -186,7 +186,7 @@ struct symtab_entry_s *__add_to_symtab(char *symbol, struct symtab_s *st)
         exit_gracefully(EXIT_FAILURE, "Fatal error: No memory for new symbol table entry");
     }
     /* and initialize it */
-    memset((void *)entry, 0, sizeof(struct symtab_entry_s));
+    memset(entry, 0, sizeof(struct symtab_entry_s));
     /* get an malloc'd copy of the key string */
     entry->name = get_malloced_str(symbol);
     /* and add the entry to the table, adjusting pointers as necessary */
@@ -208,8 +208,9 @@ struct symtab_entry_s *__add_to_symtab(char *symbol, struct symtab_s *st)
  * remove an entry from a symbol table, given pointers to the entry and the
  * symbol table.
  */
-void __rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab)
+int rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab)
 {
+    int res = 0;
     /* free the memory used by this entry's value */
     if(entry->val)
     {
@@ -230,6 +231,7 @@ void __rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab)
         {
             symtab->last = NULL;
         }
+        res = 1;
     }
     else
     {
@@ -239,19 +241,34 @@ void __rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab)
         {
             p = e, e = e->next;
         }
-        p->next = entry->next;
+        if(e == entry)
+        {
+            p->next = entry->next;
+            res = 1;
+        }
     }
     /* free the entry itself */
     free(entry);
+    return res;
 }
 
 
 /*
- * remove an entry from the local symbol table.
+ * remove an entry from any symbol table in the stack.
  */
-void rem_from_symtab(struct symtab_entry_s *entry)
+void rem_from_any_symtab(struct symtab_entry_s *entry)
 {
-    __rem_from_symtab(entry, symtab_stack.local_symtab);
+    int i = symtab_stack.symtab_count-1;
+    do
+    {
+        /*
+         * starting with the local symtab, try to remove the entry.
+         */
+        if(rem_from_symtab(entry, symtab_stack.symtab_list[i]))
+        {
+            return;
+        }
+    } while(--i >= 0);      /* move up one level */
 }
 
 
@@ -265,12 +282,12 @@ struct symtab_entry_s *add_to_symtab(char *symbol)
 {
     if(!symbol || symbol[0] == '\0')
     {
-        return 0;
+        return NULL;
     }
     struct symtab_s *st = symtab_stack.local_symtab;
     /* do not duplicate an existing entry */
     struct symtab_entry_s *entry = NULL;
-    if((entry = __do_lookup(symbol, st)))
+    if((entry = do_lookup(symbol, st)))
     {
         /* entry exists. return it */
         return entry;
@@ -297,11 +314,11 @@ struct symtab_entry_s *add_to_symtab(char *symbol)
  * search for a string in a symbol table.
  * returns the entry for the given string, or NULL if its not found.
  */
-struct symtab_entry_s *__do_lookup(char *str, struct symtab_s *symtable)
+struct symtab_entry_s *do_lookup(char *str, struct symtab_s *symtable)
 {
     if(!str || !symtable)
     {
-        return (struct symtab_entry_s *)NULL;
+        return NULL;
     }
     /* search for the key string in the table's entries */
     struct symtab_entry_s *entry = symtable->first;
@@ -316,7 +333,7 @@ struct symtab_entry_s *__do_lookup(char *str, struct symtab_s *symtable)
         entry = entry->next;
     }
     /* string not found in the table. return NULL */
-    return (struct symtab_entry_s *)NULL;
+    return NULL;
 }
 
 
@@ -326,7 +343,7 @@ struct symtab_entry_s *__do_lookup(char *str, struct symtab_s *symtable)
  */
 struct symtab_entry_s *get_local_symtab_entry(char *str)
 {
-    return __do_lookup(str, symtab_stack.local_symtab);
+    return do_lookup(str, symtab_stack.local_symtab);
 }
 
 
@@ -347,7 +364,7 @@ struct symtab_entry_s *get_symtab_entry(char *str)
         /* start with the local symtab */
         struct symtab_s *symtab = symtab_stack.symtab_list[i];
         /* search for the key */
-        struct symtab_entry_s *entry = __do_lookup(str, symtab);
+        struct symtab_entry_s *entry = do_lookup(str, symtab);
         /* entry found */
         if(entry)
         {
@@ -355,7 +372,7 @@ struct symtab_entry_s *get_symtab_entry(char *str)
         }
     } while(--i >= 0);      /* move up one level */
     /* nothing found */
-    return (struct symtab_entry_s *)NULL;
+    return NULL;
 }
 
 
@@ -448,30 +465,23 @@ void merge_global(struct symtab_s *symtab)
             {
                 if(strcmp(special_vars[i].name, entry->name) == 0)
                 {
+                    set_special_var(entry->name, entry->val);
                     break;
                 }
             }
-            if(i < special_var_count)
-            {
-                set_special_var(entry->name, entry->val);
-            }
-            else
+            if(i == special_var_count)
             {
                 /* find the global entry for this local entry */
-                struct symtab_entry_s *gentry = __do_lookup(entry->name, global);
-                /* no global entry found. create a new one */
-                if(!gentry)
-                {
-                    gentry = __add_to_symtab(entry->name, global);
-                }
+                struct symtab_entry_s *gentry = add_to_symtab(entry->name);
                 /* overwrite the global entry's value with the local one */
                 if(gentry)
                 {
-                    /* don't overwrite readonly variables */
-                    if(!flag_set(gentry->flags, FLAG_READONLY))
-                    {
-                        symtab_entry_setval(gentry, entry->val);
-                    }
+                    /* set the value */
+                    symtab_entry_setval(gentry, entry->val);
+                    /* set the flags */
+                    gentry->flags = entry->flags;
+                    /* unmark local command exports so they're not exported to other commands */
+                    gentry->flags &= ~FLAG_CMD_EXPORT;
                 }
             }
         }

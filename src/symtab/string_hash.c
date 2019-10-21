@@ -278,14 +278,14 @@ struct hashitem_s *add_hash_item(struct hashtab_s *table, char *key, char *value
         return entry;
     }
     /* add a new entry */
-    entry = (struct hashitem_s *)malloc(sizeof(struct hashitem_s));
+    entry = malloc(sizeof(struct hashitem_s));
     if(!entry)
     {
         fprintf(stderr, "%s: failed to malloc hashtable item\n", SHELL_NAME);
         return NULL;
     }
     /* initialize it */
-    memset((void *)entry, 0, sizeof(struct hashitem_s));
+    memset(entry, 0, sizeof(struct hashitem_s));
     /* save the key/value pair */
     entry->name = __get_malloced_str(key  );
     entry->val  = __get_malloced_str(value);
@@ -327,14 +327,14 @@ struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, unsigned i
         return entry;
     }
     /* add a new entry */
-    entry = (struct hashitem_s *)malloc(sizeof(struct hashitem_s));
+    entry = malloc(sizeof(struct hashitem_s));
     if(!entry)
     {
         fprintf(stderr, "%s: failed to malloc hashtable item\n", SHELL_NAME);
         return NULL;
     }
     /* initialize it */
-    memset((void *)entry, 0, sizeof(struct hashitem_s));
+    memset(entry, 0, sizeof(struct hashitem_s));
     entry->name = __get_malloced_str(key);
     entry->refs = value;
     /*

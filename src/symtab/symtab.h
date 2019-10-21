@@ -88,11 +88,11 @@ struct symtab_stack_s
 struct symtab_s       *new_symtab(int level);
 struct symtab_s       *symtab_stack_push();
 struct symtab_s       *symtab_stack_pop();
-void                  __rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab);
-void                   rem_from_symtab(struct symtab_entry_s *entry);
+int                    rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab);
+void                   rem_from_any_symtab(struct symtab_entry_s *entry);
 struct symtab_entry_s *__add_to_symtab(char *symbol, struct symtab_s *st);
 struct symtab_entry_s *add_to_symtab(char *symbol);
-struct symtab_entry_s *__do_lookup(char *str, struct symtab_s *symtable);
+struct symtab_entry_s *do_lookup(char *str, struct symtab_s *symtable);
 struct symtab_entry_s *get_local_symtab_entry(char *str);
 struct symtab_entry_s *get_symtab_entry(char *str);
 struct symtab_s       *get_local_symtab();
