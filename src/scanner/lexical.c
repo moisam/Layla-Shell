@@ -31,7 +31,7 @@
 #include "../builtins/setx.h"
 #include "../debug.h"
 
-char *__buf = (char *)NULL;     /* the buffer we'll use while parsing a token */
+char *__buf = NULL;             /* the buffer we'll use while parsing a token */
 int   __bufsize = 0;            /* the size of memory alloc'd for the buffer */
 int   __bufindex = -1;          /* our current position in the buffer */
 /* the current token */
@@ -39,7 +39,7 @@ static struct token_s   __cur_tok = { .type = TOKEN_EMPTY, };
 /* the previous (last) token */
 static struct token_s  __prev_tok = { .type = TOKEN_EMPTY, };
 /* a pointer to the current token struct */
-static struct token_s *cur_tok    = (struct token_s *)NULL;
+static struct token_s *cur_tok    = NULL;
 
 /* special token to indicate end of input */
 struct token_s eof_token = 
@@ -514,7 +514,7 @@ void add_to_buf(char c)
     if(__bufindex >= __bufsize)
     {
         /* try to double the buffer's size */
-        char *tmp = (char *)realloc(__buf, __bufsize*2);
+        char *tmp = realloc(__buf, __bufsize*2);
         if(!tmp)
         {
             errno = ENOMEM;
@@ -556,8 +556,8 @@ struct token_s *get_previous_token()
 
 /*
  * for the opening brace nc, loop through the input source until we find
- * the matching closing brace.. this looping involves skipp quote chars
- * and quoted strings, as well as nested brace of all types.. all chars
+ * the matching closing brace.. this looping involves skipping quote chars
+ * and quoted strings, as well as nested braces of all types.. all chars
  * from the opening to the closing braces, and anything in between, are
  * added to the token buffer as part of the current token.
  * 
@@ -670,7 +670,7 @@ struct token_s *tokenize(struct source_s *src)
     if(!__buf)
     {
         __bufsize = 1024;
-        __buf = (char *)malloc(__bufsize);
+        __buf = malloc(__bufsize);
         if(!__buf)
         {
             errno = ENOMEM;
@@ -680,8 +680,12 @@ struct token_s *tokenize(struct source_s *src)
     /* empty the buffer */
     __bufindex     = 0;
     __buf[0]       = '\0';
-    struct token_s *tok = (struct token_s *)NULL;
+
+    struct token_s *tok = NULL;
     long line, chr;
+    char nc2, pc;
+    size_t i;
+
     /* init position indexes */
     if(src->curpos < 0)
     {
@@ -703,7 +707,6 @@ struct token_s *tokenize(struct source_s *src)
         cur_tok = &eof_token;
         return &eof_token;
     }
-    char quote, nc2, pc;
     /* loop to get the next token */
     do
     {
@@ -716,6 +719,13 @@ struct token_s *tokenize(struct source_s *src)
                  * for quote chars, add the quote, as well as everything between this
                  * quote and the matching closing quote, to the token buffer.
                  */
+                add_to_buf(nc);
+                i = find_closing_quote(src->buffer+src->curpos, (prev_char(src) == '$') ? 1 : 0);
+                while(i--)
+                {
+                    add_to_buf(next_char(src));
+                }
+#if 0
                 quote = nc;
                 nc2 = 0;
                 /* add quote to buffer */
@@ -728,13 +738,6 @@ struct token_s *tokenize(struct source_s *src)
                 /* loop till we get EOF (-1) or ERRCHAR (0) */
                 while((nc2 = next_char(src)) > 0)
                 {
-                    /* convert whitespaces inside quotes to space characters */
-                    if(isspace(nc2))
-                    {
-                        add_to_buf(' ');
-                        nc = ' ';
-                        continue;
-                    }
                     /* add char to buffer */
                     add_to_buf(nc2);
                     /* we have a quote char matching our opening quote */
@@ -782,6 +785,7 @@ struct token_s *tokenize(struct source_s *src)
                     }
                     nc = nc2;
                 }
+#endif
                 break;
 
             case '\\':
@@ -793,7 +797,7 @@ struct token_s *tokenize(struct source_s *src)
                  * automatically.. however, if the input comes from a command string or script,
                  * we might encounter this sequence.
                  */
-                if(nc2 == NL)
+                if(nc2 == '\n')
                 {
                     break;
                 }
@@ -814,11 +818,26 @@ struct token_s *tokenize(struct source_s *src)
                 if(nc == '{' || nc == '(' || nc == '[')
                 {
                     /* find the matching closing brace */
+                    i = find_closing_brace(src->buffer+src->curpos);
+                    if(!i)
+                    {
+                        /* failed to find matching brace. return error token */
+                        src->curpos = src->bufsize;
+                        cur_tok = &eof_token;
+                        fprintf(stderr, "%s: missing closing brace '%c'\n", SHELL_NAME, nc);
+                        return &err_token;
+                    }
+                    while(i--)
+                    {
+                        add_to_buf(next_char(src));
+                    }
+#if 0
                     if(!brace_loop(nc, src))
                     {
                         /* failed to find matching brace. return error token */
                         return &err_token;
                     }
+#endif
                 }
                 /*
                  * we have a special parameter name, such as $0, $*, $@, $#,
@@ -1162,16 +1181,16 @@ token_ready:
 struct token_s *dup_token(struct token_s *tok)
 {
     /* alloc memory for the token struct */
-    struct token_s *tok2 = (struct token_s *)malloc(sizeof(struct token_s));
+    struct token_s *tok2 = malloc(sizeof(struct token_s));
     if(!tok2)
     {
         return NULL;
     }
     /* copy the old token into the new one */
-    memcpy((void *)tok2, (void *)tok, sizeof(struct token_s));
+    memcpy(tok2, (void *)tok, sizeof(struct token_s));
     tok->text_len = strlen(tok->text);
     /* alloc memory for the token text */
-    char *text = (char *)malloc(tok->text_len+1);
+    char *text = malloc(tok->text_len+1);
     if(!text)
     {
         free(tok2);

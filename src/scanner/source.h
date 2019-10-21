@@ -22,11 +22,15 @@
 #ifndef SOURCE_H
 #define SOURCE_H
 
-#define EOF     (-1)
-#define ERRCHAR ( 0)
+#define EOF             (-1)
+#define ERRCHAR         ( 0)
 
-/* structure to hold information about the source file being translated */
+/* initial position when reading from a source struct */
+#define INIT_SRC_POS    (-2)
 
+/*
+ * structure to hold information about the source file being translated.
+ */
 struct source_s
 {
     /* values for the srctype field below */

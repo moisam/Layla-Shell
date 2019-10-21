@@ -94,7 +94,7 @@ char next_char(struct source_s *src)
     }
     char c1 = 0;
     /* first time? adjust source pointers */
-    if(src->curpos == -2)
+    if(src->curpos == INIT_SRC_POS)
     {
         src->curline      =  1;
         src->curchar      =  1;
@@ -115,7 +115,7 @@ char next_char(struct source_s *src)
         return EOF;
     }
     /* if the current char is '\n', adjust line and char pointers */
-    if(c1 == NL)
+    if(c1 == '\n')
     {
         src->curline++;
         src->curchar = 1;
@@ -149,7 +149,7 @@ char peek_char(struct source_s *src)
     }
     long pos = src->curpos;
     /* first time? */
-    if(pos == -2)
+    if(pos == INIT_SRC_POS)
     {
         pos++;
     }
