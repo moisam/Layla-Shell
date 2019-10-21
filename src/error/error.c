@@ -59,21 +59,21 @@ char *get_line(struct source_s *src, long linestart, int *tabs)
     *tabs = 0;
     do
     {
-        if(buffer[i] == NL)     /* break at the first newline */
+        if(buffer[i] == '\n')     /* break at the first newline */
         {
             break;
         }
-        else if(buffer[i] == TAB)   /* keep the count of tabs */
+        else if(buffer[i] == '\t')   /* keep the count of tabs */
         {
             (*tabs)++;
         }
     } while(++i < src->bufsize);
     /* allocate memory for the string */
     size_t sz = (size_t)(i-linestart);
-    char *tmp = (char *)malloc(sz+1);
+    char *tmp = malloc(sz+1);
     if(!tmp)
     {
-        return (char *)NULL;
+        return NULL;
     }
     /* copy the line */
     strncpy(tmp, buffer+linestart, sz);
