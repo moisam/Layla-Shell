@@ -74,6 +74,36 @@ void set_exit_status(int status)
 
 
 /*
+ * reset the positional parameters by setting the value of each parameter to
+ * NULL, followed by setting the value of $# to zero.
+ */
+void reset_pos_params(void)
+{
+    /* unset all positional params */
+    struct symtab_entry_s *hash = get_symtab_entry("#");
+    if(hash && hash->val)
+    {
+        int params = atoi(hash->val);
+        if(params != 0)
+        {
+            int  j = 1;
+            char buf[32];
+            for( ; j <= params; j++)
+            {
+                sprintf(buf, "%d", j);
+                struct symtab_entry_s *entry = get_symtab_entry(buf);
+                if(entry && entry->val)
+                {
+                    symtab_entry_setval(entry, NULL);
+                }
+            }
+        }
+        symtab_entry_setval(hash, "0");
+    }
+}
+
+
+/*
  * return the symbol table entry for positional parameter i,
  * which is the value of shell variable $i.
  */
@@ -241,7 +271,7 @@ struct word_s *get_pos_params(char which, int quoted, int offset, int count)
             i = offset;
             while(i < last)
             {
-                struct word_s *param2 = (struct word_s *)malloc(sizeof(struct word_s));
+                struct word_s *param2 = malloc(sizeof(struct word_s));
                 /* TODO: we should free the so-far allocated parameters */
                 if(!param2)
                 {
@@ -278,12 +308,12 @@ struct word_s *get_pos_params(char which, int quoted, int offset, int count)
         len += len2+1; /* 1 for the separator */
         i++;
     }
-    param = (struct word_s *)malloc(sizeof(struct word_s));
+    param = malloc(sizeof(struct word_s));
     if(!param)
     {
         goto memerror;
     }
-    char *params = (char *)malloc(len+1);
+    char *params = malloc(len+1);
     if(!params)
     {
         free(param);
@@ -390,7 +420,7 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
     }
 
     /* allocate memory */
-    params = (char *)malloc(len+1);
+    params = malloc(len+1);
     if(!params)
     {
         return NULL;

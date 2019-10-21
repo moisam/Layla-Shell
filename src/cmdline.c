@@ -40,7 +40,7 @@
 
 
 /* we will save incomplete commands here until being processed */
-char     *incomplete_cmd = (char *)NULL;
+char     *incomplete_cmd = NULL;
 
 /* our main command line buffer */
 char     *cmdbuf         = NULL;        /* ptr to buffer */
@@ -133,7 +133,7 @@ void cmdline()
     src.bufsize  = 0;
     src.srctype  = SOURCE_STDIN;
     src.srcname  = NULL;
-    src.curpos   = -2;
+    src.curpos   = INIT_SRC_POS;
 
     /* REPL loop */
     do
@@ -205,7 +205,7 @@ void cmdline()
         /* fill in the source struct */
         src.buffer   = cmd;
         src.bufsize  = cmdbuf_end;
-        src.curpos   = -2;
+        src.curpos   = INIT_SRC_POS;
 
         /* and execute the command line */
         parse_and_execute(&src);
@@ -221,7 +221,7 @@ void cmdline()
 int ext_cmdbuf(size_t howmuch)
 {
     uint16_t newsz = cmdbuf_size + howmuch;
-    char *newbuf = (char *)realloc(cmdbuf, newsz);
+    char *newbuf = realloc(cmdbuf, newsz);
     if(!newbuf)
     {
         return 0;
@@ -249,7 +249,7 @@ char *read_cmd()
         {
             CMD_BUF_SIZE = DEFAULT_LINE_MAX;
         }
-        cmdbuf = (char *)malloc(CMD_BUF_SIZE);
+        cmdbuf = malloc(CMD_BUF_SIZE);
         if(!cmdbuf)
         {
             exit_gracefully(EXIT_FAILURE, "FATAL ERROR: Insufficient memory for command buffer");
@@ -644,7 +644,7 @@ char *read_cmd()
                     {
                         sz += strlen(incomplete_cmd);
                     }
-                    tmp = (char *)malloc(sz);
+                    tmp = malloc(sz);
                     if(!tmp)
                     {
                         goto _process;
@@ -701,6 +701,7 @@ int is_incomplete_cmd(int first_time)
     char   *cmd = cmdbuf;
     size_t  cmd_len = strlen(cmd);
     size_t  i = 0;
+
     if(in_heredoc >= 0)
     {
         /* if no here-document mark is present, just wait for EOF by the user */
@@ -740,6 +741,7 @@ int is_incomplete_cmd(int first_time)
             return 1;
         }
     }
+
     if(first_time)
     {
         open_cb    = 0;
@@ -749,17 +751,32 @@ int is_incomplete_cmd(int first_time)
         quotes     = 0;
         __heredocs = 0;
     }
+
     if(cmd_len >= 2)
     {
         if(cmd[cmd_len-2] == '\\' && cmd[cmd_len-1] == '\n')
         {
-            /* make sure the '\' is not escaped itself */
-            if(cmd_len == 2 || cmd[cmd_len-3] != '\\')
+            /* check if the '\' is escaped itself */
+            char *p2 = cmd+cmd_len-2;
+            char *p1 = p2;
+            while(p1 >= cmd && *p1 == '\\')
+            {
+                p1--;
+            }
+            /*
+             * check how many consecutive backslashes we have.. if we have
+             * an even number, the backslashes escape each other and the
+             * newline is not escaped, so we return the input line..
+             * if we have an odd number, the last backslash escapes the
+             * newline character and so we continue reading input.
+             */
+            if((p2-p1) % 2)
             {
                 return 1;
             }
         }
     }
+
     do
     {
         switch(cmd[i])
@@ -850,7 +867,7 @@ int is_incomplete_cmd(int first_time)
                         {
                             j++;
                         }
-                        heredoc_mark[__heredocs] = (char *)malloc(j-i+1);
+                        heredoc_mark[__heredocs] = malloc(j-i+1);
                         if(!heredoc_mark[__heredocs])
                         {
                             return 0;     /* TODO: output a decent error message and bail out */

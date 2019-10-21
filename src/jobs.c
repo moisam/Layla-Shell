@@ -1194,7 +1194,7 @@ int kill_job(struct job *job)
             {
                 continue;
             }
-            memcpy((void *)job, (void *)job2, sizeof(struct job));
+            memcpy(job, job2, sizeof(struct job));
             job2->job_num    = 0;
             job2->commandstr = 0;
             job2->proc_count = 0;

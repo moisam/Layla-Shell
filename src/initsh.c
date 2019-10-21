@@ -284,13 +284,13 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
                 /* init cwd */
                 len = strlen(p)+1;
                 len = (path_max > len) ? path_max : len;
-                cwd = (char *)malloc(len);
+                cwd = malloc(len);
                 if(!cwd)
                 {
                     fprintf(stderr, "%s: FATAL ERROR: Insufficient memory for cwd string\n", SHELL_NAME);
                     exit(EXIT_FAILURE);
                 }
-                memset((void *)cwd, 0, len);
+                memset(cwd, 0, len);
                 strcpy(cwd, p);
                 if(i == INDEX_OLDPWD)
                 {
@@ -365,7 +365,7 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
                 }
                 size_t  homelen = strlen(p);
                 size_t  hist_file_len = strlen(hist_file);
-                e = (char *)malloc(homelen+hist_file_len+2);
+                e = malloc(homelen+hist_file_len+2);
                 if(!e)
                 {
                     p = NULL;
@@ -394,7 +394,7 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
                 }
                 sprintf(buf, "%d", n);
                 len = strlen(buf);
-                e = (char *)malloc(len+1);
+                e = malloc(len+1);
                 if(!e)
                 {
                     p = NULL;
@@ -920,7 +920,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
         src->bufsize  = strlen(src->buffer);
         src->srctype  = SOURCE_CMDSTR;
         src->srcname  = NULL;
-        src->curpos   = -2;
+        src->curpos   = INIT_SRC_POS;
         if(i >= argc)
         {
             /* $0 is the name of the shell or shell script */

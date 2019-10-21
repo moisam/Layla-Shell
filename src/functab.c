@@ -19,6 +19,7 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
+#include <stdlib.h>
 #include "cmd.h"
 #include "symtab/symtab.h"
 
@@ -48,7 +49,7 @@ struct symtab_entry_s *get_func(char *name)
     {
         return NULL;
     }
-    return __do_lookup(name, func_table);
+    return do_lookup(name, func_table);
 }
 
 
@@ -66,7 +67,7 @@ struct symtab_entry_s *add_func(char *name)
     }
     /* do not duplicate an existing entry */
     struct symtab_entry_s *entry = NULL;
-    if((entry = __do_lookup(name, func_table)))
+    if((entry = do_lookup(name, func_table)))
     {
         /* return the existing entry */
         return entry;
@@ -92,5 +93,72 @@ void unset_func(char *name)
     {
         return;
     }
-    __rem_from_symtab(func, func_table);
+    rem_from_symtab(func, func_table);
+}
+
+
+/*
+ * print all the exported functions.
+ */
+void purge_exported_funcs()
+{
+    /* use an alpha list to sort variables alphabetically */
+    struct alpha_list_s list;
+    init_alpha_list(&list);
+
+#ifdef USE_HASH_TABLES
+
+    if(func_table->used)
+    {
+        struct symtab_entry_s **h1 = func_table->items;
+        struct symtab_entry_s **h2 = func_table->items + func_table->size;
+        for( ; h1 < h2; h1++)
+        {
+            struct symtab_entry_s *entry = *h1;
+
+#else
+
+        struct symtab_entry_s *entry  = func_table->first;
+
+#endif
+
+            while(entry)
+            {
+                if(flag_set(entry->flags, FLAG_EXPORT))
+                {
+                    char *str = NULL;
+                    if(!entry->val)
+                    {
+                        /* no val, print only the name */
+                        str = alpha_list_make_str("declare -x -f %s", entry->name);
+                    }
+                    else
+                    {
+                        /* print the name=val string */
+                        char *val = quote_val(entry->val, 1);
+                        printf("export %s=%s\n", entry->name, val);
+                        if(val)
+                        {
+                            str = alpha_list_make_str("declare -x -f %s=%s", entry->name, val);
+                            free(val);
+                        }
+                        else
+                        {
+                            str = alpha_list_make_str("declare -x -f %s=", entry->name);
+                        }
+                    }
+                    add_to_alpha_list(&list, str);
+                }
+                entry = entry->next;
+            }
+
+#ifdef USE_HASH_TABLES
+
+        }
+    }
+
+#endif
+
+    print_alpha_list(&list);
+    free_alpha_list(&list);
 }

@@ -52,14 +52,14 @@
 struct word_s *make_word(char *str)
 {
     /* alloc struct memory */
-    struct word_s *word = (struct word_s *)malloc(sizeof(struct word_s));
+    struct word_s *word = malloc(sizeof(struct word_s));
     if(!word)
     {
         return NULL;
     }
     /* alloc string memory */
     size_t  len  = strlen(str);
-    char   *data = (char *)malloc(len+1);
+    char   *data = malloc(len+1);
     if(!data)
     {
         free(word);
@@ -115,7 +115,7 @@ char *wordlist_to_str(struct word_s *word)
         len += w->len+1;
         w    = w->next;
     }
-    char *str = (char *)malloc(len+1);
+    char *str = malloc(len+1);
     if(!str)
     {
         return NULL;
@@ -355,7 +355,7 @@ char *substitute_str(char *s1, char *s2, size_t start, size_t end)
     strcpy(after, s1+end+1);
     /* alloc memory for the new string */
     size_t totallen = start+afterlen+strlen(s2);
-    char *final = (char *)malloc(totallen+1);
+    char *final = malloc(totallen+1);
     if(!final)
     {
         BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "performing variable substitution", NULL);
@@ -1114,7 +1114,7 @@ char *var_expand(char *__var_name)
      * commence variable substitution.
      */
     char *empty_val  = "";
-    char *tmp        = (char *)NULL;
+    char *tmp        = NULL;
     char  setme      = 0;
     char *orig_val   = NULL;
     int   pos_params = 0;
@@ -1417,7 +1417,7 @@ char *var_expand(char *__var_name)
      * we have substituted the variable's value. now go POSIX style on it.
      */
     int expanded = 0;
-    if(tmp)
+    if(tmp && tmp != orig_val)
     {
         if((tmp = word_expand_to_str(tmp)))
         {
@@ -2203,7 +2203,22 @@ struct word_s *word_expand_one_word(char *orig_word)
                     break;
                 }
                 /* skip everything, up to the closing single quote */
+                p2 = p;
                 p += find_closing_quote(p, 0);
+                /*
+                 * convert white-space characters inside single quotes to spaces, if
+                 * they occur in a variable assignment (this is what all major shells do).
+                 */
+                if(in_var_assign)
+                {
+                    while(++p2 < p)
+                    {
+                        if(isspace(*p2))
+                        {
+                            *p2 = ' ';
+                        }
+                    }
+                }
                 break;
                 
             case '`':
@@ -2387,9 +2402,20 @@ struct word_s *word_expand_one_word(char *orig_word)
                  * token in two (but beware not to remove whitespaces from within
                  * quoted strings and heredocs).
                  */
-                if(isspace(*p) && !in_double_quotes)
+                if(isspace(*p))
                 {
-                    expanded = 1;
+                    if(!in_double_quotes)
+                    {
+                        expanded = 1;
+                    }
+                    /*
+                     * convert white-space characters inside double quotes to spaces, if
+                     * they occur in a variable assignment (this is what all major shells do).
+                     */
+                    else if(in_var_assign)
+                    {
+                        *p = ' ';
+                    }
                 }
                 break;
         }
@@ -2735,7 +2761,7 @@ char *word_expand_to_str(char *word)
  *
  * returns 1 if char c is an $IFS character, 0 otherwise.
  */
-static inline int is_IFS_char(char c, char *IFS)
+int is_IFS_char(char c, char *IFS)
 {
     if(!*IFS)
     {
@@ -2810,7 +2836,7 @@ struct word_s *field_split(char *str)
     /* POSIX says empty IFS means no field splitting */
     if(IFS[0] == '\0')
     {
-        return (struct word_s *)NULL;
+        return NULL;
     }
     /* get the IFS spaces and delimiters separately */
     char IFS_space[64];
@@ -2892,10 +2918,10 @@ struct word_s *field_split(char *str)
     /* we have only one field. no field splitting needed */
     if(fields == 1)
     {
-        return (struct word_s *)NULL;
+        return NULL;
     }
-    struct word_s *first_field = (struct word_s *)NULL;
-    struct word_s *cur         = (struct word_s *)NULL;
+    struct word_s *first_field = NULL;
+    struct word_s *cur         = NULL;
     /* create the fields */
     i     = 0;
     j     = 0;
@@ -2949,7 +2975,7 @@ struct word_s *field_split(char *str)
            is_IFS_char(str[i], IFS_delim) || (i == len))
         {
             /* copy the field text */
-            char *tmp = (char *)malloc(i-j+1);
+            char *tmp = malloc(i-j+1);
             /* TODO: do something better than bailing out here */
             if(!tmp)
             {
@@ -2959,7 +2985,7 @@ struct word_s *field_split(char *str)
             strncpy(tmp, str+j, i-j);
             tmp[i-j] = '\0';
             /* create a new struct for the field */
-            struct word_s *fld = (struct word_s *)malloc(sizeof(struct word_s));
+            struct word_s *fld = malloc(sizeof(struct word_s));
             /* TODO: do something better than bailing out here */
             if(!fld)
             {

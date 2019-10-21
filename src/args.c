@@ -40,7 +40,7 @@ int    shell_argc;
  */
 char **dup_argv(int argc, char **argv)
 {
-    char **argv2 = (char **)malloc((argc+1) * sizeof(char *));
+    char **argv2 = malloc((argc+1) * sizeof(char *));
     if(!argv2)
     {
         return NULL;

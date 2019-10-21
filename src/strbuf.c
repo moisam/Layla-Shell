@@ -65,7 +65,7 @@ void init_str_hashtable()
  */
 char *__get_malloced_str(char *str)
 {
-    char *str2 = (char *)malloc(strlen(str)+1);
+    char *str2 = malloc(strlen(str)+1);
     if(!str2)
     {
         return NULL;

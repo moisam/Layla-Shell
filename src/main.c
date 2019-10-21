@@ -381,7 +381,7 @@ int main(int argc, char **argv)
     }
   
     /* init aliases */
-    memset((void *)__aliases, 0, sizeof(__aliases));
+    memset(__aliases, 0, sizeof(__aliases));
     
     /* init our internal clock */
     start_clock();
@@ -789,8 +789,8 @@ int read_file(char *__filename, struct source_s *src)
     {
         return 0;
     }
-    char *tmpbuf = (char *)NULL;
-    FILE *f      = (FILE *)NULL;
+    char *tmpbuf = NULL;
+    FILE *f      = NULL;
     if(strchr(filename, '/'))
     {
         /* pathname with '/', try opening it */
@@ -846,7 +846,7 @@ read:
     }
     rewind(f);
     /* alloc buffer */
-    tmpbuf = (char *)malloc(i+1);
+    tmpbuf = malloc(i+1);
     if(!tmpbuf)
     {
         goto error;
@@ -864,7 +864,7 @@ read:
     src->srctype  = SOURCE_EXTERNAL_FILE;
     src->srcname  = get_malloced_str(filename);
     free(filename);
-    src->curpos   = -2;
+    src->curpos   = INIT_SRC_POS;
     //free(filename);
     return 1;
     

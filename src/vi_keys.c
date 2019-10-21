@@ -509,7 +509,7 @@ void yank(int start, int end)
         /* get the system-defined maximum line length */
         savebuf_size = get_linemax();
         /* alloc the buffer */
-        savebuf = (char *)malloc(savebuf_size);
+        savebuf = malloc(savebuf_size);
         if(!savebuf)
         {
             fprintf(stderr, "FATAL ERROR: Insufficient memory for the yank buffer");

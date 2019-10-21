@@ -29,11 +29,6 @@
 #include <sys/types.h>
 #include "scanner/source.h"
 
-/* constant declarations */
-static const char TAB = '\t';
-static const char CR  = '\r';
-static const char NL  = '\n';
-
 /* the name of this shell */
 #define SHELL_NAME      "lsh"
 
@@ -225,6 +220,8 @@ char   *word_expand_to_str(char *word);
 char   *wordlist_to_str(struct word_s *word);
 void    free_all_words(struct word_s *first);
 struct  word_s *make_word(char *word);
+void    skip_IFS_whitespace(char **__str, char *__IFS);
+int     is_IFS_char(char c, char *IFS);
 
 char   *tilde_expand(char *s);
 char   *command_substitute(char *__cmd);
@@ -277,6 +274,7 @@ void   set_pos_paramsp(char **p);
 struct symtab_entry_s *get_pos_param(int i);
 void   set_exit_status(int status);
 // void   set_exit_status(int status, int domacros);
+void   reset_pos_params(void);
 
 /* main.c */
 extern int SIGINT_received;
@@ -292,6 +290,7 @@ void   init_functab(void);
 struct symtab_entry_s *get_func(char *name);
 struct symtab_entry_s *add_func(char *name);
 void   unset_func(char *name);
+void   purge_exported_funcs();
 
 /* vars.c */
 struct var_s
@@ -449,7 +448,7 @@ int    search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH
 /* do function search */
 #define SEARCH_AND_EXEC_DOFUNC          (1 << 1)
 /* merge local symtab with global symtab after executing a function or regular builtin */
-#define SEARCH_AND_EXEC_MERGE_GLOBAL    (1 << 2)
+// #define SEARCH_AND_EXEC_MERGE_GLOBAL    (1 << 2)
 
 /* builtins/false.c */
 int    false(int argc, char **argv);
@@ -643,9 +642,9 @@ void   do_export_table(struct symtab_s *symtab, int force_export_all);
  */
 
 /* export only the variables/functions marked for export */
-#define EXPORT_VARS_EXPORTED_ONLY       (1 << 0)
+#define EXPORT_VARS_EXPORTED_ONLY       (0)
 /* export everything (used only by subshells) */
-#define EXPORT_VARS_FORCE_ALL           (1 << 1)
+#define EXPORT_VARS_FORCE_ALL           (1)
 
 /* builtins/hash.c */
 extern struct hashtab_s *utility_hashes;
