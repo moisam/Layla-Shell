@@ -26,7 +26,7 @@
 
 /* typedefs for the lexical scanner */
 
-enum token_type
+enum token_type_e
 {
         /* general type tokes */
         TOKEN_EMPTY,
@@ -100,7 +100,7 @@ enum token_type
 /* the token struct that is returned by the lexical scanner */
 struct token_s
 {
-        enum   token_type type;     /* type of token */
+        enum   token_type_e type;   /* type of token */
         long   lineno, charno;      /* line and char number where token is found */
         long   linestart;           /* start of line where token is found (for error msgs) */
         struct source_s *src;       /* source of input */
@@ -112,15 +112,15 @@ struct token_s
 extern struct token_s eof_token;
 
 /* functions to manipulate tokes */
-char  *get_token_description(enum token_type type);
+char  *get_token_description(enum token_type_e type);
 void   set_token_type(struct token_s *tok);
 struct token_s *tokenize(struct source_s *src);
-struct token_s *get_current_token();
-struct token_s *get_previous_token();
+struct token_s *get_current_token(void);
+struct token_s *get_previous_token(void);
 struct token_s *dup_token(struct token_s *tok);
 void   free_token(struct token_s *tok);
-int    is_token_of_type(struct token_s *tok, enum token_type type);
+int    is_token_of_type(struct token_s *tok, enum token_type_e type);
 int    is_keyword(char *str);
-int    is_separator_tok(enum token_type type);
+int    is_separator_tok(enum token_type_e type);
 
 #endif

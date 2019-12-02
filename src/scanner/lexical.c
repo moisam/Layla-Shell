@@ -27,19 +27,18 @@
 #include "../cmd.h"
 #include "keywords.h"
 #include "scanner.h"
-#include "../parser/parser.h"       /* __parse_alias() */
 #include "../builtins/setx.h"
 #include "../debug.h"
 
-char *__buf = NULL;             /* the buffer we'll use while parsing a token */
-int   __bufsize = 0;            /* the size of memory alloc'd for the buffer */
-int   __bufindex = -1;          /* our current position in the buffer */
-/* the current token */
-static struct token_s   __cur_tok = { .type = TOKEN_EMPTY, };
-/* the previous (last) token */
-static struct token_s  __prev_tok = { .type = TOKEN_EMPTY, };
+char *tok_buf = NULL;             /* the buffer we'll use while parsing a token */
+int   tok_bufsize = 0;            /* the size of memory alloc'd for the buffer */
+int   tok_bufindex = -1;          /* our current position in the buffer */
+
 /* a pointer to the current token struct */
-static struct token_s *cur_tok    = NULL;
+static struct token_s *cur_tok  = NULL;
+
+/* a pointer to the previous token struct */
+static struct token_s *prev_tok = NULL;
 
 /* special token to indicate end of input */
 struct token_s eof_token = 
@@ -59,8 +58,7 @@ struct token_s err_token =
     .text_len = 0,
 };
 
-/* type of the previous token */
-enum token_type prev_type = TOKEN_EMPTY;
+// enum token_type_e prev_type = TOKEN_EMPTY;
 
 /*
  * return the token type that describes one of the shell's keywords.
@@ -69,7 +67,7 @@ enum token_type prev_type = TOKEN_EMPTY;
  * return is the token type describing the indexed keyword.. if the
  * index is out of the keywords array bounds, we return TOKEN_KEYWORD_NA.
  */
-enum token_type get_keyword_toktype(int index)
+enum token_type_e get_keyword_toktype(int index)
 {
     switch(index)
     {
@@ -101,7 +99,7 @@ enum token_type get_keyword_toktype(int index)
  * return a string describing the given type of token..
  * used in printing error and debugging messages.
  */
-char *get_token_description(enum token_type type)
+char *get_token_description(enum token_type_e type)
 {
     switch(type)
     {
@@ -185,27 +183,17 @@ char *get_token_description(enum token_type type)
 int is_keyword(char *str)
 {
     /* sanity check */
-    if(!str)
+    if(!str || !*str)
     {
         return 0;
     }
-    size_t len = strlen(str);
-    /* empty string */
-    if(len == 0)
+    int i;
+    for(i = 0; i < keyword_count; i++)
     {
-        return 0;
-    }
-    int j;
-    for(j = 0; j < keyword_count; j++)
-    {
-        if(keywords[j].len != len)
+        /* check the string in the keywords array */
+        if(strcmp(keywords[i], str) == 0)
         {
-            continue;
-        }
-        /* found the string in the array */
-        if(strcmp(keywords[j].str, str) == 0)
-        {
-            return j;
+            return i;
         }
     }
     /* string is not a keyowrd */
@@ -219,7 +207,7 @@ int is_keyword(char *str)
  * 
  * returns 1 if the type represents a separator operator, 0 otherwise.
  */
-int is_separator_tok(enum token_type type)
+int is_separator_tok(enum token_type_e type)
 {
     switch(type)
     {
@@ -259,7 +247,7 @@ int is_separator_tok(enum token_type type)
  */
 void set_token_type(struct token_s *tok)
 {
-    enum token_type t = TOKEN_EMPTY;
+    enum token_type_e t = TOKEN_EMPTY;
     /* one-char tokens */
     if(tok->text_len == 1)
     {
@@ -478,28 +466,15 @@ void set_token_type(struct token_s *tok)
  */
 struct token_s *create_token(char *str)
 {
-    /* save cur token as the prev token */
-    memcpy(&__prev_tok, &__cur_tok, sizeof(struct token_s));
-    /* save new token str */
-    size_t len = strlen(str);
-    __cur_tok.text_len = len;
-    __cur_tok.text     = str;
-    /* return pointer to cur token */
-    return &__cur_tok;
-}
-
-
-/*
- * create a new token from the given char, as if we were passed
- * a one-char string.
- * 
- * returns a pointer to the struct token_s of the new token.
- */
-struct token_s *create_singlechar_token(char c)
-{
-    __buf[0] = c;
-    __buf[1] = '\0';
-    return create_token(__buf);
+    struct token_s *tok = malloc(sizeof(struct token_s));
+    if(!tok)
+    {
+        return NULL;
+    }
+    memset(tok, 0, sizeof(struct token_s));
+    tok->text_len = strlen(str);
+    tok->text = get_malloced_str(str);
+    return tok;
 }
 
 
@@ -509,48 +484,39 @@ struct token_s *create_singlechar_token(char c)
  */
 void add_to_buf(char c)
 {
-    __buf[__bufindex++] = c;
+    tok_buf[tok_bufindex++] = c;
     /* if the buffer is full, try to extend it */
-    if(__bufindex >= __bufsize)
+    if(tok_bufindex >= tok_bufsize)
     {
         /* try to double the buffer's size */
-        char *tmp = realloc(__buf, __bufsize*2);
+        char *tmp = realloc(tok_buf, tok_bufsize*2);
         if(!tmp)
         {
             errno = ENOMEM;
             return;
         }
         /* save the new buffer pointer and the new size */
-        __buf = tmp;
-        __bufsize *= 2;
+        tok_buf = tmp;
+        tok_bufsize *= 2;
     }
-}
-
-
-/*
- * NULL-terminate the token buffer.
- */
-static inline void null_terminate_buf()
-{
-    __buf[__bufindex] = '\0';
 }
 
 
 /*
  * return a pointer to the current token.
  */
-struct token_s *get_current_token()
+struct token_s *get_current_token(void)
 {
-    return cur_tok;
+    return cur_tok ? : &eof_token;
 }
 
 
 /*
  * return a pointer to the previous token.
  */
-struct token_s *get_previous_token()
+struct token_s *get_previous_token(void)
 {
-    return &__prev_tok;
+    return prev_tok;
 }
 
 
@@ -654,526 +620,6 @@ int brace_loop(char nc, struct source_s *src)
 
 
 /*
- * scan the input source and get the next token.
- * 
- * returns an malloc'd token_s struct containing the next token
- * if successfull, NULL on error.
- */
-struct token_s *tokenize(struct source_s *src)
-{
-    if(!src || !src->buffer || !src->bufsize)
-    {
-        errno = ENODATA;
-        return &eof_token;
-    }
-    /* first time ever? */
-    if(!__buf)
-    {
-        __bufsize = 1024;
-        __buf = malloc(__bufsize);
-        if(!__buf)
-        {
-            errno = ENOMEM;
-            return &eof_token;
-        }
-    }
-    /* empty the buffer */
-    __bufindex     = 0;
-    __buf[0]       = '\0';
-
-    struct token_s *tok = NULL;
-    long line, chr;
-    char nc2, pc;
-    size_t i;
-
-    /* init position indexes */
-    if(src->curpos < 0)
-    {
-        line = 1;
-        chr  = 1;
-    }
-    else
-    {
-        line = src->curline;
-        chr  = src->curchar;
-    }
-    /* get next char */
-    char nc = next_char(src);
-    if(nc == ERRCHAR || nc == EOF)
-    {
-        eof_token.lineno    = src->curline     ;
-        eof_token.charno    = src->curchar     ;
-        eof_token.linestart = src->curlinestart;
-        cur_tok = &eof_token;
-        return &eof_token;
-    }
-    /* loop to get the next token */
-    do
-    {
-        switch(nc)
-        {
-            case  '"':
-            case '\'':
-            case  '`':
-                /*
-                 * for quote chars, add the quote, as well as everything between this
-                 * quote and the matching closing quote, to the token buffer.
-                 */
-                add_to_buf(nc);
-                i = find_closing_quote(src->buffer+src->curpos, (prev_char(src) == '$') ? 1 : 0);
-                while(i--)
-                {
-                    add_to_buf(next_char(src));
-                }
-#if 0
-                quote = nc;
-                nc2 = 0;
-                /* add quote to buffer */
-                add_to_buf(nc);
-                /*
-                 * ANSI-C strings look like $'string' (non-POSIX extension).
-                 * they allow escaped single quotes, so we take note of that case.
-                 */
-                int ansic = (prev_char(src) == '$') ? 1 : 0;
-                /* loop till we get EOF (-1) or ERRCHAR (0) */
-                while((nc2 = next_char(src)) > 0)
-                {
-                    /* add char to buffer */
-                    add_to_buf(nc2);
-                    /* we have a quote char matching our opening quote */
-                    if(nc2 == quote)
-                    {
-                        /*
-                         * a matching single quote terminates the quoted string, even if
-                         * the quote is escaped, except when we're parsing an ANSI-C string,
-                         * which allows escaped single quotes within the string.
-                         */
-                        if(quote == '\'' && !ansic)
-                        {
-                            break;
-                        }
-                        /* unquoted single quote. stop parsing the quoted string */
-                        if(nc != '\\')
-                        {
-                            break;
-                        }
-                    }
-                    else if(nc2 == '$')
-                    {
-                        /* check next char after the '$' */
-                        nc2 = peek_char(src);
-                        /* we have a '${' or a '$(' sequence */
-                        if(nc2 == '{' || nc2 == '(')
-                        {
-                            /* find the matching closing brace */
-                            if(!brace_loop(nc2, src))
-                            {
-                                /* failed to find matching brace. return error token */
-                                return &err_token;
-                            }
-                        }
-                        /*
-                         * we have a special parameter name, such as $0, $*, $@, $#,
-                         * or a positional parameter name, such as $1, $2, ...
-                         */
-                        else if(isalnum(nc2) || nc2 == '*' || nc2 == '@' || nc2 == '#' ||
-                                                nc2 == '!' || nc2 == '?' || nc2 == '$')
-                        {
-                            /* add next char to token buffer */
-                            add_to_buf(next_char(src));
-                        }
-                    }
-                    nc = nc2;
-                }
-#endif
-                break;
-
-            case '\\':
-                /* get the next char after the backslah */
-                nc2 = next_char(src);
-                /*
-                 * discard backslash+newline '\\n' combination.. in an interactive shell, this
-                 * case shouldn't happen as the read_cmd() function discards the '\\n' sequence
-                 * automatically.. however, if the input comes from a command string or script,
-                 * we might encounter this sequence.
-                 */
-                if(nc2 == '\n')
-                {
-                    break;
-                }
-                /* add the backslah to the token buffer */
-                add_to_buf(nc);
-                /* add the escaped char to the token buffer */
-                if(nc2 > 0)
-                {
-                    add_to_buf(nc2);
-                }
-                break;
-
-            case '$':
-                /* add the '$' to buffer and check the char after it */
-                add_to_buf(nc);
-                nc = peek_char(src);
-                /* we have a '${', '$(' or '$[' sequence */
-                if(nc == '{' || nc == '(' || nc == '[')
-                {
-                    /* find the matching closing brace */
-                    i = find_closing_brace(src->buffer+src->curpos);
-                    if(!i)
-                    {
-                        /* failed to find matching brace. return error token */
-                        src->curpos = src->bufsize;
-                        cur_tok = &eof_token;
-                        fprintf(stderr, "%s: missing closing brace '%c'\n", SHELL_NAME, nc);
-                        return &err_token;
-                    }
-                    while(i--)
-                    {
-                        add_to_buf(next_char(src));
-                    }
-#if 0
-                    if(!brace_loop(nc, src))
-                    {
-                        /* failed to find matching brace. return error token */
-                        return &err_token;
-                    }
-#endif
-                }
-                /*
-                 * we have a special parameter name, such as $0, $*, $@, $#,
-                 * or a positional parameter name, such as $1, $2, ...
-                 */
-                else if(isalnum(nc) || nc == '*' || nc == '@' || nc == '#' ||
-                                       nc == '!' || nc == '?' || nc == '$')
-                {
-                    add_to_buf(next_char(src));
-                }
-                /* we have the $< special var (csh/tcsh) */
-                else if(nc == '<')
-                {
-                    add_to_buf(next_char(src));
-                    goto prep_token;
-                }
-                break;
-
-            case '>':
-            case '<':
-            case '|':
-                /* if an '>', '<', or '|' operator delimits the current token, delimit it */
-                if(__bufindex > 0)
-                {
-                    unget_char(src);
-                    goto prep_token;
-                }
-                /* add the operator to buffer and check the char after it */
-                add_to_buf(nc);
-                pc = peek_char(src);
-                /* identify two-char tokens <<, >> and || */
-                if(nc == pc)
-                {
-                    add_to_buf(next_char(src));
-                    pc = peek_char(src);
-                    /* peek at the next char to identify three-char operator tokens */
-                    if(nc == '<' && (pc == '-' || pc == '<'))       /* <<- and <<< */
-                    {
-                        add_to_buf(next_char(src));
-                    }
-                    goto prep_token;
-                }
-                if((nc == '<' && pc == '>') ||      /* <> */
-                   (nc == '>' && pc == '|') ||      /* >| */
-                   (nc == '>' && pc == '!') ||      /* >! */
-                   (nc == '<' && pc == '&') ||      /* <& */
-                   (nc == '>' && pc == '&') ||      /* >& */
-                   (nc == '|' && pc == '&'))        /* |& */
-                {
-                    add_to_buf(next_char(src));
-                    goto prep_token;
-                }
-                /* nothing of the above matched. we have a single-char token */
-                tok = create_singlechar_token(nc);
-                goto token_ready;
-
-            case '&':
-            case ';':
-                /* if an '&' or ';' operator delimits the current token, delimit it */
-                if(__bufindex > 0)
-                {
-                    unget_char(src);
-                    goto prep_token;
-                }
-                /* add the operator to buffer and check the char after it */
-                add_to_buf(nc);
-                pc = peek_char(src);
-                /* identify two-char tokens ;; and && */
-                if(nc == pc)
-                {
-                    add_to_buf(next_char(src));
-                    /* identify ';;&' */
-                    if(nc == ';')
-                    {
-                        pc = peek_char(src);
-                        if(pc == '&')
-                        {
-                            add_to_buf(next_char(src));
-                        }
-                    }
-                    goto prep_token;
-                }
-                /* identify ';&' and ';|' */
-                if(nc == ';' && (pc == '&' || pc == '|'))
-                {
-                    add_to_buf(next_char(src));
-                    goto prep_token;
-                }
-                /* identify '&>' */
-                if(nc == '&' && pc == '>')
-                {
-                    add_to_buf(next_char(src));
-                    /* identify '&>>' */
-                    pc = peek_char(src);
-                    if(pc == '>')
-                    {
-                        add_to_buf(next_char(src));
-                    }
-                    goto prep_token;
-                }
-                /* nothing of the above matched. we have a single-char token */
-                tok = create_singlechar_token(nc);
-                goto token_ready;
-
-            case '{':
-            case '}':
-                /*
-                 * if the '{' or '}' keyword delimits the current token, delimit it.
-                 * braces are recognized as keywords only when they occur after a semi-colon
-                 * or a newline character.
-                 */
-                pc = prev_char(src);
-                if(__bufindex > 0 && (isspace(pc) || pc == ';'))
-                {
-                    unget_char(src);
-                    goto prep_token;
-                }
-                /* check the char after the brace */
-                pc = peek_char(src);
-                if(nc == '}' || (!isalnum(pc) && pc != '_'))   /* not a {var} I/O redirection word */
-                {
-                    /* single char keywords '}' or '{' */
-                    add_to_buf(nc);
-                    tok = create_singlechar_token(nc);
-                    goto token_ready;
-                }
-                /* add the opening brace and everything up to the closing brace to the buffer */
-                unget_char(src);
-                if(!brace_loop(nc, src))
-                {
-                    /* closing brace not found */
-                    return &err_token;
-                }
-                break;
-                
-            case '!':
-            case '(':
-            case ')':
-                /* if the '!' keyword or the brace delimits the current token, delimit it */
-                if(__bufindex > 0)
-                {
-                    unget_char(src);
-                    goto prep_token;
-                }
-                if(nc == '(')
-                {
-                    /*
-                     * recognize the ((expr)) structs (an old shorthand for arithmetic evaluation),
-                     * and the >(cmd) and <(cmd) structs, which are used for process substitution.
-                     * all of these are non-POSIX extensions.
-                     */
-                    pc = prev_char(src);
-                    /* check if we have '((', '<(' or '>(' */
-                    if(peek_char(src) == '(' || pc == '<' || pc == '>')
-                    {
-                        unget_char(src);    /* the 1st '(' */
-                        /* add the opening brace and everything up to the closing brace to the buffer */
-                        if(!brace_loop(nc, src))
-                        {
-                            /* closing brace not found */
-                            return &err_token;
-                        }
-                        break;
-                    }
-                }
-                /* '!' must be a separate token if it's followed by a space char */
-                else if(nc == '!')
-                {
-                    pc = peek_char(src);
-                    if(pc && !isspace(pc))
-                    {
-                        add_to_buf(nc);
-                        break;
-                    }
-                }
-                /* single char delimiters */
-                add_to_buf(nc);
-                tok = create_singlechar_token(nc);
-                goto token_ready;
-
-            case ' ':
-            case '\t':
-                /* if the whitespace delimits the current token, delimit it */
-                if(__bufindex > 0)
-                {
-                    goto prep_token;
-                }
-                /* otherwise just skip it */
-                chr++;
-                break;
-
-            case '\n':
-                /* if the newline delimits the current token, delimit it */
-                if(__bufindex > 0)
-                {
-                    unget_char(src);
-                    goto prep_token;
-                }
-                /* otherwise return it as a token by itself */
-                add_to_buf(nc);
-                tok = create_singlechar_token(nc);
-                goto token_ready;
-
-            case '#':
-                /* if the comment delimits the current token, delimit it */
-                if(__bufindex > 0)
-                {
-                    unget_char(src);
-                    goto prep_token;
-                }
-                /*
-                 * >#((expr)) and <#((expr)) are non-POSIX extensions to move
-                 * I/O file pointers to the offset specified by expr.
-                 */
-                pc = prev_char(src);
-                if(pc == '>' || pc == '<')      /* '#>' and '#<' */
-                {
-                    nc2 = peek_char(src);
-                    if(nc2 == '(')              /* '#>(' and '#<(' */
-                    {
-                        nc2 = next_char(src);   /* skip the first '(' */
-                        nc2 = peek_char(src);   /* check the second '(' */
-                        if(nc2 == '(')
-                        {
-                            /* add both braces to buffer */
-                            add_to_buf(nc);
-                            add_to_buf(nc2);
-                            /*
-                             * loop to find the matching 2 braces, but no need to call the heavy guns,
-                             * aka brace_loop().
-                             */
-                            int cb = 0;
-                            while((nc = next_char(src)) != EOF)
-                            {
-                                add_to_buf(nc);
-                                /* keep the count of closing braces */
-                                if(nc == ')')
-                                {
-                                    cb++;
-                                }
-                                /* and break when we have two */
-                                if(cb == 2)
-                                {
-                                    break;
-                                }
-                            }
-                            goto prep_token;
-                        }
-                    }
-                }
-                /* 
-                 * bash and zsh identify # comments in non-interactive shells, and in interactive
-                 * shells with the interactive_comments option.
-                 */
-                if(option_set('i') && !optionx_set(OPTION_INTERACTIVE_COMMENTS))
-                {
-                    add_to_buf(nc);
-                    break;
-                }
-                /* 
-                 * otherwise discard the comment as per POSIX section 2.3, but return a newline
-                 * token (the newline is technically part of the comment itself).
-                 */
-                while((nc = next_char(src)) > 0)
-                {
-                    if(nc == '\n')
-                    {
-                        add_to_buf(nc);
-                        tok = create_singlechar_token(nc);
-                        goto token_ready;
-                    }
-                }
-                break;
-
-            default:
-                /* for all other chars, just add to the buffer */
-                add_to_buf(nc);
-                break;
-        }
-    } while((nc = next_char(src)) != EOF);      /* loop until we hit EOF */
-        
-    /* if we have no chars, we've reached EOF */
-    if(__bufindex == 0)
-    {
-        eof_token.lineno    = src->curline     ;
-        eof_token.charno    = src->curchar     ;
-        eof_token.linestart = src->curlinestart;
-        cur_tok = &eof_token;
-        return &eof_token;
-    }
-        
-prep_token:
-    /* null-terminate the token */
-    null_terminate_buf();
-    /* create the token */
-    tok = create_token(__buf);
-    
-token_ready:
-    /* give the token a numeric type, according to its contents */
-    set_token_type(tok);
-    /*
-     * if the token consists solely of a number, we need to check the next
-     * character.. if it's the beginning of a redirection operator ('>' or '<'),
-     * we have an TOKEN_IO_NUMBER, which is your file descriptor in redirections
-     * such as '2>&/dev/null' or '1<some_file'.. otherwise treat it as a word.
-     */
-    if(tok->type == TOKEN_INTEGER)
-    {
-        char pc = peek_char(src);
-        if(pc == '<' || pc == '>')
-        {
-            tok->type = TOKEN_IO_NUMBER;
-        }
-        else
-        {
-            tok->type = TOKEN_WORD; 
-        }
-    }
-    /* record where we encountered this token in the input */
-    tok->lineno    = line;
-    tok->charno    = chr;
-    tok->src       = src;
-    tok->linestart = src->curlinestart;
-    
-    /* we do the -v option in the parse_translation_unit() function */
-    //if(option_set('v')) fprintf(stderr, "%s", tok->text);
-
-    /* set the current and previous token pointers */
-    prev_type = tok->type;
-    cur_tok = tok;
-    /* return the token */
-    return tok;
-}
-
-
-/*
  * duplicate a token struct.
  * 
  * returns the newly alloc'd token struct, or NULL in case of error.
@@ -1186,20 +632,15 @@ struct token_s *dup_token(struct token_s *tok)
     {
         return NULL;
     }
+
     /* copy the old token into the new one */
-    memcpy(tok2, (void *)tok, sizeof(struct token_s));
-    tok->text_len = strlen(tok->text);
-    /* alloc memory for the token text */
-    char *text = malloc(tok->text_len+1);
-    if(!text)
-    {
-        free(tok2);
-        return NULL;
-    }
+    memcpy(tok2, tok, sizeof(struct token_s));
+    
     /* copy the text string */
-    strcpy(text, tok->text);
-    tok2->text = text;
+    tok->text_len = strlen(tok->text);
+    tok2->text = get_malloced_str(tok->text);
     tok2->text_len = tok->text_len;
+    
     /* return the new token */
     return tok2;
 }
@@ -1210,14 +651,34 @@ struct token_s *dup_token(struct token_s *tok)
  */
 void free_token(struct token_s *tok)
 {
+    /* don't attempt to free the EOF token */
+    if(tok == &eof_token)
+    {
+        return;
+    }
+
     /* free the token text */
     if(tok->text)
     {
-        free(tok->text);
+        free_malloced_str(tok->text);
     }
+    
     /* free the token struct */
     free(tok);
+
+    /* update the current token struct pointer */
+    if(cur_tok == tok)
+    {
+        cur_tok = NULL;
+    }
+
+    /* update the previous token struct pointer */
+    if(prev_tok == tok)
+    {
+        prev_tok = NULL;
+    }
 }
+
 
 /*
  * sometimes we need to check tokens against a number of different types.
@@ -1226,7 +687,7 @@ void free_token(struct token_s *tok)
  * 
  * returns 1 if the token is of the given type, 0 otherwise.
  */
-int is_token_of_type(struct token_s *tok, enum token_type type)
+int is_token_of_type(struct token_s *tok, enum token_type_e type)
 {
     /* simple match */
     if(tok->type == type)
@@ -1269,4 +730,469 @@ int is_token_of_type(struct token_s *tok, enum token_type type)
     }
     /* token doesn't match the given type */
     return 0;
+}
+
+
+/*
+ * scan the input source and get the next token.
+ * 
+ * returns an malloc'd token_s struct containing the next token
+ * if successfull, NULL on error.
+ */
+struct token_s *tokenize(struct source_s *src)
+{
+    if(!src || !src->buffer || !src->bufsize)
+    {
+        errno = ENODATA;
+        return &eof_token;
+    }
+    /* first time ever? */
+    if(!tok_buf)
+    {
+        tok_bufsize = 1024;
+        tok_buf = malloc(tok_bufsize);
+        if(!tok_buf)
+        {
+            errno = ENOMEM;
+            return &eof_token;
+        }
+    }
+    /* empty the buffer */
+    tok_bufindex     = 0;
+    tok_buf[0]       = '\0';
+    
+    /* same the current token in the prev token pointer */
+    if(cur_tok)
+    {
+        if(prev_tok)
+        {
+            free_token(prev_tok);
+        }
+        prev_tok = cur_tok;
+        cur_tok = NULL;
+    }
+
+    struct token_s *tok = NULL;
+    long line, chr;
+    char nc2, pc;
+    size_t i;
+    int  endloop = 0;   /* flag to end the loop */
+
+    /* init position indexes */
+    if(src->curpos < 0)
+    {
+        line = 1;
+        chr  = 1;
+    }
+    else
+    {
+        line = src->curline;
+        chr  = src->curchar;
+    }
+    /* get next char */
+    char nc = next_char(src);
+    if(nc == ERRCHAR || nc == EOF)
+    {
+        eof_token.lineno    = src->curline     ;
+        eof_token.charno    = src->curchar     ;
+        eof_token.linestart = src->curlinestart;
+        cur_tok = &eof_token;
+        return &eof_token;
+    }
+    /* loop to get the next token */
+    do
+    {
+        switch(nc)
+        {
+            case  '"':
+            case '\'':
+            case  '`':
+                /*
+                 * for quote chars, add the quote, as well as everything between this
+                 * quote and the matching closing quote, to the token buffer.
+                 */
+                add_to_buf(nc);
+                i = find_closing_quote(src->buffer+src->curpos+1, (prev_char(src) == '$') ? 1 : 0);
+                while(i--)
+                {
+                    add_to_buf(next_char(src));
+                }
+                break;
+
+            case '\\':
+                /* get the next char after the backslah */
+                nc2 = next_char(src);
+                /*
+                 * discard backslash+newline '\\n' combination.. in an interactive shell, this
+                 * case shouldn't happen as the read_cmd() function discards the '\\n' sequence
+                 * automatically.. however, if the input comes from a command string or script,
+                 * we might encounter this sequence.
+                 */
+                if(nc2 == '\n')
+                {
+                    break;
+                }
+                /* add the backslah to the token buffer */
+                add_to_buf(nc);
+                /* add the escaped char to the token buffer */
+                if(nc2 > 0)
+                {
+                    add_to_buf(nc2);
+                }
+                break;
+
+            case '$':
+                /* add the '$' to buffer and check the char after it */
+                add_to_buf(nc);
+                nc = peek_char(src);
+                /* we have a '${', '$(' or '$[' sequence */
+                if(nc == '{' || nc == '(' || nc == '[')
+                {
+                    /* add the opening brace and everything up to the closing brace to the buffer */
+                    if(!brace_loop(nc, src))
+                    {
+                        /* closing brace not found */
+                        return &err_token;
+                    }
+                }
+                /*
+                 * we have a special parameter name, such as $0, $*, $@, $#,
+                 * or a positional parameter name, such as $1, $2, ...
+                 */
+                else if(isalnum(nc) || nc == '*' || nc == '@' || nc == '#' ||
+                                       nc == '!' || nc == '?' || nc == '$')
+                {
+                    add_to_buf(next_char(src));
+                }
+                /* we have the $< special var (csh/tcsh) */
+                else if(nc == '<')
+                {
+                    add_to_buf(next_char(src));
+                    endloop = 1;
+                }
+                break;
+
+            case '>':
+            case '<':
+            case '|':
+                /* if an '>', '<', or '|' operator delimits the current token, delimit it */
+                if(tok_bufindex > 0)
+                {
+                    unget_char(src);
+                    endloop = 1;
+                    break;
+                }
+                /* add the operator to buffer and check the char after it */
+                add_to_buf(nc);
+                pc = peek_char(src);
+                if(nc == pc ||                     /* <<, >> and || */
+                  (nc == '<' && pc == '>') ||      /* <> */
+                  (nc == '>' && pc == '|') ||      /* >| */
+                  (nc == '>' && pc == '!') ||      /* >! */
+                  (nc == '<' && pc == '&') ||      /* <& */
+                  (nc == '>' && pc == '&') ||      /* >& */
+                  (nc == '|' && pc == '&'))        /* |& */
+                {
+                    add_to_buf(next_char(src));
+                    pc = peek_char(src);
+                    /* peek at the next char to identify three-char operator tokens */
+                    if(nc == '<' && (pc == '-' || pc == '<'))       /* <<- and <<< */
+                    {
+                        add_to_buf(next_char(src));
+                    }
+                }
+                endloop = 1;
+                break;
+
+            case '&':
+            case ';':
+                /* if an '&' or ';' operator delimits the current token, delimit it */
+                if(tok_bufindex > 0)
+                {
+                    unget_char(src);
+                    endloop = 1;
+                    break;
+                }
+                /* add the operator to buffer and check the char after it */
+                add_to_buf(nc);
+                pc = peek_char(src);
+                /* identify two-char tokens ;; and && */
+                if(nc == pc)
+                {
+                    add_to_buf(next_char(src));
+                    /* identify ';;&' */
+                    if(nc == ';')
+                    {
+                        pc = peek_char(src);
+                        if(pc == '&')
+                        {
+                            add_to_buf(next_char(src));
+                        }
+                    }
+                    endloop = 1;
+                    break;
+                }
+                /* identify ';&' and ';|' */
+                if(nc == ';' && (pc == '&' || pc == '|'))
+                {
+                    add_to_buf(next_char(src));
+                    endloop = 1;
+                    break;
+                }
+                /* identify '&>' */
+                if(nc == '&' && pc == '>')
+                {
+                    add_to_buf(next_char(src));
+                    /* identify '&>>' */
+                    pc = peek_char(src);
+                    if(pc == '>')
+                    {
+                        add_to_buf(next_char(src));
+                    }
+                    endloop = 1;
+                    break;
+                }
+                /* nothing of the above matched. we have a single-char token */
+                endloop = 1;
+                break;
+
+            case '{':
+            case '}':
+                /*
+                 * if the '{' or '}' keyword delimits the current token, delimit it.
+                 * braces are recognized as keywords only when they occur after a semi-colon
+                 * or a newline character.
+                 */
+                pc = prev_char(src);
+                if(tok_bufindex > 0 && (isspace(pc) || pc == ';'))
+                {
+                    unget_char(src);
+                    endloop = 1;
+                    break;
+                }
+                /* check the char after the brace */
+                pc = peek_char(src);
+                if(nc == '}' || (!isalnum(pc) && pc != '_'))   /* not a {var} I/O redirection word */
+                {
+                    /* single char keywords '}' or '{' */
+                    add_to_buf(nc);
+                    endloop = 1;
+                    break;
+                }
+                /* add the opening brace and everything up to the closing brace to the buffer */
+                unget_char(src);
+                if(!brace_loop(nc, src))
+                {
+                    /* closing brace not found */
+                    return &err_token;
+                }
+                break;
+                
+            case '(':
+            case ')':
+                /* if the '!' keyword or the brace delimits the current token, delimit it */
+                if(tok_bufindex > 0)
+                {
+                    unget_char(src);
+                    endloop = 1;
+                    break;
+                }
+                if(nc == '(')
+                {
+                    /*
+                     * recognize the ((expr)) structs (an old shorthand for arithmetic evaluation),
+                     * and the >(cmd) and <(cmd) structs, which are used for process substitution.
+                     * all of these are non-POSIX extensions.
+                     */
+                    pc = prev_char(src);
+                    /* check if we have '((', '<(' or '>(' */
+                    if(peek_char(src) == '(' || pc == '<' || pc == '>')
+                    {
+                        unget_char(src);    /* the 1st '(' */
+                        /* add the opening brace and everything up to the closing brace to the buffer */
+                        if(!brace_loop(nc, src))
+                        {
+                            /* closing brace not found */
+                            return &err_token;
+                        }
+                        break;
+                    }
+                }
+                /* single char delimiters */
+                add_to_buf(nc);
+                endloop = 1;
+                break;
+
+            case ' ':
+            case '\t':
+                /* if the whitespace delimits the current token, delimit it */
+                if(tok_bufindex > 0)
+                {
+                    endloop = 1;
+                    /* we return the whitespace char to input, because we need to
+                     * check the current input char when we're parsing I/O redirections.
+                     * this is important as it makes the difference between cmds like
+                     * `echo 2>out` and `echo 2 >out`.
+                     */
+                    unget_char(src);
+                }
+                /* otherwise just skip it */
+                else
+                {
+                    chr++;
+                }
+                break;
+
+            case '\n':
+                /* if the newline delimits the current token, delimit it */
+                if(tok_bufindex > 0)
+                {
+                    unget_char(src);
+                    endloop = 1;
+                    break;
+                }
+                /* otherwise return it as a token by itself */
+                add_to_buf(nc);
+                endloop = 1;
+                break;
+
+            case '#':
+                /* if the comment delimits the current token, delimit it */
+                if(tok_bufindex > 0)
+                {
+                    unget_char(src);
+                    endloop = 1;
+                    break;
+                }
+                /*
+                 * >#((expr)) and <#((expr)) are non-POSIX extensions to move
+                 * I/O file pointers to the offset specified by expr.
+                 */
+                pc = prev_char(src);
+                if(pc == '>' || pc == '<')      /* '#>' and '#<' */
+                {
+                    nc2 = peek_char(src);
+                    if(nc2 == '(')              /* '#>(' and '#<(' */
+                    {
+                        nc2 = next_char(src);   /* skip the first '(' */
+                        nc2 = peek_char(src);   /* check the second '(' */
+                        if(nc2 == '(')
+                        {
+                            /* add both braces to buffer */
+                            add_to_buf(nc);
+                            add_to_buf(nc2);
+                            /*
+                             * loop to find the matching 2 braces, but no need to call the heavy guns,
+                             * aka brace_loop().
+                             */
+                            int cb = 0;
+                            while((nc = next_char(src)) != EOF)
+                            {
+                                add_to_buf(nc);
+                                /* keep the count of closing braces */
+                                if(nc == ')')
+                                {
+                                    cb++;
+                                }
+                                /* and break when we have two */
+                                if(cb == 2)
+                                {
+                                    break;
+                                }
+                            }
+                            endloop = 1;
+                            break;
+                        }
+                    }
+                }
+                /* 
+                 * bash and zsh identify # comments in non-interactive shells, and in interactive
+                 * shells with the interactive_comments option.
+                 */
+                if(option_set('i') && !optionx_set(OPTION_INTERACTIVE_COMMENTS))
+                {
+                    add_to_buf(nc);
+                    break;
+                }
+                /* 
+                 * otherwise discard the comment as per POSIX section 2.3, but return a newline
+                 * token (the newline is technically part of the comment itself).
+                 */
+                while((nc = next_char(src)) > 0)
+                {
+                    if(nc == '\n')
+                    {
+                        add_to_buf(nc);
+                        endloop = 1;
+                    }
+                }
+                break;
+
+            default:
+                /* for all other chars, just add to the buffer */
+                add_to_buf(nc);
+                break;
+        }
+        /* is the token delimited? */
+        if(endloop)
+        {
+            break;
+        }
+    } while((nc = next_char(src)) != EOF);      /* loop until we hit EOF */
+        
+    /* if we have no chars, we've reached EOF */
+    if(tok_bufindex == 0)
+    {
+        eof_token.lineno    = src->curline     ;
+        eof_token.charno    = src->curchar     ;
+        eof_token.linestart = src->curlinestart;
+        cur_tok = &eof_token;
+        return &eof_token;
+    }
+        
+    /* null-terminate the token */
+    tok_buf[tok_bufindex] = '\0';
+
+    /* create the token */
+    tok = create_token(tok_buf);
+    if(!tok)
+    {
+        fprintf(stderr, "%s: failed to alloc buffer: %s\n", SHELL_NAME, strerror(errno));
+        return &eof_token;
+    }
+    
+    /* give the token a numeric type, according to its contents */
+    set_token_type(tok);
+    /*
+     * if the token consists solely of a number, we need to check the next
+     * character.. if it's the beginning of a redirection operator ('>' or '<'),
+     * we have an TOKEN_IO_NUMBER, which is your file descriptor in redirections
+     * such as '2>&/dev/null' or '1<some_file'.. otherwise treat it as a word.
+     */
+    if(tok->type == TOKEN_INTEGER)
+    {
+        char pc = peek_char(src);
+        if(pc == '<' || pc == '>')
+        {
+            tok->type = TOKEN_IO_NUMBER;
+        }
+        else
+        {
+            tok->type = TOKEN_WORD; 
+        }
+    }
+    /* record where we encountered this token in the input */
+    tok->lineno    = line;
+    tok->charno    = chr;
+    tok->src       = src;
+    tok->linestart = src->curlinestart;
+    
+    /* we do the -v option in the parse_translation_unit() function */
+    //if(option_set('v')) fprintf(stderr, "%s", tok->text);
+
+    /* set the current token pointer */
+    cur_tok = tok;
+
+    /* return the token */
+    return tok;
 }

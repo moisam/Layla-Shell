@@ -22,42 +22,33 @@
 #ifndef KEYWORDS_H
 #define KEYWORDS_H
 
-#include <stdlib.h>
-
-/* structure to store the shell command language keywords */
-struct keyword_s
-{
-    size_t  len;      /* text length */
-    char   *str;      /* keyword text */
-};
-
 /* the shell command language keywords */
-struct keyword_s keywords[] =
+char *keywords[] =
 {
     /* POSIX keywords */
-    { 2, "if"       },
-    { 4, "then"     },
-    { 4, "else"     },
-    { 4, "elif"     },
-    { 2, "fi"       },
-    { 2, "do"       },
-    { 4, "done"     },
-    { 4, "case"     },
-    { 4, "esac"     },
-    { 5, "while"    },
-    { 5, "until"    },
-    { 3, "for"      },
-    { 1, "{"        },
-    { 1, "}"        },
-    { 1, "!"        },
-    { 2, "in"       },
+    "if"      ,
+    "then"    ,
+    "else"    ,
+    "elif"    ,
+    "fi"      ,
+    "do"      ,
+    "done"    ,
+    "case"    ,
+    "esac"    ,
+    "while"   ,
+    "until"   ,
+    "for"     ,
+    "{"       ,
+    "}"       ,
+    "!"       ,
+    "in"      ,
     /* non-POSIX keywords */
-    { 6, "select"   },
-    { 8, "function" },
-    { 4, "time"     },
+    "select"  ,
+    "function",
+    "time"    ,
 };
 /* keyword count */
-static int keyword_count = sizeof(keywords)/sizeof(struct keyword_s);
+static int keyword_count = sizeof(keywords)/sizeof(char *);
 
 /* shell command language operators */
 char *operators[] =
