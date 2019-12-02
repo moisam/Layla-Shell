@@ -31,16 +31,21 @@ enum node_type_e
     NODE_PROGRAM,           /* the whole translation unit nodetree */
     NODE_FUNCTION,          /* function definition nodetree */
     /* POSIX shell constructs */
+    NODE_COMMAND,           /* simple command */
+    NODE_VAR,               /* variable name (or simply, a word) */
+    NODE_IO_REDIRECT,       /* single I/O redirection (file or heredoc) */
+    NODE_IO_FILE,           /* file I/O redirection */
+    NODE_IO_HERE,           /* heredoc I/O redirection */
+    NODE_BANG,              /* bang '!' keyword */
+    NODE_PIPE,              /* pipeline */
+
     NODE_SUBSHELL,          /* subshell */
     NODE_LIST,              /* list (sequential or asynchronous) */
     NODE_ANDOR,             /* AND-OR list */
     NODE_AND_IF,            /* command on the rightside of a logical AND operator */
     NODE_OR_IF,             /* similar for a logical OR operator */
-    NODE_BANG,              /* bang '!' keyword */
-    NODE_PIPE,              /* pipeline */
     NODE_TERM,              /* term (similar to an AND-OR list) */
     NODE_WORDLIST,          /* wordlist for use in for and select loops, or case conditionals */
-    NODE_VAR,               /* variable name (or simply, a word) */
     NODE_FOR,               /* for loop */
     NODE_SELECT,            /* select loop */
     NODE_CASE_ITEM,         /* case item */
@@ -48,12 +53,8 @@ enum node_type_e
     NODE_IF,                /* if conditional */
     NODE_WHILE,             /* while loop */
     NODE_UNTIL,             /* until loop */
-    NODE_IO_FILE,           /* file I/O redirection */
-    NODE_IO_HERE,           /* heredoc I/O redirection */
-    NODE_IO_REDIRECT,       /* single I/O redirection (file or heredoc) */
     NODE_IO_REDIRECT_LIST,  /* list of I/O redirections */
     NODE_ASSIGNMENT,        /* variable assignment */
-    NODE_COMMAND,           /* simple command */
     /* non-POSIX extensions */
     NODE_ARITHMETIC_EXPR,   /* arithmetic expression in the form ((expr)) */
     NODE_TIME,              /* command preceded by the 'time' keyword */
@@ -111,8 +112,8 @@ struct node_s
  */
 struct  node_s *new_node(enum node_type_e type);
 void    add_child_node(struct node_s *parent, struct node_s *child);
-void    set_node_val_sint(struct node_s *node, int val);
-void    set_node_val_uint(struct node_s *node, unsigned int val);
+void    set_node_val_sint(struct node_s *node, long val);
+void    set_node_val_uint(struct node_s *node, unsigned long val);
 void    set_node_val_sllong(struct node_s *node, long long val);
 void    set_node_val_ullong(struct node_s *node, unsigned long long val);
 void    set_node_val_sfloat(struct node_s *node, double val);

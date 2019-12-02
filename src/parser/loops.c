@@ -28,6 +28,8 @@
 #include "parser.h"
 #include "../error/error.h"
 #include "../debug.h"
+
+
 /*
  * parse a traditional, POSIX-style 'for' loop:
  * 
@@ -82,10 +84,7 @@ struct node_s *parse_for_clause(struct token_s *tok)
     /* skip the name token */
     tok = tokenize(tok->src);
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens();
     /* check for the 'in' keyword, which is optional */
     if(tok->type == TOKEN_KEYWORD_IN)
     {
@@ -102,10 +101,7 @@ struct node_s *parse_for_clause(struct token_s *tok)
             tok = tokenize(tok->src);
         }
         /* skip optional newlines */
-        while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-        {
-            tok = tokenize(tok->src);
-        }
+        skip_newline_tokens();
     }
     /* parse the loop body, which is a do group */
     struct node_s *parse_group = parse_do_group(tok);
@@ -235,10 +231,7 @@ struct node_s *parse_for_clause2(struct token_s *tok)
         tok = tokenize(tok->src);
     }
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens();
     /* parse the loop body, which is a do group */
     struct node_s *parse_group = parse_do_group(tok);
     if(parse_group)
@@ -298,10 +291,7 @@ struct node_s *parse_select_clause(struct token_s *tok)
     /* skip the name token */
     tok = tokenize(tok->src);
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens();
     /* check for the 'in' keyowrd */
     if(tok->type == TOKEN_KEYWORD_IN)
     {
@@ -318,10 +308,7 @@ struct node_s *parse_select_clause(struct token_s *tok)
             tok = tokenize(tok->src);
         }
         /* skip optional newlines */
-        while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-        {
-            tok = tokenize(tok->src);
-        }
+        skip_newline_tokens();
     }
     /* parse the loop body, which is a do group */
     struct node_s *parse_group = parse_do_group(tok);

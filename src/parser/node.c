@@ -113,7 +113,7 @@ struct node_s *last_child(struct node_s *parent)
 /*
  * set the node's value to the given integer value.
  */
-void set_node_val_sint(struct node_s *node, int val)
+void set_node_val_sint(struct node_s *node, long val)
 {
     node->val_type = VAL_SINT;
     node->val.sint = val;
@@ -123,7 +123,7 @@ void set_node_val_sint(struct node_s *node, int val)
 /*
  * set the node's value to the given unsigned integer value.
  */
-void set_node_val_uint(struct node_s *node, unsigned int val)
+void set_node_val_uint(struct node_s *node, unsigned long val)
 {
     node->val_type = VAL_UINT;
     node->val.uint = val;

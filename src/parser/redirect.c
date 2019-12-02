@@ -30,6 +30,11 @@
 #include "../debug.h"
 
 
+/**********************************************
+ * Functions used by the front-end parser to
+ * collect I/O redirections from a command line.
+ **********************************************/
+
 /*
  * return a ready-made I/O redirection node. useful when parsing non-POSIX
  * operators, such as '|&', which equates to '2>&1 |'. in this case, the pipe
@@ -88,7 +93,7 @@ struct node_s *io_file_node(int fd, char type, char *namestr, int lineno)
  * 
  * returns a nodetree representing the I/O operation, NULL in case of error.
  */
-struct node_s *parse_io_file(struct token_s *tok)
+struct node_s *parse_file_redirect(struct token_s *tok)
 {
     /* create a new node for the redirection */
     struct node_s *file = new_node(NODE_IO_FILE);
@@ -97,65 +102,79 @@ struct node_s *parse_io_file(struct token_s *tok)
         return NULL;
     }
     file->lineno = tok->lineno;
-    /* redirection operator starts with '<' */
-    if(tok->text[0] == '<')
+
+    switch(tok->text[0])
     {
-        switch(tok->text[1])
-        {
-            case '\0':      /* '<' */
-                set_node_val_chr(file, IO_FILE_LESS     );
-                break;
-                
-            case  '&':      /* '<&' */
-                set_node_val_chr(file, IO_FILE_LESSAND  );
-                break;
-                
-            case  '>':      /* '<>' */
-                set_node_val_chr(file, IO_FILE_LESSGREAT);
-                break;
-        }
+        /* redirection operator starts with '<' */
+        case '<':
+            switch(tok->text[1])
+            {
+                case '\0':      /* '<' */
+                    set_node_val_chr(file, IO_FILE_LESS     );
+                    break;
+
+                case  '&':      /* '<&' */
+                    set_node_val_chr(file, IO_FILE_LESSAND  );
+                    break;
+
+                case  '>':      /* '<>' */
+                    set_node_val_chr(file, IO_FILE_LESSGREAT);
+                    break;
+            }
+            break;
+
+        /* redirection operator starts with '>' */
+        case '>':
+            switch(tok->text[1])
+            {
+                case  '!':      /* zsh extension '>!', equivalent to >| */
+                case  '|':            /* '>|' */
+                    set_node_val_chr(file, IO_FILE_CLOBBER  );
+                    break;
+
+                case '\0':            /* '>' */
+                    set_node_val_chr(file, IO_FILE_GREAT    );
+                    break;
+
+                case  '&':            /* '>&' */
+                    set_node_val_chr(file, IO_FILE_GREATAND );
+                    break;
+
+                case  '>':            /* '>>' */
+                    set_node_val_chr(file, IO_FILE_DGREAT   );
+                    break;
+            }
+            break;
+
+        /* redirection operator starts with '&' */
+        case '&':
+            if(strcmp(tok->text, "&>>") == 0)                   /* append stdout/stderr   */
+            {
+                set_node_val_chr(file, IO_FILE_AND_GREAT_GREAT);
+            }
+            else if(strcmp(tok->text, "&>") == 0)               /* redirect stdout/stderr */
+            {
+                set_node_val_chr(file, IO_FILE_GREATAND);       /* treat '&>' as '>&'     */
+            }
+            else if(strcmp(tok->text, "&<") == 0)
+            {
+                set_node_val_chr(file, IO_FILE_LESSAND );       /* treat '&<' as '<&'     */
+            }
+            break;
     }
-    /* redirection operator starts with '>' */
-    else if(tok->text[0] == '>')
-    {
-        switch(tok->text[1])
-        {
-            case  '!':      /* zsh extension '>!', equivalent to >| */
-            case  '|':            /* '>|' */
-                set_node_val_chr(file, IO_FILE_CLOBBER  );
-                break;
-                
-            case '\0':            /* '>' */
-                set_node_val_chr(file, IO_FILE_GREAT    );
-                break;
-                
-            case  '&':            /* '>&' */
-                set_node_val_chr(file, IO_FILE_GREATAND );
-                break;
-                
-            case  '>':            /* '>>' */
-                set_node_val_chr(file, IO_FILE_DGREAT   );
-                break;
-        }
-    }
-    /* redirection operator starts with '&' */
-    else if(tok->text[0] == '&')
-    {
-        if(strcmp(tok->text, "&>>") == 0)                   /* append stdout/stderr   */
-        {
-            set_node_val_chr(file, IO_FILE_AND_GREAT_GREAT);
-        }
-        else if(strcmp(tok->text, "&>") == 0)               /* redirect stdout/stderr */
-        {
-            set_node_val_chr(file, IO_FILE_GREATAND);       /* treat '&>' as '>&'     */
-        }
-        else if(strcmp(tok->text, "&<") == 0)
-        {
-            set_node_val_chr(file, IO_FILE_LESSAND );       /* treat '&<' as '<&'     */
-        }
-    }
+
     /* skip the redirection operator token */
     tok = tokenize(tok->src);
+
+    /* reached EOF or error getting next token */
+    if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR || tok->text[0] == '\n')
+    {
+        /* free the partially parsed nodetree */
+        fprintf(stderr, "%s: missing or invalid redirected filename\n", SHELL_NAME);
+        free_node_tree(file);
+        return NULL;
+    }
+
     /* create a new node for the file descriptor/path that follows the operator */
     struct node_s *name = new_node(NODE_VAR);
     if(!name)       /* insufficient memory */
@@ -166,8 +185,10 @@ struct node_s *parse_io_file(struct token_s *tok)
     set_node_val_str(name, tok->text);
     name->lineno = tok->lineno;
     add_child_node(file, name);
+
     /* skip the file descriptor/path token */
     tok = tokenize(tok->src);
+
     /*
      * zsh says r-shell can't redirect output to files. if the token that comes after
      * the output redirection operator is not a number, we treat it as a filename and 
@@ -185,6 +206,7 @@ struct node_s *parse_io_file(struct token_s *tok)
             return NULL;
         }
     }
+
     /* return the redirection nodetree */
     return file;
 }
@@ -196,7 +218,7 @@ struct node_s *parse_io_file(struct token_s *tok)
  * 
  * returns a nodetree representing the I/O operation, NULL in case of error.
  */
-struct node_s *parse_io_herestr(struct token_s *tok)
+struct node_s *parse_herestr(struct token_s *tok)
 {
     struct source_s *src = tok->src;
 
@@ -207,12 +229,14 @@ struct node_s *parse_io_herestr(struct token_s *tok)
         cmd++;
         src->curpos++;
     }
+
     /* empty here-string */
     if(!*cmd || *cmd == '\n')
     {
         parser_err = 1;
         return NULL;
     }
+
     /* get the end of the here-string */
     size_t len;
     char *end = cmd;
@@ -221,6 +245,7 @@ struct node_s *parse_io_herestr(struct token_s *tok)
         end++;
     }
     len = end - cmd;
+
     /* create a new node for the redirection */
     struct node_s *file = new_node(NODE_IO_HERE);
     if(!file)       /* insufficient memory */
@@ -229,15 +254,19 @@ struct node_s *parse_io_herestr(struct token_s *tok)
         return NULL;
     }
     file->lineno = tok->lineno;
+
     /* we word-expand here-strings by default */
     set_node_val_chr(file, IO_HERE_EXPAND);
+
     /* update the src struct pointer to point past the here-string */
     src->curpos += len;
     src->curlinestart = src->curpos;
     src->curchar = 1;
     src->curline++;
+
     /* make sure our cur_token is synced to the new src position */
     tokenize(tok->src);
+
     /* create a new node for the here-string body */
     struct node_s *here = new_node(NODE_VAR);
     if(!here)       /* insufficient memory */
@@ -248,6 +277,7 @@ struct node_s *parse_io_herestr(struct token_s *tok)
     }
     here->val.str = get_malloced_strl(cmd, 0, len+1);
     add_child_node(file, here);
+
     /* return the here-string nodetree */
     return file;
 }
@@ -261,19 +291,21 @@ struct node_s *parse_io_herestr(struct token_s *tok)
  * 
  * returns a nodetree representing the I/O operation, NULL in case of error.
  */
-struct node_s *parse_io_here(struct token_s *tok)
+struct node_s *parse_heredoc_redirect(struct token_s *tok)
 {
     /* is it a here-string redirection? */
     if(tok->text[2] == '<')     /* operator is '<<<' */
     {
-        return parse_io_herestr(tok);
+        return parse_herestr(tok);
     }
+
     /* is it a stripped here-doc redirection? */
     int strip = 0;
     if(tok->text[2] == '-')     /* operator is '<<-' */
     {
         strip = 1;
     }
+
     /* create a new node for the redirection */
     struct node_s *file = new_node(NODE_IO_HERE);
     if(!file)       /* insufficient memory */
@@ -282,24 +314,28 @@ struct node_s *parse_io_here(struct token_s *tok)
         return NULL;
     }
     file->lineno = tok->lineno;
+
     /*****************************************
      * NOTE: brute-force extract the heredoc
      * TODO: maybe find a better workaround?
      *****************************************/
-    struct source_s  *src     = tok->src;
-    struct word_s *heredoc = get_heredoc(src, src->buffer+src->curpos+1, strip);
+    struct source_s  *src  = tok->src;
+    int expand = 0;
+    struct word_s *heredoc_body = get_heredoc(src, strip, &expand);
+
     /* error getting the here-document body */
-    if(!heredoc)
+    if(!heredoc_body)
     {
         parser_err = 1;
         free_node_tree(file);
         return NULL;
     }
+
     /*
      * check if the here-doc should be word-expanded or not (depends on whether the
      * here-doc word was quoted or not), and set the redirection node flags accordingly.
      */
-    if(flag_set(heredoc->flags, HEREDOC_TOKEN_EXP))
+    if(expand)
     {
         set_node_val_chr(file, IO_HERE_EXPAND);
     }
@@ -307,20 +343,23 @@ struct node_s *parse_io_here(struct token_s *tok)
     {
         set_node_val_chr(file, IO_HERE_NOEXPAND);
     }
+
     /* create a new node for the here-doc body */
-    struct node_s *here = new_node(NODE_VAR);
-    if(!here)
+    struct node_s *heredoc_node = new_node(NODE_VAR);
+    if(!heredoc_node)
     {
         parser_err = 1;
         free_node_tree(file);
-        free_all_words(heredoc);
+        free_all_words(heredoc_body);
         return NULL;
     }
+
     /* store the here-doc body */
-    here->val.str = get_malloced_str(heredoc->data);
-    add_child_node(file, here);
-    free_all_words(heredoc);
-    src->bufsize = strlen(src->buffer);
+    heredoc_node->val.str = heredoc_body->data;
+    heredoc_node->val_type = VAL_STR;
+    add_child_node(file, heredoc_node);
+    free(heredoc_body);
+
     /* return the here-doc nodetree */
     return file;
 }
@@ -339,6 +378,7 @@ struct node_s *parse_io_redirect(struct token_s *tok)
     struct node_s *io = new_node(NODE_IO_REDIRECT);
     if(!io)
     {
+        parser_err = 1;
         return NULL;
     }
     io->lineno = tok->lineno;
@@ -370,8 +410,8 @@ struct node_s *parse_io_redirect(struct token_s *tok)
     }
     /* parse as file or here-document redirection depending on the operator */
     struct node_s *file = ((tok->text[0] == '<') && (tok->text[1] == '<')) ?
-                            parse_io_here(tok) :    /* '<<', '<<-', '<<<' operators */
-                            parse_io_file(tok);     /* all other operators */
+                            parse_heredoc_redirect(tok) :    /* '<<', '<<-', '<<<' operators */
+                            parse_file_redirect(tok);     /* all other operators */
     if(file)
     {
         add_child_node(io, file);
@@ -457,34 +497,37 @@ struct node_s *parse_redirect_list(struct token_s *tok)
 
 
 /*
- * extract a heredoc body text.. the *_cmd parameter points to the start
+ * extract a heredoc body text.. the *orig_cmd parameter points to the start
  * of the heredoc body in the source buffer, while the strip parameter
  * tells us if we should strip leading tabs from heredoc lines or not.
  * 
  * returns a node representing the parsed here-doc, or NULL on parsing errors.
  * the curpos field of src is updated to point past the heredoc body.
  */
-struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
+struct word_s *get_heredoc(struct source_s *src, int strip, int *expand)
 {
-    if(!_cmd)
+    char *orig_cmd = src->buffer+src->curpos+1;
+    if(!*orig_cmd)
     {
         return NULL;
     }
+
     /*
      * skip any optional spaces before the heredoc delimiter word.. while this behavior
      * is non-POSIX, it is quite common, and so we have to deal with it (in POSIX,
      * the heredoc delimiter word and the heredoc redirection operator (<< or <<-)
      * should have no spaces between them).
      */
-    while(*_cmd && isspace(*_cmd) && *_cmd != '\n')
+    while(*orig_cmd && isspace(*orig_cmd) && *orig_cmd != '\n')
     {
-        _cmd++;
+        orig_cmd++;
         src->curpos++;
     }
-    char *cmd   = _cmd;
+    char *cmd   = orig_cmd;
     char delim[256];        /* heredoc delimiter word */
-    int  expand = 1;        /* expand by default, unless delimiter is quoted */
     int  heredoc_len = 0;   /* length of heredoc body text */
+    (*expand) = 1;          /* expand by default, unless delimiter is quoted */
+
     /* 
      * find the end of the delimiter word by skipping all non-space chars, semi-colons
      * and ampersands.
@@ -493,15 +536,16 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
     {
         cmd++;
     }
+
     /* empty delimiter word */
-    if(cmd == _cmd)
+    if(cmd == orig_cmd)
     {
         delim[0] = '\0';
     }
     else
     {
         /* copy delimiter */
-        char *c1 = _cmd;
+        char *c1 = orig_cmd;
         char *c2 = delim;
         while(c1 < cmd)
         {
@@ -510,7 +554,7 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
                 /* word has single or double quotes. skip the quote char */
                 c1++;
                 /* we will not expand this heredoc */
-                expand = 0;
+                (*expand) = 0;
             }
             else
             {
@@ -518,7 +562,7 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
                 if(*c1 == '\\')
                 {
                     /* we will not expand this heredoc */
-                    expand = 0;
+                    (*expand) = 0;
                     c1++;
                 }
                 /* copy the next char */
@@ -528,25 +572,19 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
         /* terminate the copied word with newline and NULL */
         *c2++ = '\n';
         *c2   = '\0';
-        /* now remove the word from the original command string */
-        /*
-        c2 = _cmd;
-        c1 = cmd;
-        while((*c2++ = *c1++))
-        {
-            ;
-        }
-        */
     }
+
     /* get the next newline char */
-    char *nl = strchr(_cmd, '\n');
+    char *nl = strchr(orig_cmd, '\n');
     char *end;
+
     /* missing newline char */
     if(!nl)
     {
         BACKEND_RAISE_ERROR(HEREDOC_MISSING_NEWLINE, NULL, NULL);
         return NULL;
     }
+
     /* empty heredoc delimiter word */
     if(delim[0] == '\0')
     {
@@ -559,16 +597,17 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
          * get the heredoc length.. the body ends with the first occurrence of the delimiter
          * word that's followed by a newline char.
          */
-        end = strstr(nl, delim);
+        end = strstr(++nl, delim);
         if(!end)
         {
             /* remove the newline char to print delimiter nicely */
-            delim[cmd - _cmd] = '\0';
+            delim[cmd - orig_cmd] = '\0';
             BACKEND_RAISE_ERROR(HEREDOC_EXPECTED_DELIM, delim, NULL);
             return NULL;
         }
         heredoc_len = end - nl;
     }
+
     /* now get the heredoc proper */
     char *heredoc = malloc(heredoc_len+1);
     if(!heredoc)        /* insufficient memory */
@@ -576,14 +615,29 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
         BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "storing here-document", NULL);
         return NULL;
     }
+
     /* copy the heredoc body */
-    char *p1 = nl+1;
+    char *p1 = nl;
     char *p2 = heredoc;
-    do
+    int lines = 2;      /* 1 for the redirection line, 1 for the terminating line */
+
+    /* strip tabs at the beginning of the first line */
+    if(strip)
     {
-        if(*p1 == '\n')
+        while(*p1 == '\t')
         {
-            /* strip tabs at the beginning of each line */
+            p1++;
+        }
+    }
+
+    /* now copy the heredoc body */
+    while(p1 < end)
+    {
+        *p2++ = *p1++;
+        if(p1[-1] == '\n')
+        {
+            lines++;
+            /* strip tabs at the beginning of each subsequent line */
             if(strip)
             {
                 while(*p1 == '\t')
@@ -592,26 +646,23 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
                 }
             }
         }
-        *p2++ = *p1++;
-    } while(p1 < end);
+    }
+
     /* NULL-terminate the copied string */
     *p2 = '\0';
+
     p1 = end;
     p1 += strlen(delim);
-    /*
-    p2 = nl+1;
-    while((*p2++ = *p1++))
-    {
-        ;
-    }
-    */
+
     /* update the src struct pointer to point past the heredoc body */
-    src->curpos += (p1 - _cmd);
+    src->curpos += (p1 - orig_cmd);
     src->curlinestart = src->curpos;
     src->curchar = 1;
-    src->curline++;
+    src->curline += lines;
+
     /* make sure our cur_token is synced to the new src position */
     tokenize(src);
+
     /* save the heredoc body */
     struct word_s *t = malloc(sizeof(struct word_s));
     if(!t)      /* insufficient memory */
@@ -622,15 +673,8 @@ struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip)
     }
     t->data = heredoc;
     t->len  = strlen(heredoc);
-    /* remember if we'll need to word-expand the heredoc body later on */
-    if(expand)
-    {
-        t->flags |= HEREDOC_TOKEN_EXP;
-    }
-    else
-    {
-        t->flags |= HEREDOC_TOKEN_NOEXP;
-    }
-    /* return the heredocument */
+    t->next = NULL;
+
+    /* return the here-document */
     return t;
 }

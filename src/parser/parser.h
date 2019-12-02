@@ -25,7 +25,7 @@
 #include "../scanner/scanner.h"
 #include "../symtab/symtab.h"
 
-/* constants used by parse_io_file() and parse_io_here() */
+/* constants used by parse_file_redirect() and parse_heredoc_redirect() */
 #define IO_FILE_LESS            1       /* '<' input redirection operator */
 #define IO_FILE_LESSAND         2       /* '<&' input redirection operator */
 #define IO_FILE_LESSGREAT       3       /* '<>' input/output redirection operator */
@@ -34,20 +34,42 @@
 #define IO_FILE_GREATAND        6       /* '>&' output redirection operator */
 #define IO_FILE_AND_GREAT_GREAT 7       /* '&>>' append redirection operator */
 #define IO_FILE_DGREAT          8       /* '>>' append redirection operator */
-// #define IO_HERE_DLESS       8
-// #define IO_HERE_DLESSDASH   9
 #define IO_HERE_EXPAND          9       /* expandable heredoc (without quoted heredoc word) */
 #define IO_HERE_NOEXPAND        10      /* nonexpandable heredoc (with quoted heredoc word) */
+
+/* skip optional newlines */
+#define skip_newline_tokens()                                   \
+do                                                              \
+{                                                               \
+    while(tok->type == TOKEN_NEWLINE)                           \
+    {                                                           \
+        tok = tokenize(tok->src);                               \
+    }                                                           \
+} while(0)
+
+/*
+ *  skip optional newlines and update the source struct's wstart pointer
+ *  (this one is important for compound commands, such as loops, that want
+ *  to know where the current command line starts in the input source).
+ */
+#define skip_newline_tokens2()                                  \
+do                                                              \
+{                                                               \
+    while(tok->type == TOKEN_NEWLINE)                           \
+    {                                                           \
+        tok->src->wstart = tok->src->curpos;                    \
+        tok = tokenize(tok->src);                               \
+    }                                                           \
+} while(0)
 
 /* parser functions */
 struct node_s *parse_complete_command(struct token_s *tok);
 struct node_s *parse_list(struct token_s *tok);
 struct node_s *parse_and_or(struct token_s *tok);
 struct node_s *parse_pipeline(struct token_s *tok);
-struct node_s *parse_pipe_sequence(struct token_s *tok);
 void           parse_separator(struct token_s *tok);
-struct node_s *parse_term(struct token_s *tok, enum token_type stop_at);
-struct node_s *parse_compound_list(struct token_s *tok, enum token_type stop_at);
+struct node_s *parse_term(struct token_s *tok, enum token_type_e stop_at);
+struct node_s *parse_compound_list(struct token_s *tok, enum token_type_e stop_at);
 struct node_s *parse_subshell(struct token_s *tok);
 struct node_s *get_wordlist(struct token_s *tok);
 struct node_s *parse_do_group(struct token_s *tok);
@@ -61,8 +83,8 @@ struct node_s *parse_while_clause(struct token_s *tok);
 struct node_s *parse_until_clause(struct token_s *tok);
 struct node_s *parse_brace_group(struct token_s *tok);
 struct node_s *parse_compound_command(struct token_s *tok);
-struct node_s *parse_io_file(struct token_s *tok);
-struct node_s *parse_io_here(struct token_s *tok);
+struct node_s *parse_file_redirect(struct token_s *tok);
+struct node_s *parse_heredoc_redirect(struct token_s *tok);
 struct node_s *parse_io_redirect(struct token_s *tok);
 int            is_redirect_op(char *str);
 struct node_s *parse_redirect_list(struct token_s *tok);
@@ -71,9 +93,9 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
 struct node_s *parse_simple_command(struct token_s *tok);
 struct node_s *parse_command(struct token_s *tok);
 struct node_s *parse_translation_unit();
-char          *parse_alias(char *cmd);
+char          *get_alias_val(char *cmd);
 struct node_s *io_file_node(int fd, char type, char *namestr, int lineno);
-struct word_s *get_heredoc(struct source_s *src, char *_cmd, int strip);
+struct word_s *get_heredoc(struct source_s *src, int strip, int *expand);
 int            is_name(char *str);
 
 /* pointer to the current function definition we're parsing */

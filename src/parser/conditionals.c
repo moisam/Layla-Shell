@@ -77,11 +77,7 @@ struct node_s *parse_case_item(struct token_s *tok)
     tok->src->wstart = tok->src->curpos;
     tok = tokenize(tok->src);
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok->src->wstart = tok->src->curpos;
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens2();
     /* the next command begins after the ')' char */
     if(tok->src->buffer[tok->src->wstart] == ')')
     {
@@ -136,10 +132,7 @@ struct node_s *parse_case_item(struct token_s *tok)
         tok = tokenize(tok->src);
     }
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens();
     /* return the parsed nodetree */
     return item;
 }
@@ -184,10 +177,7 @@ struct node_s *parse_case_clause(struct token_s *tok)
     /* skip the name token */
     tok = tokenize(tok->src);
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens();
     /* check for the 'in' keyword */
     if(tok->type != TOKEN_KEYWORD_IN)
     {
@@ -200,10 +190,7 @@ struct node_s *parse_case_clause(struct token_s *tok)
     /* skip the 'in' keyword */
     tok = tokenize(tok->src);
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens();
     /* loop to parse the case item(s) until we hit EOF or esac, or an error occurs */
     while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR && tok->type != TOKEN_KEYWORD_ESAC)
     {

@@ -46,6 +46,36 @@ int parser_err = 0;
 
 
 /*
+ * convert a list of words to a list of AST nodes.
+ */
+struct node_s *wordlist_to_nodetree(struct word_s *first_word)
+{
+    struct node_s *head_node = NULL, *tail_node = NULL, *node;
+    while(first_word)
+    {
+        node = new_node(NODE_VAR);
+        if(!node)
+        {
+            break;
+        }
+        set_node_val_str(node, first_word->data);
+        if(!head_node)
+        {
+            head_node = node;
+            tail_node = node;
+        }
+        else
+        {
+            tail_node->next_sibling = node;
+            tail_node = node;
+        }
+        first_word = first_word->next;
+    }
+    return head_node;
+}
+
+
+/*
  * substitute a token whose text we identified as an alias word
  * with the value of that alias.. the *alias parameter tells us the
  * alias word we're substituting, so that we won't enter an infinite
@@ -56,174 +86,167 @@ int parser_err = 0;
  *
  * returns 1 if the alias was successfully substituted, 0 otherwise.
  */
-int substitute_alias(char *buf, char *alias)
+struct node_s *substitute_alias(char *aliased_word, int *__check_next)
 {
-    char   *alias_val;
-    int     name_len ;
-    int     val_len  ;
-    int     res = 1;
-    char   *p = buf, *p2, *p3;
-    size_t  i;
-    int     sep = 1;
-    while(*p)
+    /* sanity check */
+    if(!aliased_word || !*aliased_word)
     {
-        switch(*p)
+        return NULL;
+    }
+
+    /* get the aliased value (if none defined, returns the same word) */
+    char *alias_val = get_alias_val(aliased_word);
+
+    /* undefined or null alias */
+    if(alias_val == aliased_word || alias_val == NULL)
+    {
+        return NULL;
+    }
+
+    /* split the aliased value into words (or fields) */
+    struct word_s *wordlist = field_split(alias_val);
+    size_t val_len = strlen(alias_val);
+    struct node_s *nodes = wordlist_to_nodetree(wordlist);
+    free_all_words(wordlist);
+
+    /* no field splitting done. use the original value */
+    if(!nodes)
+    {
+        nodes = new_node(NODE_VAR);
+        if(nodes)
         {
-            /* separator chars terminate words */
-            case '(':
-            case ')':
-            case '{':
-            case '}':
-            case '[':
-            case ']':
-            case '|':
-            case ';':
-            case '&':
-            case '!':
-            case ' ':
-            case '\t':
-            case '\r':
-            case '\n':
-                sep = 1;
-                p++;
-                break;
-
-            /* non-separator chars that can also terminate words */
-            case '\\':
-            case '-':
-            case '+':
-            case '=':
-                sep = 0;
-                p++;
-                break;
-
-            case '\'':
-            case '"':
-            case '`':
-                /* if the quote is escaped */
-                if(p != buf && p[-1] == '\\')
+            char *val2 = __get_malloced_str(alias_val);
+            /* remove trailing spaces */
+            char *p1 = val2;
+            if(p1)
+            {
+                char *p2 = p1+val_len-1;
+                while(p2 > p1 && isspace(*p2))
                 {
-                    /* skip escaped quotes */
-                    p++;
+                    p2--;
+                }
+                if(isspace(p2[1]))
+                {
+                    p2[1] = '\0';
+                }
+            }
+            set_node_val_str(nodes, val2);
+            free(val2);
+        }
+        else
+        {
+            return NULL;
+        }
+        //(*__check_next) = nodes && isspace(alias_val[val_len-1]) ? 1 : 0;
+        /*
+        if(!root_word)
+        {
+            return nodes;
+        }
+        */
+    }
+
+    /*
+     * to avoid infinite looping, we check if the first word of the aliased
+     * value is the same as the word we're checking for alias substitution.
+     * if that's the case, we return immediately, otherwise we continue to
+     * recursively check the aliased value for more aliases.
+     */
+    if(strcmp(nodes->val.str, aliased_word) == 0)
+    {
+        char *val = nodes->val.str;
+        (*__check_next) = val && isspace(val[strlen(val)-1]) ? 1 : 0;
+        return nodes;
+    }
+
+    /* perform the alias substitution */
+    int check_next = 1, endme = 0;
+    /*
+     * we perform alias substitution on the original word, then we check the
+     * substitution for possible aliases.. we repeat the process until we get
+     * a substitution with no further aliases.. we'll only consider the original
+     * aliased values when we want to determine whether we should check the
+     * next word for aliases or not.
+     */
+    while(check_next)
+    {
+        struct node_s *node = nodes, *pnode = NULL;
+        while(node)
+        {
+            struct node_s *subwords = substitute_alias(node->val.str, &check_next);
+            /*
+             * no aliases found, or the alias contains the same word we're checking
+             * for alias substitution.
+             */
+            if(!subwords || strcmp(subwords->val.str, aliased_word) == 0)
+            {
+                endme = 1;
+                break;
+            }
+
+            /* find the last word */
+            struct node_s *node2 = subwords;
+            while(node2->next_sibling)
+            {
+                node2 = node2->next_sibling;
+            }
+
+            /*
+             * remove the word we just substituted from the wordlist, and put the
+             * expanded alias in its place, then adjust our pointers.
+             */
+            if(pnode)
+            {
+                if(pnode->next_sibling == node)
+                {
+                    node2->next_sibling = NULL;
                 }
                 else
                 {
-                    /* otherwise, find closing quote and skip the string between the quotes */
-                    i = find_closing_quote(p, 0);
-                    if(i)
-                    {
-                        p = p+i;
-                    }
-                    else
-                    {
-                        p++;
-                    }
+                    node2->next_sibling = pnode->next_sibling;
                 }
-                sep = 0;
-                break;
-
-            default:
-                /* skip all chars that can be part of the alias word */
-                p2 = p;
-                while(*p2)
-                {
-                    if(isalnum(*p2) || *p2 == '_' || *p2 == '!' || *p2 == '%' || *p2 == ',' || *p2 == '@')
-                    {
-                        /* valid chars */
-                        p2++;
-                    }
-                    else
-                    {
-                        /* invalid chars. break the loop */
-                        break;
-                    }
-                }
-                /* we haven't moved forward, meaning the first char is invalid for an alias name */
-                if(p2 == p)
-                {
-                    p++;
-                    break;
-                }
-                /* only consider possible aliases if they come after a separator token */
-                if(!sep)
-                {
-                    p = p2;
-                    break;
-                }
-                /* get a copy of that alias word */
-                name_len  = p2-p;
-                char a[name_len+1];
-                strncpy(a, p, name_len);
-                a[name_len] = '\0';
-                /*
-                 * prevent alias recursion by making sure we're not processing the same alias
-                 * again (see the 'ls' example in the comment at the beginning of this function).
-                 */
-                if(alias && strcmp(a, alias) == 0)
-                {
-                    p = p2;
-                    res = 0;
-                    sep = 0;
-                    break;
-                }
-                /* get the aliased value */
-                alias_val = parse_alias(a);
-                /* no aliased value, or value is empty, or value is the same alias name */
-                if(!alias_val || strcmp(a, alias_val) == 0)
-                {
-                    /* don't bother substituting anything. keep the alias name as-is */
-                    p = p2;
-                    res = 0;
-                    sep = 0;
-                    break;
-                }
-                val_len = strlen(alias_val);
-                /* give some room for the alias value */
-                p2 = p+name_len;
-                p3 = p+val_len ;
-                while((*p3++ = *p2++))
-                {
-                    ;
-                }
-                /* now copy the value */
-                strncpy(p, alias_val, val_len);
-                /* adjust our pointer */
-                p = p3-1;
-                sep = 0;
-                break;
-        }
-    }
-    return res;
-}
-
-
-/*
- * NOTE: we should only check the first word of a command for
- *       possible alias substitution. also, we should check if the
- *       last char of an alias substitution is space, in which case
- *       we will need to check the next word for alias substitution.
- */
-void check_word_for_alias_substitution(struct token_s *tok)
-{
-    if(valid_alias_name(tok->text))
-    {
-        char *a = get_malloced_str(tok->text);
-        if(a)
-        {
-            if(substitute_alias(tok->text, NULL))
-            {
-                substitute_alias(tok->text, a);
+                pnode->next_sibling = subwords;
             }
-            free_malloced_str(a);
-            tok->text_len = strlen(tok->text);
+            else
+            {
+                node2->next_sibling = node->next_sibling;
+            }
+
+            pnode = node2;
+            node->next_sibling = NULL;
+
+            /* free temp memory */
+            free_node_tree(node);
+
+            /* if this word is the first word in the alias substitution, adjust our pointer */
+            if(node == nodes)
+            {
+                nodes = subwords;
+            }
+            node = node2->next_sibling;
+            if(!check_next)
+            {
+                break;
+            }
         }
+        /* force breaking out from the loop */
+        if(endme)
+        {
+            break;
+        }
+        /* repeat checking from the start */
+        check_next = 1;
     }
+    /* determine whether to check the next word for aliases or not */
+    (*__check_next) = isspace(alias_val[val_len-1]) ? 1 : 0;
+    /* return the expanded alias words */
+    return nodes;
 }
 
 
 /*
  * return the command string of the command being parsed.
- */
+s */
 char *get_cmdwords(struct token_s *tok, int wstart)
 {
     if(!tok || !tok->src)
@@ -286,10 +309,7 @@ struct node_s *parse_complete_command(struct token_s *tok)
         tok = tokenize(tok->src);
     }
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens();
     /* return the parsed nodetree */
     return node;
 }
@@ -357,10 +377,7 @@ struct node_s *parse_list(struct token_s *tok)
         set_node_val_str(list, cmdline);
         free_malloced_str(cmdline);
         /* skip optional newlines */
-        while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-        {
-            tok = tokenize(tok->src);
-        }
+        skip_newline_tokens();
         return list;
     }
     /* parse the second list */
@@ -392,7 +409,7 @@ struct node_s *parse_and_or(struct token_s *tok)
      */
     struct node_s *and_or = NULL;
     struct node_s *node   = parse_pipeline(tok);
-    enum token_type last_type = 0;
+    enum token_type_e last_type = 0;
 loop:
     if(!node)
     {
@@ -412,10 +429,7 @@ loop:
         tok->src->wstart = tok->src->curpos+1;
         tok = tokenize(tok->src);
         /* skip optional newlines */
-        while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-        {
-            tok = tokenize(tok->src);
-        }
+        skip_newline_tokens();
     }
     else
     {
@@ -503,6 +517,7 @@ loop:
 struct node_s *parse_pipeline(struct token_s *tok)
 {
     int has_bang = 0;
+
     /* pipeline starts with a bang '!' keyword */
     if(tok->type == TOKEN_KEYWORD_BANG)
     {
@@ -510,44 +525,17 @@ struct node_s *parse_pipeline(struct token_s *tok)
         has_bang = 1;
         tok = tokenize(tok->src);
     }
+
     /*
      * a pipeline consists of a pipe sequence, optionally preceded by a bang.
      * parse the pipe sequence.
      */
-    struct node_s *node = parse_pipe_sequence(tok);
-    if(!node)
-    {
-        return NULL;
-    }
-    /* pipeline has a bang */
-    if(has_bang)
-    {
-        struct node_s *bang = new_node(NODE_BANG);
-        if(!bang)       /* insufficient memory */
-        {
-            free_node_tree(node);
-            return NULL;
-        }
-        add_child_node(bang, node);
-        bang->lineno = node->lineno;
-        node = bang;
-    }
-    /* return the pipeline nodetree */
-    return node;
-}
-
-
-/*
- * parse a pipe sequence that starts with the given token.
- * 
- * returns the parsed nodetree, NULL on parsing errors.
- */
-struct node_s *parse_pipe_sequence(struct token_s *tok)
-{
     struct node_s *pipe = NULL;
     struct node_s *node;
+
     /* save the start of this line */
     int wstart = tok->src->wstart;
+
     /*
      * pipeline consists of one or more command, separated by the pipe operator '|',
      * or the non-POSIX operator '|&'.. parse the next command.
@@ -558,28 +546,26 @@ struct node_s *parse_pipe_sequence(struct token_s *tok)
         if(node == node_func_def)
         {
             tok = get_current_token();
+
             /* save the start of this line */
             tok->src->wstart = tok->src->curpos;
+
             /* skip optional newlines */
-            while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-            {
-                tok = tokenize(tok->src);
-            }
+            skip_newline_tokens();
             continue;
         }
         tok = get_current_token();
+
         /* we have a pipe operator ('|' or '|&') */
         if(tok->type == TOKEN_PIPE || tok->type == TOKEN_PIPE_AND)
         {
-            enum token_type type = tok->type;
+            enum token_type_e type = tok->type;
             tok->src->wstart = tok->src->curpos;
             tok = tokenize(tok->src);
+
             /* skip optional newlines */
-            while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-            {
-                tok->src->wstart = tok->src->curpos;
-                tok = tokenize(tok->src);
-            }
+            skip_newline_tokens2();
+
             /* add implicit redirection of '2>&1' if the '|&' pipe operator was used */
             if(type == TOKEN_PIPE_AND)
             {
@@ -589,6 +575,44 @@ struct node_s *parse_pipe_sequence(struct token_s *tok)
                     add_child_node(node, io);
                 }
             }
+
+            /* reached EOF or error parsing */
+            if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
+            {
+                PARSER_RAISE_ERROR(UNEXPECTED_TOKEN, get_previous_token(), TOKEN_EOF);
+
+                /* free partially parsed nodetree */
+                free_node_tree(node);
+                if(pipe)
+                {
+                    free_node_tree(pipe);
+                }
+
+                /* exit in error if non-interactive shell. return NULL if interactive */
+                EXIT_IF_NONINTERACTIVE();
+                return NULL;
+            }
+
+            /* first command in the pipe sequence */
+            if(!pipe)
+            {
+                pipe = new_node(NODE_PIPE);
+                if(!pipe)       /* insufficient memory */
+                {
+                    free_node_tree(node);
+                    return NULL;
+                }
+                pipe->lineno = node->lineno;
+            }
+
+            /* add commands to the pipe sequence in reverse order (last command first) */
+            struct node_s *child = pipe->first_child;
+            node->next_sibling   = child;
+            if(child)
+            {
+                child->prev_sibling  = node;
+            }
+            pipe->first_child = node;
         }
         else
         {
@@ -602,66 +626,44 @@ struct node_s *parse_pipe_sequence(struct token_s *tok)
                 pipe->first_child    = node;
                 set_node_val_str(pipe, cmdline);
                 free_malloced_str(cmdline);
-                return pipe;
             }
             else
             {
-                //set_node_val_str(node, cmdline);
-                //free_malloced_str(cmdline);
-                return node;
+                pipe = node;
             }
+            break;
         }
-        /* reached EOF or error parsing */
-        if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
-        {
-            PARSER_RAISE_ERROR(UNEXPECTED_TOKEN, get_previous_token(), TOKEN_EOF);
-            /* free partially parsed nodetree */
-            free_node_tree(node);
-            if(pipe)
-            {
-                free_node_tree(pipe);
-            }
-            /* exit in error if non-interactive shell. return NULL if interactive */
-            EXIT_IF_NONINTERACTIVE();
-            return NULL;
-        }
-        /* first command in the pipe sequence */
-        if(!pipe)
-        {
-            pipe = new_node(NODE_PIPE);
-            if(!pipe)       /* insufficient memory */
-            {
-                free_node_tree(node);
-                return NULL;
-            }
-            pipe->lineno = node->lineno;
-        }
-        /* add commands to the pipe sequence in reverse order (last command first) */
-        struct node_s *child = pipe->first_child;
-        node->next_sibling   = child;
-        if(child)
-        {
-            child->prev_sibling  = node;
-        }
-        pipe->first_child = node;
     }
+
     /* failed to parse pipe sequence */
-    if(!node)
+    if(!pipe)
     {
-        if(pipe)
-        {
-            /* free partially parsed nodetree */
-            free_node_tree(pipe);
-        }
         return NULL;
     }
-    return node;
+
+    /* pipeline has a bang */
+    if(has_bang)
+    {
+        struct node_s *bang = new_node(NODE_BANG);
+        if(!bang)       /* insufficient memory */
+        {
+            free_node_tree(pipe);
+            return NULL;
+        }
+        add_child_node(bang, pipe);
+        bang->lineno = pipe->lineno;
+        pipe = bang;
+    }
+
+
+    /* return the pipeline nodetree */
+    return pipe;
 }
 
 
 /*
  * skip list separators '&' and ';'.
- * 
+ *
  * returns nothing.
  */
 void parse_separator(struct token_s *tok)
@@ -672,11 +674,7 @@ void parse_separator(struct token_s *tok)
         tok = tokenize(tok->src);
     }
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok->src->wstart = tok->src->curpos;
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens2();
 }
 
 
@@ -686,7 +684,7 @@ void parse_separator(struct token_s *tok)
  * 
  * returns the parsed nodetree, NULL on parsing errors.
  */
-struct node_s *parse_term(struct token_s *tok, enum token_type stop_at)
+struct node_s *parse_term(struct token_s *tok, enum token_type_e stop_at)
 {
     /* a term consists of one or more AND-OR lists. parse the first list */
     struct node_s *node = parse_and_or(tok);
@@ -695,17 +693,13 @@ struct node_s *parse_term(struct token_s *tok, enum token_type stop_at)
         return NULL;
     }
     tok = get_current_token();
-    enum token_type type = tok->type;
+    enum token_type_e type = tok->type;
     if(tok->type == TOKEN_AND || tok->type == TOKEN_SEMI || tok->type == TOKEN_NEWLINE)
     {
         tok->src->wstart = tok->src->curpos;
         tok = tokenize(tok->src);
         /* skip optional newlines */
-        while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-        {
-            tok->src->wstart = tok->src->curpos;
-            tok = tokenize(tok->src);
-        }
+        skip_newline_tokens2();
         /* stop if the current token is the list terminator */
         if(is_token_of_type(tok, stop_at))
         {
@@ -763,7 +757,7 @@ struct node_s *parse_term(struct token_s *tok, enum token_type stop_at)
  * 
  * returns the parsed nodetree, NULL on parsing errors.
  */
-struct node_s *parse_compound_list(struct token_s *tok, enum token_type stop_at)
+struct node_s *parse_compound_list(struct token_s *tok, enum token_type_e stop_at)
 {
     /* create a new node for the list */
     struct node_s *list = new_node(NODE_LIST);
@@ -772,11 +766,7 @@ struct node_s *parse_compound_list(struct token_s *tok, enum token_type stop_at)
         return NULL;
     }
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok->src->wstart = tok->src->curpos;
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens2();
     /* reached EOF or error parsing */
     if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
     {
@@ -1075,12 +1065,12 @@ struct node_s *parse_function_body(struct token_s *tok)
  */
 struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
 {
-    enum token_type err_tok;
+    enum token_type_e err_tok;
     /* special builtin utility names cannot be used as function names */
     if(is_special_builtin(tok->text))
     {
         PARSER_RAISE_ERROR_DESC(INVALID_FUNC_NAME, tok, tok->text);
-        set_exit_status(1);
+        set_internal_exit_status(1);
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
@@ -1138,7 +1128,7 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
     tok->linestart = l; tok->charno = c;
     symtab_entry_setval(func, cmdline);
     free_malloced_str(cmdline);
-    set_exit_status(0);
+    set_internal_exit_status(0);
     /*
      * we are not going to execute the function body right now, so return a dummy nodetree
      * to let the caller know we parsed the function definition successfully.
@@ -1147,7 +1137,7 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
     
 err:
     PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, err_tok);
-    set_exit_status(1);
+    set_internal_exit_status(1);
     rem_from_symtab(func, func_table);
     EXIT_IF_NONINTERACTIVE();
     return NULL;
@@ -1168,20 +1158,18 @@ struct node_s *parse_simple_command(struct token_s *tok)
         return NULL;
     }
     cmd->lineno = tok->lineno;
+
     /*
      * flag to indicate if we need to check the following word for alias substitution.
      */
     int alias_next_word = 0;
+
     /*
      *  parse the command prefix.. command prefixes can contain I/O redirections
      *  and assignment words.
      */
-    //int has_prefix = 0;
-    /* do we have a command prefix? */
     if(is_redirect_op(tok->text) || tok->type == TOKEN_IO_NUMBER || tok->type == TOKEN_ASSIGNMENT_WORD)
     {
-        //has_prefix = 1;
-        //tok = get_current_token();
         /* parse all the redirections and assignments in the command prefix */
         while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
         {
@@ -1217,6 +1205,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
             tok = tokenize(tok->src);
         }
     }
+
     /* parse the command word proper */
     if(tok->type != TOKEN_WORD)
     {
@@ -1224,7 +1213,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
         if(!cmd->children)
         {
             /* empty command */
-            free(cmd);
+            free_node_tree(cmd);
             cmd = NULL;
         }
         else
@@ -1236,47 +1225,50 @@ struct node_s *parse_simple_command(struct token_s *tok)
         /* return the parsed command prefix */
         return cmd;
     }
-    /* create a new node for the command word */
-    struct node_s *word = new_node(NODE_VAR);
-    if(!word)
-    {
-        /* free the partially parsed nodetree */
-        free_node_tree(cmd);
-        return NULL;
-    }
+
     /* check the command word for aliases */
-    if(optionx_set(OPTION_EXPAND_ALIASES))
+    int i;
+    struct node_s *word;
+    if(option_set('i') || optionx_set(OPTION_EXPAND_ALIASES))
     {
-        /* check first word for alias substitution */
-        check_word_for_alias_substitution(tok);
-        /* check if we need to alias-substitute the following word */
-        if(tok->text[tok->text_len-1] == ' ')
+        char *s = get_malloced_str(tok->text);
+        word = substitute_alias(s, &alias_next_word);
+        if(word)
         {
-            alias_next_word = 1;
+            add_child_node(cmd, word);
+            i = 0;
+            /*
+             * add_child_node() adds only one child to the parent's count.
+             * we need to manually count the rest of the children and add them.
+             */
+            while(word->next_sibling)
+            {
+                i++;
+                word = word->next_sibling;
+            }
+            cmd->children += i;
         }
+        else
+        {
+            word = new_node(NODE_VAR);
+            set_node_val_str(word, s);
+            add_child_node(cmd, word);
+        }
+        free_malloced_str(s);
     }
-    set_node_val_str(word, tok->text);
-    word->lineno = tok->lineno;
+
     /* is this a test or '[[' command? */
-    add_child_node(cmd, word);
-    int istest = (strcmp(tok->text, "[[") == 0) ? 2 :
-                 (strcmp(tok->text, "[" ) == 0) ? 1 : 0;
-    /*
-    if(has_prefix)
-    {
-        tok = tokenize(tok->src);
-    }
-    else
-    {
-        tok = get_current_token();
-    }
-    */
+    word = cmd->first_child;
+    int istest = (strcmp(word->val.str, "[[") == 0) ? 2 :
+                 (strcmp(word->val.str, "[" ) == 0) ? 1 : 0;
     tok = tokenize(tok->src);
+
     /* reached EOF */
     if(tok->type == TOKEN_EOF)
     {
         return cmd;
     }
+
     /* error getting next token */
     if(tok->type == TOKEN_ERROR)
     {
@@ -1284,11 +1276,14 @@ struct node_s *parse_simple_command(struct token_s *tok)
         free_node_tree(cmd);
         return NULL;
     }
+
     /* parse the command suffix */
     struct node_s *last = last_child(cmd);
     do
     {
-        /* parse all the redirections and assignments in the command suffix */
+        /*
+         * parse all the redirections and assignments in the command suffix.
+         */
         if(is_redirect_op(tok->text) || tok->type == TOKEN_IO_NUMBER)
         {
             struct node_s *redirect = parse_io_redirect(tok);
@@ -1338,9 +1333,12 @@ struct node_s *parse_simple_command(struct token_s *tok)
                 }
             }
             tok = get_current_token();
+            alias_next_word = 0;
             continue;
         }
-        /* we have a separator token */
+        /*
+         * we have a separator token.
+         */
         else if(is_separator_tok(tok->type))
         {
             /* finish parsing the command, unless its a 'test' command */
@@ -1348,6 +1346,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
             {
                 break;
             }
+
             /* the test command accepts !, &&, ||, (, ) */
             if(tok->type != TOKEN_KEYWORD_BANG && tok->type != TOKEN_AND_IF && 
                tok->type != TOKEN_OR_IF && tok->type != TOKEN_CLOSEBRACE &&
@@ -1355,6 +1354,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
             {
                 break;
             }
+            alias_next_word = 0;
         }
         /*
          * variable assignments in command suffixes are not POSIX-defined,
@@ -1373,34 +1373,55 @@ struct node_s *parse_simple_command(struct token_s *tok)
                 last = assign;
             }
             tok = tokenize(tok->src);
+            alias_next_word = 0;
             continue;
         }
-        /* normal word (command argument) */
-        struct node_s *word = new_node(NODE_VAR);
-        if(!word)
-        {
-            /* free the partially parsed nodetree */
-            free_node_tree(cmd);
-            return NULL;
-        }
-        /* check the command word for aliases */
+
+        /* normal word (command argument). check for aliases */
         if(alias_next_word)
         {
-            /* check first word for alias substitution */
-            check_word_for_alias_substitution(tok);
-            /* check if we need to alias-substitute the following word */
-            if(tok->text[tok->text_len-1] == ' ')
+            word = substitute_alias(tok->text, &alias_next_word);
+            if(word)
             {
-                alias_next_word = 1;
+                add_child_node(cmd, word);
+                i = 0;
+                /*
+                 * add_child_node() adds only one child to the parent's count.
+                 * we need to manually count the rest of the children and add them.
+                 */
+                while(word->next_sibling)
+                {
+                    i++;
+                    word = word->next_sibling;
+                }
+                cmd->children += i;
             }
             else
             {
-                alias_next_word = 0;
+                word = new_node(NODE_VAR);
+                if(!word)
+                {
+                    /* free the partially parsed nodetree */
+                    free_node_tree(cmd);
+                    return NULL;
+                }
+                set_node_val_str(word, tok->text);
+                add_child_node(cmd, word);
             }
         }
-        set_node_val_str(word, tok->text);
-        word->lineno = tok->lineno;
-        add_child_node(cmd, word);
+        else
+        {
+            word = new_node(NODE_VAR);
+            if(!word)
+            {
+                /* free the partially parsed nodetree */
+                free_node_tree(cmd);
+                return NULL;
+            }
+            set_node_val_str(word, tok->text);
+            word->lineno = tok->lineno;
+            add_child_node(cmd, word);
+        }
         last = word;
         tok = tokenize(tok->src);
         /*
@@ -1419,6 +1440,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
             break;
         }
     } while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR);
+
     /* check if we have successfully parsed the command */
     if(cmd)
     {
@@ -1426,6 +1448,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
         set_node_val_str(cmd, cmdline);   /* get the command line */
         free_malloced_str(cmdline);
     }
+
     /* return the parsed nodetree */
     return cmd;
 }
