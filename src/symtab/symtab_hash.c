@@ -67,7 +67,7 @@ uint32_t calc_symhash(struct symtab_s *table, char *text)
  * returns the table struct, or exits the shell in error if the table
  * could not be allocated.
  */
-struct symtab_s *alloc_hash_table()
+struct symtab_s *alloc_hash_table(void)
 {
     struct symtab_s *table = malloc(sizeof(struct symtab_s));
     if(!table)
@@ -92,7 +92,7 @@ struct symtab_s *alloc_hash_table()
  * initialize the symbol table stack.. called on shell startup..
  * does not return.. if there is an error, the shell exits.
  */
-void init_symtab()
+void init_symtab(void)
 {
     struct symtab_s *table = alloc_hash_table();
     table->level = 0;
@@ -132,7 +132,7 @@ void symtab_stack_add(struct symtab_s *symtab)
  * create an empty symbol table and push on top the stack.
  * returns the newly pushed symbol table.
  */
-struct symtab_s *symtab_stack_push()
+struct symtab_s *symtab_stack_push(void)
 {
     struct symtab_s *st = new_symtab(++symtab_level);
     symtab_stack_add(st);
@@ -146,7 +146,7 @@ struct symtab_s *symtab_stack_push()
  * function, in order to exit the local scope and return to the global scope.
  * returns the popped symbol table, or NULL if the stack is empty.
  */
-struct symtab_s *symtab_stack_pop()
+struct symtab_s *symtab_stack_pop(void)
 {
     /* can't pop past the global table */
     if(symtab_stack.symtab_count == 0)
@@ -314,7 +314,8 @@ int rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab)
             return 1;
         }
         /* check the next entry */
-        p = e, e = e->next;
+        p = e;
+        e = e->next;
     }
     return 0;
 }
@@ -448,7 +449,7 @@ struct symtab_entry_s *get_symtab_entry(char *str)
  * return a pointer to the local symbol table (this changes as we change
  * scope by calling functions and builtin utilities).
  */
-struct symtab_s *get_local_symtab()
+struct symtab_s *get_local_symtab(void)
 {
     return symtab_stack.local_symtab;
 }
@@ -458,7 +459,7 @@ struct symtab_s *get_local_symtab()
  * return a pointer to the global symbol table (this stays the same as long
  * as the shell is running).
  */
-struct symtab_s *get_global_symtab()
+struct symtab_s *get_global_symtab(void)
 {
     return symtab_stack.global_symtab;
 }
@@ -467,7 +468,7 @@ struct symtab_s *get_global_symtab()
 /*
  * return a pointer to the symbol table stack.
  */
-struct symtab_stack_s *get_symtab_stack()
+struct symtab_stack_s *get_symtab_stack(void)
 {
     return &symtab_stack;
 }
@@ -601,7 +602,7 @@ char *get_symbol_type_str(enum symbol_type type)
  * dump the local symbol table, by printing the symbols, their keys and values.
  * used in debugging the shell, as well as when we invoke `dump symtab`.
  */
-void dump_local_symtab()
+void dump_local_symtab(void)
 {
     struct symtab_s *symtab = symtab_stack.local_symtab;
     int i = 0;

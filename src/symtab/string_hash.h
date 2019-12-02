@@ -34,7 +34,7 @@ struct hashitem_s
     union
     {
         char *val;              /* string value */
-        unsigned int refs;      /*
+        long refs;              /*
                                  * number of references to this string.. used by
                                  * the string buffer in strbuf.c.
                                  */
@@ -50,12 +50,13 @@ struct hashtab_s
     struct  hashitem_s **items; /* the buckets array */
 };
 
-struct hashtab_s *new_hashtable();
+struct hashtab_s *new_hashtable(void);
 struct hashtab_s *new_hashtable_sz(int size);
 void   free_hashtable(struct hashtab_s *table);
 void   rem_all_items (struct hashtab_s *table, int free_index);
 void   rem_hash_item (struct hashtab_s *table, char *key);
 struct hashitem_s *add_hash_item(struct hashtab_s *table, char *key, char *value);
+struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, long value);
 struct hashitem_s *get_hash_item(struct hashtab_s *table, char *key);
 void   dump_hashtable(struct hashtab_s *table, char *format);
 

@@ -123,7 +123,7 @@ struct hashtab_s *new_hashtable_sz(int size)
  *
  * returns the table struct, or NULL if the table could not be allocated.
  */
-struct hashtab_s *new_hashtable()
+struct hashtab_s *new_hashtable(void)
 {
     return new_hashtable_sz(HASHTABLE_INIT_SIZE);
 }
@@ -313,7 +313,7 @@ struct hashitem_s *add_hash_item(struct hashtab_s *table, char *key, char *value
  * WARNING: DO NOT use this function at all, unless you are modifying the string
  *          buffer in strbuf.c and you know what you're doing.
  */
-struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, unsigned int value)
+struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, long value)
 {
     if(!table || !key)
     {
