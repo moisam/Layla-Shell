@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -35,6 +36,57 @@
 #include "../parser/parser.h"
 #include "../error/error.h"
 #include "../debug.h"
+
+
+/**********************************************
+ * Functions used by the back-end executor to
+ * perform I/O redirections of a command.
+ **********************************************/
+
+/* special value to represent an invalid variable */
+#define INVALID_VAR     ((char *)-1)
+
+/*
+ * when a builtin or function redirects one of the shell's standard streams,
+ * we store the original stream so that we can restore it after the builtin
+ * or function finishes execution.
+ */
+int saved_fd[3] = { -1, -1, -1 };
+
+/*
+ * if we are executing a builtin utility or a shell function, we need to save the
+ * state of the standard streams so that we can restore them after the utility or
+ * function finishes execution.
+ */
+void save_std(int fd)
+{
+    fflush(stdin);
+    fflush(stdout);
+    fflush(stderr);
+    saved_fd[fd] = dup(fd);
+}
+
+
+/*
+ * after a builtin utility or a shell function finishes execution, restore the
+ * standard streams if there were any I/O redirections.
+ */
+void restore_stds(void)
+{
+    fflush(stdin);
+    fflush(stdout);
+    fflush(stderr);
+    int i = 0;
+    for( ; i < 3; i++)
+    {
+        if(saved_fd[i] >= 0)
+        {
+            dup2(saved_fd[i], i);
+            close(saved_fd[i]);
+            saved_fd[i] = -1;
+        }
+    }
+}
 
 
 /*
@@ -54,16 +106,19 @@ void redirect_proc_do(char *cmdline, char op, char *tmpname)
         {
             return;
         }
+
         char c = cmdline[i];
         cmdline[i] = ' ';
         sprintf(buf, "{ %s} %c%s", cmdline+1, (op == '>') ? '<' : '>', tmpname);
         cmdline[i] = c;
+
         struct source_s src;
         src.buffer   = buf;
         src.bufsize  = j;
         src.curpos   = INIT_SRC_POS;
         src.srctype = SOURCE_FIFO;
         src.srcname = NULL;
+
         parse_and_execute(&src);
         unlink(tmpname);
         exit(exit_status);
@@ -141,6 +196,7 @@ char *redirect_proc(char op, char *cmdline)
     return NULL;
 }
 
+
 /*
  * get the slot belonging to this fileno, or else the first empty
  * slot in the redirection table. returns -1 if no slot is available.
@@ -157,6 +213,7 @@ int get_slot(int fileno, struct io_file_s *io_files)
     }
     return -1;
 }
+
 
 /*
  * prepare a redirection file from the given redirection node.
@@ -192,6 +249,7 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                 {
                     child2 = NULL;
                 }
+
                 /*
                  * if the path is '-', it means we need to close the fd, so we'll get the fd number
                  * from the shell variable where it was saved before.
@@ -213,6 +271,7 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                     }
                     break;
                 }
+
                 /* search for an available slot for the new file descriptor, starting with #10 */
                 for(fileno = 10; fileno < FOPEN_MAX; fileno++)
                 {
@@ -243,17 +302,22 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
         sprintf(buf, "%d", fileno);
         BACKEND_RAISE_ERROR(INVALID_REDIRECT_FILENO, buf, NULL);
         //fprintf(stderr, "%s: invalid redirection file number: %d\n", SHELL_NAME, fileno);
-        return -1;
+        return 0;
     }
     
     if((i = get_slot(fileno, io_files)) == -1)
     {
         fprintf(stderr, "%s: too many open files\n", SHELL_NAME);
-        return -1;
+        return 0;
     }
-    if(!do_io_redirect(child, &io_files[i]))
+
+    struct node_s *io = child->first_child;
+    int res = (io->type == NODE_IO_FILE) ?
+               file_redirect_prep(io, &io_files[i]) :
+               heredoc_redirect_prep(io, &io_files[i]);
+    if(!res)
     {
-        return -1;
+        return 0;
     }
     else
     {
@@ -273,7 +337,13 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                 {
                     if((i = get_slot(2, io_files)) != -1)
                     {
-                        do_io_redirect(node2, &io_files[i]);
+                        struct node_s *io = node2->first_child;
+                        int res = (io->type == NODE_IO_FILE) ? file_redirect_prep(io, &io_files[i]) :
+                                                               heredoc_redirect_prep(io, &io_files[i]);
+                        if(!res)
+                        {
+                            return 0;
+                        }
                         io_files[i].fileno = 2;
                     }
                     free_node_tree(node2);
@@ -281,32 +351,33 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                 else
                 {
                     fprintf(stderr, "%s: failed to duplicate stdout on stderr\n", SHELL_NAME);
-                    return -1;
+                    return 0;
                 }
             }
         }
     }
-    return 0;
+    return 1;
 }
 
 
 /*
  * initialize the redirection table for the command to be executed.
  */
-int redirect_prep(struct node_s *node, struct io_file_s *io_files)
+int init_redirect_list(struct node_s *node, struct io_file_s *io_files)
 {
     if(!io_files)
     {
         return 0;
     }
-    int  i;
+    int  i = 0;
     int  total_redirects = 0;
-    for(i = 0; i < FOPEN_MAX; i++)
+    for( ; i < FOPEN_MAX; i++)
     {
-        io_files[i].path       = NULL;
-        io_files[i].fileno     = -1;
-        io_files[i].duplicates = -1;
-        io_files[i].flags      =  0;
+        io_files[i].path        = NULL;
+        io_files[i].fileno      = -1;
+        io_files[i].duplicates  = -1;
+        io_files[i].open_mode   =  0;
+        io_files[i].extra_flags =  0;
     }
     if(!node)
     {
@@ -319,7 +390,7 @@ int redirect_prep(struct node_s *node, struct io_file_s *io_files)
     {
         if(child->type == NODE_IO_REDIRECT)
         {
-            if(redirect_prep_node(child, io_files) == -1)
+            if(!redirect_prep_node(child, io_files))
             {
                 total_redirects = -1;
             }
@@ -349,7 +420,7 @@ do {                                                    \
  * such as /dev/stdin.
  * returns the file descriptor on which the file is opened, -1 otherwise.
  */
-int open_special(char *path, int flags)
+int open_special(char *path, int mode)
 {
     int fd = -1, i, remote = 0;
     if(strstr(path, "/dev/fd/") == path)
@@ -363,7 +434,7 @@ int open_special(char *path, int flags)
     }
     else if(strcmp(path, "/dev/stdin") == 0)
     {
-        if(!flag_set(flags, R_FLAG))
+        if(!flag_set(mode, O_RDONLY) && !flag_set(mode, O_RDWR))
         {
             OPEN_SPECIAL_ERROR();
         }
@@ -371,7 +442,7 @@ int open_special(char *path, int flags)
     }
     else if(strcmp(path, "/dev/stdout") == 0)
     {
-        if(!flag_set(flags, R_FLAG))
+        if(!flag_set(mode, O_RDWR))
         {
             OPEN_SPECIAL_ERROR();
         }
@@ -379,7 +450,7 @@ int open_special(char *path, int flags)
     }
     else if(strcmp(path, "/dev/stderr") == 0)
     {
-        if(!flag_set(flags, R_FLAG))
+        if(!flag_set(mode, O_RDWR))
         {
             OPEN_SPECIAL_ERROR();
         }
@@ -393,6 +464,7 @@ int open_special(char *path, int flags)
     {
         remote = 2;
     }
+
     if(remote)
     {
         /* get the hostname and port parts */
@@ -450,7 +522,7 @@ int open_special(char *path, int flags)
  * if called from the shell itself, the redirections will affect the file descriptors
  * of the shell process.
  */
-int __redirect_do(struct io_file_s *io_files, int do_savestd)
+int redirect_do(struct io_file_s *io_files, int do_savestd)
 {
     int i, j;
     /* perform the redirections */
@@ -468,6 +540,7 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
                     save_std(j);
                 }
                 close(j);
+
                 /* POSIX says we can open an "unspecified file" in this case */
                 if(j == 0)
                 {
@@ -483,26 +556,27 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
                 path = word_expand_to_str(path);
                 if(!path)
                 {
-                    continue;
+                    fprintf(stderr, "%s: failed to expand path: %s\n", SHELL_NAME, io_files[i].path);
+                    return 0;
                 }
 
                 /* check the noclobber situation */
-                if(flag_set(io_files[i].flags, W_FLAG) && option_set('C'))
+                if(io_files[i].open_mode == MODE_WRITE && option_set('C'))
                 {
-                    struct stat st;
-                    if(stat(path, &st) == 0)
+                    if(!flag_set(io_files[i].extra_flags, NOCLOBBER_FLAG))
                     {
-                        if(S_ISREG(st.st_mode))
+                        struct stat st;
+                        if(stat(path, &st) == 0)
                         {
-                            free(path);
-                            continue;
+                            if(S_ISREG(st.st_mode))
+                            {
+                                fprintf(stderr, "%s: redirection fail: file already exists: %s\n", SHELL_NAME, path);
+                                free(path);
+                                return 0;
+                            }
                         }
                     }
-                    io_files[i].flags |= O_EXCL;
-                }
-                if(io_files[i].flags == C_FLAG)
-                {
-                    io_files[i].flags = W_FLAG;
+                    io_files[i].open_mode |= O_EXCL;
                 }
                 
                 /*
@@ -531,7 +605,7 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
                             free(p2);
                             BACKEND_RAISE_ERROR(FAILED_REDIRECT, "invalid file offset", expr);
                             EXIT_IF_NONINTERACTIVE();
-                            continue;
+                            return 0;
                         }
                         free(p2);
                         /* now seek to the given offset */
@@ -539,30 +613,30 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
                         {
                             BACKEND_RAISE_ERROR(FAILED_REDIRECT, "failed to lseek file", strerror(errno));
                             EXIT_IF_NONINTERACTIVE();
-                            continue;
+                            return 0;
                         }
                     }
                     else
                     {
                             BACKEND_RAISE_ERROR(FAILED_REDIRECT, "invalid file offset", expr);
                             EXIT_IF_NONINTERACTIVE();
-                            continue;
+                            return 0;
                     }
                 }
                 
                 /*
                  * 'normal' file redirection.
                  */
-                int fd = open(path, io_files[i].flags, FILE_MASK);
+                int fd = open(path, io_files[i].open_mode, FILE_MASK);
                 if(fd < 0)
                 {
                     //errno = 0;
-                    if((fd = open_special(path, io_files[i].flags)) < 0)
+                    if((fd = open_special(path, io_files[i].open_mode)) < 0)
                     {
                         BACKEND_RAISE_ERROR(FAILED_TO_OPEN_FILE, io_files[i].path, strerror(errno));
                         EXIT_IF_NONINTERACTIVE();
                         free(path);
-                        continue;
+                        return 0;
                     }
                 }
 
@@ -581,44 +655,43 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
         }
         else if(io_files[i].duplicates >= 0)
         {
-            if(io_files[i].flags == C_FLAG)
+            struct io_file_s *f = &io_files[i];
+            int flags2 = fcntl(f->duplicates, F_GETFL);
+
+            int err = 0;
+            switch(f->open_mode)
             {
-                io_files[i].flags = W_FLAG;
-            }
-            int fd2    = io_files[i].duplicates;
-            int flags1 = io_files[i].flags;
-            int flags2 = fcntl(fd2, F_GETFL);
-            /* special flag for heredocs */
-            if(flags1 != (int)CLOOPEN)
-            {
-                if(flag_set(flags1, W_FLAG) || flag_set(flags1, A_FLAG))
-                {
+                case MODE_WRITE:
+                case MODE_APPEND:
                     if(!flag_set(flags2, O_WRONLY) && !flag_set(flags2, O_RDWR))
                     {
-                        BACKEND_RAISE_ERROR(FAILED_REDIRECT, NULL, NULL);
-                        EXIT_IF_NONINTERACTIVE();
-                        continue;
+                        err = 1;
                     }
-                }
-                if((flags1 & R_FLAG))
-                {
+                    break;
+
+                case MODE_READ:
                     if(!flag_set(flags2, O_RDONLY) && !flag_set(flags2, O_RDWR))
                     {
-                        BACKEND_RAISE_ERROR(FAILED_REDIRECT, NULL, NULL);
-                        EXIT_IF_NONINTERACTIVE();
-                        continue;
+                        err = 1;
                     }
-                }
+                    break;
             }
-// _dup:
+            /* if error, bail out on all redirections */
+            if(err)
+            {
+                BACKEND_RAISE_ERROR(FAILED_REDIRECT, NULL, NULL);
+                EXIT_IF_NONINTERACTIVE();
+                return 0;
+            }
+
             if(j <= 2 && do_savestd)
             {
                 save_std(j);
             }
-            dup2(io_files[i].duplicates, j);
-            if(flag_set(io_files[i].flags, CLOOPEN))
+            dup2(f->duplicates, j);
+            if(flag_set(f->extra_flags, CLOOPEN_FLAG))
             {
-                close(io_files[i].duplicates);
+                close(f->duplicates);
             }
         }
     } /* end for */
@@ -629,40 +702,29 @@ int __redirect_do(struct io_file_s *io_files, int do_savestd)
 /*
  * prepare a redirection list and then execute the redirections.
  */
-int redirect_do(struct node_s *redirect_list)
+int redirect_prep_and_do(struct node_s *redirect_list)
 {
     if(!redirect_list)
     {
         return 1;
     }
     struct io_file_s io_files[FOPEN_MAX];
-    if(redirect_prep(redirect_list, io_files) == -1)
+    if(init_redirect_list(redirect_list, io_files) == -1)
     {
         return 0;
     }
-    if(!__redirect_do(io_files, 1))
+    if(!redirect_do(io_files, 1))
     {
         return 0;
     }
-    do_restore_std = 0;
     return 1;
-}
-
-
-/*
- * restore the standard streams if they have been redirected.
- */
-void redirect_restore()
-{
-    do_restore_std = 1;
-    restore_std();
 }
 
 
 /*
  * prepare an I/O redirection for a file.
  */
-int  do_io_file(struct node_s *node, struct io_file_s *io_file)
+int file_redirect_prep(struct node_s *node, struct io_file_s *io_file)
 {
     int fileno     = -1;
     int duplicates = 0;
@@ -693,38 +755,39 @@ int  do_io_file(struct node_s *node, struct io_file_s *io_file)
     switch(node->val.chr)
     {
         case IO_FILE_LESS     :
-            io_file->flags = R_FLAG;
+            io_file->open_mode = MODE_READ;
             break;
             
         case IO_FILE_LESSAND  :
             duplicates = 1;
-            io_file->flags = R_FLAG;
+            io_file->open_mode = MODE_READ;
             break;
             
         case IO_FILE_LESSGREAT:
-            io_file->flags = R_FLAG|W_FLAG;
+            io_file->open_mode = MODE_READ|MODE_WRITE;
             break;
             
         case IO_FILE_CLOBBER  :
-            io_file->flags = C_FLAG;
+            io_file->open_mode   = MODE_WRITE;
+            io_file->extra_flags = NOCLOBBER_FLAG;
             break;
             
         case IO_FILE_GREAT    :
-            io_file->flags = W_FLAG;
+            io_file->open_mode = MODE_WRITE;
             break;
             
         case IO_FILE_GREATAND :
             duplicates = 1;
-            io_file->flags = W_FLAG;
+            io_file->open_mode = MODE_WRITE;
             break;
             
         case IO_FILE_AND_GREAT_GREAT:
             duplicates = 1;
-            io_file->flags = A_FLAG;
+            io_file->open_mode = MODE_APPEND;
             break;
             
         case IO_FILE_DGREAT   :
-            io_file->flags = A_FLAG;
+            io_file->open_mode = MODE_APPEND;
             break;
     }
 
@@ -788,7 +851,7 @@ int  do_io_file(struct node_s *node, struct io_file_s *io_file)
         /* >&n- and <&n-, but don't close coproc files */
         if(str[strlen(str)-1] == '-' && strcmp(str, "p-"))
         {
-            io_file->flags |= CLOOPEN;
+            io_file->extra_flags |= CLOOPEN_FLAG;
         }
         io_file->duplicates = fileno;
         io_file->path       = NULL;
@@ -813,55 +876,261 @@ invalid:
 
 
 /*
+ * when preparing a here-document redirection, perform word expansion on the word
+ * starting at *p and counting len characters.
+ * this function calls the function passed in the third parameter to do the actual
+ * expansion, then prints the expanded result to out, which should be a temp file.
+ */
+void heredoc_substitute_word(char *p, size_t len, char *(func)(char *), FILE *out)
+{
+    /* extract the word to be substituted */
+    char *tmp = malloc(len+1);
+    if(!tmp)
+    {
+        char *p2 = p;
+        while(len--)
+        {
+            fputc(*p2, out);
+            p2++;
+        }
+        return;
+    }
+    strncpy(tmp, p, len);
+    tmp[len] = '\0';
+    /* and expand it */
+    char *tmp2 = func(tmp);
+    if(tmp2 && tmp2 != INVALID_VAR)
+    {
+        fprintf(out, "%s", tmp2);
+        free(tmp2);
+    }
+    else
+    {
+        fprintf(out, "%s", tmp);
+    }
+    free(tmp);
+}
+
+
+/*
  * prepare an I/O redirection for a here document.
  */
-int  do_io_here(struct node_s *node, struct io_file_s *io_file)
+int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
 {
     struct node_s *child = node->first_child;
     if(!child)
     {
         return 0;
     }
+
+    /* we implement here-documents as temp files */
     char *heredoc = child->val.str;
     FILE *tmp = tmpfile();
     if(!tmp)
     {
         return 0;
     }
-    if(node->val.chr == IO_HERE_EXPAND)
-    {
-        struct word_s *head = word_expand(heredoc);
-        struct word_s *w = head;
-        while(w)
-        {
-            fprintf(tmp, "%s", w->data);
-            w = w->next;
-        }
-        free_all_words(head);
-    }
-    else
+
+    /* determine whether to word-expand the here-document body or not */
+    if(node->val.chr == IO_HERE_NOEXPAND)
     {
         fprintf(tmp, "%s", heredoc);
     }
+    else
+    {
+        size_t len, i;
+        char *p = heredoc, *p2;
+        char c;
+        char *(*func)(char *);
+
+        do
+        {
+            switch(*p)
+            {
+                case '\\':
+                    /* skip \\n */
+                    if(p[1] == '\n')
+                    {
+                        p++;
+                        break;
+                    }
+
+                    /* skip backslash-quoted '`', '$' and '\' */
+                    if(p[1] == '`' || p[1] == '$' || p[1] == '\\')
+                    {
+                        p++;
+                    }
+                    fputc(*p, tmp);
+                    break;
+
+                case '`':
+                    /* find the closing back quote */
+                    if((len = find_closing_quote(p, 0)) == 0)
+                    {
+                        /* not found. print the ` and break */
+                        fputc(*p, tmp);
+                        break;
+                    }
+                    /* otherwise, extract the command and substitute its output */
+                    heredoc_substitute_word(p, len+1, command_substitute, tmp);
+                    p += len;
+                    break;
+
+                /*
+                 * the $ sign might introduce:
+                 * - ANSI-C strings: $''
+                 * - arithmetic expansions (non-POSIX): $[]
+                 * - parameter expansions: ${var} or $var
+                 * - command substitutions: $()
+                 * - arithmetic expansions (POSIX): $(())
+                 */
+                case '$':
+                    c = p[1];
+                    switch(c)
+                    {
+                        /*
+                         * ANSI-C string
+                         */
+                        case '\'':
+                            /* find the closing quote */
+                            if((len = find_closing_quote(p+1, 1)) == 0)
+                            {
+                                /* not found. print the ' and break */
+                                fputc(*p, tmp);
+                                break;
+                            }
+                            /* otherwise, extract the string and substitute its value */
+                            heredoc_substitute_word(p, len+2, ansic_expand, tmp);
+                            p += len;
+                            break;
+
+                    /*
+                     * $[ ... ] is a deprecated form of integer arithmetic, similar to (( ... )).
+                     */
+                        case '{':
+                        case '[':
+                            /* find the closing quote */
+                            if((len = find_closing_brace(p+1)) == 0)
+                            {
+                                /* not found. print the { or [ and break */
+                                fputc(*p, tmp);
+                                break;
+                            }
+                            /* otherwise, extract the expression and substitute its value */
+                            func = (c == '[') ? arithm_expand : var_expand;
+                            heredoc_substitute_word(p, len+2, func, tmp);
+                            p += len;
+                            break;
+
+                        /*
+                         * arithmetic expansion $(()) or command substitution $().
+                         */
+                        case '(':
+                            /* check if we have one or two opening braces */
+                            i = 0;
+                            if(p[2] == '(')
+                            {
+                                i++;
+                            }
+                            /* find the closing quote */
+                            if((len = find_closing_brace(p+1)) == 0)
+                            {
+                                /* not found. print the ( and break */
+                                fputc(*p, tmp);
+                                break;
+                            }
+                            /*
+                             * otherwise, extract the expression and substitute its value.
+                             * if we have one brace (i == 0), we'll perform command substitution.
+                             * otherwise, arithmetic expansion.
+                             */
+                            func = i ? arithm_expand : command_substitute;
+                            heredoc_substitute_word(p, len+2, func, tmp);
+                            p += len;
+                            break;
+
+                        /*
+                         * special variable substitution.
+                         */
+                        case '#':
+                            p++;
+                            /*
+                             * $#@ and $#* both give the same result as $# (ksh extension).
+                             */
+                            if(p[1] == '@' || p[1] == '*')
+                            {
+                                p++;
+                            }
+                            char p3[4];
+                            sprintf(p3, "$#");
+                            heredoc_substitute_word(p3, 2, var_expand, tmp);
+                            break;
+
+                        case '@':
+                        case '*':
+                        case '!':
+                        case '?':
+                        case '$':
+                        case '-':
+                        case '_':
+                        case '<':
+                        case '0':
+                        case '1':
+                        case '2':
+                        case '3':
+                        case '4':
+                        case '5':
+                        case '6':
+                        case '7':
+                        case '8':
+                        case '9':
+                            heredoc_substitute_word(p, 2, var_expand, tmp);
+                            p++;
+                            break;
+
+                        default:
+                            /* var names must start with an alphabetic char or _ */
+                            if(!isalpha(p[1]) && p[1] != '_')
+                            {
+                                fputc(*p, tmp);
+                                break;
+                            }
+                            p2 = p+1;
+                            /* get the end of the var name */
+                            while(*p2)
+                            {
+                                if(!isalnum(*p2) && *p2 != '_')
+                                {
+                                    break;
+                                }
+                                p2++;
+                            }
+                            /* empty name */
+                            if(p2 == p+1)
+                            {
+                                fputc(*p, tmp);
+                                break;
+                            }
+                            /* perform variable expansion */
+                            len = p2-p;
+                            heredoc_substitute_word(p, len, var_expand, tmp);
+                            p += len-1;
+                            break;
+                    }
+                    break;
+
+                default:
+                    fputc(*p, tmp);
+                    break;
+            }
+        } while(*(++p));
+    }
+
     int fd = fileno(tmp);
     rewind(tmp);
-    io_file->duplicates = fd;
-    io_file->path       = NULL;
-    io_file->flags      = CLOOPEN;
+    io_file->duplicates  = fd;
+    io_file->path        = NULL;
+    io_file->extra_flags = CLOOPEN_FLAG;
+    io_file->open_mode   = fcntl(fd, F_GETFL);
     return 1;
-}
-
-
-/*
- * prepare an I/O redirection for a file or a here document by calling the
- * appropriate delegate function to handle the redirection.
- */
-int  do_io_redirect(struct node_s *node, struct io_file_s *io_file)
-{
-    struct node_s *io = node->first_child;
-    if(io->type == NODE_IO_FILE)
-    {
-        return do_io_file(io, io_file);
-    }
-    return do_io_here(io, io_file);
 }

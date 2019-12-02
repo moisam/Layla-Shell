@@ -55,7 +55,7 @@ int req_continue   = 0;     /* if set, continue was encountered in a loop */
  * returns 0, unless an error occurs (such as an invalid argument being passed,
  * or 'break' being called outside a loop). in case of error, 1 is returned.
  */
-int __break(int argc, char **argv)
+int break_builtin(int argc, char **argv)
 {
     if(!cur_loop_level)
     {
@@ -93,7 +93,7 @@ int __break(int argc, char **argv)
  * returns 0, unless an error occurs (such as an invalid argument being passed,
  * or 'continue' being called outside a loop). in case of error, 1 is returned.
  */
-int __continue(int argc, char **argv)
+int continue_builtin(int argc, char **argv)
 {
     if(!cur_loop_level)
     {
@@ -341,7 +341,7 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
     struct node_s *commands = expr3->next_sibling;
     if(!commands)
     {
-        set_exit_status(0);
+        set_internal_exit_status(0);
         return 1;
     }
     /* redirects specific to the loop should override global ones */
@@ -351,9 +351,10 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
     {
         redirect_list = local_redirects;
     }
+
     if(redirect_list)
     {
-        if(!redirect_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list))
         {
             return 0;
         }
@@ -367,7 +368,7 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
         str2 = arithm_expand(str);
         if(!str2)     /* invalid expr */
         {
-            redirect_restore();
+            restore_stds();
             return 0;
         }
         free(str2);
@@ -433,7 +434,7 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
                 str2 = arithm_expand(str);
                 if(!str2)     /* invalid expr */
                 {
-                    redirect_restore();
+                    restore_stds();
                     return 0;
                 }
                 free(str2);
@@ -446,7 +447,11 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
         }
     }
     cur_loop_level--;
-    redirect_restore();
+
+    if(local_redirects)
+    {
+        restore_stds();
+    }
     return res;
 }
 
@@ -481,7 +486,7 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
                               index->next_sibling;
     if(!commands)
     {
-        set_exit_status(0);
+        set_internal_exit_status(0);
         return 1;
     }
     /* redirects specific to the loop should override global ones */
@@ -493,7 +498,7 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
     }
     if(redirect_list)
     {
-        if(!redirect_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list))
         {
             return 0;
         }
@@ -504,8 +509,8 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
     int i;
     if(!count || !list)
     {
-        set_exit_status(0);
-        redirect_restore();
+        set_internal_exit_status(0);
+        restore_stds();
         return 1;
     }
 
@@ -519,7 +524,7 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
      * we set FLAG_CMD_EXPORT so that the index var will be exported to all commands
      * inside the for loop.
      */
-    if(__set(index_name, NULL, 0, FLAG_CMD_EXPORT, 0) == -1)
+    if(do_set(index_name, NULL, 0, FLAG_CMD_EXPORT, 0) == -1)
     {
         fprintf(stderr, "%s: can't assign to readonly variable\n", SHELL_NAME);
         goto end;
@@ -528,7 +533,7 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
 // loop:
     for( ; j < count; j++)
     {
-        if(__set(index_name, list[j], 0, 0, 0) == -1)
+        if(do_set(index_name, list[j], 0, 0, 0) == -1)
         {
             fprintf(stderr, "%s: can't assign to readonly variable\n", SHELL_NAME);
             res = 0;
@@ -567,7 +572,11 @@ end:
     //free(list[0]);
     free(list);
     cur_loop_level--;
-    redirect_restore();
+
+    if(local_redirects)
+    {
+        restore_stds();
+    }
     return res;
 }
 
@@ -600,7 +609,7 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
                               index->next_sibling;
     if(!commands)
     {
-        set_exit_status(0);
+        set_internal_exit_status(0);
         return 1;
     }
     /* redirects specific to the loop should override global ones */
@@ -612,7 +621,7 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
     }
     if(redirect_list)
     {
-        if(!redirect_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list))
         {
             return 0;
         }
@@ -622,14 +631,14 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
     int i;
     if(!count || !list)
     {
-        set_exit_status(0);
-        redirect_restore();
+        set_internal_exit_status(0);
+        restore_stds();
         return 1;
     }
     
     /* we should now be set at the first command inside the for loop */
     char *index_name = index->val.str;
-    __set(index_name, NULL, 0, 0, 0);
+    do_set(index_name, NULL, 0, 0, 0);
     int j     = 0;
     int res   = 0;
     int endme = 0;
@@ -641,7 +650,7 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
     for(;;)
     {
         print_prompt3();
-        if(__read(2, (char *[]){ "read", "REPLY" }) != 0)
+        if(read_builtin(2, (char *[]){ "read", "REPLY" }) != 0)
         {
             res = 0;
             fprintf(stderr, "\n\n");
@@ -674,7 +683,7 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
             symtab_entry_setval(entry, NULL);
             continue;
         }
-        __set(index_name, list[sel-1], 0, 0, 0);
+        do_set(index_name, list[sel-1], 0, 0, 0);
         if(!do_do_group(src, commands, NULL /* redirect_list */))
         {
             res = 1;
@@ -716,7 +725,11 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
     //free(list[0]);
     free(list);
     cur_loop_level--;
-    redirect_restore();
+
+    if(local_redirects)
+    {
+        restore_stds();
+    }
     return res;
 }
 
@@ -746,7 +759,7 @@ int  do_while_clause(struct source_s *src, struct node_s *node, struct node_s *r
     }
     if(redirect_list)
     {
-        if(!redirect_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list))
         {
             return 0;
         }
@@ -763,7 +776,7 @@ int  do_while_clause(struct source_s *src, struct node_s *node, struct node_s *r
             cur_loop_level--;
             if(local_redirects)
             {
-                redirect_restore();
+                restore_stds();
             }
             return 0;
         }
@@ -799,20 +812,21 @@ int  do_while_clause(struct source_s *src, struct node_s *node, struct node_s *r
         {
             if(first_round)
             {
-                set_exit_status(0);
+                set_internal_exit_status(0);
             }
             cur_loop_level--;
             if(local_redirects)
             {
-                redirect_restore();
+                restore_stds();
             }
             return 1;
         }
     } while(1);
     cur_loop_level--;
+
     if(local_redirects)
     {
-        redirect_restore();
+        restore_stds();
     }
     return res;
 }
@@ -843,7 +857,7 @@ int  do_until_clause(struct source_s *src, struct node_s *node, struct node_s *r
     }
     if(redirect_list)
     {
-        if(!redirect_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list))
         {
             return 0;
         }
@@ -860,7 +874,7 @@ int  do_until_clause(struct source_s *src, struct node_s *node, struct node_s *r
             cur_loop_level--;
             if(local_redirects)
             {
-                redirect_restore();
+                restore_stds();
             }
             return 0;
         }
@@ -868,12 +882,12 @@ int  do_until_clause(struct source_s *src, struct node_s *node, struct node_s *r
         {
             if(first_round)
             {
-                set_exit_status(0);
+                set_internal_exit_status(0);
             }
             cur_loop_level--;
             if(local_redirects)
             {
-                redirect_restore();
+                restore_stds();
             }
             return 1;
         }
@@ -907,9 +921,10 @@ int  do_until_clause(struct source_s *src, struct node_s *node, struct node_s *r
         }
     } while(1);
     cur_loop_level--;
+
     if(local_redirects)
     {
-        redirect_restore();
+        restore_stds();
     }
     return res;
 }

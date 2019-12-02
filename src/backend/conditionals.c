@@ -127,7 +127,7 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
     }
     if(redirect_list)
     {
-        if(!redirect_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list))
         {
             return 0;
         }
@@ -140,7 +140,7 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
         BACKEND_RAISE_ERROR(EMPTY_CASE_WORD, NULL, NULL);
         if(local_redirects)
         {
-            redirect_restore();
+            restore_stds();
         }
         /* POSIX says non-interactive shell should exit on syntax errors */
         EXIT_IF_NONINTERACTIVE();
@@ -187,13 +187,13 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
         }
         item = item->next_sibling;
     }
-    set_exit_status(0);
+    set_internal_exit_status(0);
     
 fin:
     free(word);
     if(local_redirects)
     {
-        redirect_restore();
+        restore_stds();
     }
     return 1;
 }
@@ -231,7 +231,7 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
     }
     if(redirect_list)
     {
-        if(!redirect_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list))
         {
             return 0;
         }
@@ -241,7 +241,7 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
     {
         if(local_redirects)
         {
-            redirect_restore();
+            restore_stds();
         }
         return 0;
     }
@@ -251,7 +251,7 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
         ERR_TRAP_OR_EXIT();
         if(local_redirects)
         {
-            redirect_restore();
+            restore_stds();
         }
         return res;
     }
@@ -259,7 +259,7 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
     {
         if(local_redirects)
         {
-            redirect_restore();
+            restore_stds();
         }
         return 1;
     }
@@ -269,7 +269,7 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
         ERR_TRAP_OR_EXIT();
         if(local_redirects)
         {
-            redirect_restore();
+            restore_stds();
         }
         return res;
     }
@@ -277,7 +277,7 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
     ERR_TRAP_OR_EXIT();
     if(local_redirects)
     {
-        redirect_restore();
+        restore_stds();
     }
     return res;
 }

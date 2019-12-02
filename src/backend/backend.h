@@ -28,22 +28,13 @@
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
 
-struct io_file_s
-{
-    char *path;
-    int   fileno;
-    int   duplicates;
-    int   flags;
-};
-
 int   do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, char **));
-pid_t fork_child();
+pid_t fork_child(void);
 
 int   do_complete_command(struct source_s *src, struct node_s *node);
 int   do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
 int   do_and_or(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg);
 int   do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int wait);
-int   do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int wait);
 void  do_separator(struct source_s *src, struct node_s *node);
 int   do_term(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
 int   do_compound_list(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
@@ -65,14 +56,14 @@ int   do_simple_command(struct source_s *src, struct node_s *node, struct node_s
 int   do_command(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fork);
 //int   do_translation_unit(struct source_s *src, struct node_s *node);
 char **__make_list(struct word_s *first_tok, int *token_count);
-void  asynchronous_prologue();
-void  inc_subshell_var();
+void  asynchronous_prologue(void);
+void  inc_subshell_var(void);
 
 int   do_special_builtin(int argc, char **argv);
 int   do_regular_builtin(int argc, char **argv);
 
-int   __break(int argc, char **argv);
-int   __continue(int argc, char **argv);
+int   break_builtin(int argc, char **argv);
+int   continue_builtin(int argc, char **argv);
 // void SIGCHLD_handler(int signum);
 
 /* pattern.c */
@@ -84,20 +75,16 @@ int   match_suffix(char *pattern, char *str, int longest);
 int   has_regex_chars(char *p, size_t len);
 int   match_ignore(char *pattern, char *filename);
 
-void  save_std(int fd);
-void  restore_std();
-
 /* redirect.c */
 int   redirect_prep_node(struct node_s *child, struct io_file_s *io_files);
-int   redirect_prep(struct node_s *node, struct io_file_s *io_files);
-int   redirect_do(struct node_s *redirect_list);
-void  redirect_restore();
+int   init_redirect_list(struct node_s *node, struct io_file_s *io_files);
+int   redirect_prep_and_do(struct node_s *redirect_list);
 char *redirect_proc(char op, char *cmdline);
-int   do_io_file(struct node_s *node, struct io_file_s *io_file);
-int   do_io_here(struct node_s *node, struct io_file_s *io_file);
-int   do_io_redirect(struct node_s *node, struct io_file_s *io_file);
-//int   do_redirect_list(struct node_s *node, struct io_file_s *io_file);
-int   __redirect_do(struct io_file_s *io_files, int do_savestd);
+int   file_redirect_prep(struct node_s *node, struct io_file_s *io_file);
+int   heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file);
+int   redirect_do(struct io_file_s *io_files, int do_savestd);
+void  save_std(int fd);
+void  restore_stds(void);
 
 /* coprocess file descriptors */
 extern int rfiledes[];

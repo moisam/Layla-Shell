@@ -82,9 +82,6 @@ do {                                                \
 /* defined in jobs.c */
 int rip_dead(pid_t pid);
 
-/* defined in builtins/coproc.c */
-int coproc(int argc, char **argv, struct io_file_s *io_files);
-
 /* defined below */
 char *get_cmdstr(struct node_s *cmd);
 
@@ -94,7 +91,7 @@ char *get_cmdstr(struct node_s *cmd);
  * if successful, the function returns the pid of the new child process (in the parent), or
  * zero (in the child), or a negative value in case of error.
  */
-pid_t fork_child()
+pid_t fork_child(void)
 {
     int tries = 5;
     useconds_t usecs = 1;
@@ -122,13 +119,13 @@ pid_t fork_child()
 
 /*
  * wait on the child process with the given pid until it changes status.
- * if the struct job *job is passed, wait for all processes in the job to finish,
+ * if the struct job_s *job is passed, wait for all processes in the job to finish,
  * then update the job's status. if the command is stopped or signalled and no job
  * has been added for it, use the *cmd nodetree to re-construct the command line
  * and add it as a background job.
  * the return value is the exit status of the waited-for child process, or -1 on error.
  */
-int wait_on_child(pid_t pid, struct node_s *cmd, struct job *job)
+int wait_on_child(pid_t pid, struct node_s *cmd, struct job_s *job)
 {
     int   status = 0;
     pid_t res;
@@ -207,7 +204,7 @@ _wait:
  * and read from /dev/null.
  * we will do this preparation in this function.
  */
-void asynchronous_prologue()
+void asynchronous_prologue(void)
 {
     /*
      * POSIX says we should restore non-ignored signals to their
@@ -241,7 +238,10 @@ static inline void set_underscore_val(char *val, int set_env)
         return;
     }
     symtab_entry_setval(entry, val);
-    if(set_env) setenv("_", val, 1);
+    if(set_env)
+    {
+        setenv("_", val, 1);
+    }
 }
 
 
@@ -302,8 +302,8 @@ void do_exec_script(char *path, int argc, char **argv)
     {
         /* in tcsh, special alias 'shell' give the full pathname of the shell to use */
         char *s = "shell";
-        char *sh = parse_alias(s);
-        if(sh != s && sh != null_alias)
+        char *sh = get_alias_val(s);
+        if(sh && sh != s)
         {
              space = strchr(sh, ' ');
              argv2[i++] = sh;
@@ -566,7 +566,7 @@ int  do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_
         }
         else if(pid > 0)
         {
-            struct job *job;
+            struct job_s *job;
             char *cmdstr = get_cmdstr(node);
             /*
              * add as a new job if job control is on, or set $! if job control is off.
@@ -597,7 +597,7 @@ int  do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_
                     fprintf(stderr, "[%d] %u\n", job->job_num, pid);
                 }
             }
-            set_exit_status(0);
+            set_internal_exit_status(0);
             /*
              * give the child process a headstart, in case the scheduler decided to run us first.
              * we wouldn't need to do this if we used vfork() instead of fork(), but the former has
@@ -721,34 +721,18 @@ loop2:
 
 
 /*
- * execute a pipeline, which consists of a group of commands joined by the
- * pipe operator '|'. for each pipe operator, we create a two-way pipe. we join
- * stdout of the command on the leftside of the operator to stdin of the command
- * on the rightside of the operator. if the pipeline is preceded by a bang '!',
- * we logically inverse the pipeline's exit status after it finishes execution.
- * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
- * the relation between this result and the exit status of the commands executed).
+ * set the exit status after executing a pipeline.
  */
-int  do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg)
+void pipeline_set_exit_status(int status, int is_bang)
 {
-    if(!node)
+    /* invert the result if the pipeline has a bang */
+    if(is_bang)
     {
-        return 0;
+        set_internal_exit_status(!status);
     }
-    int is_bang = 0;
-    if(node->type == NODE_BANG)
-    {
-        is_bang = 1;
-        node = node->first_child;
-    }
-    int res = do_pipe_sequence(src, node, redirect_list, fg);
-    if(res && is_bang)
-    {
-        set_exit_status(!exit_status);
-    }
+
     /* exit on failure? */
-    if(!is_bang && (!res || exit_status))
+    if(!is_bang && status)
     {
         /*
          * NOTE: we are mixing POSIX and ksh-behavior, where ERR trap is exec'd
@@ -761,26 +745,44 @@ int  do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redir
             exit_gracefully(EXIT_FAILURE, NULL);
         }
     }
-    return res;
 }
 
 
 /*
- * execute a pipe sequence, which is a pipeline without the optional bang '!' operator.
+ * execute a pipeline, which consists of a group of commands joined by the
+ * pipe operator '|'. for each pipe operator, we create a two-way pipe. we join
+ * stdout of the command on the leftside of the operator to stdin of the command
+ * on the rightside of the operator. if the pipeline is preceded by a bang '!',
+ * we logically inverse the pipeline's exit status after it finishes execution.
  * 
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg)
+int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg)
 {
     if(!node)
     {
         return 0;
     }
+
+    int is_bang = 0;
+    int res = 0;
+    if(node->type == NODE_BANG)
+    {
+        is_bang = 1;
+        node = node->first_child;
+    }
+
     if(node->type != NODE_PIPE)
     {
-        return do_command(src, node, redirect_list, fg);
+        res = do_command(src, node, redirect_list, fg);
+        if(res && is_bang)
+        {
+            pipeline_set_exit_status(exit_status, is_bang);
+        }
+        return res;
     }
+
     struct node_s *cmd = node->first_child;
     pid_t pid;
     pid_t all_pids[node->children];
@@ -789,8 +791,9 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
 
     /* create pipe */
     pipe(filedes);
+
     /*
-     * last command of a foreground pipeline (in the absence of job control) will 
+     * last command of a foreground pipeline (in the absence of job control) will
      * be run by the shell itself (bash).
      */
     int lastpipe = (fg && !option_set('m') && optionx_set(OPTION_LAST_PIPE));
@@ -815,11 +818,13 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
                 }
             }
             reset_nonignored_traps();
+
             /* 2nd command component of command line */
             close(0);   /* stdin */
             dup2(filedes[0], 0);
             close(filedes[0]);
             close(filedes[1]);
+
             /* standard input now comes from pipe */
             do_command(src, cmd, redirect_list, 0);
             exit(exit_status);
@@ -830,6 +835,8 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
             return 0;
         }
     }
+
+    /* set fg process group id if job control is enabled */
     if(option_set('m'))
     {
         setpgid(pid, pid);
@@ -841,6 +848,7 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
             }
         }
     }
+
     all_pids[count++] = pid;
     cmd = cmd->next_sibling;
     while(cmd)
@@ -848,10 +856,12 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
         pid_t pid2;
         struct node_s *next = cmd->next_sibling;
         int filedes2[2];
+
         if(next)
         {
             pipe(filedes2);
         }
+
         /* fork the first command */
         if((pid2 = fork_child()) == 0)
         {
@@ -863,13 +873,14 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
                     tcsetpgrp(0, pid);
                 }
             }
-            /* only restore tty to canonical mode if we are reading from it */
             reset_nonignored_traps();
+
             /* first command of pipeline */
             close(1);   /* stdout */
             dup2(filedes[1], 1);
             close(filedes[1]);
             close(filedes[0]);
+
             /* stdout now goes to pipe */
             /* child process does command */
             if(next)
@@ -890,6 +901,7 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
         all_pids[count++] = pid2;
         close(filedes[1]);
         close(filedes[0]);
+
         if((cmd = next))
         {
             filedes[0] = filedes2[0];
@@ -897,11 +909,12 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
         }
     }
 
+
     /* TODO: use correct command str */
     char *cmdstr = get_cmdstr(node);
 
     /* $! will be set in add_job() */
-    struct job *job = NULL;
+    struct job_s *job = NULL;
 
     /*
      * add as a new job if job control is on, or set $! if job control is off.
@@ -909,6 +922,7 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
      * job's pgid if the '-m' option is set (see code below).
      */
     job = add_job(tty_pid, all_pids, count, cmdstr, !fg);
+
     /*
      * if job control is on, set the current job.
      */
@@ -926,6 +940,7 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
     {
         free(cmdstr);
     }
+
     /* run the last command in this process if extended option 'lastpipe' is set (bash) */
     if(lastpipe)
     {
@@ -939,24 +954,23 @@ int  do_pipe_sequence(struct source_s *src, struct node_s *node, struct node_s *
         close(0);   /* restore stdin */
         open("/dev/tty", O_RDWR);
     }
-    
+
     if(fg)
     {
-        /* tell the terminal who's the foreground pgid now */
-        int status = wait_on_child(pid, node, job);
+        res = wait_on_child(pid, node, job);
         /* reset the terminal's foreground pgid */
         if(option_set('m'))
         {
             tcsetpgrp(0, tty_pid);
         }
-        PRINT_EXIT_STATUS(status);
-        set_exit_status(status);
-        return !status;
+        pipeline_set_exit_status(res, is_bang);
+        PRINT_EXIT_STATUS(exit_status);
+        return !res;
     }
     else
     {
         fprintf(stderr, "[%d] %u %s\n", job->job_num, pid, job->commandstr);
-        set_exit_status(0);
+        pipeline_set_exit_status(0, is_bang);
         return 1;
     }
 }
@@ -989,7 +1003,7 @@ int  do_term(struct source_s *src, struct node_s *node, struct node_s *redirect_
         }
         else if(pid > 0)
         {
-            struct job *job = NULL;
+            struct job_s *job = NULL;
             char *cmdstr = get_cmdstr(node->first_child);
             /*
              * add as a new job if job control is on, or set $! if job control is off.
@@ -997,7 +1011,7 @@ int  do_term(struct source_s *src, struct node_s *node, struct node_s *redirect_
              * job's pgid if the '-m' option is set (see code below).
              */
             job = add_job(tty_pid, (pid_t[]){pid}, 1, cmdstr, 1);
-            set_exit_status(0);
+            set_internal_exit_status(0);
             /*
              * if job control is on, set the current job.
              */
@@ -1128,7 +1142,7 @@ int  do_subshell(struct source_s *src, struct node_s *node, struct node_s *redir
         wait_on_child(pid, node, NULL);
         if(redirect_list)
         {
-            redirect_restore();
+            restore_stds();
         }
         if(option_set('m'))
         {
@@ -1143,7 +1157,7 @@ int  do_subshell(struct source_s *src, struct node_s *node, struct node_s *redir
     /* perform I/O redirections */
     if(redirect_list)
     {
-        if(!redirect_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list))
         {
             return 0;
         }
@@ -1453,7 +1467,7 @@ int do_special_builtin(int argc, char **argv)
             }
             int (*func)(int, char **) = (int (*)(int, char **))special_builtins[j].func;
             int status = do_exec_cmd(argc, argv, NULL, func);
-            set_exit_status(status);
+            set_internal_exit_status(status);
             return 1;
         }
     }
@@ -1487,76 +1501,11 @@ int do_regular_builtin(int argc, char **argv)
             }
             int (*func)(int, char **) = (int (*)(int, char **))regular_builtins[j].func;
             int status = do_exec_cmd(argc, argv, NULL, func);
-            set_exit_status(status);
+            set_internal_exit_status(status);
             return 1;
         }
     }
     return 0;
-}
-
-
-static int saved_stdin    = -1;
-static int saved_stdout   = -1;
-static int saved_stderr   = -1;
-       int do_restore_std =  1;
-
-/*
- * if we are executing a builtin utility or a shell function, we need to save the
- * state of the standard streams so that we can restore them after the utility or
- * function finishes execution.
- */
-void save_std(int fd)
-{
-    if(fd == 0)
-    {
-        fflush(stdin);
-        saved_stdin = dup(0);
-    }
-    else if(fd == 1)
-    {
-        fflush(stdout);
-        saved_stdout = dup(1);
-    }
-    else if(fd == 2)
-    {
-        fflush(stderr);
-        saved_stderr = dup(2);
-    }
-}
-
-
-/*
- * after a builtin utility or a shell function finishes execution, restore the
- * standard streams if there were any I/O redirections.
- */
-void restore_std()
-{
-    if(!do_restore_std)
-    {
-        return;
-    }
-    if(saved_stdin >= 0)
-    {
-        fflush(stdin);
-        dup2(saved_stdin, 0);
-        close(saved_stdin);
-    }
-    if(saved_stdout >= 0)
-    {
-        fflush(stdout);
-        dup2(saved_stdout, 1);
-        close(saved_stdout);
-    }
-    if(saved_stderr >= 0)
-    {
-        fflush(stderr);
-        dup2(saved_stderr, 2);
-        close(saved_stderr);
-    }
-    saved_stdin    = -1;
-    saved_stdout   = -1;
-    saved_stderr   = -1;
-    do_restore_std =  1;
 }
 
 
@@ -1607,7 +1556,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
     struct io_file_s io_files[FOPEN_MAX];
     int i;
     /* first apply the given redirection list, if any */
-    int total_redirects = redirect_prep(redirect_list, io_files);
+    int total_redirects = init_redirect_list(redirect_list, io_files);
     
     /* then loop through the command and its arguments */
     struct node_s *child = node->first_child;
@@ -1659,7 +1608,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
                         }
                     }
                 }
-                if(redirect_prep_node(child, io_files) == -1)
+                if(!redirect_prep_node(child, io_files))
                 {
                     total_redirects = -1;
                 }
@@ -1753,7 +1702,6 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
                             {
                                 strcpy(s, old_val);
                                 strcat(s, val);
-                                free(val);
                                 entry->val = get_malloced_str(s);
                                 free(s);
                             }
@@ -1762,13 +1710,17 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
                         else
                         {
                             entry->val = get_malloced_str(val);
-                            free(val);
                             if(old_val)
                             {
                                 free_malloced_str(old_val);
                             }
                         }
                         entry->flags |= FLAG_CMD_EXPORT;
+
+                        if(val)
+                        {
+                            free(val);
+                        }
                     }
                     free(name);
                     break;
@@ -1942,7 +1894,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
     int function = is_function(argv[0]);
     struct symtab_entry_s *entry;
 
-    if(total_redirects == -1 /* redir_fail */)
+    if(total_redirects == -1)
     {
         /*
          * POSIX says non-interactive shell shall exit on redirection errors with
@@ -1954,7 +1906,10 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
         {
             EXIT_IF_NONINTERACTIVE();
         }
-        total_redirects = 0;
+        /* I/O redirection failure */
+        free_argv(argc, argv);
+        free_symtab(symtab_stack_pop());
+        return 0;
     }
 
     if(argc != 0)
@@ -2012,7 +1967,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
         }
         else
         {
-            s = list_to_str(argv, 0);
+            s = list_to_str(argv);
             if(s && *s)
             {
                 entry = add_to_symtab("COMMAND");       /* similar to $BASH_COMMAND */
@@ -2043,6 +1998,17 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
     run_alias_cmd("preexec");
 
     trap_handler(DEBUG_TRAP_NUM);    
+
+    /*
+     * return if argc == 0 (if the command consisted of redirections and/or
+     * variable assignments, they would have been executed in the above code).
+     */
+    if(argc == 0)
+    {
+        free_argv(argc, argv);
+        MERGE_GLOBAL_SYMTAB();
+        return 1;
+    }
     
     pid_t child_pid = 0;
     if(dofork && (child_pid = fork_child()) == 0)
@@ -2065,18 +2031,9 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
         do_export_vars(EXPORT_VARS_EXPORTED_ONLY);
     }
     
-   
-// redir:
+
     if(child_pid == 0)
     {
-#if 0
-        /* only restore tty to canonical mode if we are reading from it */
-        if(read_stdin && /* isatty(0) && */ getpgrp() == tcgetpgrp(0))
-        {
-            term_canon(1);
-        }
-#endif
-        
         /*
          * we need to handle the special case of coproc, as this command opens
          * a pipe between the shell and the new coprocess before local redirections
@@ -2086,8 +2043,8 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
         if(argc && strcmp(argv[0], "coproc") == 0 && 
             flag_set(special_builtins[REGULAR_BUILTIN_COPROC].flags, BUILTIN_ENABLED))
         {
-            int res = coproc(argc, argv, io_files);
-            set_exit_status(res);
+            int res = coproc_builtin(argc, argv, io_files);
+            set_internal_exit_status(res);
             free_argv(argc, argv);
             return !res;
         }
@@ -2099,28 +2056,22 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
         int savestd = !argc || (strcmp(argv[0], "exec") != 0);
         
         /* perform I/O redirection, if any */
-        if(total_redirects && !__redirect_do(io_files, savestd))
+        if(total_redirects && !redirect_do(io_files, savestd))
         {
+            if(dofork)
+            {
+                exit(EXIT_FAILURE);
+            }
             /* I/O redirection failure */
             free_argv(argc, argv);
+            free_symtab(symtab_stack_pop());
+            /* restore standard streams */
+            if(savestd)
+            {
+                restore_stds();
+            }
             return 0;
         }
-
-        /*
-         * return if argc == 0 (if the command consisted of redirections and/or
-         * variable assignments, they would have been executed in the above code).
-         */
-        if(argc == 0)
-        {
-            free_argv(argc, argv);
-            if(savestd && total_redirects)
-            {
-                redirect_restore();
-            }
-            MERGE_GLOBAL_SYMTAB();
-            return 1;
-        }
-        
 
         /*
          * bash/tcsh have a useful non-POSIX extension where '%n' equals 'fg %n'
@@ -2138,17 +2089,17 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
                 s = node->val.str;
                 if(s[strlen(s)-1] == '&')
                 {
-                    res = bg(2, (char *[]){ "bg", argv[0], NULL });
+                    res = bg_builtin(2, (char *[]){ "bg", argv[0], NULL });
                 }
                 else
                 {
-                    res = fg(2, (char *[]){ "fg", argv[0], NULL });
+                    res = fg_builtin(2, (char *[]){ "fg", argv[0], NULL });
                 }
                 //while(argc--) free_malloced_str(argv[argc]);
                 free_argv(argc, argv);
                 if(savestd && total_redirects)
                 {
-                    redirect_restore();
+                    restore_stds();
                 }
                 if(exit_status)
                 {
@@ -2195,9 +2146,10 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
                 i = 1;
             }
             free_argv(argc, argv);
+            /* restore standard streams */
             if(savestd && total_redirects)
             {
-                redirect_restore();
+                restore_stds();
             }
             MERGE_GLOBAL_SYMTAB();
             /*
@@ -2241,15 +2193,6 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
     }
     PRINT_EXIT_STATUS(status);
 
-#if 0
-    /* only restore tty to canonical mode if the child process read from it */
-    if(read_stdin /* isatty(0) */)
-    {
-        term_canon(0);
-        update_row_col();
-    }
-#endif
-
 
     /* if we forked, we didn't hash the utility's path in our
      * hashtable. if so, do it now.
@@ -2272,8 +2215,7 @@ int  do_simple_command(struct source_s *src, struct node_s *node, struct node_s 
         }
     }
 
-    struct symtab_s *symtab = symtab_stack_pop();
-    free(symtab);
+    free_symtab(symtab_stack_pop());
 
     /* in tcsh, special alias postcmd is run after running each command */
     run_alias_cmd("postcmd");
@@ -2312,7 +2254,7 @@ int  do_command(struct source_s *src, struct node_s *node, struct node_s *redire
             return do_simple_command(src, node, redirect_list, fork);
 
         case NODE_TIME:
-            return __time(src, node->first_child);
+            return time_builtin(src, node->first_child);
 
         default:
             return do_compound_command(src, node, redirect_list);
