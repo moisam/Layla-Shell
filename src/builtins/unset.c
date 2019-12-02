@@ -45,7 +45,7 @@
  * explanation on how to use this utility.
  */
 
-int unset(int argc, char **argv)
+int unset_builtin(int argc, char **argv)
 {
     /* no arguments. bail out */
     if(argc == 1)

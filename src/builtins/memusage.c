@@ -42,13 +42,13 @@ long long memusage_dirstack(long long *res);
 void print_mu_stack(int lengthy);
 void print_mu_hashtab(int lengthy);
 void print_mu_str_hashtab(int lengthy);
-void print_mu_traps();
-void print_mu_inputbuf();
-void print_mu_history();
-void print_mu_cmdbuf();
+void print_mu_traps(void);
+void print_mu_inputbuf(void);
+void print_mu_history(void);
+void print_mu_cmdbuf(void);
 void print_mu_dirstack(int lengthy);
 void print_mu_vm(int lengthy);
-void print_mu_aliases();
+void print_mu_aliases(void);
 
 void output_size(long long __size);
 
@@ -69,7 +69,7 @@ extern struct hashtab_s *str_hashes;
  * explanation on how to use this utility.
  */
 
-int memusage(int argc, char **argv)
+int memusage_builtin(int argc, char **argv)
 {
     int lengthy = 0;
     int v = 1, c;
@@ -301,7 +301,7 @@ void print_mu_str_hashtab(int lengthy)
 /*
  * print the memory used for the trap strings.
  */
-void print_mu_traps()
+void print_mu_traps(void)
 {
     long long i = memusage_traps(NULL);
     printf("* Traps (strings): ");
@@ -313,7 +313,7 @@ void print_mu_traps()
 /*
  * print the memory used for the input buffer.
  */
-void print_mu_inputbuf()
+void print_mu_inputbuf(void)
 {
     printf("* Input buffer: ");
     /*
@@ -328,7 +328,7 @@ void print_mu_inputbuf()
 /*
  * print the memory used for the alias strings.
  */
-void print_mu_aliases()
+void print_mu_aliases(void)
 {
     long long i = memusage_aliases(NULL);
     printf("* Alias names and values (strings): ");
@@ -340,7 +340,7 @@ void print_mu_aliases()
 /*
  * print the memory used for the history list.
  */
-void print_mu_history()
+void print_mu_history(void)
 {
     long long i = memusage_history(NULL);
     printf("* Command line history (strings): ");
@@ -352,7 +352,7 @@ void print_mu_history()
 /*
  * print the memory used for the command buffer.
  */
-void print_mu_cmdbuf()
+void print_mu_cmdbuf(void)
 {
     long long sz = (long long)cmdbuf_size;
     printf("* Command line buffer (string): ");
@@ -597,13 +597,13 @@ long long memusage_aliases(long long *__res)
     int i;
     for(i = 0; i < MAX_ALIASES; i++)
     {
-        if(__aliases[i].name)
+        if(aliases[i].name)
         {
-            res += strlen(__aliases[i].name);
+            res += strlen(aliases[i].name);
         }
-        if(__aliases[i].val )
+        if(aliases[i].val )
         {
-            res += strlen(__aliases[i].val );
+            res += strlen(aliases[i].val );
         }
     }
     if(__res)

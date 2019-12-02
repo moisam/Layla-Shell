@@ -28,22 +28,22 @@
 /*
  * forget all defined aliases.
  */
-void unalias_all()
+void unalias_all(void)
 {
-    int i;
-    for(i = 0; i < MAX_ALIASES; i++)
+    int i = 0;
+    for( ; i < MAX_ALIASES; i++)
     {
-        if(!__aliases[i].name)
+        if(!aliases[i].name)
         {
             continue;
         }
-        free(__aliases[i].name);
-        __aliases[i].name = NULL;
-        if(__aliases[i].val)
+        free(aliases[i].name);
+        aliases[i].name = NULL;
+        if(aliases[i].val)
         {
-            free(__aliases[i].val);
+            free(aliases[i].val);
         }
-        __aliases[i].val  = NULL;
+        aliases[i].val  = NULL;
     }
 }
 
@@ -58,7 +58,7 @@ void unalias_all()
  * explanation on how to use this utility.
  */
 
-int unalias(int argc, char **argv)
+int unalias_builtin(int argc, char **argv)
 {
     int do_unalias_all = 0;
     int i;
@@ -104,17 +104,17 @@ int unalias(int argc, char **argv)
     {
         for(i = 0; i < MAX_ALIASES; i++)
         {
-            if(__aliases[i].name)
+            if(aliases[i].name)
             {
-                if(strcmp(__aliases[i].name, argv[v]) == 0)
+                if(strcmp(aliases[i].name, argv[v]) == 0)
                 {
-                    free(__aliases[i].name);
-                    __aliases[i].name = NULL;
-                    if(__aliases[i].val)
+                    free(aliases[i].name);
+                    aliases[i].name = NULL;
+                    if(aliases[i].val)
                     {
-                        free(__aliases[i].val);
+                        free(aliases[i].val);
                     }
-                    __aliases[i].val  = NULL;
+                    aliases[i].val  = NULL;
                     break;
                 }
             }

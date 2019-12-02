@@ -77,7 +77,7 @@ int get_niceval(char *str)
  * explanation on how to use this utility.
  */
 
-int __nice(int argc, char **argv)
+int nice_builtin(int argc, char **argv)
 {
     int niceval = DEFAULT_NICEVAL;
     int hasnice = 0;

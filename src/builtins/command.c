@@ -98,7 +98,7 @@ int search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH, i
  * you can also run: `help command` or `command -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
-int command(int argc, char **argv)
+int command_builtin(int argc, char **argv)
 {
     int i;
     int print_path       = 0;
@@ -180,8 +180,8 @@ int command(int argc, char **argv)
             return 0;
         }
         /* check if the command name is a defined alias */
-        char *alias = parse_alias(argv[i]);
-        if(alias != argv[i])
+        char *alias = get_alias_val(argv[i]);
+        if(alias && alias != argv[i])
         {
             printf("alias %s='%s'\n", argv[i], alias);
             return 0;
@@ -216,8 +216,8 @@ int command(int argc, char **argv)
             return 0;
         }
         /* check if the command name is a defined alias */
-        char *alias = parse_alias(argv[i]);
-        if(alias != argv[i])
+        char *alias = get_alias_val(argv[i]);
+        if(alias && alias != argv[i])
         {
             printf("%s is aliased to '%s'\n", argv[i], alias);
             return 0;
@@ -229,7 +229,7 @@ int command(int argc, char **argv)
             return 0;
         }
         /* check if the command name is a shell builtin */
-        if(is_builtin (argv[i]) )
+        if(is_builtin (argv[i]))
         {
             printf("%s is a shell builtin\n", argv[i]);
             return 0;

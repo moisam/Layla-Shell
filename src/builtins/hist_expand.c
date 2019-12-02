@@ -409,7 +409,7 @@ char *hist_expand(int quotes)
                             p2 = get_hist_cmdp(p3, 1);
                             j++;                        /* add 1 for the '!' */
                             sprintf(errmsg, "%s: history command not found: !%s", SHELL_NAME, p3);
-                            free(p3);
+                            free_malloced_str(p3);
                             i = get_hist_words(p2, p+j, &p3);
                             if(errexp)
                             {
@@ -667,7 +667,7 @@ char *get_hist_cmdp(char *s, int anchor)
  */
 int get_hist_words(char *cmd, char *wdesig, char **res)
 {
-    *res = NULL;
+    (*res) = NULL;
     errexp = 0;
     /* sanity checks */
     if(!cmd || !wdesig || !*wdesig)
@@ -694,12 +694,14 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
             p = get_word_start(cmd, 1);
             if(!p)
             {
-                return *res = get_malloced_str(""), i+1;
+                (*res) = get_malloced_str("");
+                return i+1;
             }
             p = get_malloced_word(p);
             if(p)
             {
-                return *res = p, i+1;
+                (*res) = p;
+                return i+1;
             }
             break;
             
@@ -707,12 +709,14 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
             p = get_word_start(cmd, -1);
             if(!p)
             {
-                return *res = get_malloced_str(""), i+1;
+                (*res) = get_malloced_str("");
+                return i+1;
             }
             p = get_malloced_word(p);
             if(p)
             {
-                return *res = p, i+1;
+                (*res) = p;
+                return i+1;
             }
             break;
 
@@ -720,12 +724,14 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
             p = get_word_start(cmd, 1);
             if(!p)
             {
-                return *res = get_malloced_str(""), i+1;
+                (*res) = get_malloced_str("");
+                return i+1;
             }
             p = get_malloced_str(p);
             if(p)
             {
-                return *res = p, i+1;
+                (*res) = p;
+                return i+1;
             }
             break;
             
@@ -746,7 +752,8 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
             p = get_malloced_strl(cmd, j, p-cmd-j);
             if(p)
             {
-                return *res = p, i+1;
+                (*res) = p;
+                return i+1;
             }
             break;
             
@@ -769,7 +776,8 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
             p2 = get_word_start(cmd, 0);
             if(!p2)
             {
-                return *res = get_malloced_str(""), i;
+                (*res) = get_malloced_str("");
+                return i;
             }
             p = get_word_start(cmd, n);     /* get the start of the second word */
             if(!p)
@@ -787,7 +795,8 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
             p = get_malloced_strl(cmd, j, p-cmd-j);
             if(p)
             {
-                return *res = p, i;     /* length of "'-' + y" */
+                (*res) = p;
+                return i;     /* length of "'-' + y" */
             }
             break;
             
@@ -842,7 +851,8 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
                         p = get_malloced_strl(cmd, j, p-cmd-j);
                         if(p)
                         {
-                            return *res = p, i;     /* length of "':' + x + '-' + y" */
+                            (*res) = p;
+                            return i;     /* length of "':' + x + '-' + y" */
                         }
                     }
                     else                    /* 'x-' abbreviates 'x-$' without the last word */
@@ -872,7 +882,8 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
                         p = get_malloced_strl(cmd, j, p-cmd-j+1);
                         if(p)
                         {
-                            return *res = p, i;     /* length of "':' + x + '-'" */
+                            (*res) = p;
+                            return i;     /* length of "':' + x + '-'" */
                         }
                     }
                 }
@@ -882,7 +893,8 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
                     p = get_malloced_str(p);
                     if(p)
                     {
-                        return *res = p, j+i+1;   /* length of ': + word + *' */
+                        (*res) = p;
+                        return j+i+1;   /* length of ': + word + *' */
                     }
                 }
                 else
@@ -891,7 +903,8 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
                     p = get_malloced_word(p);
                     if(p)
                     {
-                        return *res = p, j+i;     /* length of ': + word' */
+                        (*res) = p;
+                        return j+i;     /* length of ': + word' */
                     }
                 }
             }

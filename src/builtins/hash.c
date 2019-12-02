@@ -43,7 +43,7 @@ char *__get_malloced_str(char *str);
 /*
  * initialize the utility hashtable.
  */
-void init_utility_hashtable()
+void init_utility_hashtable(void)
 {
     utility_hashes = new_hashtable();
 }
@@ -126,7 +126,7 @@ do {                                                    \
  * explanation on how to use this utility.
  */
 
-int hash(int argc, char **argv)
+int hash_builtin(int argc, char **argv)
 {
     /* no arguments or options. print the hashed utilities and return */
     if(argc == 1)
@@ -280,7 +280,7 @@ int hash(int argc, char **argv)
  *
  * returns 0 if all utilities are located and hashed, 1 otherwise.
  */
-int rehash_all()
+int rehash_all(void)
 {
     int res = 0;
     if(utility_hashes->used)

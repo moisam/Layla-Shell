@@ -66,7 +66,7 @@ struct rlim_s
  * get the size of pipes on this system in kilobytes (there is no direct and
  * portable way of getting the default pipe size - hence this hack).
  */
-long get_pipesz()
+long get_pipesz(void)
 {
     int pipefd[2];
     pipe(pipefd);
@@ -281,7 +281,7 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int isha
  * explanation on how to use this utility.
  */
 
-int __ulimit(int argc, char **argv)
+int ulimit_builtin(int argc, char **argv)
 {
     struct rlimit limit;
     /* no arguments. assume the -f option */

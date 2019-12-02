@@ -39,7 +39,7 @@
  * explanation on how to use this utility.
  */
 
-int notify(int argc, char **argv)
+int notify_builtin(int argc, char **argv)
 {
     /* job control must be on */
     if(!option_set('m'))
@@ -48,7 +48,7 @@ int notify(int argc, char **argv)
         return 2;
     }
     
-    struct job *job;
+    struct job_s *job;
     /* called with no job arguments. use the current job */
     if(argc == 1)
     {

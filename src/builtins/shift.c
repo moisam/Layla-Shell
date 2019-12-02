@@ -42,7 +42,7 @@
  * explanation on how to use this utility.
  */
 
-int shift(int argc, char **argv)
+int shift_builtin(int argc, char **argv)
 {
     /* extra arguments produce an error in --posix mode */
     if(option_set('P') && argc > 2)

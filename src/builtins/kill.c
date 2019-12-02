@@ -98,7 +98,7 @@ int get_signum(char *__signame)
  * explanation on how to use this utility.
  */
 
-int __kill(int argc, char *argv[])
+int kill_builtin(int argc, char **argv)
 {
     /* we should have at least one option/argument */
     if(argc == 1)
@@ -111,7 +111,7 @@ int __kill(int argc, char *argv[])
     int    i;
     int    signum = SIGTERM;
     pid_t  pid    = 0;
-    struct job *job = NULL;
+    struct job_s *job = NULL;
     char  *arg;
 
     /* process the options and arguments */

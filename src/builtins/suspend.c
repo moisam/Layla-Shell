@@ -37,7 +37,7 @@
  * explanation on how to use this utility.
  */
 
-int suspend(int argc, char **argv)
+int suspend_builtin(int argc, char **argv)
 {
     int v = 1, c;
     int force = 0;

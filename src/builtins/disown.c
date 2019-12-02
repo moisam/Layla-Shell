@@ -27,9 +27,9 @@
 #define UTILITY             "disown"
 
 /* defined in ../jobs.c */
-extern struct job __jobs[];
+extern struct job_s jobs_table[];
 
-void disown_job(struct job *job, int nohup);
+void disown_job(struct job_s *job, int nohup);
 
 
 /*
@@ -42,9 +42,9 @@ void disown_job(struct job *job, int nohup);
  * explanation on how to use this utility.
  */
 
-int disown(int argc, char **argv)
+int disown_builtin(int argc, char **argv)
 {
-    struct job *job;
+    struct job_s *job;
     int v = 1, c;
     int all_jobs     = 0;
     int running_only = 0;
@@ -110,7 +110,7 @@ int disown(int argc, char **argv)
         }
         
         /* disown all jobs */
-        for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+        for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
         {
             if(job->job_num != 0)
             {
@@ -169,7 +169,7 @@ int disown(int argc, char **argv)
 /*
  * disown the given job.
  */
-void disown_job(struct job *job, int nohup)
+void disown_job(struct job_s *job, int nohup)
 {
     if(nohup)
     {

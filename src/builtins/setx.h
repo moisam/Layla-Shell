@@ -80,7 +80,7 @@ extern __int64_t optionsx;
 
 int       set_optionx(__int64_t op, int onoff);
 __int64_t optionx_index(char *opname);
-int       setx(int argc, char **argv);
+int       setx_builtin(int argc, char **argv);
 void      purge_xoptions(char which, int formal);
 
 #endif

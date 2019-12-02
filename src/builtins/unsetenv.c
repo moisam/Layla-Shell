@@ -63,7 +63,7 @@ static inline void unset_entry(char *name)
  * explanation on how to use this utility.
  */
 
-int __unsetenv(int argc, char **argv)
+int unsetenv_builtin(int argc, char **argv)
 {
     int v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */

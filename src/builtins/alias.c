@@ -24,11 +24,10 @@
 #include <ctype.h>
 #include "../cmd.h"
 #include "../scanner/scanner.h"     /* is_keyword() */
-#include "../parser/parser.h"       /* __parse_alias() */
+#include "../parser/parser.h"       /* get_alias_val() */
 #include "../debug.h"
 
-struct  alias_s __aliases[MAX_ALIASES];
-char    *null_alias = "";
+struct  alias_s aliases[MAX_ALIASES];
 
 #define UTILITY     "alias"
 
@@ -38,7 +37,7 @@ int set_alias(char *name, char *val);
 /*
  * initialize our predefined aliases. called on shell startup by an interactive shell.
  */
-void init_aliases()
+void init_aliases(void)
 {
     /* colorize the ls output */
     set_alias("ls", "ls --color=auto");
@@ -93,6 +92,11 @@ void init_aliases()
     //set_alias("du", "du -ch");
     set_alias("r", "fc -s");    /* to quickly re-execute history commands */
     set_alias("memuse", "memusage");
+
+    set_alias("a", "d c ");
+    set_alias("d", "e ");
+    set_alias("e", "alias");
+    set_alias("c", "-p");
 }
 
 
@@ -100,23 +104,24 @@ void init_aliases()
  * unset (remove) all aliases.. called by init_subshell() when we fork a
  * new subshell.
  */
-void unset_all_aliases()
+void unset_all_aliases(void)
 {
     int i = 0;
     for( ; i < MAX_ALIASES; i++)
     {
-        if(__aliases[i].name)
+        if(aliases[i].name)
         {
-            free(__aliases[i].name);
-            __aliases[i].name = NULL;
+            free(aliases[i].name);
+            aliases[i].name = NULL;
         }
-        if(__aliases[i].val)
+        if(aliases[i].val)
         {
-            free(__aliases[i].val);
-            __aliases[i].val = NULL;
+            free(aliases[i].val);
+            aliases[i].val = NULL;
         }
     }
 }
+
 
 /*
  * print an alias definition in a form that can be reinput again to the shell to redefine
@@ -129,25 +134,25 @@ int print_alias(char *name)
     /* search the alias list for the given name, or print all aliases if name is NULL */
     for(i = 0; i < MAX_ALIASES; i++)
     {
-        if(!__aliases[i].name)
+        if(!aliases[i].name)
         {
             continue;
         }
         if(name)
         {
-            if(strcmp(__aliases[i].name, name) != 0)
+            if(strcmp(aliases[i].name, name) != 0)
             {
                 continue;
             }
         }
-        printf("alias %s=", __aliases[i].name);
+        printf("alias %s=", aliases[i].name);
         /*
          * NOTE: POSIX says to use appropriate quoting, suitable for reinput 
          *       to the shell.
          */
-        if(__aliases[i].val)
+        if(aliases[i].val)
         {
-            purge_quoted_val(__aliases[i].val);
+            purge_quoted_val(aliases[i].val);
         }
         printf("\n");
         if(name)
@@ -184,7 +189,7 @@ int set_alias(char *name, char *val)
      */
     for(i = 0; i < MAX_ALIASES; i++)
     {
-        if(!__aliases[i].name)
+        if(!aliases[i].name)
         {
             if(first_free == -1)
             {
@@ -192,8 +197,7 @@ int set_alias(char *name, char *val)
             }
             continue;
         }
-        //if(strlen(__aliases[i].name) != len) continue;
-        if(strcmp(__aliases[i].name, name) == 0)
+        if(strcmp(aliases[i].name, name) == 0)
         {
             index = i;
             break;
@@ -211,27 +215,27 @@ int set_alias(char *name, char *val)
     }
     i = index;
     /* save the alias name */
-    if(!__aliases[i].name)
+    if(!aliases[i].name)
     {
-        __aliases[i].name = malloc(len+1);
-        if(!__aliases[i].name)
+        aliases[i].name = malloc(len+1);
+        if(!aliases[i].name)
         {
             goto memerr;
         }
-        strcpy(__aliases[i].name, name);
+        strcpy(aliases[i].name, name);
     }
     /* remove the old value */
-    if(__aliases[i].val)
+    if(aliases[i].val)
     {
-        free(__aliases[i].val);
+        free(aliases[i].val);
     }
     /* save the new value */
-    __aliases[i].val = malloc(strlen(val)+1);
-    if(!__aliases[i].val)
+    aliases[i].val = malloc(strlen(val)+1);
+    if(!aliases[i].val)
     {
         goto memerr;
     }
-    strcpy(__aliases[i].val, val);
+    strcpy(aliases[i].val, val);
     return 0;
     
 memerr:
@@ -244,7 +248,7 @@ memerr:
  * check if the given name is a valid alias name. this function doesn't check if the
  * alias is already defined or not, it just checks if the name is valid as an alias
  * name, as defined by POSIX (aliases can contain alphanumerics, underscores, and any
- * of these characters: "!%,@".
+ * of these characters: "!%,@").
  * returns 1 if the name is a valid alias name, 0 otherwise.
  */
 int valid_alias_name(char *name)
@@ -271,28 +275,24 @@ int valid_alias_name(char *name)
 
 /*
  * parse an alias name by searching the alias definition and returning
- * the aliased value, the special null_alias value if the alias value
- * is NULL, or the same alias name if the alias is not defined.
+ * the aliased value, NULL if the alias value is NULL, or the same alias
+ * name if the alias is not defined.
  */
-char *parse_alias(char *cmd)
+char *get_alias_val(char *cmd)
 {
-    if(!is_name(cmd))
+    if(!valid_alias_name(cmd))
     {
         return cmd;
     }
     int i;
     for(i = 0; i < MAX_ALIASES; i++)
     {
-        if(__aliases[i].name)
+        if(aliases[i].name)
         {
-            if(strcmp(__aliases[i].name, cmd) == 0)
+            if(strcmp(aliases[i].name, cmd) == 0)
             {
                 /* now get the alias value */
-                if(__aliases[i].val)
-                {
-                    return __aliases[i].val;
-                }
-                return null_alias;                
+                return aliases[i].val;
             }
         }
     }
@@ -310,13 +310,13 @@ char *parse_alias(char *cmd)
 
 void run_alias_cmd(char *alias)
 {
-    char *cmd = parse_alias(alias);
-    if(cmd != alias && cmd != null_alias)
+    char *cmd = get_alias_val(alias);
+    if(cmd && cmd != alias)
     {
         cmd = word_expand_to_str(cmd);
         if(cmd)
         {
-            eval(2, (char *[]){ "eval", cmd, NULL });
+            eval_builtin(2, (char *[]){ "eval", cmd, NULL });
             free(cmd);
         }
     }
@@ -332,7 +332,7 @@ void run_alias_cmd(char *alias)
  * explanation on how to use this utility.
  */
 
-int alias(int argc, char *argv[])
+int alias_builtin(int argc, char **argv)
 {
     int  index = 0;
     char *str  = NULL;
@@ -386,7 +386,7 @@ int alias(int argc, char *argv[])
         {
             int res2 = print_alias(str);
             /* if error return error */
-            if(!res && res2)
+            if(res2)
             {
                 res = res2;
             }
@@ -399,7 +399,7 @@ int alias(int argc, char *argv[])
         tmp[i] = '\0';
         /*
          * don't allow aliasing for shell keywords. tcsh also doesn't allow aliasing
-         * for the words 'alias' and 'unalias'.
+         * for the words 'alias' and 'unalias' (bash doesn't seem to mind it).
          */
         if(is_keyword(tmp) >= 0 || strcmp(tmp, "alias") == 0 || strcmp(tmp, "unalias") == 0)
         {
@@ -408,9 +408,9 @@ int alias(int argc, char *argv[])
             continue;
         }
         /* set the alias value, which is the part after the = */
-        res3 = set_alias(tmp, str+i+1);
+        res3 = set_alias(tmp, eq+1);
         /* if error, return an error result */
-        if(!res && res3)
+        if(res3)
         {
             res = res3;
         }

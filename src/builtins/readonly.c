@@ -33,7 +33,7 @@
 /*
  * print all the readonly variables.
  */
-void purge_readonlys()
+void purge_readonlys(void)
 {
     int i;
     /* use an alpha list to sort variables alphabetically */
@@ -130,7 +130,7 @@ void purge_readonlys()
  * explanation on how to use this utility.
  */
 
-int readonly(int argc, char *argv[])
+int readonly_builtin(int argc, char **argv)
 {
     int v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */

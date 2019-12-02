@@ -46,7 +46,7 @@
  * be changed by the user, filling the report with wrong and unhelpful info (but again,
  * the user can fill whatever they want in the bugreport in all cases).
  */
-int bugreport(int argc __attribute__((unused)), char **argv __attribute__((unused)))
+int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     struct  symtab_entry_s *REPLY = add_to_symtab("REPLY");
     const  char *to = "mohammed_isam1984@yahoo.com;";
@@ -103,7 +103,7 @@ int bugreport(int argc __attribute__((unused)), char **argv __attribute__((unuse
     /* get the email subject */
     printf("Please enter the subject of your email message (an empty line will cancel this bugreport)\n\n");
     /* abort if error reading input */
-    if(__read(2, read_argv) != 0)
+    if(read_builtin(2, read_argv) != 0)
     {
         printf("\n\nAborted\n\n");
         return 2;
@@ -124,7 +124,7 @@ int bugreport(int argc __attribute__((unused)), char **argv __attribute__((unuse
     /* get the user's email address */
     printf("Please enter your email address (an empty line will cancel this bugreport)\n\n");
     /* abort if error reading input */
-    if(__read(2, read_argv) != 0)
+    if(read_builtin(2, read_argv) != 0)
     {
         printf("\n\nAborted\n\n");
         /* discard saved subject */
@@ -155,7 +155,7 @@ int bugreport(int argc __attribute__((unused)), char **argv __attribute__((unuse
     {
         symtab_entry_setval(REPLY, NULL);
         /* stop if error reading input */
-        if(__read(2, read_argv) != 0)
+        if(read_builtin(2, read_argv) != 0)
         {
             break;
         } 

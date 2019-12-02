@@ -24,7 +24,7 @@
 #include "../debug.h"
 
 /* current version of the shell */
-char   shell_ver[] = "1.1";
+char   shell_ver[] = "1.1-2";
 
 /* useful macros for printing utilities help message */
 #define SYNOPSIS        (1 << 0)    /* print usage summary (one liner) */
@@ -43,7 +43,7 @@ char   shell_ver[] = "1.1";
  * explanation on how to use this utility.
  */
 
-int help(int argc, char **argv)
+int help_builtin(int argc, char **argv)
 {
     int v = 1, c, res = 0;
     int flags = HELP_BODY|SYNOPSIS|DESCRIPTION;

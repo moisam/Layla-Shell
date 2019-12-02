@@ -38,7 +38,7 @@
  * explanation on how to use this utility.
  */
 
-int type(int argc, char **argv)
+int type_builtin(int argc, char **argv)
 {
     int i;
     int res = 0;
@@ -142,8 +142,8 @@ int type(int argc, char **argv)
             if(!print_path)
             {
                 /* check if it is a defined alias */
-                char *alias = parse_alias(argv[i]);
-                if(alias != argv[i])
+                char *alias = get_alias_val(argv[i]);
+                if(alias && alias != argv[i])
                 {
                     if(print_word)
                     {

@@ -43,7 +43,7 @@
  * explanation on how to use this utility.
  */
 
-int exec(int argc, char **argv)
+int exec_builtin(int argc, char **argv)
 {
     int  v = 1, c;
     int  cenv = 0, login = 0;

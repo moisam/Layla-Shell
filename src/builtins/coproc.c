@@ -53,7 +53,7 @@ int wfiledes[2] = { -1, -1 };
  * explanation on how to use this utility.
  */
 
-int coproc(int argc, char **argv, struct io_file_s *io_files)
+int coproc_builtin(int argc, char **argv, struct io_file_s *io_files)
 {
     /* should have at least one argument */
     if(argc == 1)
@@ -96,7 +96,7 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
         close(wfiledes[0]);
         close(wfiledes[1]);
         /* perform any I/O redirections */
-        __redirect_do(io_files, 0);
+        redirect_do(io_files, 0);
         errno = 0;
         /*
          * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
@@ -184,9 +184,9 @@ int coproc(int argc, char **argv, struct io_file_s *io_files)
         symtab_entry_setval(entry, buf);
 
         /* add as background job */
-        char *cmdstr = list_to_str(&argv[1], 0);
+        char *cmdstr = list_to_str(&argv[1]);
         /* $! will be set in add_job() */
-        struct job *job = add_job(pid, (pid_t[]){ pid }, 1, cmdstr, 1);
+        struct job_s *job = add_job(pid, (pid_t[]){ pid }, 1, cmdstr, 1);
         set_cur_job(job);
         if(cmdstr)
         {

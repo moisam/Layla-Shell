@@ -28,7 +28,7 @@
  * explanation on how to use this utility.
  */
 
-int colon(int argc __attribute__((unused)), char **argv __attribute__((unused)))
+int colon_builtin(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     return 0;
 }

@@ -41,7 +41,7 @@ time_t last_check = 0;
 /*
  * check for unread mail.
  */
-int check_for_mail()
+int check_for_mail(void)
 {
     /* get the time interval checking variable */
     struct symtab_entry_s *entry = get_symtab_entry("MAILCHECK");
@@ -86,7 +86,7 @@ int check_for_mail()
  * explanation on how to use this utility.
  */
 
-int mail(int argc, char **argv)
+int mailcheck_builtin(int argc, char **argv)
 {
     int v = 1, c;
     int quiet = 0;

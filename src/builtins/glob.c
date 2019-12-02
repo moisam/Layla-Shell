@@ -45,7 +45,7 @@
  * explanation on how to use this utility.
  */
 
-int __glob(int argc, char **argv)
+int glob_builtin(int argc, char **argv)
 {
     /*
      * in bash, shopt option 'xpg_echo' is used to indicate whether escape

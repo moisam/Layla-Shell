@@ -43,7 +43,7 @@
  * explanation on how to use this utility.
  */
 
-int stop(int argc, char **argv)
+int stop_builtin(int argc, char **argv)
 {
     /* job control must be on */
     if(!option_set('m'))
@@ -52,7 +52,7 @@ int stop(int argc, char **argv)
         return 2;
     }
     
-    struct job *job;
+    struct job_s *job;
     int v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
     argi = 0;   /* defined in args.c */

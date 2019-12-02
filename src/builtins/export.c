@@ -192,7 +192,7 @@ void purge_exports(void)
  * explanation on how to use this utility.
  */
 
-int export(int argc, char **argv)
+int export_builtin(int argc, char **argv)
 {
     int v = 1, c, unexport = 0;
     int funcs = 0;      /* if set, work on the functions table */

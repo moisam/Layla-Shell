@@ -37,7 +37,7 @@ int return_set = 0;
  * explanation on how to use this utility.
  */
 
-int __return(int argc, char **argv)
+int return_builtin(int argc, char **argv)
 {
     /*
      * NOTE: if we are not running in --posix mode and there are more than two args,
@@ -71,7 +71,7 @@ int __return(int argc, char **argv)
         res = exit_status;
     }
     /* POSIX says we should set $? to the return value */
-    set_exit_status(res);
+    set_internal_exit_status(res);
     /* set the return flag so the other functions will know we've encountered return */
     return_set = 1;
     return res;

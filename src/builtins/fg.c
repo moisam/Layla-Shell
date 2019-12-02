@@ -32,7 +32,7 @@ extern int cur_job ;
 extern int prev_job;
 
 /* defined in ../backend/backend.c */
-int wait_on_child(pid_t pid, struct node_s *cmd, struct job *job);
+int wait_on_child(pid_t pid, struct node_s *cmd, struct job_s *job);
 
 #define UTILITY         "fg"
 
@@ -40,7 +40,7 @@ int wait_on_child(pid_t pid, struct node_s *cmd, struct job *job);
 /*
  * bring a job to the foreground.
  */
-void __fg(struct job *job)
+void do_fg(struct job_s *job)
 {
     /*
      * in tcsh, special alias jobcmd is run before running commands and when jobs
@@ -89,7 +89,7 @@ void __fg(struct job *job)
  * explanation on how to use this utility.
  */
 
-int fg(int argc, char **argv)
+int fg_builtin(int argc, char **argv)
 {
     /* job control must be on */
     if(!option_set('m'))
@@ -98,7 +98,7 @@ int fg(int argc, char **argv)
         return 2;
     }
     
-    struct job *job;
+    struct job_s *job;
     /* we have no job argument.. use the current job */
     if(argc == 1)
     {
@@ -108,7 +108,7 @@ int fg(int argc, char **argv)
             fprintf(stderr, "%s: unknown job: %%%%\n", UTILITY);
             return 3;
         }
-        __fg(job);
+        do_fg(job);
         return 0;
     }
 
@@ -152,7 +152,7 @@ int fg(int argc, char **argv)
             fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
             return 3;
         }
-        __fg(job);
+        do_fg(job);
     }
     return 0;
 }

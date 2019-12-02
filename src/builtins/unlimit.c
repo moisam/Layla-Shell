@@ -60,7 +60,7 @@ int unlimit_all(int ishard, int ignore_err)
     while(i-- >= 0)
     {
         argv[2] = all_rlim[i];
-        j = __ulimit(4, argv);
+        j = ulimit_builtin(4, argv);
         if(j && !ignore_err)
         {
             break;
@@ -83,7 +83,7 @@ int unlimit_all(int ishard, int ignore_err)
  * explanation on how to use this utility.
  */
 
-int unlimit(int argc, char **argv)
+int unlimit_builtin(int argc, char **argv)
 {
     int v = 1, c;
     int ignore_err = 0, ishard = 0;
@@ -159,7 +159,7 @@ int unlimit(int argc, char **argv)
         else
         {
             char *argv2[] = { "ulimit", op, op2, "unlimited", NULL };
-            c = __ulimit(4, argv2);
+            c = ulimit_builtin(4, argv2);
         }
         if(c && !ignore_err)
         {

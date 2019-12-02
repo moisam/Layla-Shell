@@ -1358,7 +1358,7 @@ void test_push_opstack(struct test_op_s *op)
 /*
  * pop the last operator off the operator stack.
  */
-struct test_op_s *test_pop_opstack()
+struct test_op_s *test_pop_opstack(void)
 {
     if(!test_nopstack)
     {
@@ -1394,7 +1394,7 @@ void test_push_stack(char *val)
 /*
  * pop the last operator off the operands stack.
  */
-char *test_pop_stack()
+char *test_pop_stack(void)
 {
     if(!nteststack)
     {
@@ -1540,7 +1540,7 @@ void test_shunt_op(struct test_op_s *op)
  * explanation on how to use this utility.
  */
 
-int test(int argc, char **argv)
+int test_builtin(int argc, char **argv)
 {
     char   *expr;
     char   *tstart       = NULL;

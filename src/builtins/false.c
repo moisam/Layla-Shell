@@ -34,7 +34,7 @@
  * explanation on how to use this utility.
  */
 
-int false(int argc __attribute__((unused)), char **argv __attribute__((unused)))
+int false_builtin(int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
     /*
      * NOTE: ksh, bash and other major shells implement a false builtin

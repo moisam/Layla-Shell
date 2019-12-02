@@ -64,7 +64,7 @@ static inline void set_entry(char *name, char *val)
  * explanation on how to use this utility.
  */
 
-int __setenv(int argc, char **argv)
+int setenv_builtin(int argc, char **argv)
 {
     int v = 1, c;
     char separator = '\n';

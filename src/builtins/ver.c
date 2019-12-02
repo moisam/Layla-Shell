@@ -35,7 +35,7 @@
  * explanation on how to use this utility.
  */
 
-int ver(int argc, char **argv)
+int ver_builtin(int argc, char **argv)
 {
     int v = 1;
     for( ; v < argc; v++)

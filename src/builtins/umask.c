@@ -28,14 +28,14 @@
 /* the umask value of the shell process */
 static mode_t _umask = 0;
 
-/* umask value we will use when setting the umask in __umask() below */
+/* umask value we will use when setting the umask in umask_builtin() below */
 int cur_perm = 0;
 
 
 /*
  * intialize the umask by getting the current umask value.
  */
-void init_umask()
+void init_umask(void)
 {
     _umask = umask(0);
     umask(_umask);
@@ -255,7 +255,7 @@ fin:
  * explanation on how to use this utility.
  */
 
-int __umask(int argc, char **argv)
+int umask_builtin(int argc, char **argv)
 {
     int   symb_output = 0;
     char *permstr     = NULL;

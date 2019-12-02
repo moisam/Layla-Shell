@@ -64,7 +64,7 @@ struct callframe_s *callframe_new(char *funcname, char *srcfile, int lineno)
  * get a pointer to the current callframe.
  * returns the current callframe, or NULL if the stack is empty.
  */
-struct callframe_s *get_cur_callframe()
+struct callframe_s *get_cur_callframe(void)
 {
     return cur_callframe;
 }
@@ -97,7 +97,7 @@ int callframe_push(struct callframe_s *cf)
  * pop a callframe off the call stack.
  * returns the popped callframe, or NULL if the stack is empty.
  */
-struct callframe_s *callframe_pop()
+struct callframe_s *callframe_pop(void)
 {
     if(!cur_callframe)
     {
@@ -121,7 +121,7 @@ struct callframe_s *callframe_pop()
  * pop a callframe off the call stack and free its structure.
  * doesn't return anything as the popped callframe is freed.
  */
-void callframe_popf()
+void callframe_popf(void)
 {
     if(!cur_callframe)
     {
@@ -150,7 +150,7 @@ void callframe_popf()
  * return the number of callframes in the stack, which equals the
  * number of nested function calls executed by the shell.
  */
-int get_callframe_count()
+int get_callframe_count(void)
 {
     int count = 0;
     struct callframe_s *cf = cur_callframe;
@@ -168,7 +168,7 @@ int get_callframe_count()
  * for usage, see the manpage, or run: `help caller` from lsh prompt to
  * see a short explanation on how to use this utility.
  */
-int caller(int argc, char **argv)
+int caller_builtin(int argc, char **argv)
 {
     int level = -1;
     /* if an argument is supplied, it gives the callframe number the user wants */

@@ -60,7 +60,7 @@ void SIGQUIT_handler(int signum);
  * initialize traps by setting the default action for each trap.
  * called on shell startup.
  */
-void init_traps()
+void init_traps(void)
 {
     int i = 0;
     for( ; i < TRAP_COUNT; i++)
@@ -81,7 +81,7 @@ sigset_t intmask;
  * a foreground job to complete (see page 47 of the bash manual for more
  * information).
  */
-void block_traps()
+void block_traps(void)
 {
     sigemptyset(&intmask);
     struct trap_item_s *trap;
@@ -102,29 +102,9 @@ void block_traps()
 /*
  * unblock trapped signals.
  */
-void unblock_traps()
+void unblock_traps(void)
 {
     sigprocmask(SIG_UNBLOCK, &intmask, NULL);
-}
-
-
-/*
- * return a copy of all the shell's traps (set and unset). this copy can be
- * used later to restore traps to their current values. this is useful when
- * we are e.g. executing a function. traps are reset on entry to the function
- * and restored after the function finishes execution.
- */
-void save_traps()
-{
-    memcpy(saved_table, trap_table, sizeof(struct trap_item_s)*TRAP_COUNT);
-    int i = 0;
-    for( ; i < TRAP_COUNT; i++)
-    {
-        if(trap_table[i].action_str)
-        {
-            saved_table[i].action_str = get_malloced_str(trap_table[i].action_str);
-        }
-    }
 }
 
 
@@ -202,7 +182,7 @@ void trap_handler(int signum)
          *       eval action
          */
         char *argv[] = { "eval", trap->action_str, NULL };
-        eval(2, argv);
+        eval_builtin(2, argv);
         executing_trap = 0;
     }
     if(signum > 0 && signum < ERR_TRAP_NUM)
@@ -315,7 +295,7 @@ void __free_action_str(int i)
  * reset the traps that are not ignored by the shell to their default values.
  * called from a child process (or subshell) after it is forked.
  */
-void reset_nonignored_traps()
+void reset_nonignored_traps(void)
 {
     /* reset the special EXIT trap */
     if(trap_table[0].action != ACTION_IGNORE)
@@ -370,7 +350,7 @@ void reset_nonignored_traps()
 /*
  * print the traps.
  */
-void purge_traps()
+void purge_traps(void)
 {
     /* print the special EXIT trap */
     struct trap_item_s *trap = &trap_table[0];
@@ -443,7 +423,7 @@ void purge_traps()
  * explanation on how to use this utility.
  */
 
-int trap(int argc, char **argv)
+int trap_builtin(int argc, char **argv)
 {
     /* no arguments. print traps and return */
     if(argc == 1)

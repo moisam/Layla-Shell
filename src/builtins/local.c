@@ -36,7 +36,7 @@
  * explanation on how to use this utility.
  */
 
-int local(int argc, char **argv)
+int local_builtin(int argc, char **argv)
 {
     int v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
@@ -83,7 +83,7 @@ int local(int argc, char **argv)
     if(get_local_symtab()->level == 0)
     {
         fprintf(stderr, "%s: cannot declare local variables at the global scope\n", UTILITY);
-        symtab_stack_push(symtab);
+        symtab_stack_add(symtab);
         return 2;
     }
 
@@ -95,6 +95,6 @@ int local(int argc, char **argv)
             res = 1;
         }
     }  
-    symtab_stack_push(symtab);
+    symtab_stack_add(symtab);
     return res;
 }

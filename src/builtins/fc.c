@@ -62,7 +62,7 @@ void __output_multi(char *cmd)
  * explanation on how to use this utility.
  */
 
-int fc(int argc, char **argv)
+int fc_builtin(int argc, char **argv)
 {
     
     /*

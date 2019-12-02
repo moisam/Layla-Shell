@@ -329,7 +329,7 @@ int read_field_split(char *str, int var_count, char **var_names, int suppress_es
  * explanation on how to use this utility.
  */
 
-int __read(int argc, char **argv)
+int read_builtin(int argc, char **argv)
 {
     /*
      * NOTE: POSIX says read must have at least one name argument,

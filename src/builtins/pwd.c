@@ -42,7 +42,7 @@
  * explanation on how to use this utility.
  */
 
-int pwd(int argc, char **argv)
+int pwd_builtin(int argc, char **argv)
 {
     struct symtab_entry_s *entry = get_symtab_entry("PWD");
     char *PWD = get_shell_varp("PWD", NULL);

@@ -30,7 +30,7 @@
 
 /* defined in jobs.c */
 int rip_dead(pid_t pid);
-extern struct job __jobs[];
+extern struct job_s jobs_table[];
 
 
 /*
@@ -41,14 +41,14 @@ extern struct job __jobs[];
  * you can also run: `help wait` or `wait -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
-int __wait(int argc, char **argv)
+int wait_builtin(int argc, char **argv)
 {
     int    res      = 0;
     char  *arg      = 0;
     pid_t  pid      = 0;
     int    wait_any = 0;
     int    force    = 0;
-    struct job *job;
+    struct job_s *job;
     int    v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
     argi = 0;   /* defined in args.c */
@@ -97,7 +97,7 @@ int __wait(int argc, char **argv)
             return 2;
         }
         
-        for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+        for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
         {
             if(job->job_num != 0)
             {
@@ -131,7 +131,7 @@ int __wait(int argc, char **argv)
                             /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
                             if(option_set('i'))
                             {
-                                jobs(1, (char *[]){ "jobs", NULL });
+                                jobs_builtin(1, (char *[]){ "jobs", NULL });
                             }
                             /* return 128 to indicate we were interrupted by a signal */
                             return 128;
@@ -203,7 +203,7 @@ read_next2:
                     /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
                     if(option_set('i'))
                     {
-                        jobs(1, (char *[]){ "jobs", NULL });
+                        jobs_builtin(1, (char *[]){ "jobs", NULL });
                     }
                     /* return 128 to indicate we were interrupted by a signal */
                     return 128;
@@ -249,7 +249,7 @@ read_next2:
                 /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
                 if(option_set('i'))
                 {
-                    jobs(1, (char *[]){ "jobs", NULL });
+                    jobs_builtin(1, (char *[]){ "jobs", NULL });
                 }
                 /* return 128 to indicate we were interrupted by a signal */
                 return 128;

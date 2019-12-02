@@ -45,7 +45,7 @@
  * explanation on how to use this utility.
  */
 
-int repeat(int argc, char **argv)
+int repeat_builtin(int argc, char **argv)
 {
     int v = 1, c;
     int count = 0;

@@ -32,11 +32,11 @@ extern int prev_job;
 #define UTILITY         "bg"
 
 /*
- * helper function to send the job indicated by the passed struct job to
+ * helper function to send the job indicated by the passed struct job_s to
  * the background. it prints a status message to stdout, then sends
  * SIGCONT to the job processes and sets $! to the PGID of the job.
  */
-void __bg(struct job *job)
+void do_bg(struct job_s *job)
 {
     /*
      * POSIX defines bg's output as:
@@ -65,7 +65,7 @@ void __bg(struct job *job)
  * explanation on how to use this utility.
  */
 
-int bg(int argc, char **argv)
+int bg_builtin(int argc, char **argv)
 {
     /* bg only works if job control is enabled (the monitor '-m' option is set) */
     if(!option_set('m'))
@@ -75,7 +75,7 @@ int bg(int argc, char **argv)
     }
     
     int i;
-    struct job *job;
+    struct job_s *job;
     /* if no arguments given, use the current job '%%' */
     if(argc == 1)
     {
@@ -86,7 +86,7 @@ int bg(int argc, char **argv)
             /* if it is stopped, continue it in the background */
             if(WIFSTOPPED(job->status))
             {
-                __bg(job);
+                do_bg(job);
             }
         }
         return 0;
@@ -127,7 +127,7 @@ int bg(int argc, char **argv)
         /* if the job is stopped, start it in the background */
         if(WIFSTOPPED(job->status))
         {
-            __bg(job);
+            do_bg(job);
             /*
              * save the current job in the previous job, then set the last started job
              * as the current job.

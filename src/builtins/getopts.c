@@ -40,7 +40,7 @@
  * explanation on how to use this utility.
  */
 
-int getopts(int argc, char **argv)
+int getopts_builtin(int argc, char **argv)
 {
     /* we need at least 3 args */
     if(argc < 3)

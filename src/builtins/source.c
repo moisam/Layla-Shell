@@ -38,7 +38,7 @@
  * explanation on how to use this utility.
  */
 
-int source(int argc, char **argv)
+int source_builtin(int argc, char **argv)
 {
     int v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
@@ -61,7 +61,7 @@ int source(int argc, char **argv)
                     return 2;
                 }
                 char *argv2[] = { "history", "-L", __optarg, NULL };
-                return history(3, argv2);
+                return history_builtin(3, argv2);
                 
             case 'v':
                 printf("%s", shell_ver);
@@ -74,5 +74,5 @@ int source(int argc, char **argv)
         return 2;
     }
     
-    return dot(argc, argv);
+    return dot_builtin(argc, argv);
 }

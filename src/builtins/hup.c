@@ -41,7 +41,7 @@
  * with (to hup or to nohup, that is the question).
  */
 
-int hup(int argc, char **argv)
+int hup_builtin(int argc, char **argv)
 {
     int i;
     /* determine whether to run as hup or nohup, depending on argv[0] */

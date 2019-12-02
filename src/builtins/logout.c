@@ -34,11 +34,11 @@
  * explanation on how to use this utility.
  */
 
-int logout(int argc, char **argv)
+int logout_builtin(int argc, char **argv)
 {
     /*
      * NOTE: we perform proper logout in the exit_gracefully() function
      *       of exit.c.
      */
-    return __exit(argc, argv);
+    return exit_builtin(argc, argv);
 }

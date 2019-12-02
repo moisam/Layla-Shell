@@ -112,7 +112,7 @@ void enable_list(char which)
  * explanation on how to use this utility.
  */
 
-int enable(int argc, char **argv)
+int enable_builtin(int argc, char **argv)
 {
     int v = 1, c, res = 0;
     int print_attribs = 0;

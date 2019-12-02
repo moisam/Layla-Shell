@@ -39,7 +39,7 @@ double   st_time;
 /*
  * start the shell internal clock.. called on shell startup.
  */
-void start_clock()
+void start_clock(void)
 {
     CLK_TCK = sysconf(_SC_CLK_TCK);
     /* can't do without the clock */
@@ -62,10 +62,10 @@ void start_clock()
  * explanation on how to use this utility.
  */
 
-int __times(int argc, char *argv[] __attribute__((unused)))
+int times_builtin(int argc, char *argv[] __attribute__((unused)))
 {
     /* we accept no arguments */
-    if(argc > 1)
+    if(option_set('P') && argc > 1)
     {
         fprintf(stderr, "%s: should be called with no arguments\n", UTILITY);
         return 1;

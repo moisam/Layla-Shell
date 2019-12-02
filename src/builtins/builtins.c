@@ -23,9 +23,6 @@
 #include "../backend/backend.h"
 #include "setx.h"
 
-/* defined in coproc.c */
-int    coproc(int argc, char **argv, struct io_file_s *io_files);
-
 /*
  * in this file, we define the builtin utility, which is used to display the list
  * of special and regular builtin utilities, as well as to run a builtin utility,
@@ -53,14 +50,16 @@ int    coproc(int argc, char **argv, struct io_file_s *io_files);
 struct builtin_s regular_builtins[] =
 {
     {
-        "["      , 1, "test file attributes and compare strings"                  , test   , 1,       /* POSIX */
+        "["      , 1, "test file attributes and compare strings",
+        test_builtin, 1,       /* POSIX */
         "Usage: %s -option expression ]",
         "expression  conditional expression to test\n\n"
         "For the list of options and their meanings, run 'help [['\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "[["     , 2, "test file attributes and compare strings"                  , test   , 9,       /* POSIX */
+        "[["     , 2, "test file attributes and compare strings",
+        test_builtin, 9,       /* POSIX */
         "Usage: %s -abcdefgGhkLNOprsSuwx file ]]\n"
         "       %s [-nz] string ]]\n"
         "       %s -o [?]op ]]\n"
@@ -131,10 +130,11 @@ struct builtin_s regular_builtins[] =
         "  !expression        true if expression is false\n"
         "  expr1 && expr2     true if expr1 and expr2 are both true\n"
         "  expr1 || expr2     true if either expr1 or expr2 is true\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     { 
-        "alias"  , 5, "define or display aliases"                                 , alias  , 1,       /* POSIX */
+        "alias"  , 5, "define or display aliases",
+        alias_builtin, 1,       /* POSIX */
         "Usage: %s [-hv] [alias-name[=string] ...]",
         "alias-name    write alias definition to standard output\n"
         "alias-name=string\n"
@@ -144,20 +144,23 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     { 
-        "bg"     , 2, "run jobs in the background"                                , bg     , 1,       /* POSIX */
+        "bg"     , 2, "run jobs in the background",
+        bg_builtin, 1,       /* POSIX */
         "Usage: %s [-hv] [job_id...]",
         "job_id      specify the job to run as background job\n\n"
         "Options:\n",
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "bugreport", 9, "send bugreports to the shell's author(s)"                , bugreport, 1,       /* non-POSIX */
+        "bugreport", 9, "send bugreports to the shell's author(s)",
+        bugreport_builtin, 1,       /* non-POSIX */
         "Usage: %s",
         "",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "builtin" , 7, "print the list of shell builtin utilities"                , builtin, 1,       /* non-POSIX */
+        "builtin" , 7, "print the list of shell builtin utilities",
+        builtin_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hvsra] [name [args]]",
         "name       the name of a shell builtin utility to invoke\n"
         "args       arguments to pass to the builtin utility\n\n"
@@ -168,15 +171,17 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "caller"  , 6, "print the context of any active subroutine call"          , caller, 1,       /* non-POSIX */
+        "caller"  , 6, "print the context of any active subroutine call",
+        caller_builtin, 1,       /* non-POSIX */
         "Usage: %s [n]",
         "n          non-negative integer denoting one of the callframe in the current\n"
         "           call stack. The current frame is 0. Each call to a function or dot\n"
         "           script results in a new entry added to the call stack.\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "cd"     , 2, "change the working directory"                              , cd     , 2,       /* POSIX */
+        "cd"     , 2, "change the working directory",
+        cd_builtin, 2,       /* POSIX */
         "Usage: %s [-h] [-nplv] [-L|-P] [directory]\n"
         "       %s [-h] [-nplv] -",
         "directory   Directory path to go to\n\n"
@@ -188,7 +193,8 @@ struct builtin_s regular_builtins[] =
         BUILTIN_PRINT_HOPTION  | BUILTIN_ENABLED,  /* print only the -h option (suppress printing the -v option) */
     },
     {
-        "command", 7, "execute a simple command"                                  , command, 2,       /* POSIX */
+        "command", 7, "execute a simple command",
+        command_builtin, 2,       /* POSIX */
         "Usage: %s [-hp] command_name [argument ...]\n"
         "       %s [-hp][-v|-V] command_name",
         "commmand    command to be executed\n\n"
@@ -199,7 +205,8 @@ struct builtin_s regular_builtins[] =
         BUILTIN_PRINT_HOPTION  | BUILTIN_ENABLED,  /* print only the -h option (suppress printing the -v option) */
     },
     {
-        "coproc"  , 6, "execute commands in a coprocess (subshell with pipe)"      , coproc   , 1,       /* non-POSIX */
+        "coproc"  , 6, "execute commands in a coprocess (subshell with pipe)",
+        coproc_builtin, 1,       /* non-POSIX */
         "Usage: %s command [redirections]",
         "command       the command to be executed in the subshell.\n"
         "redirections  optional file redirections. A pipe is opened between the shell and the\n"
@@ -211,10 +218,11 @@ struct builtin_s regular_builtins[] =
         "                $ cmd >&p\n\n"
         "              similarly, you can read the process's output by invoking:\n\n"
         "                $ cmd <&p\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "declare" , 7, "declare variables and give them attributes"                , declare  , 1,       /* non-POSIX */
+        "declare" , 7, "declare variables and give them attributes",
+        declare_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hvfFgrxlut] [-p] [name=[value]...]",
         "name        variable to which an attribute or value is set\n"
         "value       the value to give to the variable called name\n\n"
@@ -231,7 +239,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "dirs"    , 4, "display the contents of the directory stack"              , dirs   , 2,       /* non-POSIX */
+        "dirs"    , 4, "display the contents of the directory stack",
+        dirs_builtin, 2,       /* non-POSIX */
         "Usage: %s [-hclpv] [+N | -N]\n"
         "       %s -S|-L [filename]",
         "+N          print the N-th directory from the top (the left side of the \n"
@@ -254,7 +263,8 @@ struct builtin_s regular_builtins[] =
         BUILTIN_PRINT_HOPTION | BUILTIN_ENABLED,  /* print only the -h option */
     },
     {
-        "disown"  , 6, "not send HUP signal to jobs"                              , disown , 1,       /* non-POSIX */
+        "disown"  , 6, "not send HUP signal to jobs",
+        disown_builtin, 1,       /* non-POSIX */
         "Usage: %s [-arsv] [-h] [job...]",
         "job        job ids of the jobs to prevent from receiving SIGHUP on exit\n\n"
         "Options:\n"
@@ -265,7 +275,8 @@ struct builtin_s regular_builtins[] =
         BUILTIN_PRINT_VOPTION | BUILTIN_ENABLED,  /* print only the -v option */
     },
     {
-        "dump"    , 4, "dump memory values of the passed arguments"               , dump   , 1,       /* non-POSIX */
+        "dump"    , 4, "dump memory values of the passed arguments",
+        dump_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hv] [argument ...]",
         "argument    can be one of the following:\n"
         "   symtab      will print the contents of the local symbol table\n"
@@ -274,17 +285,19 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "echo"    , 4, "echo arguments"                                           , echo   , 1,       /* non-POSIX */
+        "echo"    , 4, "echo arguments",
+        echo_builtin, 1,       /* non-POSIX */
         "Usage: %s [-enE] [args...]",
         "args        strings to echo\n\n"
         "Options:\n"
         "  -e        allow escaped characters in arguments\n"
         "  -E        don't allow escaped characters in arguments\n"
         "  -n        suppress newline echoing\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "enable"  , 6, "enable/disable shell builtins"                            , enable , 1,       /* non-POSIX */
+        "enable"  , 6, "enable/disable shell builtins",
+        enable_builtin, 1,       /* non-POSIX */
         "Usage: %s [-ahnprsv] [name ...]",
         "name       the name of a shell builtin utility\n"
         "Options:\n"
@@ -296,13 +309,15 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "false"  , 5, "return false value"                                        , false  , 1,       /* POSIX */
+        "false"  , 5, "return false value",
+        false_builtin, 1,       /* POSIX */
         "Usage: %s",
         "",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "fc"     , 2, "process the command history list"                          , fc     , 3,       /* POSIX */
+        "fc"     , 2, "process the command history list",
+        fc_builtin, 3,       /* POSIX */
         "Usage: %s [-hvr] [-e editor] [first [last]]\n"
         "       %s -l [-hvnr] [first [last]]\n"
         "       %s -s [-hv] [old=new] [first]",
@@ -318,31 +333,35 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "fg"     , 2, "run jobs in the foreground"                                , fg     , 1,       /* POSIX */
+        "fg"     , 2, "run jobs in the foreground",
+        fg_builtin, 1,       /* POSIX */
         "Usage: %s [-hv] [job_id]",
         "job_id      specify the job to run as foreground job\n\n"
         "Options:\n",
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "getopts", 7, "parse utility options"                                     , getopts, 1,       /* POSIX */
+        "getopts", 7, "parse utility options",
+        getopts_builtin, 1,       /* POSIX */
         "Usage: %s optstring name [arg...]",
         "optstring   string of option characters to be recognized\n"
         "name        shell variable to save in the found option\n"
         "arg...      list of arguments to parse instead of positional args\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,       /* don't print neither the -v nor the -h options */
     },
     {
-        "glob"   , 4, "echo arguments, delimited by NULL characters"              , __glob , 1,       /* non-POSIX */
+        "glob"   , 4, "echo arguments, delimited by NULL characters",
+        glob_builtin, 1,       /* non-POSIX */
         "Usage: %s [-eE] [args...]",
         "args       strings to echo\n\n"
         "Options:\n"
         "  -e       allow escaped characters in arguments\n"
         "  -E       don't allow escaped characters in arguments\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,       /* don't print neither the -v nor the -h options */
     },
     {
-        "hash"   , 4, "remember or report utility locations"                      , hash   , 2,       /* POSIX */
+        "hash"   , 4, "remember or report utility locations",
+        hash_builtin, 2,       /* POSIX */
         "Usage: %s [-hvld] [-p path] [-r] utility...\n"
         "       %s -a",
         "utility...  the name of a utility to search and add to the hashtable\n\n"
@@ -356,7 +375,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "help"    , 4, "show help for builtin utilities and commands"             , help   , 1,       /* non-POSIX */
+        "help"    , 4, "show help for builtin utilities and commands",
+        help_builtin, 1,       /* non-POSIX */
         "Usage: %s [-ds] [command]",
         "command     the name of a builtin utility for which to print help\n\n"
         "Options:\n"
@@ -365,7 +385,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "history" , 7, "print command history"                                    , history, 6,       /* non-POSIX */
+        "history" , 7, "print command history",
+        history_builtin, 6,       /* non-POSIX */
         "Usage: %s [-hR] [n]\n"
         "       %s -c\n"
         "       %s -d offset\n"
@@ -393,17 +414,19 @@ struct builtin_s regular_builtins[] =
         "  -S         equivalent to -w\n"
         "  -w         write out the current in-memory list to filename. If filename is not\n"
         "               supplied, the default history file is used\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "hup"    , 3, "run a command, receiving SIGHUP"                           , hup    , 1,       /* non-POSIX */
+        "hup"    , 3, "run a command, receiving SIGHUP",
+        hup_builtin, 1,       /* non-POSIX */
         "Usage: %s [command]",
         "command     the command to run (must be an external command)\n\n"
         "Options:\n",
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "jobs"   , 4, "display status of jobs in the current session"             , jobs   , 2,       /* POSIX */
+        "jobs"   , 4, "display status of jobs in the current session",
+        jobs_builtin, 2,       /* POSIX */
         "Usage: %s [-hnrsv] [-l|-p] [job_id...]\n"
         "       %s -x command [argument...]",
         "job_id...      job ID(s) for which to display status\n"
@@ -421,7 +444,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "kill"   , 4, "terminate or signal processes"                             , __kill , 6,       /* POSIX */
+        "kill"   , 4, "terminate or signal processes",
+        kill_builtin, 6,       /* POSIX */
         "Usage: %s [-hv]\n"
         "       %s -s signal_name pid...\n"
         "       %s -n signal_number pid...\n"
@@ -440,20 +464,23 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     { 
-        "let"    , 3, "evaluate arithmetic expressions"                           , let    , 1,       /* non-POSIX */
+        "let"    , 3, "evaluate arithmetic expressions",
+        let_builtin, 1,       /* non-POSIX */
         "Usage: %s [args...]",
         "args        arithmetic expressions to evaluate\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "mailcheck", 9, "check for mail at specified intervals"                    , mail   , 1,       /* non-POSIX */
+        "mailcheck", 9, "check for mail at specified intervals",
+        mailcheck_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hvq]",
         "Options:\n"
         "  -q        do not output messages in case of error or no mail\n",
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "memusage", 8, "show the shell's memory usage"                             , memusage  , 1,       /* non-POSIX */
+        "memusage", 8, "show the shell's memory usage",
+        memusage_builtin, 1,       /* non-POSIX */
         "Usage: %s arg...",
         "Arguments show the memory allocated for different shell internal structures:\n"
         "  aliases             show the memory allocated for alias names and values\n"
@@ -471,7 +498,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "newgrp" , 6, "change to a new group"                                     , newgrp , 1,       /* POSIX */
+        "newgrp" , 6, "change to a new group",
+        newgrp_builtin, 1,       /* POSIX */
         "Usage: %s [-hv] [-l] [group]",
         "group       group name (or ID) to which the real and effective group\n"
         "              IDs shall be set\n\n"
@@ -480,7 +508,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "nice"   , 4, "run a command with the given priority"                     , __nice , 2,       /* non-POSIX */
+        "nice"   , 4, "run a command with the given priority",
+        nice_builtin, 2,       /* non-POSIX */
         "Usage: %s [+n] [command]\n"
         "       %s [-n] [command]",
         "+n          a positive nice priority to give to command, or the shell if no command\n"
@@ -491,21 +520,24 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "nohup"  , 5, "run a command, ignoring SIGHUP"                            , hup    , 1,       /* non-POSIX */
+        "nohup"  , 5, "run a command, ignoring SIGHUP",
+        hup_builtin, 1,       /* non-POSIX */
         "Usage: %s [command]",
         "command     the command to run (must be an external command)\n\n"
         "Options:\n",
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "notify" , 6, "notify immediately when jobs change status"                , notify , 1,       /* non-POSIX */
+        "notify" , 6, "notify immediately when jobs change status",
+        notify_builtin, 1,       /* non-POSIX */
         "Usage: %s [job ...]",
         "job         the job id of the job to mark for immediate notification\n\n"
         "Options:\n",
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "popd"   , 4, "pop directories off the stack and cd to them"              , popd   , 1,       /* non-POSIX */
+        "popd"   , 4, "pop directories off the stack and cd to them",
+        popd_builtin, 1,       /* non-POSIX */
         "Usage: %s [-chlnpsv] [+N | -N]",
         "+N          remove the N-th directory, counting from 0 from the left\n"
         "-N          remove the N-th directory, counting from 0 from the right\n\n"
@@ -519,7 +551,8 @@ struct builtin_s regular_builtins[] =
         BUILTIN_PRINT_HOPTION | BUILTIN_ENABLED,  /* print only the -h option */
     },
     {
-        "printenv", 8, "print the names and values of environment variables"      , printenv, 1,       /* non-POSIX */
+        "printenv", 8, "print the names and values of environment variables",
+        printenv_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hv0] [name ...]",
         "name        the name of an environment variable\n\n"
         "Options:\n"
@@ -527,7 +560,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "pushd"  , 5, "push directories on the stack and cd to them"              , pushd  , 1,       /* non-POSIX */
+        "pushd"  , 5, "push directories on the stack and cd to them",
+        pushd_builtin, 1,       /* non-POSIX */
         "Usage: %s [-chlnpsv] [+N | -N | dir]",
         "+N          rotate the stack and bring the N-th directory, counting from 0 from the \n"
         "              left, to the top of the stack\n"
@@ -548,10 +582,11 @@ struct builtin_s regular_builtins[] =
         "If the 'dunique' extra option is set, pushd removes instances of dir from the stack\n"
         "before pushing it. If the 'dextract' extra option is set, pushd extracts the N-th directory\n"
         "and pushes it on top of the stack.\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "pwd"    , 3, "return working directory name"                             , pwd    , 1,       /* POSIX */
+        "pwd"    , 3, "return working directory name",
+        pwd_builtin, 1,       /* POSIX */
         "Usage: %s [-hv] [-L|-P]",
         "Options:\n"
         "  -L        logically handle dot-dot\n"
@@ -559,7 +594,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "read"   , 4, "read a line from standard input"                           , __read , 1,       /* POSIX */
+        "read"   , 4, "read a line from standard input",
+        read_builtin, 1,       /* POSIX */
         "Usage: %s [-hv] [-rs] [-d delim] [-nN num] [-t secs] [-u fd] [-p msg] [var...]",
         "delim       read up to the first character of delim instead of a newline\n"
         "num         max number of bytes to read\n"
@@ -580,7 +616,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "setenv" , 6, "set environment variable values"                           , __setenv, 1,       /* non-POSIX */
+        "setenv" , 6, "set environment variable values",
+        setenv_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hv] [name[=value] ...]",
         "name        the environment variable to set\n"
         "value       the value to give to name, NULL if no value is given\n\n"
@@ -591,33 +628,38 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "stop"   , 4, "stop background jobs"                                      , stop    , 1,       /* non-POSIX */
+        "stop"   , 4, "stop background jobs",
+        stop_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hv] job",
         "job         the background job to stop\n\n"
         "Options:\n",
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "test"   , 4, "test file attributes and compare strings"                  , test    , 1,       /* POSIX */
+        "test"   , 4, "test file attributes and compare strings",
+        test_builtin, 1,       /* POSIX */
         "Usage: %s -option expression",
         "For the list of options and their meanings, run 'help [['\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,       /* don't print neither the -v nor the -h options */
     },
     {
-        "true"   , 4, "return true value"                                         , true   , 1,       /* POSIX */
+        "true"   , 4, "return true value",
+        true_builtin, 1,       /* POSIX */
         "Usage: %s",
         "",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,       /* don't print neither the -v nor the -h options */
     },
     {
-        "type"   , 4, "write a description of command type"                       , type   , 1,       /* POSIX */
+        "type"   , 4, "write a description of command type",
+        type_builtin, 1,       /* POSIX */
         "Usage: %s name...",
         "command     the name of a command or function for which to write description\n\n"
         "Options:\n",
-        3 | BUILTIN_ENABLED,  /* print both -v and -h options */
+        3 | BUILTIN_ENABLED,   /* print both -v and -h options */
     },
     {
-        "ulimit" , 6, "set or report shell resource limits"                       , __ulimit, 1,       /* POSIX */
+        "ulimit" , 6, "set or report shell resource limits",
+        ulimit_builtin, 1,       /* POSIX */
         "Usage: %s [-h] [-acdflmnpstuv] [limit]",
         "limit       the new limit for the given resource\n\n"
         "Options:\n"
@@ -641,7 +683,8 @@ struct builtin_s regular_builtins[] =
         BUILTIN_PRINT_HOPTION | BUILTIN_ENABLED,  /* print only the -h option */
     },
     {
-        "umask"  , 5, "get or set the file mode creation mask"                    , __umask, 1,       /* POSIX */
+        "umask"  , 5, "get or set the file mode creation mask",
+        umask_builtin, 1,       /* POSIX */
         "Usage: %s [-hvp] [-S] [mask]",
         "mask        the new file mode creation mask\n\n"
         "Options:\n"
@@ -650,7 +693,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "unalias", 7, "remove alias definitions"                                  , unalias, 2,       /* POSIX */
+        "unalias", 7, "remove alias definitions",
+        unalias_builtin, 2,       /* POSIX */
         "Usage: %s [-hv] alias-name...\n"
         "       %s [-hv] -a",
         "alias-name  the name of an alias to be removed\n\n"
@@ -659,7 +703,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "unlimit", 7, "remove limits on system resources"                         , unlimit, 1,       /* non-POSIX */
+        "unlimit", 7, "remove limits on system resources",
+        unlimit_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hHfSv] [limit ...]\n"
         "       %s [-HS] -a",
         "limit       the name of a system resource, which can be one of the following:\n"
@@ -692,7 +737,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "unsetenv", 8, "unset environment variable values"                        , __unsetenv, 1,       /* non-POSIX */
+        "unsetenv", 8, "unset environment variable values",
+        unsetenv_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hv] [name ...]",
         "name        the environment variable to unset\n\n"
         "This utility unsets both the environment variable and the shell variable with\n"
@@ -701,13 +747,15 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "ver"     , 3, "show shell version"                                       , ver    , 1,       /* non-POSIX */
+        "ver"     , 3, "show shell version",
+        ver_builtin, 1,       /* non-POSIX */
         "Usage: %s",
         "",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "wait"   , 4, "await process completion"                                  , __wait , 1,       /* POSIX */
+        "wait"   , 4, "await process completion",
+        wait_builtin, 1,       /* POSIX */
         "Usage: %s [-hfnv] [pid...]",
         "pid...      process ID or Job ID to wait for\n\n"
         "Options:\n"
@@ -716,7 +764,8 @@ struct builtin_s regular_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     { 
-        "whence" , 6, "write a description of command type"                       , whence , 1,       /* non-POSIX */
+        "whence" , 6, "write a description of command type",
+        whence_builtin, 1,       /* non-POSIX */
         "Usage: %s [-afhpv] name...",
         "name        the name of a command or function for which to write description\n\n"
         "Options:\n"
@@ -726,7 +775,6 @@ struct builtin_s regular_builtins[] =
         "  -v        verbose output (the default)\n",
         2 | BUILTIN_ENABLED,  /* print only the -h option */
     },
-    
 };
 int regular_builtin_count = sizeof(regular_builtins)/sizeof(struct builtin_s);
 
@@ -735,37 +783,43 @@ int regular_builtin_count = sizeof(regular_builtins)/sizeof(struct builtin_s);
 struct builtin_s special_builtins[] = 
 {
     {
-        "break"   , 5, "exit from for, while, or until loop"                       , __break   , 1,       /* POSIX */
+        "break"   , 5, "exit from for, while, or until loop",
+        break_builtin, 1,       /* POSIX */
         "Usage: %s [n]",
         "n           exit the the n-th enclosing for, while, or until loop\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        ":"       , 1, "expand arguments (the null utility)"                       , colon     , 1,       /* POSIX */
+        ":"       , 1, "expand arguments (the null utility)",
+        colon_builtin, 1,       /* POSIX */
         "Usage: %s [argument...]",
         "argument    command arguments to expand\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "continue", 8, "continue for, while, or until loop"                        , __continue, 1,       /* POSIX */
+        "continue", 8, "continue for, while, or until loop",
+        continue_builtin, 1,       /* POSIX */
         "Usage: %s [n]",
         "n           return to the top of the n-th enclosing for, while, or until loop\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "."       , 1, "execute commands in the current environment"               , dot       , 1,       /* POSIX */
+        "."       , 1, "execute commands in the current environment",
+        dot_builtin, 1,       /* POSIX */
         "Usage: %s file",
         "file        execute commands from this file in the current environment\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "eval"    , 4, "construct command by concatenating arguments"              , eval      , 1,       /* POSIX */
+        "eval"    , 4, "construct command by concatenating arguments",
+        eval_builtin, 1,       /* POSIX */
         "Usage: %s [argument...]",
         "argument    construct a command by concatenating arguments together\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "exec"    , 4, "execute commands and open, close, or copy file descriptors", exec      , 1,       /* POSIX */
+        "exec"    , 4, "execute commands and open, close, or copy file descriptors",
+        exec_builtin, 1,       /* POSIX */
         "Usage: %s [-cl] [-a name] [command [argument...]]",
         "command     path to the command to be executed\n"
         "argument    execute command with arguments and open, close, or copy file descriptors\n\n"
@@ -773,16 +827,18 @@ struct builtin_s special_builtins[] =
         "  -a        set argv[0] to 'name' instead of 'command'\n"
         "  -c        clear the environment before performing exec\n"
         "  -l        place a dash in front of argv[0], just as the login utility does\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "exit"    , 4, "exit the shell"                                            , __exit    , 1,       /* POSIX */
+        "exit"    , 4, "exit the shell",
+        exit_builtin, 1,       /* POSIX */
         "Usage: %s [n]",
         "n           exit the shell returning n as the exit status code\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "export"  , 6, "set the export attribute for variables"                    , export    , 1,       /* POSIX */
+        "export"  , 6, "set the export attribute for variables",
+        export_builtin, 1,       /* POSIX */
         "Usage: %s [-hvn] [-p] [name[=word]...]",
         "name        set the export attribute to the variable name\n"
         "word        set the value of variable name to word\n\n"
@@ -792,7 +848,8 @@ struct builtin_s special_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     { 
-        "local"   , 5, "define local variables"                                    , local    , 1,       /* non-POSIX */
+        "local"   , 5, "define local variables",
+        local_builtin, 1,       /* non-POSIX */
         "Usage: %s name[=word] ...",
         "name        set the local attribute to the variable 'name'\n"
         "word        set the value of the variable named 'name' to 'word'\n\n"
@@ -800,23 +857,26 @@ struct builtin_s special_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "logout"  , 6, "exit a login shell"                                        , logout    , 1,       /* non-POSIX */
+        "logout"  , 6, "exit a login shell",
+        logout_builtin, 1,       /* non-POSIX */
         "Usage: %s [n]",
         "n           exit a login shell returning n as the exit status code\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "readonly", 8, "set the readonly attribute for variables"                  , readonly  , 2,       /* POSIX */
+        "readonly", 8, "set the readonly attribute for variables",
+        readonly_builtin, 2,       /* POSIX */
         "Usage: %s name[=word]...\n"
         "       %s -p",
         "name        set the readonly attribute to the variable name\n"
         "word        set the value of variable name to word\n\n"
         "Options:\n"
         "  -p        print the names and values of all readonly variables\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "repeat"  , 6, "repeat a command count times"                              , repeat    , 1,       /* non-POSIX */
+        "repeat"  , 6, "repeat a command count times",
+        repeat_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hv] count command",
         "count       the number of times to repeat command\n"
         "command     the command to execute count times\n\n"
@@ -824,13 +884,15 @@ struct builtin_s special_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "return"  , 6, "return from a function or dot script"                      , __return  , 1,       /* POSIX */
+        "return"  , 6, "return from a function or dot script",
+        return_builtin, 1,       /* POSIX */
         "Usage: %s [n]",
         "n           exit status to return\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "set"     , 3, "set or unset options and positional parameters"            , set       , 5,       /* POSIX */
+        "set"     , 3, "set or unset options and positional parameters",
+        set_builtin, 5,       /* POSIX */
         "Usage: %s [-abCdeEfhHkmnprtTuvx] [-o option ...] [argument...]\n"
         "       %s [+abCdeEfhHkmnprtTuvx] [+o option ...] [argument...]\n"
         "       %s -- [argument...]\n"
@@ -890,10 +952,11 @@ struct builtin_s special_builtins[] =
         "  -u         expanding unset parameters (except $@ and $*) results in error\n"
         "  -v         verbose mode (write input to stderr as it is read)\n"
         "  -x         write command trace to stderr before executing each command\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "setx"    , 4, "set/unset optional (extra) shell options"                  , setx     , 1,       /* non-POSIX */
+        "setx"    , 4, "set/unset optional (extra) shell options",
+        setx_builtin, 1,       /* non-POSIX */
         "Usage: %s [-hvpsuqo] option",
         "option      can be any of the following (the name inside brackets is the shell from\n"
         "            which the option was taken/based; 'int' means interactive shell, 'non-int'\n"
@@ -974,14 +1037,16 @@ struct builtin_s special_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "shift"   , 5, "shift positional parameters"                               , shift     , 1,       /* POSIX */
+        "shift"   , 5, "shift positional parameters",
+        shift_builtin, 1,       /* POSIX */
         "Usage: %s [n]",
         "n           the value by which to shift positional parameters to the left.\n"
         "            parameter 1 becomes (1+n), parameters 2 becomes (2+n), and so on\n\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "source"  , 6, "execute commands in the current environment"               , source    , 1,       /* POSIX */
+        "source"  , 6, "execute commands in the current environment",
+        source_builtin, 1,       /* POSIX */
         "Usage: %s [-hv] file",
         "file        execute commands from this file in the current environment\n\n"
         "This command is the same as dot or '.', except when the -h option is given, where\n"
@@ -992,20 +1057,23 @@ struct builtin_s special_builtins[] =
         BUILTIN_PRINT_VOPTION | BUILTIN_ENABLED,  /* print only the -h option */
     },
     {
-        "suspend" , 7, "suspend execution of the shell"                            , suspend  , 1,       /* non-POSIX */
+        "suspend" , 7, "suspend execution of the shell",
+        suspend_builtin, 1,       /* non-POSIX */
         "Usage: %s [-fhv]",
         "Options:\n"
         "  -f        force suspend, even if the shell is a login shell\n",
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "times"   , 5, "write process times"                                       , __times   , 1,       /* POSIX */
+        "times"   , 5, "write process times",
+        times_builtin, 1,       /* POSIX */
         "Usage: %s",
         "",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
-        "trap"    , 4, "trap signals"                                              , trap      , 2,       /* POSIX */
+        "trap"    , 4, "trap signals",
+        trap_builtin, 2,       /* POSIX */
         "Usage: %s [-hvlp] n [condition...]\n"
         "       %s [-hvlp] [action condition...]",
         "n           treat all operands as conditions; reset each condition to the default value\n\n"
@@ -1025,14 +1093,15 @@ struct builtin_s special_builtins[] =
         3 | BUILTIN_ENABLED,  /* print both -v and -h options */
     },
     {
-        "unset"   , 5, "unset values and attributes of variables and functions"    , unset     , 1,       /* POSIX */
+        "unset"   , 5, "unset values and attributes of variables and functions",
+        unset_builtin, 1,       /* POSIX */
         "Usage: %s [-fv] name...",
         "name       names of variables/functions to unset and remove from the environment.\n"
         "           readonly variables cannot be unset.\n\n"
         "Options:\n"
         "  -f       treat each name as a function name\n"
         "  -v       treat each name as a variable name\n",
-        0 | BUILTIN_ENABLED,  /* don't print neither the -v nor the -h options */
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
 };
 int special_builtin_count = sizeof(special_builtins)/sizeof(struct builtin_s);
@@ -1202,7 +1271,7 @@ void list(char which)
  * explanation on how to use this utility.
  */
 
-int builtin(int argc, char *argv[])
+int builtin_builtin(int argc, char **argv)
 {
     int v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */

@@ -38,7 +38,7 @@
  * zero. otherwise, return 1.
  */
 
-int let(int argc, char **argv)
+int let_builtin(int argc, char **argv)
 {
     /* no arguments */
     if(argc == 1)

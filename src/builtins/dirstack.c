@@ -45,7 +45,7 @@ int    push_dir(char *dir, struct dirstack_ent_s **stack, int *count);
  * 
  * returns 1 on success, 0 on failure.
  */
-int init_dirstack()
+int init_dirstack(void)
 {
     if(read_dirsfile)
     {
@@ -80,7 +80,7 @@ void __free_dirstack(struct dirstack_ent_s *ds)
  * free the memory used by the dirstack structure entries and set the
  * dirstack pointer to NULL and the stack count to zero.
  */
-void free_dirstack()
+void free_dirstack(void)
 {
     __free_dirstack(dirstack);
     dirstack = NULL;
@@ -156,7 +156,7 @@ int load_dirstack(char *__path)
                 p += 3;
                 while(*p && isspace(*p)) p++;   /* skip spaces after the 'cd' command word */
                 if(!p) continue;
-                cd(2, (char *[]){ "cd", p, NULL });
+                cd_builtin(2, (char *[]){ "cd", p, NULL });
                 continue;
             }
 #endif
@@ -180,7 +180,7 @@ int load_dirstack(char *__path)
              * this step is also important if the file contains pushd commands with
              * relative (vs absolute) directory paths.
              */
-            if(cd(2, (char *[]){ "cd", p, NULL }) != 0)
+            if(cd_builtin(2, (char *[]){ "cd", p, NULL }) != 0)
             {
                 /*
                 * TODO: do something better than just b*^%$ing about it.
@@ -222,7 +222,7 @@ int load_dirstack(char *__path)
     /* cd to the dir on top of the stack if its not the same as our cwd */
     if(!cwd || strcmp(dirstack->path, cwd) != 0)
     {
-        cd(2, (char *[]){ "cd", dirstack->path, NULL });
+        cd_builtin(2, (char *[]){ "cd", dirstack->path, NULL });
     }
     return 1;
     
@@ -288,7 +288,7 @@ int load_dirstackp(char *val)
             path[n] = '\0';
         }
         /* cd to the directory */
-        if(cd(2, (char *[]){ "cd", path, NULL }) != 0)
+        if(cd_builtin(2, (char *[]){ "cd", path, NULL }) != 0)
         {
             /*
              * TODO: do something better than just b*^%$ing about it.
@@ -343,7 +343,7 @@ int load_dirstackp(char *val)
     /* cd to the dir on top of the stack if its not the same as our cwd */
     if(!cwd || strcmp(dirstack->path, cwd) != 0)
     {
-        cd(2, (char *[]){ "cd", dirstack->path, NULL });
+        cd_builtin(2, (char *[]){ "cd", dirstack->path, NULL });
     }
     return 1;
     
@@ -577,7 +577,7 @@ void purge_dirstack(int flags)
  * same as purge_dirstack() above, but saves the output in a string, instead of
  * sending it to stdout.
  */
-char *purge_dirstackp()
+char *purge_dirstackp(void)
 {
     struct dirstack_ent_s *ds = dirstack;
     /* calculate the space we will need */
@@ -646,7 +646,7 @@ int push_dir(char *dir, struct dirstack_ent_s **stack, int *count)
  * returns 1 if the directory is pushed on the stack, 0 in case of error.
  * stack_count is incremented by 1 after the push.
  */
-int push_cwd()
+int push_cwd(void)
 {
     return push_dir(cwd, &dirstack, &stack_count);
 }
@@ -657,9 +657,9 @@ int push_cwd()
  *
  * returns 1 on success, 0 in case of error.
  */
-int dirs_cd()
+int dirs_cd(void)
 {
-    if(cd(2, (char *[]){ "cd", dirstack->path, NULL }) != 0)
+    if(cd_builtin(2, (char *[]){ "cd", dirstack->path, NULL }) != 0)
     {
         return 0;
     }
@@ -682,7 +682,7 @@ int dirs_cd()
  * you can also run: `help dirs` or `dirs -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
-int dirs(int argc, char **argv)
+int dirs_builtin(int argc, char **argv)
 {
     int clear = 0, fullpaths = 0, print_separate = 0, print_index = 0, n = 0;
     int v = 1, c;
@@ -844,7 +844,7 @@ int dirs(int argc, char **argv)
  * you can also run: `help pushd` or `pushd -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
-int pushd(int argc, char **argv)
+int pushd_builtin(int argc, char **argv)
 {
     int flags = 0, silent = 0;
     int docd = 1;
@@ -1124,7 +1124,7 @@ int pushd(int argc, char **argv)
  * you can also run: `help popd` or `popd -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
-int popd(int argc, char **argv)
+int popd_builtin(int argc, char **argv)
 {
     int flags = 0, silent = 0;
     int docd = 1;

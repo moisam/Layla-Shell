@@ -126,7 +126,7 @@ gid_t *add_supp_group(gid_t *supp_groups, int supp_group_count, gid_t new_gid)
  * explanation on how to use this utility.
  */
 
-int newgrp(int argc, char **argv)
+int newgrp_builtin(int argc, char **argv)
 {
     int   req_login  = 0;
     gid_t new_gid    = 0;

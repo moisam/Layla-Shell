@@ -39,7 +39,7 @@
  * explanation on how to use this utility.
  */
 
-int whence(int argc, char **argv)
+int whence_builtin(int argc, char **argv)
 {
     int v = 1, c;
     int res = 0, /* verbose = 0, */ skipfunc = 0, print_path = 0, print_all = 0;
@@ -102,8 +102,8 @@ int whence(int argc, char **argv)
             if(!print_path)
             {
                 /* check if it is a defined alias */
-                char *alias = parse_alias(arg);
-                if(alias != arg)
+                char *alias = get_alias_val(arg);
+                if(alias && alias != arg)
                 {
                     printf("%s is aliased to ", arg);
                     purge_quoted_val(alias);

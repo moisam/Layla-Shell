@@ -212,7 +212,7 @@ void purge_xoptions(char which, int formal)
  * explanation on how to use this utility.
  */
 
-int setx(int argc, char **argv)
+int setx_builtin(int argc, char **argv)
 {
     int enable = 0, disable = 0, quiet = 0, setonly = 0, formal = 0;
     int v = 1, c;

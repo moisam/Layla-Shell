@@ -53,12 +53,12 @@ char *cwd = NULL;
  * for these words.. of course, these words might appear in the alias AFTER it is
  * expanded, and so we check AFTER the word expansion is performed.
  */
-void do_cwdcmd()
+void do_cwdcmd(void)
 {
     static char *wordlist[] = { "cd", "popd", "pushd", "cwdcmd" };
     int wordcount = 4;
     /* get the alias value */
-    char *cmd = parse_alias("cwdcmd");
+    char *cmd = get_alias_val("cwdcmd");
     char *p;
     if(cmd && *cmd)
     {
@@ -80,7 +80,7 @@ void do_cwdcmd()
                 }
             }
             /* run the parsed cwdcmd alias command(s) */
-            eval(2, (char *[]){ "eval", cmd, NULL });
+            eval_builtin(2, (char *[]){ "eval", cmd, NULL });
             free(cmd);
         }
     }
@@ -96,7 +96,7 @@ void do_cwdcmd()
  * 
  * this function returns 0 on success, non-zero if an error occurred.
  */
-int cd_hyphen()
+int cd_hyphen(void)
 {
     /* get the value of the old working dir from the $OLDPWD variable */
     struct symtab_entry_s *entry = get_symtab_entry("OLDPWD");
@@ -140,9 +140,11 @@ int cd_hyphen()
 /*
  * return the value of the home directory.. if the $HOME variable is set, use its value.
  * otherwise, get the home directory from the passwd database.
- * returns the home directory of the current user, or NULL in case of error.
+ * returns the home directory of the current user, or NULL in case of error.. if the
+ * caller wants to do anything with the result, it should make its own copy and work
+ * on it, as our return value is shared by other functions in the shell.
  */
-char *get_home()
+char *get_home(void)
 {
     char *home = get_shell_varp("HOME", NULL);
     /*
@@ -151,6 +153,7 @@ char *get_home()
      */
     if(!home || !*home)
     {
+#if 0
         static struct passwd pwd;
         static char *buf = NULL;
         struct passwd *result;
@@ -191,8 +194,13 @@ char *get_home()
         }
         /* get the home dir */
         home = pwd.pw_dir;
-        /* and save it in the $HOME variable */
-        set_shell_varp("HOME", home);
+#endif
+        struct passwd *pw = getpwuid(geteuid());
+        if(!pw)
+        {
+            return NULL;
+        }
+        home = pw->pw_dir;
     }
     return home;
 }
@@ -517,7 +525,7 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
  *  Update 29/08/2019: fixed the function by removing the goto statements
  *  and refactoring some functionality to separate functions (defined above).
  */
-int cd(int argc, char *argv[])
+int cd_builtin(int argc, char *argv[])
 {
     int     P_option = 0;
     int     v;
@@ -619,7 +627,10 @@ int cd(int argc, char *argv[])
     {
         /* no dir argument. use $HOME */
         directory = get_home();
-        curpath = __get_malloced_str(directory);
+        if(directory)
+        {
+            curpath = __get_malloced_str(directory);
+        }
     }
     else
     {
@@ -637,7 +648,7 @@ start:
     if(!P_option)
     {
         /* if curpath is relative, attach it to the current working directory */
-        if(*curpath != '/' && pwd && *pwd)
+        if(curpath && *curpath != '/' && pwd && *pwd)
         {
             /* add 2 to the length for possible '/' */
             char *path = malloc(pwdlen+strlen(curpath)+2);
@@ -678,7 +689,7 @@ start:
     }
     
     /* now change to the new directory */
-    if(chdir(curpath) != 0)
+    if(curpath && chdir(curpath) != 0)
     {
         free(curpath);
         if(optionx_set(OPTION_CDABLE_VARS) && v < argc)

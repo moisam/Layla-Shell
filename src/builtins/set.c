@@ -328,7 +328,7 @@ int option_set(char which)
 /*
  * reset (unset) all options.
  */
-void reset_options()
+void reset_options(void)
 {
     memset(&options, 0, sizeof(options));
 }
@@ -340,7 +340,7 @@ void reset_options()
  * additionally, save the long option version of the set options in the $SHELLOPTS
  * variable (bash), which will contain a colon-separated list of the set options.
  */
-void symtab_save_options()
+void symtab_save_options(void)
 {
     /* $- is the current option flags. set it appropriately */
     //struct symtab_entry_s *entry = add_to_symtab("-");
@@ -563,7 +563,7 @@ static inline int __do_restricted(int onoff)
 /*
  * if the shell is started in the --posix mode, clear all non-POSIX options.
  */
-void reset_non_posix_options()
+void reset_non_posix_options(void)
 {
     options.braceexpand = 0;
     options.dumpast     = 0;
@@ -873,7 +873,7 @@ int do_options(char *ops, char *extra)
  * explanation on how to use this utility.
  */
 
-int set(int argc, char **argv)
+int set_builtin(int argc, char **argv)
 {
     int i = 1;
 
@@ -1037,7 +1037,7 @@ int set(int argc, char **argv)
  * returns 1 if the shell variable and its flags are set, -1 if the variable is readonly,
  * and 0 for all other errors.
  */
-int __set(char* name_buf, char* val_buf, int set_global, int set_flags, int unset_flags)
+int do_set(char* name_buf, char* val_buf, int set_global, int set_flags, int unset_flags)
 {
     /* check the special variables first */
     if(set_special_var(name_buf, val_buf))

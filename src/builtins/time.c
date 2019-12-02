@@ -49,7 +49,7 @@ extern long int CLK_TCK;
 /*
  * get the current time in seconds.
  */
-double get_cur_time()
+double get_cur_time(void)
 {
     struct timeval tm;
     gettimeofday(&tm, NULL);
@@ -90,7 +90,7 @@ void print_time(int l, int p, int hrs, int mins, double secs)
  * explanation on how to use this utility.
  */
 
-int __time(struct source_s *src, struct node_s *cmd)
+int time_builtin(struct source_s *src, struct node_s *cmd)
 {
     int     res = 0;
     /* use POSIX format by default if running in the --posix mode */
@@ -104,7 +104,7 @@ int __time(struct source_s *src, struct node_s *cmd)
     /* if time is called with no arguments, we print the shell's times information (zsh) */
     if(!cmd)
     {
-        return __times(1, NULL);
+        return times_builtin(1, NULL);
     }
     
     /* get start time */

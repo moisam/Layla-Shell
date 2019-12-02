@@ -47,7 +47,7 @@ void   purge_var(struct symtab_entry_s *entry, int name_only);
  * explanation on how to use this utility.
  */
 
-int declare(int argc, char **argv)
+int declare_builtin(int argc, char **argv)
 {
     int v = 1, c, res = 0;
     int print_attribs = 0;
@@ -277,8 +277,8 @@ int do_declare_var(char *arg, int set_global, int set_flags, int unset_flags, in
         res = 1;
         fprintf(stderr, "%s: error setting/unsetting '%s' is not allowed\n", who, name_buf);
     }
-    /* zero or negative result from __set() means error */
-    else if((res = __set(name_buf, val, set_global, set_flags, unset_flags)) <= 0)
+    /* zero or negative result from do_set() means error */
+    else if((res = do_set(name_buf, val, set_global, set_flags, unset_flags)) <= 0)
     {
         char *keyword = "declaring";
         switch(utility)

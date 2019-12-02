@@ -232,7 +232,7 @@ char *read_line(FILE *file, int alloc_memory, int *is_timestamp)
  * initialize the command line history facility.
  * called upon interactive shell startup.
  */
-void init_history()
+void init_history(void)
 {
     /* get the maxium count of history entries we need to remember */
     struct symtab_entry_s *entry = get_symtab_entry("HISTSIZE");
@@ -350,7 +350,7 @@ void init_history()
  * save the history list entries to the history file.
  * called on shell shut down.
  */
-void flush_history()
+void flush_history(void)
 {
     /* empty list */
     if(cmd_history_end == 0)
@@ -516,7 +516,7 @@ void flush_history()
  * remove the oldest entry in the history list to make room for a new entry
  * at the bottom of the list.
  */
-void remove_oldest()
+void remove_oldest(void)
 {
     int i;
     /* list is already empty */
@@ -543,7 +543,7 @@ void remove_oldest()
  * remove the newest entry in the history list.
  * this function is only called by the fc builtin utility.
  */
-void remove_newest()
+void remove_newest(void)
 {
     /* list is already empty */
     if(cmd_history_end == 0)
@@ -568,7 +568,7 @@ void remove_newest()
 /*
  * return the last entry in the history list.
  */
-char *get_last_cmd_history()
+char *get_last_cmd_history(void)
 {
     return cmd_history[cmd_history_end-1].cmd;
 }
@@ -863,7 +863,7 @@ void use_hist_file(char *path)
  * restore the old history file.
  * called from history() when processing -a, -r, -n, -w options.
  */
-void restore_hist_file()
+void restore_hist_file(void)
 {
     if(saved_hist_filename)
     {
@@ -935,7 +935,7 @@ static inline void print_hist_entry(char *cmd, char *fmt, int i, int supp_nums)
  * explanation on how to use this utility.
  */
 
-int history(int argc, char **argv)
+int history_builtin(int argc, char **argv)
 {
     /*
      * get the value of the $HISTTIMEFORMAT shell variable.. if not NULL, this
@@ -1138,7 +1138,7 @@ int history(int argc, char **argv)
                     fprintf(stderr, "%s: -%c option is missing arguments\n", UTILITY, 'p');
                     return 2;
                 }
-                p = list_to_str(&argv[v], 0);
+                p = list_to_str(&argv[v]);
                 if(p)
                 {
                     strcpy(cmdbuf, p);
@@ -1166,7 +1166,7 @@ int history(int argc, char **argv)
                     fprintf(stderr, "%s: -%c option is missing arguments\n", UTILITY, 's');
                     return 2;
                 }
-                p = list_to_str(&argv[v], 0);
+                p = list_to_str(&argv[v]);
                 if(p)
                 {
                     save_to_history(p);

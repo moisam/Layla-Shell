@@ -40,7 +40,7 @@
  * explanation on how to use this utility.
  */
 
-int dot(int argc, char **argv)
+int dot_builtin(int argc, char **argv)
 {
     /*
      * strictly POSIX speaking, dot must have only two arguments.. but ksh has a
@@ -133,7 +133,7 @@ int dot(int argc, char **argv)
         }
     }
     src.srctype = SOURCE_DOTFILE;
-    set_exit_status(0);
+    set_internal_exit_status(0);
     
     /* save current positional parameters */
     char **pos = NULL;

@@ -36,7 +36,7 @@
  * explanation on how to use this utility.
  */
 
-int dump(int argc, char **argv)
+int dump_builtin(int argc, char **argv)
 {
     int v = 1;
     /* process options and arguments */

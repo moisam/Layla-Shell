@@ -38,14 +38,14 @@
  * the echo builtin utility (non-POSIX).. prints back the arguments passed to it,
  * followed by an optional newline.
  *
- * returns 0.
+ * returns 0 invariably.
  *
  * see the manpage for the list of options and an explanation of what each option does.
  * you can also run: `help echo` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
-int echo(int argc, char **argv)
+int echo_builtin(int argc, char **argv)
 {
     /*
      * in bash, shopt option 'xpg_echo' is used to indicate whether escape
@@ -65,7 +65,7 @@ int echo(int argc, char **argv)
             /*
              * check the validity of the options string.. we only accept
              * three options: e, n and E.. if the string contains any other
-             * letter, we treat it as an argument to be printed, not an option.
+             * letter, we treat it as an argument to be printed, not as an option.
              */
             while(*p)
             {
@@ -143,10 +143,10 @@ void do_echo(int v, int argc, char **argv, int flags)
         /* are escape sequences allowed? */
         if(allow_escaped)
         {
-            int  k;
+            int k;
             wchar_t j;
-            char c;
             p = argv[v];
+
             /* process the argument char by char */
             while(*p)
             {
@@ -231,17 +231,16 @@ void do_echo(int v, int argc, char **argv, int flags)
                         case 'x':       /* \xNN - hexadecimal ASCII char code */
                             i = 0;
                             p2 = p+1;
-                            if(isxdigit(*p2))
+                            /* get 1st digit */
+                            if(get_ndigit(*p2, 16, &i))
                             {
-                                /* get 1st digit */
-                                i = get_xdigit(*p2);
                                 p2++;
-                            }
-                            if(isxdigit(*p2))
-                            {
-                                /* get 2nd digit */
-                                i = i*16 + get_xdigit(*p2);
-                                p2++;
+                                if(get_ndigit(*p2, 16, &k))
+                                {
+                                    /* get 2nd digit */
+                                    i = i*16 + k;
+                                    p2++;
+                                }
                             }
                             /* print the char */
                             if(p2 == p+1)
@@ -274,10 +273,10 @@ void do_echo(int v, int argc, char **argv, int flags)
                             /* get the Unicode code point */
                             for(i = 1; i <= k; i++)
                             {
-                                if(isxdigit(p[i]))
+                                int l = 0;
+                                if(get_ndigit(p[i], 16, &l))
                                 {
-                                    c = get_xdigit(p[i]);
-                                    j = j*16 + c;
+                                    j = j*16 + l;
                                 }
                                 else
                                 {

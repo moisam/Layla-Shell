@@ -58,8 +58,7 @@ extern int read_stdin;
 /* declared in dirstack.c */
 extern struct dirstack_ent_s *dirstack;
 
-extern char *__buf;                     /* defined in lexical.c */
-extern char *cmdbuf;                    /* defined in cmdline.c */
+extern char *tok_buf;                   /* defined in lexical.c */
 extern struct hashtab_s *str_hashes;    /* defined in strbuf.c  */
 
 
@@ -74,7 +73,7 @@ extern struct hashtab_s *str_hashes;    /* defined in strbuf.c  */
  * explanation on how to use this utility.
  */
 
-int __exit(int argc, char **argv)
+int exit_builtin(int argc, char **argv)
 {
     /* more than 2 args is an error */
     if(argc > 2)
@@ -102,7 +101,7 @@ int __exit(int argc, char **argv)
         /* list the pending jobs (bash extension) */
         if(optionx_set(OPTION_CHECK_JOBS))
         {
-            jobs(1, (char *[]){ "jobs" });
+            jobs_builtin(1, (char *[]){ "jobs" });
         }
 
         /* interactive login shell will kill all jobs in exit_gracefully() below */
@@ -129,7 +128,7 @@ int __exit(int argc, char **argv)
 /*
  * free memory used by the internal buffers.
  */
-void free_buffers()
+void free_buffers(void)
 {
     int i;
     /*
@@ -181,9 +180,9 @@ void free_buffers()
     }
     
     /* free the command input buffer */
-    if(__buf )
+    if(tok_buf)
     {
-        free(__buf );
+        free(tok_buf);
     }
     if(cmdbuf)
     {

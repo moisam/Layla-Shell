@@ -49,7 +49,7 @@ extern char **environ;
  * explanation on how to use this utility.
  */
 
-int printenv(int argc, char **argv)
+int printenv_builtin(int argc, char **argv)
 {
     int v = 1, c;
     char separator = '\n';
