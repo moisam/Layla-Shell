@@ -3,105 +3,130 @@
 #    Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
 # 
 #    file: Makefile
-#    This file is part of the Layla Shell project.
+#    This file is part of the Layla shell project.
 #
-#    Layla Shell is free software: you can redistribute it and/or modify
+#    Layla shell is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
 #    (at your option) any later version.
 #
-#    Layla Shell is distributed in the hope that it will be useful,
+#    Layla shell is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 #
 #    You should have received a copy of the GNU General Public License
-#    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
+#    along with Layla shell.  If not, see <http://www.gnu.org/licenses/>.
 #    
 
-#Some basic definitions
-pkgname=lsh
-pkgversion=1.0
-prefix=/usr/local
-exec_prefix=/usr
-bindir=$(exec_prefix)/bin
-datarootdir=$(prefix)/share
-datadir=$(datarootdir)
-docdir=$(datarootdir)/doc/$(pkgname)
-infodir=$(datarootdir)/info
-mandir=$(datarootdir)/man
 
-TARGET=$(pkgname)
+# output file name
+TARGET=lsh
+
+# version (for the distro target)
+PKG_VERSION=1.1-2
+
+# directory definitions
 SRCDIR=src
-BUILDDIR=build
+BUILTINS_SRCDIR=$(SRCDIR)/builtins
+SYMTAB_SRCDIR=$(SRCDIR)/symtab
+BUILD_DIR=build
+DIR_PREFIX=/usr/local
+EXEC_PREFIX=/usr
+BINDIR=$(EXEC_PREFIX)/bin
+DATA_ROOTDIR=$(DIR_PREFIX)/share
+DATADIR=$(DATA_ROOTDIR)
+DOCDIR=$(DATA_ROOTDIR)/doc/$(TARGET)
+INFODIR=$(DATA_ROOTDIR)/info
+MANDIR=$(DATA_ROOTDIR)/man
+
+# compiler name and flags
 CC=gcc
-# librt is needed for timer_create() and timer_settime()
-CFLAGS=-Wall -lrt -g
-SRCFILES=main.c strings.c terminal.c alphalist.c shunt.c braceexp.c functab.c strbuf.c popen.c wordexp.c cmdline.c helpfunc.c initsh.c jobs.c prompt.c args.c params.c sig.c tab.c kbdevent2.c early_environ.h cmd.h cpu.h ostype.h sig.h kbdevent.h vars.c vi.c vi.h vi_keys.c scanner/lexical.c scanner/source.c scanner/scanner.h scanner/source.h scanner/keywords.h parser/node.c parser/parser.c parser/node.h parser/conditionals.c parser/loops.c parser/redirect.c backend/loops.c backend/conditionals.c backend/backend.c backend/backend.h backend/pattern.c backend/redirect.c symtab/symtab_hash.c symtab/symtab_hash.h symtab/symtab.h symtab/string_hash.c symtab/string_hash.h error/error.c error/error.h builtins/builtins.c builtins/help.c builtins/history.c builtins/alias.c builtins/bg.c builtins/cd.c builtins/command.c builtins/echo.c builtins/false.c builtins/fc.c builtins/fg.c builtins/getopts.c builtins/hash.c builtins/kill.c builtins/newgrp.c builtins/pwd.c builtins/read.c builtins/type.c builtins/true.c builtins/ulimit.c builtins/umask.c builtins/unalias.c builtins/wait.c builtins/colon.c builtins/dot.c builtins/disown.c builtins/eval.c builtins/exec.c builtins/exit.c builtins/export.c builtins/mailcheck.c builtins/readonly.c builtins/return.c builtins/set.c builtins/shift.c builtins/source.c builtins/time.c builtins/times.c builtins/trap.c builtins/test.c builtins/unset.c builtins/ver.c builtins/dump.c builtins/let.c builtins/whence.c builtins/setx.c builtins/setx.h builtins/coproc.c builtins/local.c builtins/caller.c builtins/declare.c builtins/enable.c builtins/logout.c builtins/memusage.c builtins/dirstack.c builtins/suspend.c builtins/hist_expand.c builtins/bugreport.c builtins/nice.c builtins/hup.c builtins/notify.c builtins/glob.c builtins/printenv.c builtins/repeat.c builtins/setenv.c builtins/stop.c builtins/unlimit.c builtins/unsetenv.c comptype.h debug.c debug.h
+LIBS=-lrt
+CFLAGS=-Wall -Wextra -g -I$(SRCDIR)
+LDFLAGS=-g
 
-.SUFFIXES:
+# generate the lists of source and object files
+SRCS_BUILTINS=$(shell find $(SRCDIR)/builtins -name "*.c")
 
-# 
-# Targets:
-# 
-all: stable info
+# the following line will compile the hashtable implementation of the symbol
+# table struct.. if you want to use the linked list implementation instead,
+# replace symtab_hash.c with symtab.c in the SRCS_SYMTAB line below (also,
+# don't forget to comment the following line in the header file symbtab/symtab.h:
+#    #define USE_HASH_TABLES 1
+SRCS_SYMTAB=$(SRCDIR)/symtab/symtab_hash.c
+
+SRCS =$(wildcard $(SRCDIR)/*.c)
+SRCS+=$(shell find $(SRCDIR)/backend -name "*.c")
+SRCS+=$(shell find $(SRCDIR)/parser -name "*.c")
+SRCS+=$(SRCDIR)/symtab/string_hash.c                                 \
+      $(SRCDIR)/scanner/lexical.c $(SRCDIR)/scanner/source.c         \
+      $(SRCDIR)/error/error.c                                        \
+      $(SRCS_BUILTINS) $(SRCS_SYMTAB)
+
+OBJS=$(SRCS:%.c=$(BUILD_DIR)/%.o)
+
+# default target (when we call make with no arguments)
+.PHONY: all
+all: prep-build $(TARGET)
+
+prep-build:
+	mkdir -p $(BUILD_DIR)/src/builtins
+	mkdir -p $(BUILD_DIR)/src/backend
+	mkdir -p $(BUILD_DIR)/src/error
+	mkdir -p $(BUILD_DIR)/src/parser
+	mkdir -p $(BUILD_DIR)/src/scanner
+	mkdir -p $(BUILD_DIR)/src/symtab
+
+$(TARGET): $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+# target to auto-generate header file dependencies for source files
+depend: .depend
+
+.depend: $(SRCS)
+	$(RM) ./.depend
+	$(CC) $(CFLAGS) -MM $^ > ./.depend;
+
+include .depend
+
+#compile C source files
+$(BUILD_DIR)/%.o : %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Make sure all installation directories (e.g. $(bindir))
 # actually exist by making them if necessary.
 installdirs:
-	-mkdir -p $(DESTDIR)$(datadir) $(DESTDIR)$(infodir) \
-	$(DESTDIR)$(mandir) $(DESTDIR)$(bindir) $(DESTDIR)$(javadir)
+	-mkdir -p $(DESTDIR)$(DATADIR) $(DESTDIR)$(INFODIR) \
+	$(DESTDIR)$(MANDIR) $(DESTDIR)$(BINDIR)
 
-build/setup:
-	$(info Preparing build tree)
-	-mkdir -p $(BUILDDIR)
-	@cp -R $(SRCDIR) $(BUILDDIR)
+# compile info and dvi files from the texi source
+info: $(TARGET).info
 
-stable:clean build/setup
-	@echo -> Creating stable version executable
-ifeq ($(CC),gcc)
-	@cd $(BUILDDIR)/$(SRCDIR) && $(CC) $(CFLAGS) $(SRCFILES) -o $(TARGET); [ $$? -eq 0 ] || exit 2
-else
-# Clang/LLMV will produce an a.out file
-	@cd $(BUILDDIR)/$(SRCDIR) && $(CC) $(CFLAGS) $(SRCFILES); [ $$? -eq 0 ] || exit 2
-	mv $(BUILDDIR)/$(SRCDIR)/a.out $(BUILDDIR)/$(SRCDIR)/$(TARGET)
-endif
-	mv $(BUILDDIR)/$(SRCDIR)/$(TARGET) $(BUILDDIR)/
-	rm -rf $(BUILDDIR)/$(SRCDIR)
-	@echo "*****************************************************"
-	@echo "Layla shell executable successfully created."
-	@echo ""
-	@echo "To start the shell, invoke:"
-	@echo "  build/$(TARGET)"
-	@echo ""
-	@echo "If you want to install the shell on your system, run:"
-	@echo "  sudo make install"
-	@echo "*****************************************************"
+$(TARGET).texi:
 
-info: $(pkgname).info
-
-$(pkgname).texi:
-
-$(pkgname).info: $(pkgname).texi
+$(TARGET).info: $(TARGET).texi
 	@echo Creating info file from texi source
-	$(MAKEINFO) docs/info/$(pkgname).texi
-	@mv $(pkgname).info docs/info/
+	$(MAKEINFO) docs/info/$(TARGET).texi
+	@mv $(TARGET).info docs/info/
 
-dvi: $(pkgname).dvi
+dvi: $(TARGET).dvi
 
-$(pkgname).dvi: $(pkgname).texi
+$(TARGET).dvi: $(TARGET).texi
 	@echo Creating dvi file from texi source
-	$(TEXI2DVI) docs/info/$(pkgname).texi
+	$(TEXI2DVI) docs/info/$(TARGET).texi
+	@mv $(TARGET).dvi docs/info/
 
-install-info: $(pkgname).info installdirs
-	$(INSTALLDATA) docs/info/$(pkgname).info* $(infodir)
+# install info file system-wide
+install-info: $(TARGET).info installdirs
+	$(INSTALLDATA) docs/info/$(TARGET).info* $(INFODIR)
 
-$(DESTDIR)$(infodir)/$(pkgname).info: $(pkgname).info
+$(DESTDIR)$(INFODIR)/$(TARGET).info: $(TARGET).info
 	$(POST_INSTALL)
 # There may be a newer info file in . than in srcdir.
-	-if test -f $(pkgname).info; then d=.; \
+	-if test -f $(TARGET).info; then d=.; \
 	else d=info; fi; \
-	$(INSTALL_DATA) $$d/$(pkgname).info $(DESTDIR)$@; \
+	$(INSTALL_DATA) $$d/$(TARGET).info $(DESTDIR)$@; \
 # Run install-info only if it exists.
 # Use `if' instead of just prepending `-' to the
 # line so we notice real errors from install-info.
@@ -109,75 +134,84 @@ $(DESTDIR)$(infodir)/$(pkgname).info: $(pkgname).info
 # fail gracefully when there is an unknown command.
 	if $(SHELL) -c 'install-info --version' \
 	>/dev/null 2>&1; then \
-		install-info --dir-file=$(DESTDIR)$(infodir)/dir \
-		$(DESTDIR)$(infodir)/$(pkgname).info; \
+		install-info --dir-file=$(DESTDIR)$(INFODIR)/dir \
+		$(DESTDIR)$(INFODIR)/$(TARGET).info; \
 	else true; fi
 
+# compile manpage. nothing to do really
 man:
 	@echo Nothing to do.
 
+# install manpage system-wide
 install-man:
-	@echo Installing $(pkgname) manual to $(mandir)
-	@mkdir -p $(mandir)/man1
-	@gzip -k docs/man/man1/$(pkgname).1
-	@mv docs/man/man1/$(pkgname).1.gz $(mandir)/man1/
-	@chmod 644 $(mandir)/man1/$(pkgname).1.gz
+	@echo Installing $(TARGET) manual to $(MANDIR)
+	@mkdir -p $(MANDIR)/man1
+	@gzip -k docs/man/man1/$(TARGET).1
+	@mv docs/man/man1/$(TARGET).1.gz $(MANDIR)/man1/
+	@chmod 644 $(MANDIR)/man1/$(TARGET).1.gz
 
+# uninstall manpage system-wide
 uninstall-man:
-	@echo Removing $(pkgname) manual from $(mandir)
-	-$(RM) $(mandir)/man1/$(pkgname).1.gz
+	@echo Removing $(TARGET) manual from $(MANDIR)
+	-$(RM) $(MANDIR)/man1/$(TARGET).1.gz
 
+# install extra documentation files system-wide
 install-doc:
-	@echo Installing $(pkgname) documentation to $(docdir)
-	@mkdir -p $(docdir)
-	@cp AUTHORS $(docdir)
-	@cp COPYING $(docdir)
-	@cp NEWS $(docdir)
-	@cp README $(docdir)
-	@cp THANKS $(docdir)
+	@echo Installing $(TARGET) documentation to $(DOCDIR)
+	@mkdir -p $(DOCDIR)
+	@cp AUTHORS $(DOCDIR)
+	@cp COPYING $(DOCDIR)
+	@cp NEWS $(DOCDIR)
+	@cp README $(DOCDIR)
+	@cp THANKS $(DOCDIR)
 
+# uninstall extra documentation files
 uninstall-doc:
-	@echo Removing $(pkgname) documentation from $(docdir)
-	-$(RM) $(docdir)/AUTHORS
-	-$(RM) $(docdir)/COPYING
-	-$(RM) $(docdir)/NEWS
-	-$(RM) $(docdir)/README
-	-$(RM) $(docdir)/THANKS
-	-@rmdir $(docdir)
+	@echo Removing $(TARGET) documentation from $(DOCDIR)
+	-$(RM) $(DOCDIR)/AUTHORS
+	-$(RM) $(DOCDIR)/COPYING
+	-$(RM) $(DOCDIR)/NEWS
+	-$(RM) $(DOCDIR)/README
+	-$(RM) $(DOCDIR)/THANKS
+	-@rmdir $(DOCDIR)
 
+# install the package
 install-strip: install
 
 install: install-man install-doc
-	@echo Installing $(pkgname)
-	@cp $(BUILDDIR)/$(TARGET) $(bindir)/$(TARGET)
-	@chmod a+rx $(bindir)/$(TARGET)
-# @echo "Removing build directory"
-# @rm -rf $(BUILDDIR)
+	@echo Installing $(TARGET)
+	@cp $(TARGET) $(BINDIR)/$(TARGET)
+	@chmod a+rx $(BINDIR)/$(TARGET)
 	@echo "*******************************************"
-	@echo "$(pkgname) installed as $(bindir)/$(TARGET)"
+	@echo "$(TARGET) installed as $(BINDIR)/$(TARGET)"
 	@echo "To run now, invoke: $(TARGET)"
 	@echo "*******************************************"
 
+# uninstall the package
 uninstall: uninstall-man uninstall-doc
-	@echo Uninstalling $(pkgname)
-	-$(RM) $(bindir)/$(TARGET)
+	@echo Uninstalling $(TARGET)
+	-$(RM) $(BINDIR)/$(TARGET)
 
+# prepare a distor version of this package
 dist: info
-	-@mkdir -p $(pkgname)-$(pkgversion)
-	-@mkdir -p $(pkgname)-$(pkgversion)/docs
-	-@cd $(pkgname)-$(pkgversion)
-	-@cp Makefile ChangeLog $(pkgname)-$(pkgversion)/
-	-@cp AUTHORS COPYING NEWS README THANKS $(pkgname)-$(pkgversion)/docs/
-	-@cp -r src $(pkgname)-$(pkgversion)/
-	-@cp -r docs/info $(pkgname)-$(pkgversion)/docs/
-	-@cp -r docs/man $(pkgname)-$(pkgversion)/docs/
+	-@mkdir -p $(TARGET)-$(PKG_VERSION)
+	-@mkdir -p $(TARGET)-$(PKG_VERSION)/docs
+	-@cd $(TARGET)-$(PKG_VERSION)
+	-@cp Makefile ChangeLog $(TARGET)-$(PKG_VERSION)/
+	-@cp AUTHORS COPYING NEWS README THANKS $(TARGET)-$(PKG_VERSION)/docs/
+	-@cp -r src $(TARGET)-$(PKG_VERSION)/
+	-@cp -r docs/info $(TARGET)-$(PKG_VERSION)/docs/
+	-@cp -r docs/man $(TARGET)-$(PKG_VERSION)/docs/
 	@cd ..
-	-$(RM) $(pkgname)-$(pkgversion).tar.gz
-	@tar -czf $(pkgname)-$(pkgversion).tar.gz $(pkgname)-$(pkgversion)/
-	$(RM) -r $(pkgname)-$(pkgversion)
+	-$(RM) $(TARGET)-$(PKG_VERSION).tar.gz
+	@tar -czf $(TARGET)-$(PKG_VERSION).tar.gz $(TARGET)-$(PKG_VERSION)/
+	$(RM) -r $(TARGET)-$(PKG_VERSION)
 
+# targets to clean build files and shell executable
+.PHONY: clean
 clean:
-	$(RM) -r build
+	$(RM) $(OBJS) $(TARGET) core .depend
+	$(RM) -r $(BUILD_DIR)
 
 mostlyclean: clean
 
@@ -185,7 +219,7 @@ maintainer-clean: clean
 
 distclean: clean
 	$(info Cleaning build tree)
-	$(RM) $(pkgname)-$(pkgversion).tar
+	$(RM) $(TARGET)-$(PKG_VERSION).tar
 
 check:
 
