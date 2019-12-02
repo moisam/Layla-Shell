@@ -54,7 +54,7 @@
  * 
  * returns 1.
  */
-int beep()
+int beep(void)
 {
     /* in tcsh, special alias beepcmd is run when the shell wants to ring the bell */
     run_alias_cmd("beepcmd");
@@ -66,7 +66,7 @@ int beep()
 /*
  * return 1 if the current user is root, 0 otherwise.
  */
-int isroot()
+int isroot(void)
 {
     static uid_t uid = -1;
     static char  gotuid = 0;
@@ -283,14 +283,14 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
     waitpid(child_pid, &status, WUNTRACED);
     if(WIFSTOPPED(status) && option_set('m'))
     {
-        struct job *job = add_job(child_pid, (pid_t[]){child_pid}, 1, argv[0], 0);
+        struct job_s *job = add_job(child_pid, (pid_t[]){child_pid}, 1, argv[0], 0);
         set_cur_job(job);
         notice_termination(child_pid, status);
     }
     else
     {
         set_exit_status(status);
-        struct job *job = get_job_by_any_pid(child_pid);
+        struct job_s *job = get_job_by_any_pid(child_pid);
         if(job)
         {
             set_pid_exit_status(job, child_pid, status);
@@ -329,7 +329,7 @@ int file_exists(char *path)
  * them, we get an malloc'd string, instead of using a string from our
  * string buffer.. it is the caller's responsibility to free that string.
  */
-char *get_tmp_filename()
+char *get_tmp_filename(void)
 {
     char *tmpdir = get_shell_varp("TMPDIR", "/tmp");
     int   len = strlen(tmpdir);

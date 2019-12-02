@@ -170,7 +170,7 @@ int get_pwd(char *pwd, char *escseq, int baseonly, int tildsub)
  * sequence, in addition to zsh %h escape sequence.
  * return value is the number of characters added to the buffer.
  */
-int get_histindex()
+int get_histindex(void)
 {
     char buf[32];
     sprintf(buf, "%d", cmd_history_end+1);
@@ -913,7 +913,17 @@ char *evaluate_prompt(char *PS)
      * substitution, arithmetic expansion, and quote removal (but don't remove
      * whitespace chars).
      ************************************************/
-    return word_expand_to_str(prompt);
+    struct word_s *w = word_expand_one_word(prompt, WORD_EXPANSION_NO_FIELD_SPLIT);
+    if(w)
+    {
+        /* perform pathname expansion and quote removal */
+        struct word_s *wordlist = pathnames_expand(w);
+        char *res = wordlist_to_str(wordlist, WORDLIST_NO_SPACES);
+        free_all_words(wordlist);
+        return res ? : __get_malloced_str(prompt);
+    }
+    return __get_malloced_str(prompt);
+    //return word_expand_to_str(prompt);
 }
 
 /*
@@ -984,7 +994,7 @@ void do_print_prompt(char *which)
         return;
     }
 
-    set_terminal_color(COL_WHITE, COL_DEFAULT /* COL_BGBLACK */);
+    set_terminal_color(COL_WHITE, COL_DEFAULT);
     /* bash extension to decide whether or not to evaluate prompt strings */
     if(optionx_set(OPTION_PROMPT_VARS))
     {
@@ -1013,13 +1023,13 @@ void do_print_prompt(char *which)
 /* 
  * print the primary prompt $PS1.
  */
-void print_prompt()
+void print_prompt(void)
 {
     /* command to execute before printing $PS1 (bash) */
     char *cmd = get_shell_varp("PROMPT_COMMAND", NULL);
     if(cmd)
     {
-        command(2, (char *[]){ "command", cmd, NULL });
+        command_builtin(2, (char *[]){ "command", cmd, NULL });
     }
     do_print_prompt(PS1);
 }
@@ -1027,7 +1037,7 @@ void print_prompt()
 /*
  * print secondary prompt $PS2.
  */
-void print_prompt2()
+void print_prompt2(void)
 {
     do_print_prompt(PS2);
 }
@@ -1035,7 +1045,7 @@ void print_prompt2()
 /*
  * print the select loop prompt $PS3.
  */
-void print_prompt3()
+void print_prompt3(void)
 {
     do_print_prompt(PS3);
 }
@@ -1043,7 +1053,7 @@ void print_prompt3()
 /*
  * print 'execution trace' prompt $PS4.
  */
-void print_prompt4()
+void print_prompt4(void)
 {
     do_print_prompt(PS4);
 }

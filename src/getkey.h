@@ -70,6 +70,6 @@ char INSERT_MASK;
 #define CTRLV_KEY       0x16
 #define CTRLW_KEY       0x17
 
-int getkey();
+int getkey(void);
 
 #endif

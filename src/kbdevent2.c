@@ -55,7 +55,7 @@ char VLNEXT_KEY;
  * 
  * returns 1 if the terminal attributes are set successfully, 0 otherwise.
  */
-int rawon()
+int rawon(void)
 {
     /* get the special control keys */
     ERASE_KEY  = tty_attr_old.c_cc[VERASE];
@@ -104,7 +104,7 @@ int rawon()
 /*
  * return the next key press from the terminal.
  */
-int get_next_key()
+int get_next_key(void)
 {
     CTRL_MASK = 0;
     int nread;

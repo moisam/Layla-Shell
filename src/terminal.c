@@ -125,7 +125,7 @@ int echooff(int fd)
  *
  * returns 1 if the screen size if obtained and saved, 0 otherwise.
  */
-int get_screen_size()
+int get_screen_size(void)
 {
     struct winsize w;
     /* find the size of the terminal window */
@@ -180,7 +180,7 @@ void move_cur(int row, int col)
 /*
  * clear the screen.
  */
-void clear_screen()
+void clear_screen(void)
 {
     fprintf(stdout, "\e[2J");
     fprintf(stdout, "\e[0m");
@@ -202,7 +202,7 @@ void set_terminal_color(int FG, int BG)
  * get the cursor position (current row and column), which are 1-based numbers,
  * counting from the top-left corner of the screen.
  */
-void update_row_col()
+void update_row_col(void)
 {
     /*
      * clear the terminal device's EOF flag.. this would have been set, for example,
@@ -271,30 +271,9 @@ void update_row_col()
  * return the current row at which the cursor is positioned.. rows are 1-based,
  * counting from the top of the screen.
  */
-int get_terminal_row()
+int get_terminal_row(void)
 {
     return terminal_row;
-}
-
-
-/*
- * move the cursor to the given row.. rows are 1-based, counting from the
- * top of the screen.
- *
- * returns the new cursor row.
- */
-int set_terminal_row(int row)
-{
-    int diff = row-terminal_row;
-    if(diff < 0)
-    {
-        fprintf(stdout, "\x1b[%dA", -diff);
-    }
-    else
-    {
-        fprintf(stdout, "\x1b[%dB",  diff);
-    }
-    return row;
 }
 
 
@@ -302,20 +281,7 @@ int set_terminal_row(int row)
  * return the current column at which the cursor is positioned.. columns are 1-based,
  * counting from the left side of the screen.
  */
-int get_terminal_col()
+int get_terminal_col(void)
 {
     return terminal_col;
-}
-
-
-/*
- * move the cursor to the given column.. columns are 1-based, counting from the
- * left side of the screen.
- *
- * returns the new cursor column.
- */
-int set_terminal_col(int col)
-{
-    fprintf(stdout, "\x1b[%dG", col);
-    return col;
 }

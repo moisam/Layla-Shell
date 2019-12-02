@@ -295,7 +295,7 @@ int isbrace(char c)
 /*
  * find the next brace char.
  */
-void find_brace()
+void find_brace(void)
 {
     int count2;
     count2 = cmdbuf_index+1;
@@ -321,7 +321,7 @@ void find_brace()
 /*
  * save the current cursor position.
  */
-void save_curpos()
+void save_curpos(void)
 {
     srow = terminal_row;
     scol = terminal_col;
@@ -332,7 +332,7 @@ void save_curpos()
 /*
  * restore the cursor to its saved position.
  */
-void restore_curpos()
+void restore_curpos(void)
 {
     terminal_row = srow;
     terminal_col = scol;
@@ -399,7 +399,7 @@ void replace_with(char *s)
 /*
  * free our internal buffers.
  */
-void free_bufs()
+void free_bufs(void)
 {
     if(backup)
     {
@@ -1652,7 +1652,7 @@ select:
                     globfree(&glob);
                     break;
                 }
-                p = list_to_str(pp, 0);
+                p = list_to_str(pp);
                 globfree(&glob);
                 if(!p)
                 {
@@ -1827,7 +1827,7 @@ select:
                     beep();
                     break;
                 }
-                char *a = parse_alias(buf);
+                char *a = get_alias_val(buf);
                 if(!a)
                 {
                     beep();

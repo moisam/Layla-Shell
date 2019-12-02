@@ -47,14 +47,18 @@
 #include "symtab/symtab.h"
 #include "debug.h"
 
+/* define some limits */
 #define MAXOPSTACK          64
 #define MAXNUMSTACK         64
 #define MAXBASE             36
 
-struct stack_item_s
-{
+/* values for the type field of struct stack_item_s */
 #define ITEM_LONG_INT       1
 #define ITEM_VAR_PTR        2
+
+/* struct to represent operand stack items */
+struct stack_item_s
+{
     int  type;
     union
     {
@@ -70,27 +74,6 @@ int    nopstack  = 0;
 struct stack_item_s numstack[MAXNUMSTACK];
 int    nnumstack = 0;
 int    error     = 0;
-
-
-/*
- * extract the value of the hex digit c.
- */
-char get_xdigit(char c)
-{
-    if(c >= '0' && c <= '9')
-    {
-        c -= '0';
-    }
-    else if(c >= 'a' && c <= 'z')
-    {
-        c = c-'a'+10;
-    }
-    else
-    {
-        c = c-'A'+10;
-    }
-    return c;
-}
 
 
 long long_value(struct stack_item_s *a)
@@ -209,14 +192,14 @@ long eval_logor(struct stack_item_s *a1, struct stack_item_s *a2)
     return long_value(a1) || long_value(a2);
 }
 
-long __eval_exp(long a1, long a2)
+long do_eval_exp(long a1, long a2)
 {
-    return a2 < 0 ? 0 : (a2 == 0 ? 1 : a1 * __eval_exp(a1, a2-1));
+    return a2 < 0 ? 0 : (a2 == 0 ? 1 : a1 * do_eval_exp(a1, a2-1));
 }
 
 long eval_exp(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_exp(long_value(a1), long_value(a2));
+    return do_eval_exp(long_value(a1), long_value(a2));
 }
 
 long eval_div(struct stack_item_s *a1, struct stack_item_s *a2) 
@@ -255,7 +238,7 @@ long eval_assign(struct stack_item_s *a1, struct stack_item_s *a2)
     return val;
 }
 
-long __eval_assign_ext(long (*f)(struct stack_item_s *a1, struct stack_item_s *a2),
+long do_eval_assign_ext(long (*f)(struct stack_item_s *a1, struct stack_item_s *a2),
             struct stack_item_s *a1, struct stack_item_s *a2)
 {
     long val = f(a1, a2);
@@ -270,55 +253,55 @@ long __eval_assign_ext(long (*f)(struct stack_item_s *a1, struct stack_item_s *a
 
 long eval_assign_add(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_add, a1, a2);
+    return do_eval_assign_ext(eval_add, a1, a2);
 }
 
 long eval_assign_sub(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_sub, a1, a2);
+    return do_eval_assign_ext(eval_sub, a1, a2);
 }
 
 long eval_assign_mult(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_mult, a1, a2);
+    return do_eval_assign_ext(eval_mult, a1, a2);
 }
 
 long eval_assign_div(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_div, a1, a2);
+    return do_eval_assign_ext(eval_div, a1, a2);
 }
 
 long eval_assign_mod(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_mod, a1, a2);
+    return do_eval_assign_ext(eval_mod, a1, a2);
 }
 
 long eval_assign_lsh(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_lsh, a1, a2);
+    return do_eval_assign_ext(eval_lsh, a1, a2);
 }
 
 long eval_assign_rsh(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_rsh, a1, a2);
+    return do_eval_assign_ext(eval_rsh, a1, a2);
 }
 
 long eval_assign_and(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_bitand, a1, a2);
+    return do_eval_assign_ext(eval_bitand, a1, a2);
 }
 
 long eval_assign_xor(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_bitxor, a1, a2);
+    return do_eval_assign_ext(eval_bitxor, a1, a2);
 }
 
 long eval_assign_or(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return __eval_assign_ext(eval_bitor, a1, a2);
+    return do_eval_assign_ext(eval_bitor, a1, a2);
 }
 
-long __eval_inc_dec(int pre, int add, struct stack_item_s *a1)
+long do_eval_inc_dec(int pre, int add, struct stack_item_s *a1)
 {
     long val = long_value(a1);
     char buf[16];
@@ -353,22 +336,22 @@ long __eval_inc_dec(int pre, int add, struct stack_item_s *a1)
 
 long eval_postinc(struct stack_item_s *a1, struct stack_item_s *unused __attribute__((unused)))
 {
-    return __eval_inc_dec(0, 1, a1);
+    return do_eval_inc_dec(0, 1, a1);
 }
 
 long eval_postdec(struct stack_item_s *a1, struct stack_item_s *unused __attribute__((unused)))
 {
-    return __eval_inc_dec(0, 0, a1);
+    return do_eval_inc_dec(0, 0, a1);
 }
 
 long eval_preinc(struct stack_item_s *a1, struct stack_item_s *unused __attribute__((unused)))
 {
-    return __eval_inc_dec(1, 1, a1);
+    return do_eval_inc_dec(1, 1, a1);
 }
 
 long eval_predec(struct stack_item_s *a1, struct stack_item_s *unused __attribute__((unused)))
 {
-    return __eval_inc_dec(1, 0, a1);
+    return do_eval_inc_dec(1, 0, a1);
 }
 
 
@@ -422,7 +405,7 @@ struct op_s
     char unary;
     char chars;
     long (*eval)(struct stack_item_s *a1, struct stack_item_s *a2);
-} ops[] =
+} arithm_ops[] =
 {
     { CH_POST_INC     , 20, ASSOC_LEFT , 1, 2, eval_postinc       },
     { CH_POST_DEC     , 20, ASSOC_LEFT , 1, 2, eval_postdec       },
@@ -471,58 +454,371 @@ struct op_s
     { ')'             , 0 , ASSOC_NONE , 0, 1, NULL               }
 };
 
-struct op_s *OP_POST_INC     = &ops[0 ];
-struct op_s *OP_POST_DEC     = &ops[1 ];
-struct op_s *OP_PRE_INC      = &ops[2 ];
-struct op_s *OP_PRE_DEC      = &ops[3 ];
-struct op_s *OP_UMINUS       = &ops[4 ];
-struct op_s *OP_UPLUS        = &ops[5 ];
-struct op_s *OP_LOG_NOT      = &ops[6 ];
-struct op_s *OP_BIT_NOT      = &ops[7 ];
-struct op_s *OP_EXP          = &ops[8 ];
-struct op_s *OP_MULT         = &ops[9 ];
-struct op_s *OP_DIV          = &ops[10];
-struct op_s *OP_MOD          = &ops[11];
-struct op_s *OP_ADD          = &ops[12];
-struct op_s *OP_SUB          = &ops[13];
-struct op_s *OP_LSH          = &ops[14];
-struct op_s *OP_RSH          = &ops[15];
-struct op_s *OP_LT           = &ops[16];
-struct op_s *OP_LE           = &ops[17];
-struct op_s *OP_GT           = &ops[18];
-struct op_s *OP_GE           = &ops[19];
-struct op_s *OP_EQ           = &ops[20];
-struct op_s *OP_NE           = &ops[21];
-struct op_s *OP_BIT_AND      = &ops[22];
-struct op_s *OP_BIT_XOR      = &ops[23];
-struct op_s *OP_BIT_OR       = &ops[24];
-struct op_s *OP_LOG_AND      = &ops[25];
-struct op_s *OP_LOG_OR       = &ops[26];
-struct op_s *OP_ASSIGN       = &ops[27];
-struct op_s *OP_ASSIGN_ADD   = &ops[28];
-struct op_s *OP_ASSIGN_SUB   = &ops[29];
-struct op_s *OP_ASSIGN_MULT  = &ops[30];
-struct op_s *OP_ASSIGN_DIV   = &ops[31];
-struct op_s *OP_ASSIGN_MOD   = &ops[32];
-struct op_s *OP_ASSIGN_LSH   = &ops[33];
-struct op_s *OP_ASSIGN_RSH   = &ops[34];
-struct op_s *OP_ASSIGN_AND   = &ops[35];
-struct op_s *OP_ASSIGN_XOR   = &ops[36];
-struct op_s *OP_ASSIGN_OR    = &ops[37];
-struct op_s *OP_LBRACE       = &ops[38];
-struct op_s *OP_RBRACE       = &ops[39];
+struct op_s *OP_POST_INC     = &arithm_ops[0 ];
+struct op_s *OP_POST_DEC     = &arithm_ops[1 ];
+struct op_s *OP_PRE_INC      = &arithm_ops[2 ];
+struct op_s *OP_PRE_DEC      = &arithm_ops[3 ];
+struct op_s *OP_UMINUS       = &arithm_ops[4 ];
+struct op_s *OP_UPLUS        = &arithm_ops[5 ];
+struct op_s *OP_LOG_NOT      = &arithm_ops[6 ];
+struct op_s *OP_BIT_NOT      = &arithm_ops[7 ];
+struct op_s *OP_EXP          = &arithm_ops[8 ];
+struct op_s *OP_MULT         = &arithm_ops[9 ];
+struct op_s *OP_DIV          = &arithm_ops[10];
+struct op_s *OP_MOD          = &arithm_ops[11];
+struct op_s *OP_ADD          = &arithm_ops[12];
+struct op_s *OP_SUB          = &arithm_ops[13];
+struct op_s *OP_LSH          = &arithm_ops[14];
+struct op_s *OP_RSH          = &arithm_ops[15];
+struct op_s *OP_LT           = &arithm_ops[16];
+struct op_s *OP_LE           = &arithm_ops[17];
+struct op_s *OP_GT           = &arithm_ops[18];
+struct op_s *OP_GE           = &arithm_ops[19];
+struct op_s *OP_EQ           = &arithm_ops[20];
+struct op_s *OP_NE           = &arithm_ops[21];
+struct op_s *OP_BIT_AND      = &arithm_ops[22];
+struct op_s *OP_BIT_XOR      = &arithm_ops[23];
+struct op_s *OP_BIT_OR       = &arithm_ops[24];
+struct op_s *OP_LOG_AND      = &arithm_ops[25];
+struct op_s *OP_LOG_OR       = &arithm_ops[26];
+struct op_s *OP_ASSIGN       = &arithm_ops[27];
+struct op_s *OP_ASSIGN_ADD   = &arithm_ops[28];
+struct op_s *OP_ASSIGN_SUB   = &arithm_ops[29];
+struct op_s *OP_ASSIGN_MULT  = &arithm_ops[30];
+struct op_s *OP_ASSIGN_DIV   = &arithm_ops[31];
+struct op_s *OP_ASSIGN_MOD   = &arithm_ops[32];
+struct op_s *OP_ASSIGN_LSH   = &arithm_ops[33];
+struct op_s *OP_ASSIGN_RSH   = &arithm_ops[34];
+struct op_s *OP_ASSIGN_AND   = &arithm_ops[35];
+struct op_s *OP_ASSIGN_XOR   = &arithm_ops[36];
+struct op_s *OP_ASSIGN_OR    = &arithm_ops[37];
+struct op_s *OP_LBRACE       = &arithm_ops[38];
+struct op_s *OP_RBRACE       = &arithm_ops[39];
 
 
-int special_char(char c)
+/*
+ * return 1 if the given char is a valid shell variable name char.
+ */
+int valid_name_char(char c)
 {
-    if(c == '_' || c =='@' || c == '#' || c == '$' || c == '?')
+    switch(c)
     {
+        case '_':
+        case '@':
+        case '#':
+        case '$':
+        case '?':
+            return 1;
+
+        default:
+            if(isalnum(c))
+            {
+                return 1;
+            }
+            return 0;
+    }
+}
+
+
+/*
+ * push an operator on the operator stack.
+ */
+void push_opstack(struct op_s *op)
+{
+    if(nopstack>MAXOPSTACK-1)
+    {
+        fprintf(stderr, "%s: Operator stack overflow\n", SHELL_NAME);
+        error = 1;
+        return;
+    }
+    opstack[nopstack++]=op;
+}
+
+
+/*
+ * pop an operator from the operator stack.
+ */
+struct op_s *pop_opstack(void)
+{
+    if(!nopstack)
+    {
+        fprintf(stderr, "%s: Operator stack empty\n", SHELL_NAME);
+        error = 1;
+        return NULL;
+    }
+    return opstack[--nopstack];
+}
+
+
+/*
+ * push a long numeric operand on the operand stack.
+ */
+void push_numstackl(long val)
+{
+    if(nnumstack > MAXNUMSTACK-1)
+    {
+        fprintf(stderr, "%s: Number stack overflow\n", SHELL_NAME);
+        error = 1;
+        return;
+    }
+
+    numstack[nnumstack].type = ITEM_LONG_INT;
+    numstack[nnumstack++].val = val;
+}
+
+
+/*
+ * push a shell variable operand on the operand stack.
+ */
+void push_numstackv(struct symtab_entry_s *val)
+{
+    if(nnumstack > MAXNUMSTACK-1)
+    {
+        fprintf(stderr, "%s: Number stack overflow\n", SHELL_NAME);
+        error = 1;
+        return;
+    }
+
+    numstack[nnumstack].type = ITEM_VAR_PTR;
+    numstack[nnumstack++].ptr = val;
+}
+
+
+/*
+ * pop an operand from the operand stack.
+ */
+struct stack_item_s pop_numstack(void)
+{
+    if(!nnumstack)
+    {
+        fprintf(stderr, "%s: Number stack empty\n", SHELL_NAME);
+        error = 1;
+        return (struct stack_item_s) { };
+    }
+    return numstack[--nnumstack];
+}
+
+
+/*
+ * perform operator shunting when we have a new operator by popping the operator
+ * at the top of the stack and applying it to the operands on the operand stack.
+ * we do this if the operator on top of the stack is not a '(' operator and:
+ *   - has greater precedence than the new operator, or
+ *   - has equal precedence to the new operator, but the top-of-stack one is
+ *     left-associative
+ * after popping the operator, we push the new operator on the operator stack,
+ * and we push the previous top-of-stack operator's result on the operand stack.
+ */
+void shunt_op(struct op_s *op)
+{
+    struct op_s *pop;
+    error = 0;
+    if(op->op == '(')
+    {
+        push_opstack(op);
+        return;
+    }
+    else if(op->op == ')')
+    {
+        while(nopstack > 0 && opstack[nopstack-1]->op != '(')
+        {
+            pop = pop_opstack();
+            if(error)
+            {
+                return;
+            }
+            struct stack_item_s n1 = pop_numstack();
+            if(error)
+            {
+                return;
+            }
+            if(pop->unary)
+            {
+                push_numstackl(pop->eval(&n1, 0));
+            }
+            else
+            {
+                struct stack_item_s n2 = pop_numstack();
+                if(error)
+                {
+                    return;
+                }
+                push_numstackl(pop->eval(&n2, &n1));
+                if(error)
+                {
+                    return;
+                }
+            }
+        }
+        if(!(pop = pop_opstack()) || pop->op != '(')
+        {
+            fprintf(stderr, "%s: Stack error. No matching \'(\'\n", SHELL_NAME);
+            error = 1;
+        }
+        return;
+    }
+
+    if(op->assoc == ASSOC_RIGHT)
+    {
+        while(nopstack && op->prec < opstack[nopstack-1]->prec)
+        {
+            pop = pop_opstack();
+            if(error)
+            {
+                return;
+            }
+            struct stack_item_s n1 = pop_numstack();
+            if(pop->unary)
+            {
+                push_numstackl(pop->eval(&n1, 0));
+            }
+            else
+            {
+                struct stack_item_s n2 = pop_numstack();
+                if(error)
+                {
+                    return;
+                }
+                push_numstackl(pop->eval(&n2, &n1));
+            }
+            if(error)
+            {
+                return;
+            }
+        }
+    }
+    else
+    {
+        while(nopstack && op->prec <= opstack[nopstack-1]->prec)
+        {
+            pop = pop_opstack();
+            if(error)
+            {
+                return;
+            }
+            struct stack_item_s n1 = pop_numstack();
+            if(pop->unary)
+            {
+                push_numstackl(pop->eval(&n1, 0));
+            }
+            else
+            {
+                struct stack_item_s n2 = pop_numstack();
+                if(error)
+                {
+                    return;
+                }
+                push_numstackl(pop->eval(&n2, &n1));
+            }
+            if(error)
+            {
+                return;
+            }
+        }
+    }
+    push_opstack(op);
+}
+
+
+/*
+ * check if the given digit falls in the range [0]..[base-1], then return
+ * the numeric value of that digit.
+ * the base can be any number from 2 to 64, with values higher than 9
+ * represented by the letters a-z, then A-Z, then @ and _ (similar to bash).
+ * if the base is <= 36, small and capital letters can be used interchangeably.
+ * the result is place in the *result field, and 1 is returned.. otherwise
+ * zero is returned.
+ */
+int get_ndigit(char c, int base, int *result)
+{
+    /* invalid char */
+    if(!isalnum(c) && c != '@' && c != '_')
+    {
+        return 0;
+    }
+
+    char max, max2;
+    /* base 10 or less: only digits 0-9 are acceptable */
+    if(base <= 10)
+    {
+        max = '0'+base-1;
+        if(c >= '0' && c <= max)
+        {
+            (*result) = c-'0';
+            return 1;
+        }
+        goto invalid;
+    }
+
+    /* base larger than 10: if the digit is 0-9, return it */
+    if(c >= '0' && c <= '9')
+    {
+        (*result) = c-'0';
         return 1;
     }
+
+    /* bases 11 to 36: small and capital letters can be used interchangeably */
+    if(base <= 36)
+    {
+        max  = 'a'+base-11;     /* max. small letter in this base */
+        max2 = max-32;          /* max capital letter in this base */
+        if(c >= 'a' && c <= max)
+        {
+            (*result) = c-'a'+10;
+            return 1;
+        }
+        if(c >= 'A' && c <= max2)
+        {
+            (*result) = c-'A'+10;
+            return 1;
+        }
+    }
+
+    /*
+     *  bases 37 to 64: the following characters represent the corresponding digits:
+     *     a-z => 10-35
+     *     A-Z => 36-61
+     *     @   => 62
+     *     _   => 63
+     */
+    else if(base <= 62)
+    {
+        /* check the small letters first */
+        if(c >= 'a' && c <= 'z')
+        {
+            (*result) = c-'a'+10;
+            return 1;
+        }
+        max2 = 'A'+base-37;          /* max capital letter in this base */
+        if(c >= 'A' && c <= max2)
+        {
+            (*result) = c-'A'+36;
+            return 1;
+        }
+    }
+    else if(c == '@')
+    {
+        (*result) = 62;
+        return 1;
+    }
+    else if(c == '_' && base == 64)
+    {
+        (*result) = 63;
+        return 1;
+    }
+
+invalid:
+    /* invalid digit */
+    fprintf(stderr, "%s: digit %c exceeds the value of the base %d\n", SHELL_NAME, c, base);
+    error = 1;
     return 0;
 }
 
-struct op_s *getop(char *expr)
+
+/*
+ * extract an arithmetic operator from the beginning of expr.
+ */
+struct op_s *get_op(char *expr)
 {
     switch(*expr)
     {
@@ -637,7 +933,7 @@ struct op_s *getop(char *expr)
                 return OP_ASSIGN_DIV;
             }
             return OP_DIV;
-            
+
         case '%':
             if(expr[1] == '=')
             {
@@ -647,281 +943,105 @@ struct op_s *getop(char *expr)
 
         case '~':
             return OP_BIT_NOT;
-            
+
         case '(':
             return OP_LBRACE ;
-            
+
         case ')':
             return OP_RBRACE ;
     }
     return NULL;
 }
 
-void push_opstack(struct op_s *op)
+
+/*
+ * extract a numeric operand from the beginning of the given string.
+ * numbers can be hex constants (preceded by 0x or 0X), octal (preceded by 0),
+ * binary (preceded by 0b or 0B), or in any base, given in the format: [base#]n.
+ * the number of characters used to get the number is stored in *char_count,
+ * while the number itself is return as a long int.
+ */
+long get_num(char *s, int *char_count)
 {
-    if(nopstack>MAXOPSTACK-1)
-    {
-        fprintf(stderr, "%s: Operator stack overflow\n", SHELL_NAME);
-        error = 1;
-        return;
-    }
-    opstack[nopstack++]=op;
-}
+    char *s2 = s;
+    long num = 0;
+    int num2, base = 10;
 
-struct op_s *pop_opstack()
-{
-    if(!nopstack)
-    {
-        fprintf(stderr, "%s: Operator stack empty\n", SHELL_NAME);
-        error = 1;
-        return NULL;
-    }
-    return opstack[--nopstack];
-}
-
-void push_numstackl(long val)
-{
-    if(nnumstack > MAXNUMSTACK-1)
-    {
-        fprintf(stderr, "%s: Number stack overflow\n", SHELL_NAME);
-        error = 1;
-        return;
-    }
-
-    numstack[nnumstack].type = ITEM_LONG_INT;
-    numstack[nnumstack++].val = val;
-}
-
-void push_numstackv(struct symtab_entry_s *val)
-{
-    if(nnumstack > MAXNUMSTACK-1)
-    {
-        fprintf(stderr, "%s: Number stack overflow\n", SHELL_NAME);
-        error = 1;
-        return;
-    }
-
-    numstack[nnumstack].type = ITEM_VAR_PTR;
-    numstack[nnumstack++].ptr = val;
-}
-
-struct stack_item_s pop_numstack()
-// long pop_numstack()
-{
-    if(!nnumstack)
-    {
-        fprintf(stderr, "%s: Number stack empty\n", SHELL_NAME);
-        error = 1;
-        return (struct stack_item_s) { };
-    }
-    return numstack[--nnumstack];
-}
-
-
-void shunt_op(struct op_s *op)
-{
-    struct op_s *pop;
-    error = 0;
-    if(op->op == '(')
-    {
-        push_opstack(op);
-        return;
-    }
-    else if(op->op == ')')
-    {
-        while(nopstack > 0 && opstack[nopstack-1]->op != '(')
-        {
-            pop = pop_opstack();
-            if(error)
-            {
-                return;
-            }
-            struct stack_item_s n1 = pop_numstack();
-            if(error)
-            {
-                return;
-            }
-            if(pop->unary)
-            {
-                push_numstackl(pop->eval(&n1, 0));
-            }
-            else
-            {
-                struct stack_item_s n2 = pop_numstack();
-                if(error)
-                {
-                    return;
-                }
-                push_numstackl(pop->eval(&n2, &n1));
-                if(error)
-                {
-                    return;
-                }
-            }
-        }
-        if(!(pop = pop_opstack()) || pop->op != '(')
-        {
-            fprintf(stderr, "%s: Stack error. No matching \'(\'\n", SHELL_NAME);
-            error = 1;
-        }
-        return;
-    }
-
-    if(op->assoc == ASSOC_RIGHT)
-    {
-        while(nopstack && op->prec < opstack[nopstack-1]->prec)
-        {
-            pop = pop_opstack();
-            if(error)
-            {
-                return;
-            }
-            struct stack_item_s n1 = pop_numstack();
-            if(pop->unary)
-            {
-                push_numstackl(pop->eval(&n1, 0));
-            }
-            else
-            {
-                struct stack_item_s n2 = pop_numstack();
-                if(error)
-                {
-                    return;
-                }
-                push_numstackl(pop->eval(&n2, &n1));
-            }
-            if(error)
-            {
-                return;
-            }
-        }
-    }
-    else
-    {
-        while(nopstack && op->prec <= opstack[nopstack-1]->prec)
-        {
-            pop = pop_opstack();
-            if(error)
-            {
-                return;
-            }
-            struct stack_item_s n1 = pop_numstack();
-            if(pop->unary)
-            {
-                push_numstackl(pop->eval(&n1, 0));
-            }
-            else
-            {
-                struct stack_item_s n2 = pop_numstack();
-                if(error)
-                {
-                    return;
-                }
-                push_numstackl(pop->eval(&n2, &n1));
-            }
-            if(error)
-            {
-                return;
-            }
-        }
-    }
-    push_opstack(op);
-}
-
-int isndigit(int c, char max_digit)
-{
-    if(max_digit <= '9')
-    {
-        return (c >= '0' && c <= max_digit);
-    }
-    else
-    {
-        if(c >= '0' && c <= '9')
-        {
-            return 1;          /* normal digits   */
-        }
-        if(c >= 'a' && c <= max_digit)
-        {
-            return 1;    /* small letters   */
-        }
-        return (c >= 'A' && c <= (max_digit-32));   /* capital letters */
-    }
-}
-
-long get_num(char *s, int *chars)
-{
-    char *s2   = s ;
-    long  num  = 0 ;
-    int   base = 10;
-    char  max_digit = '9';
+    /* check if we have a predefined base */
     if(*s2 == '0')
     {
         switch(s2[1])
         {
             case 'x':
             case 'X':
-                base  = 16;
-                s2   += 2 ;
-                while(isxdigit(*s2))
-                {
-                    char c = get_xdigit(*s2);
-                    num = num*base + c;
-                    s2++;
-                }
+                base = 16;
+                s2 += 2;
                 break;
 
             case 'b':
             case 'B':
-                base  = 2;
-                max_digit = '1';
-                s2   += 2 ;
+                base = 2;
+                s2 += 2;
                 break;
                 
             default:
                 base = 8;
-                max_digit = '7';
                 s2++;
                 break;
         }
     }
-    if(*s2 >= '0' && *s2 <= max_digit)
+
+    /* get the number according to the given base (use base 10 if none) */
+    while(get_ndigit(*s2, base, &num2))
     {
-        while(*s2 >= '0' && *s2 <= max_digit)
-        {
-            num = num*base + (*s2)-'0';
-            s2++;
-        }
+        num = (num*base) + num2;
+        s2++;
     }
+
+    /* check we didn't encounter an invalid digit */
+    if(error)
+    {
+        return 0;
+    }
+
+    /* if binary, octal or hex base, return the result */
+    if(base != 10)
+    {
+        (*char_count) = s2-s;
+        return num;
+    }
+
     /*
      * numbers can be written as base#n, where base is a number
-     * between 1 and 64. this is a non-POSIX extension. digits higher
-     * than 9 are represented with alphabetic characters a..z and A..Z,
+     * between 2 and 64.. this is a non-POSIX extension.. digits higher
+     * than 9 are represented by alphabetic characters a..z, A..Z, @ and _.
      * the number of legal letters depends on the selected base.
      */
     if(*s2 == '#')
     {
         base = num;
         num  = 0;
-        if(base <= 10)
-        {
-            max_digit = '0'+(base-1 );
-        }
-        else
-        {
-            max_digit = 'a'+(base-11);
-        }
         s2++;
-        while(isndigit(*s2, max_digit))
+        while(get_ndigit(*s2, base, &num2))
         {
-            num = num*base + get_xdigit(*s2);
+            num = (num*base) + num2;
             s2++;
         }
+        /* check we didn't encounter an invalid digit */
+        if(error)
+        {
+            return 0;
+        }
     }
-    *chars = s2-s;
+    (*char_count) = s2-s;
     return num;
 }
 
-struct symtab_entry_s *get_var(char *s, int *chars)
+
+/*
+ * extract a shell variable name operand from the beginning of chars.
+ */
+struct symtab_entry_s *get_var(char *s, int *char_count)
 {
     char *ss = s;
     if(*ss == '$')
@@ -929,7 +1049,7 @@ struct symtab_entry_s *get_var(char *s, int *chars)
         ss++;        /* var names can begin with '$'. skip it */
     }
     char *s2 = ss;
-    while(*s2 && (isalnum(*s2) || special_char(*s2)))
+    while(*s2 && valid_name_char(*s2))
     {
         s2++;
     }
@@ -937,7 +1057,7 @@ struct symtab_entry_s *get_var(char *s, int *chars)
     /* empty var name */
     if(len == 0)
     {
-        *chars = s2-s;
+        (*char_count) = s2-s;
         return NULL;
     }
     /* copy the name */
@@ -950,7 +1070,8 @@ struct symtab_entry_s *get_var(char *s, int *chars)
     {
         e = add_to_symtab(name);
     }
-    *chars = s2-s;              /* get the real length, including leading '$' if present */
+    /* get the real length, including leading '$' if present */
+    (*char_count) = s2-s;
     return e;
 }
 
@@ -980,7 +1101,7 @@ struct symtab_entry_s *get_var(char *s, int *chars)
  *       - the comma operator (expr, expr)
  */
 
-char *arithm_expand(char *__expr)
+char *arithm_expand(char *orig_expr)
 {
     char   *expr;
     char   *tstart       = NULL;
@@ -989,10 +1110,10 @@ char *arithm_expand(char *__expr)
     int     n1, n2;
     struct  op_s *lastop = &startop;
     /*
-     * get a copy of __expr without the $(( and )), or the $[ and ]
+     * get a copy of orig_expr without the $(( and )), or the $[ and ]
      * if we're given the obsolete arithmetic expansion operator.
      */
-    int baseexp_len = strlen(__expr);
+    int baseexp_len = strlen(orig_expr);
     char *baseexp = malloc(baseexp_len+1);
     if(!baseexp)
     {
@@ -1000,9 +1121,9 @@ char *arithm_expand(char *__expr)
         return NULL;
     }
     /* lose the $(( */
-    if(__expr[0] == '$' && __expr[1] == '(')
+    if(orig_expr[0] == '$' && orig_expr[1] == '(')
     {
-        strcpy(baseexp, __expr+3);
+        strcpy(baseexp, orig_expr+3);
         baseexp_len -= 3;
         /* and the )) */
         if(baseexp[baseexp_len-1] == ')' && baseexp[baseexp_len-2] == ')')
@@ -1011,9 +1132,9 @@ char *arithm_expand(char *__expr)
         }
     }
     /* lose the $[ */
-    else if(__expr[0] == '$' && __expr[1] == '[')
+    else if(orig_expr[0] == '$' && orig_expr[1] == '[')
     {
-        strcpy(baseexp, __expr+2);
+        strcpy(baseexp, orig_expr+2);
         baseexp_len -= 2;
         /* and the ] */
         if(baseexp[baseexp_len-1] == ']')
@@ -1023,7 +1144,7 @@ char *arithm_expand(char *__expr)
     }
     else
     {
-        strcpy(baseexp, __expr);
+        strcpy(baseexp, orig_expr);
     }
 
     /* init our stacks */
@@ -1038,7 +1159,7 @@ char *arithm_expand(char *__expr)
     {
         if(!tstart)
         {
-            if((op = getop(expr)))
+            if((op = get_op(expr)))
             {
                 if(lastop && (lastop == &startop || lastop->op != ')'))
                 {
@@ -1061,7 +1182,7 @@ char *arithm_expand(char *__expr)
                 if(op->op == CH_POST_INC || op->op == CH_POST_DEC)
                 {
                     /* post ++/-- has higher precedence over pre ++/-- */
-                    if(expr < baseexp+2 || !isalnum(expr[-2]) || !special_char(expr[-2]))
+                    if(expr < baseexp+2 || !valid_name_char(expr[-2]))
                     {
                         if(op == OP_POST_INC)
                         {
@@ -1082,7 +1203,7 @@ char *arithm_expand(char *__expr)
                 lastop = op;
                 expr += op->chars;
             }
-            else if(isalnum(*expr) || special_char(*expr))
+            else if(valid_name_char(*expr))
             {
                 tstart = expr;
             }
@@ -1104,8 +1225,12 @@ char *arithm_expand(char *__expr)
             }
             else if(isdigit(*expr))
             {
-                n1 = get_num(tstart, &n2);
                 error = 0;
+                n1 = get_num(tstart, &n2);
+                if(error)
+                {
+                    goto err;
+                }
                 push_numstackl(n1);
                 if(error)
                 {
@@ -1115,7 +1240,7 @@ char *arithm_expand(char *__expr)
                 lastop = NULL;
                 expr += n2;
             }
-            else if(isalpha(*expr) || special_char(*expr))
+            else if(valid_name_char(*expr))
             {
                 struct symtab_entry_s *n1 = get_var(tstart, &n2);
                 if(!n1)
@@ -1133,10 +1258,14 @@ char *arithm_expand(char *__expr)
                 lastop = NULL;
                 expr += n2;
             }
-            else if((op = getop(expr)))
+            else if((op = get_op(expr)))
             {
-                n1 = get_num(tstart, &n2);
                 error = 0;
+                n1 = get_num(tstart, &n2);
+                if(error)
+                {
+                    goto err;
+                }
                 push_numstackl(n1);
                 if(error)
                 {
@@ -1148,7 +1277,7 @@ char *arithm_expand(char *__expr)
                 if(op->op == CH_POST_INC || op->op == CH_POST_DEC)
                 {
                     /* post ++/-- has higher precedence over pre ++/-- */
-                    if(expr < baseexp+2 || !isalnum(expr[-2]) || !special_char(expr[-2]))
+                    if(expr < baseexp+2 || !valid_name_char(expr[-2]))
                     {
                         if(op == OP_POST_INC)
                         {
@@ -1182,9 +1311,14 @@ char *arithm_expand(char *__expr)
         error = 0;
         if(isdigit(*tstart))
         {
-            push_numstackl(get_num(tstart, &n2));
+            n1 = get_num(tstart, &n2);
+            if(error)
+            {
+                goto err;
+            }
+            push_numstackl(n1);
         }
-        else if(isalpha(*tstart) || special_char(*tstart))
+        else if(valid_name_char(*tstart))
         {
             push_numstackv(get_var(tstart, &n2));
         }
@@ -1230,7 +1364,7 @@ char *arithm_expand(char *__expr)
     if(!nnumstack)
     {
         /*return false as the result */
-        set_exit_status(1);
+        set_internal_exit_status(1);
         free(baseexp);
         return NULL;
     }
@@ -1250,7 +1384,7 @@ char *arithm_expand(char *__expr)
      * which is inverted, i.e. non-zero result is true (or zero exit status) and vice versa.
      * this is what bash does with the (( expr )) compound command.
      */
-    set_exit_status(!numstack[0].val);
+    set_internal_exit_status(!numstack[0].val);
     free(baseexp);
     return res2;
 

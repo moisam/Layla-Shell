@@ -44,14 +44,11 @@ struct hashtab_s *str_hashes = NULL;
 /* dummy value for an empty string */
 char *empty_str = "";
 
-/* defined in symtab/string_hash.c */
-struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, unsigned int value);
-
 
 /*
  * initialize the strings buffer.
  */
-void init_str_hashtable()
+void init_str_hashtable(void)
 {
     str_hashes = new_hashtable();
 }
@@ -156,12 +153,12 @@ void free_malloced_str(char *str)
         {
             /* this string is hashed. process it */
             entry->refs--;
-            if(entry->refs == 0)
+            if(entry->refs <= 0)
             {
                 rem_hash_item(str_hashes, str);
             }
-            return;
         }
+        return;
     }
     /* strings buffer is not operational. free the malloc'd string */
     free(str);

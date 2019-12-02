@@ -96,12 +96,14 @@ void free_all_words(struct word_s *first)
 
 
 /*
- * convert a tree of tokens into a command string (i.e. re-create the original command line
- * from the token tree.
+ * convert a tree of tokens into a command string (i.e. re-create the original
+ * command line from the token tree.. if add_spaces is non-zero, the function
+ * will separate the tokens by spaces, otherwise the tokens are concatenated
+ * together with no intervening spaces.
  *
  * returns the malloc'd command string, or NULL if there is an error.
  */
-char *wordlist_to_str(struct word_s *word)
+char *wordlist_to_str(struct word_s *word, int add_spaces)
 {
     if(!word)
     {
@@ -111,7 +113,7 @@ char *wordlist_to_str(struct word_s *word)
     struct word_s *w = word;
     while(w)
     {
-        w->len = strlen(w->data);
+        /* add extra spaces without checking add_spaces (to simplify this code) */
         len += w->len+1;
         w    = w->next;
     }
@@ -124,12 +126,23 @@ char *wordlist_to_str(struct word_s *word)
     w = word;
     while(w)
     {
-        sprintf(str2, "%s ", w->data);
-        str2 += w->len+1;
-        w     = w->next;
+        if(add_spaces)
+        {
+            sprintf(str2, "%s ", w->data);
+            str2 += w->len+1;
+        }
+        else
+        {
+            sprintf(str2, "%s", w->data);
+            str2 += w->len;
+        }
+        w = w->next;
     }
     /* remove the last separator */
-    str2[-1] = '\0';
+    if(add_spaces)
+    {
+        str2[-1] = '\0';
+    }
     return str;
 }
 
@@ -267,6 +280,7 @@ size_t find_closing_brace(char *data)
     {
         return 0;
     }
+
     /* determine the closing brace according to the opening brace */
     if(opening_brace == '{')
     {
@@ -280,6 +294,7 @@ size_t find_closing_brace(char *data)
     {
         closing_brace = ')';
     }
+
     /* find the matching closing brace */
     size_t ob_count = 1, cb_count = 0;
     size_t i = 0, len = strlen(data);
@@ -381,6 +396,15 @@ char *substitute_str(char *s1, char *s2, size_t start, size_t end)
 }
 
 
+/*
+ * perform word expansion on the word starting at *p and counting len characters.
+ * this function calls the function passed in the third parameter to do the actual
+ * expansion, then replaces len characters from *pstart, starting at *p.
+ * the expanded value is quoted, adding quotes around the value if add_quotes is
+ * non-zero.
+ *
+ * returns 1 if the expansion succeeds, 0 on error.
+ */
 int substitute_word(char **pstart, char **p, size_t len, char *(func)(char *), int add_quotes)
 {
     /* extract the word to be substituted */
@@ -397,7 +421,14 @@ int substitute_word(char **pstart, char **p, size_t len, char *(func)(char *), i
     if(func)
     {
         tmp2 = func(tmp);
-        free(tmp);
+        if(tmp2 == INVALID_VAR)
+        {
+            tmp2 = NULL;
+        }
+        if(tmp2)
+        {
+            free(tmp);
+        }
     }
     else
     {
@@ -407,6 +438,7 @@ int substitute_word(char **pstart, char **p, size_t len, char *(func)(char *), i
     if(!tmp2)
     {
         (*p) += len;
+        free(tmp);
         return 0;
     }
     /* save our current position in the word */
@@ -617,14 +649,14 @@ char *get_all_vars(char *prefix)
  *
  *    $(command)
  */
-char *command_substitute(char *__cmd)
+char *command_substitute(char *orig_cmd)
 {
     char    b[1024];
     size_t  bufsz = 0;
     char   *buf   = NULL;
     char   *p     = NULL;
     int     i     = 0;
-    int backquoted = (*__cmd == '`');
+    int backquoted = (*orig_cmd == '`');
 
     /* 
      * fix cmd in the backquoted version. we will be modifying the command, hence
@@ -633,7 +665,7 @@ char *command_substitute(char *__cmd)
      * we skip the first char (if using the old, backquoted version), or the first
      * two chars (if using the POSIX version).
      */
-    char *cmd = __get_malloced_str(__cmd+(backquoted ? 1 : 2));
+    char *cmd = __get_malloced_str(orig_cmd+(backquoted ? 1 : 2));
     char *cmd2 = cmd;
     if(!cmd)
     {
@@ -911,12 +943,10 @@ char *var_info_expand(char op, char *orig_val, char *var_name, int name_len)
 /*
  * read input from stdin and substitute it for a variable (tcsh extension), or
  * return the length of that string if get_length is non-zero.
- * returns the malloc'd input string (or its length), or NULL in case of error.
  *
- * this function should not be called directly by any function outside of this
- * module (hence the double underscores that prefix the function name).
+ * returns the malloc'd input string (or its length), or NULL in case of error.
  */
-char *__get_stdin_var(int get_length)
+char *get_stdin_var(int get_length)
 {
     char *tmp = NULL;
     /* stdin must be a terminal device */
@@ -979,10 +1009,10 @@ char *__get_stdin_var(int get_length)
  * this function should not be called directly by any function outside of this
  * module (hence the double underscores that prefix the function name).
  */
-char *var_expand(char *__var_name)
+char *var_expand(char *orig_var_name)
 {
     /* sanity check */
-    if(!__var_name)
+    if(!orig_var_name)
     {
        return NULL;
     }
@@ -993,29 +1023,29 @@ char *var_expand(char *__var_name)
      */
 
     /* skip the $ */
-    __var_name++;
-    size_t len = strlen(__var_name);
-    if(*__var_name == '{')
+    orig_var_name++;
+    size_t len = strlen(orig_var_name);
+    if(*orig_var_name == '{')
     {
         /* remove the } */
-        __var_name[len-1] = '\0';
-        __var_name++;
+        orig_var_name[len-1] = '\0';
+        orig_var_name++;
     }
 
     /* check we don't have an empty varname */
-    if(!*__var_name)
+    if(!*orig_var_name)
     {
        return NULL;
     }
     int get_length = 0;
 
     /* if varname starts with #, we need to get the string length */
-    if(*__var_name == '#')
+    if(*orig_var_name == '#')
     {
         /* use of '#' should come with omission of ':' */
-        if(strchr(__var_name, ':'))
+        if(strchr(orig_var_name, ':'))
         {
-            BACKEND_RAISE_ERROR(INVALID_SUBSTITUTION, __var_name, NULL);
+            BACKEND_RAISE_ERROR(INVALID_SUBSTITUTION, orig_var_name, NULL);
             /* POSIX says non-interactive shell should exit on expansion errors */
             EXIT_IF_NONINTERACTIVE();
             return INVALID_VAR;
@@ -1024,16 +1054,16 @@ char *var_expand(char *__var_name)
          * make sure the caller meant ${#parameter}, which gets string length,
          * and it didn't mean ${#}, which gets # of positional parameters.
          */
-        char c = __var_name[1];
+        char c = orig_var_name[1];
         if(c != '\0' && c != '-' && c != '=' && c != '?' && c != '+')
         {
             get_length = 1;
-            __var_name++;
+            orig_var_name++;
         }
     }
 
     /* check we don't have an empty varname */
-    if(!*__var_name)
+    if(!*orig_var_name)
     {
         return NULL;
     }
@@ -1042,12 +1072,12 @@ char *var_expand(char *__var_name)
      * sanity-check the name. it should only include alphanumeric chars, or one of
      * the special parameter names, such as !, ?, # and so on.
      */
-    char *p = __var_name;
+    char *p = orig_var_name;
     if(!is_alphanum(*p) && *p != '!' && *p != '?' && *p != '#' &&
                            *p != '$' && *p != '-' && *p != '@' &&
                            *p != '*' && *p != '<')
     {
-        BACKEND_RAISE_ERROR(INVALID_SUBSTITUTION, __var_name, NULL);
+        BACKEND_RAISE_ERROR(INVALID_SUBSTITUTION, orig_var_name, NULL);
         /* POSIX says non-interactive shell should exit on expansion errors */
         EXIT_IF_NONINTERACTIVE();
         return INVALID_VAR;
@@ -1058,14 +1088,14 @@ char *var_expand(char *__var_name)
      * value or substitution we are going to perform on the variable.
      */
     //int   colon = 0;
-    char *sub   = strchr(__var_name, ':');
+    char *sub   = strchr(orig_var_name, ':');
     if(sub)     /* we have a colon + substitution */
     {
         /* colon = 1 */ ;
     }
     else        /* we have a substitution without a colon */
     {
-        char *v = __var_name;
+        char *v = orig_var_name;
         /* don't mistake a '#' variable name for a #var length substitution */
         if(*v == '#' && v[1] == '\0')
         {
@@ -1083,7 +1113,7 @@ char *var_expand(char *__var_name)
     }
 
     /* get the length of the variable name (without the substitution part) */
-    len = sub ? (size_t)(sub-__var_name) : strlen(__var_name);
+    len = sub ? (size_t)(sub-orig_var_name) : strlen(orig_var_name);
 
     /* if we have a colon+substitution, skip the colon */
     if(sub && *sub == ':')
@@ -1093,7 +1123,7 @@ char *var_expand(char *__var_name)
 
     /* copy the varname to a buffer */
     char var_name[len+1];
-    strncpy(var_name, __var_name, len);
+    strncpy(var_name, orig_var_name, len);
     var_name[len]   = '\0';
 
     /*
@@ -1136,7 +1166,7 @@ char *var_expand(char *__var_name)
     /* tcsh extension to read directly from stdin */
     if(strcmp(var_name, "<") == 0)
     {
-        return __get_stdin_var(get_length);
+        return get_stdin_var(get_length);
     }
 
     /* check if the requested varname is a special variable name and get its value */
@@ -1191,7 +1221,7 @@ char *var_expand(char *__var_name)
                      */
                     if(is_pos_param(var_name) || is_special_param(var_name))
                     {
-                        BACKEND_RAISE_ERROR(INVALID_ASSIGNMENT, __var_name, NULL);
+                        BACKEND_RAISE_ERROR(INVALID_ASSIGNMENT, orig_var_name, NULL);
                         /* NOTE: this is not strict POSIX behaviour. see the table above */
                         if(!option_set('i'))
                         {
@@ -1428,7 +1458,7 @@ char *var_expand(char *__var_name)
     /* do we need to set new value to the variable? */
     if(setme)
     {
-        __set(var_name, tmp, 0, 0, 0);
+        do_set(var_name, tmp, 0, 0, 0);
     }
 
     /* return the length of the variable's value */
@@ -1569,7 +1599,7 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
         }
         subs[l++] = NULL;
         /* convert the list to a string */
-        p = list_to_str(subs, 0);
+        p = list_to_str(subs);
         /* free the memory used by the list strings */
         for(k = 0; subs[k]; k++)
         {
@@ -1627,7 +1657,7 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
             }
             subs[l++] = NULL;
             /* convert the list to a string */
-            p = list_to_str(subs, 0);
+            p = list_to_str(subs);
             /* free the memory used by the list strings */
             for(k = 0; subs[k]; k++)
             {
@@ -1726,15 +1756,24 @@ char *ansic_expand(char *str)
                     
                 case 'x':
                     delete_char_at(s, 0);
+                    if(!isxdigit(*s))
+                    {
+                        break;
+                    }
                     /* we can have up to 2 hex digits */
                     i = 0;
-                    if(isxdigit(*s  ))
+                    j = 0;
+                    k = 0;
+                    get_ndigit(*s, 16, &j);
+                    i++;
+                    if(get_ndigit(s[1], 16, &k))
                     {
-                        c = get_xdigit(*s), i++;
+                        i++;
+                        c = j*16 + k;
                     }
-                    if(isxdigit(s[1]))
+                    else
                     {
-                        c = c*16 + get_xdigit(s[1]), i++;
+                        c = j;
                     }
                     *s = c;
                     if(i != 1)
@@ -1760,10 +1799,10 @@ char *ansic_expand(char *str)
                     j = 0;
                     for(i = 0; i < k; i++)
                     {
-                        if(isxdigit(s[i]))
+                        int l = 0;
+                        if(get_ndigit(s[i], 16, &l))
                         {
-                            c = get_xdigit(s[i]);
-                            j = j*16 + c;
+                            j = j*16 + l;
                         }
                         else
                         {
@@ -1900,14 +1939,15 @@ char *ansic_expand(char *str)
  */
 char *tilde_expand(char *s)
 {
-    char *home = NULL;
     /*
      * TODO: we should add full support for the "Tilde Prefix" as defined in the
      *       POSIX standard (section 2.6.1).
      */
-    size_t len      = strlen(s);
-    char   *s2      = NULL;
+    char *home = NULL, *s2 = NULL;
+    size_t len = strlen(s);
     struct symtab_entry_s *entry;
+    struct dirstack_ent_s *ds;
+
     /* null tilde prefix. substitute with the value of home */
     if(len == 1)
     {
@@ -1915,20 +1955,40 @@ char *tilde_expand(char *s)
     }
     else
     {
-        /* ksh and bash extensions */
-        if(strcmp(s, "~+") == 0 || strcmp(s, "~-") == 0)
+        /*
+         * process ~+ and ~- tilde prefixes, which refer to $PWD and $OLDPWD.
+         * also process numeric tilde prefixes such as ~+N, ~-N and ~N, which
+         * represent entries in the dirs stack (see bash manual pages 30 and 96).
+         * all of these are ksh and bash extensions.
+         */
+        if(s[1] == '+' || s[1] == '-')
         {
-            entry = get_symtab_entry((s[1] == '+') ? "PWD" : "OLDPWD");
-            char *dir = entry ? entry->val : NULL;
-            if(dir && dir[0] != '\0')
+            if(s[2] == '\0')        /* ~+ and ~- */
             {
-                home = dir;
+                entry = get_symtab_entry((s[1] == '+') ? "PWD" : "OLDPWD");
+                char *dir = entry ? entry->val : NULL;
+                if(dir && *dir)
+                {
+                    home = dir;
+                }
+            }
+            else                    /* ~+N and ~-N (dirstack entries) */
+            {
+                ds = get_dirstack_entry(s+1, NULL);
+                if(ds)
+                {
+                    home = ds->path;
+                }
             }
         }
-        /*
-         * TODO: process numeric tilde prefixes such as ~+N, ~-N and ~N, which
-         *       represent entries in the dirs stack (see bash manual pages 30 and 96).
-         */
+        else if(isdigit(s[1]))      /* ~N (dirstack entries) */
+        {
+            ds = get_dirstack_entry(s+1, NULL);
+            if(ds)
+            {
+                home = ds->path;
+            }
+        }
         else
         {
             /* we have a login name */
@@ -1940,11 +2000,14 @@ char *tilde_expand(char *s)
             }
         }
     }
-    /* return the home dir we've found */
+
+    /* we have a NULL value */
     if(!home)
     {
         return NULL;
     }
+
+    /* return the home dir we've found */
     s2 = malloc(strlen(home)+1);
     if(!s2)
     {
@@ -1961,7 +2024,7 @@ char *tilde_expand(char *s)
  * returns the head of the linked list of the expanded fields and stores the last field
  * in the tail pointer.
  */
-struct word_s *word_expand_one_word(char *orig_word)
+struct word_s *word_expand_one_word(char *orig_word, int do_field_splitting)
 {
     /* NULL word */
     if(!orig_word)
@@ -2423,7 +2486,7 @@ struct word_s *word_expand_one_word(char *orig_word)
     
     /* if we performed word expansion, do field splitting */
     struct word_s *words = NULL;
-    if(expanded)
+    if(expanded && do_field_splitting)
     {
         words = field_split(pstart);
     }
@@ -2474,7 +2537,7 @@ struct word_s *word_expand(char *orig_word)
     struct word_s *wordlist = NULL, *listtail = NULL;
     for(i = 0; i < count; i++)
     {
-        struct word_s *w = word_expand_one_word(list[i]);
+        struct word_s *w = word_expand_one_word(list[i], WORD_EXPANSION_FIELD_SPLIT);
         if(w)
         {
             /* add the words list */
@@ -2750,7 +2813,7 @@ char *word_expand_to_str(char *word)
     {
         return NULL;
     }
-    char *res = wordlist_to_str(w);
+    char *res = wordlist_to_str(w, WORDLIST_ADD_SPACES);
     free_all_words(w);
     return res;
 }
@@ -2781,19 +2844,19 @@ int is_IFS_char(char c, char *IFS)
 /*
  * skip all whitespace characters that are part of $IFS.
  */
-void skip_IFS_whitespace(char **__str, char *__IFS)
+void skip_IFS_whitespace(char **str, char *IFS)
 {
-    char *IFS = __IFS;
-    char *s   = *__str;
+    char *IFS2 = IFS;
+    char *s2   = *str;
     do
     {
-        if(*s == *IFS)
+        if(*s2 == *IFS2)
         {
-            s++;
-            IFS = __IFS-1;
+            s2++;
+            IFS2 = IFS-1;
         }
-    } while(*++IFS);
-    *__str = s;
+    } while(*++IFS2);
+    *str = s2;
 }
 
 
@@ -2828,6 +2891,7 @@ struct word_s *field_split(char *str)
 {
     struct symtab_entry_s *entry = get_symtab_entry("IFS");
     char *IFS = entry ? entry->val : NULL;
+    char *p;
     /* POSIX says no IFS means: "space/tab/NL" */
     if(!IFS)
     {
@@ -2851,7 +2915,7 @@ struct word_s *field_split(char *str)
     }
     else                            /* "custom" IFS */
     {
-        char *p  = IFS;
+        p  = IFS;
         char *sp = IFS_space;
         char *dp = IFS_delim;
         do
@@ -2879,47 +2943,55 @@ struct word_s *field_split(char *str)
     /* estimate the needed number of fields */
     do
     {
-        /* skip escaped chars */
-        if(str[i] == '\\')
+        switch(str[i])
         {
-            /* backslash has no effect inside single quotes */
-            if(quote != '\'')
-            {
-                i++;
-            }
-            continue;
-        }
-        /* don't count whitespaces inside quotes */
-        else if(str[i] == '\'' || str[i] == '"' || str[i] == '`')
-        {
-            if(quote == str[i])
-            {
-                quote = 0;
-            }
-            else
-            {
-                quote = str[i];
-            }
-            continue;
-        }
-        if(quote)
-        {
-            continue;
-        }
-        if(is_IFS_char(str[i], IFS_space) || is_IFS_char(str[i], IFS_delim))
-        {
-            skip_IFS_delim(str, IFS_space, IFS_delim, &i, len);
-            if(i < len)
-            {
-                fields++;
-            }
+            /* skip escaped chars */
+            case '\\':
+                /* backslash has no effect inside single quotes */
+                if(quote != '\'')
+                {
+                    i++;
+                }
+                break;
+
+            /* don't count whitespaces inside quotes */
+            case '\'':
+            case '"':
+            case '`':
+                if(quote == str[i])
+                {
+                    quote = 0;
+                }
+                else
+                {
+                    quote = str[i];
+                }
+                break;
+
+            default:
+                /* skip normal characters if we're inside quotes */
+                if(quote)
+                {
+                    break;
+                }
+                if(is_IFS_char(str[i], IFS_space) || is_IFS_char(str[i], IFS_delim))
+                {
+                    skip_IFS_delim(str, IFS_space, IFS_delim, &i, len);
+                    if(i < len)
+                    {
+                        fields++;
+                    }
+                }
+                break;
         }
     } while(++i < len);
+
     /* we have only one field. no field splitting needed */
     if(fields == 1)
     {
         return NULL;
     }
+
     struct word_s *first_field = NULL;
     struct word_s *cur         = NULL;
     /* create the fields */
@@ -2928,94 +3000,97 @@ struct word_s *field_split(char *str)
     quote = 0;
     do
     {
-        /* skip escaped chars */
-        if(str[i] == '\\')
+        switch(str[i])
         {
-            /* backslash has no effect inside single quotes */
-            if(quote != '\'')
-            {
-                i++;
-            }
-            continue;
-        }
-        /* skip single quoted substrings */
-        else if(str[i] == '\'')
-        {
-            char *p = str+i+1;
-            while(*p && *p != '\'')
-            {
-                p++;
-            }
-            i = p-str;
-            continue;
-        }
-        /* remember if we're inside/outside double and back quotes */
-        else if(str[i] == '"' || str[i] == '`')
-        {
-            if(quote == str[i])
-            {
-                quote = 0;
-            }
-            else
-            {
-                quote = str[i];
-            }
-            continue;
-        }
-        /* skip normal characters if we're inside quotes */
-        if(quote)
-        {
-            continue;
-        }
-        /*
-         * delimit the field if we have an IFS space or delimiter char, or if
-         * we reached the end of the input string.
-         */
-        if(is_IFS_char(str[i], IFS_space) ||
-           is_IFS_char(str[i], IFS_delim) || (i == len))
-        {
-            /* copy the field text */
-            char *tmp = malloc(i-j+1);
-            /* TODO: do something better than bailing out here */
-            if(!tmp)
-            {
-                BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "making fields", NULL);
-                return first_field;
-            }
-            strncpy(tmp, str+j, i-j);
-            tmp[i-j] = '\0';
-            /* create a new struct for the field */
-            struct word_s *fld = malloc(sizeof(struct word_s));
-            /* TODO: do something better than bailing out here */
-            if(!fld)
-            {
-                free(tmp);
-                return first_field;
-            }
-            fld->data = tmp;
-            fld->len  = i-j;
-            fld->next = 0;
-            if(!first_field)
-            {
-                first_field = fld;
-            }
-            if(!cur)
-            {
-                cur  = fld;
-            }
-            else
-            {
-                cur->next = fld;
-                cur       = fld;
-            }
-            k = i;
-            /* skip trailing IFS spaces/delimiters */
-            skip_IFS_delim(str, IFS_space, IFS_delim, &i, len);
-            j = i;
-            if(i != k)
-            {
-                i--;     /* go back one step so the loop will work correctly */
-            }
+            /* skip escaped chars */
+            case '\\':
+                /* backslash has no effect inside single quotes */
+                if(quote != '\'')
+                {
+                    i++;
+                }
+                break;
+
+            /* skip single quoted substrings */
+            case '\'':
+                p = str+i+1;
+                while(*p && *p != '\'')
+                {
+                    p++;
+                }
+                i = p-str;
+                break;
+
+            /* remember if we're inside/outside double and back quotes */
+            case '"':
+            case '`':
+                if(quote == str[i])
+                {
+                    quote = 0;
+                }
+                else
+                {
+                    quote = str[i];
+                }
+                break;
+
+            default:
+                /* skip normal characters if we're inside quotes */
+                if(quote)
+                {
+                    break;
+                }
+                /*
+                 * delimit the field if we have an IFS space or delimiter char, or if
+                 * we reached the end of the input string.
+                 */
+                if(is_IFS_char(str[i], IFS_space) ||
+                        is_IFS_char(str[i], IFS_delim) || (i == len))
+                {
+                    /* copy the field text */
+                    char *tmp = malloc(i-j+1);
+                    /* TODO: do something better than bailing out here */
+                    if(!tmp)
+                    {
+                        BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "making fields", NULL);
+                        return first_field;
+                    }
+                    strncpy(tmp, str+j, i-j);
+                    tmp[i-j] = '\0';
+                    /* create a new struct for the field */
+                    struct word_s *fld = malloc(sizeof(struct word_s));
+                    /* TODO: do something better than bailing out here */
+                    if(!fld)
+                    {
+                        free(tmp);
+                        return first_field;
+                    }
+                    fld->data = tmp;
+                    fld->len  = i-j;
+                    fld->next = 0;
+                    if(!first_field)
+                    {
+                        first_field = fld;
+                    }
+                    if(!cur)
+                    {
+                        cur  = fld;
+                    }
+                    else
+                    {
+                        cur->next = fld;
+                        cur       = fld;
+                    }
+                    k = i;
+                    /* skip trailing IFS spaces/delimiters */
+                    skip_IFS_delim(str, IFS_space, IFS_delim, &i, len);
+                    j = i;
+                    if(i != k && i < len)
+                    {
+                        i--;     /* go back one step so the loop will work correctly */
+                    }
+                }
+                break;
         }
     } while(++i <= len);
     return first_field;

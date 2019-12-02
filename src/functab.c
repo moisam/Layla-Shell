@@ -33,7 +33,7 @@ struct symtab_s *func_table = NULL;
 /*
  * initialize the functions table.. called on shell startup.
  */
-void init_functab()
+void init_functab(void)
 {
     func_table = new_symtab(0);
 }
@@ -100,7 +100,7 @@ void unset_func(char *name)
 /*
  * print all the exported functions.
  */
-void purge_exported_funcs()
+void purge_exported_funcs(void)
 {
     /* use an alpha list to sort variables alphabetically */
     struct alpha_list_s list;

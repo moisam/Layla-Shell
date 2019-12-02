@@ -30,7 +30,6 @@ char **get_letter_list(char *xs, char *ys, char *zs, size_t *count);
 char **get_num_list(char *xs, char *ys, char *zs, size_t *count);
 int add_to_list(char ***__list, char *p0, char *p1, size_t *list_count, size_t *list_size);
 int remove_from_list(char **list, int i, size_t *list_count);
-char **brace_expand(char *str, size_t *count);
 
 
 /*

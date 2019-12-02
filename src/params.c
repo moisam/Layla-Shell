@@ -39,11 +39,9 @@ int get_supp_groups(char *name, gid_t gid, gid_t **_supp_groups, int *_n);
 /*
  * set the exit status of the last command executed in both the global
  * exit_status variable and the $? shell variable.
- *
- * the domacros flag tells us if we should examine the status
- * argument to extract the actual exit status. if the flag is 0,
- * we set the exit status to status, otherwise we use wait.h macros
- * to get the status.
+ * this function examines the status argument to extract the actual
+ * exit status.. if the flag is 0, it sets the exit status to status,
+ * otherwise it uses the <wait.h> macros to get the status.
  */
 void set_exit_status(int status)
 {
@@ -60,10 +58,20 @@ void set_exit_status(int status)
     {
         status = WSTOPSIG(status) + 128;
     }
-    status &= 0xff;
+    set_internal_exit_status(status & 0xff);
+}
 
+
+/*
+ * set the exit status of the last command executed in both the global
+ * exit_status variable and the $? shell variable.
+ * this function is used by the shell builtins and functions to set
+ * the exit status, without applying the macros from <wait.h>.
+ */
+void set_internal_exit_status(int status)
+{
     char status_str[16];
-    _itoa(status_str, status);
+    sprintf(status_str, "%u", status);
     struct symtab_entry_s *entry = get_symtab_entry("?");
     if(entry)
     {
@@ -155,24 +163,32 @@ int is_pos_param(char *name)
  */
 int is_special_param(char *name)
 {
-    /* all special parameters have one-letter names */
-    if(name[1] == '\0')
+    switch(name[0])
     {
-        if(name[0] == '#' || name[0] == '?' || name[0] == '-' ||
-           name[0] == '$' || name[0] == '!' || name[0] == '@' ||
-           name[0] == '*')
-        {
-            return 1;
-        }
+        case '#':
+        case '?':
+        case '-':
+        case '$':
+        case '!':
+        case '@':
+        case '*':
+            /* all special parameters have one-letter names */
+            if(name[1] == '\0')
+            {
+                return 1;
+            }
+            __attribute__((fallthrough));
+
+        default:
+            return 0;
     }
-    return 0;
 }
 
 
 /*
  * return the positional parameter count, which we get from the shell variable $#.
  */
-int pos_param_count()
+int pos_param_count(void)
 {
     return get_shell_vari("#", -1);
 }
@@ -466,7 +482,7 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
  * save the positional parameter list.. return array is NULL-terminated,
  * just like an **argv array.
  */
-char **get_pos_paramsp()
+char **get_pos_paramsp(void)
 {
     struct symtab_entry_s *entry = get_symtab_entry("#");
     if(!entry || !entry->val)
@@ -578,7 +594,7 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
     symtab_entry_setval(entry, "0");
     
     /* $$ is the decimal process ID of the shell */
-    _itoa(buf, tty_pid);
+    sprintf(buf, "%u", tty_pid);
     entry = add_to_symtab("$");
     symtab_entry_setval(entry, buf);
   

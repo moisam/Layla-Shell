@@ -71,28 +71,6 @@ int strlower(char *str)
 }
 
 
-const char *_itoa_digits = "0123456789";
-
-/*
- * quick converstion from an integer to a string format.
- */
-void _itoa(char *str, int num)
-{
-    size_t res = 1, i;
-    uintmax_t copy = num;
-    while(10 <= copy)
-    {
-        copy /= 10, res++;
-    }
-    str[res] = '\0';
-    for(i = res; i != 0; i--)
-    {
-        str[i-1] = _itoa_digits[num % 10];
-        num /= 10;
-    }
-}
-
-
 /*
  * append character chr to string str at position pos (zero based).
  */
@@ -100,32 +78,6 @@ inline void strcat_c(char *str, int pos, char chr)
 {
     str[pos++] = chr;
     str[pos  ] = '\0';
-}
-
-
-/*
- * remove all occurrences of '\\n' from the string in buf.
- */
-size_t remove_escaped_newlines(char *buf)
-{
-    size_t len = strlen(buf);
-    if(!len)
-    {
-        return 0;
-    }
-    size_t i = 0;
-    while(i < len)
-    {
-        if(buf[i] == '\\' && buf[i+1] == '\n')
-        {
-            delete_char_at(buf, i);
-        }
-        else
-        {
-            i++;
-        }
-    }
-    return len;
 }
 
 
@@ -265,7 +217,7 @@ char *quote_val(char *val, int add_quotes)
  * causes the passed list to be freed (if the caller is too
  * lazy to free its own memory).
  */
-char *list_to_str(char **list, int dofree)
+char *list_to_str(char **list)
 {
     if(!list)
     {
@@ -303,15 +255,6 @@ char *list_to_str(char **list, int dofree)
         p += lens[i];
     }
     p[-1]= '\0';
-    /* free the original list */
-    if(dofree)
-    {
-        for(i = 0; i < count; i++)
-        {
-            free(list[i]);
-        }
-        free(list);
-    }
     return p2;
 }
 
@@ -320,7 +263,7 @@ char *list_to_str(char **list, int dofree)
  * get the system-defined maximum line length.. if no value is defined by the
  * system, use our own default value.
  */
-int get_linemax()
+int get_linemax(void)
 {
     int line_max;
 #ifdef LINE_MAX

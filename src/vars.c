@@ -83,7 +83,7 @@ void SIGALRM_handler(int signum);
  * seed the random number generator with the current time value, and initialize
  * the other variables.
  */
-void init_rand()
+void init_rand(void)
 {
     srand(time(NULL));
     int i;

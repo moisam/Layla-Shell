@@ -83,7 +83,7 @@ struct termios tty_attr_old;
  * 
  * returns 1 if the $ENV file is found and executed, 0 otherwise.
  */
-int check_env_file()
+int check_env_file(void)
 {
     /* only execute $ENV if our real and effective ids match */
     if((getuid() != geteuid()) || (getgid() != getegid()))
@@ -378,7 +378,8 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
                 }
                 strcat(e, hist_file);
                 setenv(name, e, 1);
-                p = NULL;
+                /* we'll free the value below as setenv() makes a copy of it */
+                p = e;
                 break;
                 
             case INDEX_HISTSIZE:
@@ -402,7 +403,8 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
                 }
                 strcpy(e, buf);
                 setenv(name, e, 1);
-                p = NULL;
+                /* we'll free the value below as setenv() makes a copy of it */
+                p = e;
                 break;
                 
             case INDEX_PATH:
@@ -438,14 +440,7 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
         {
             if(e)
             {
-                if(i == INDEX_PWD || i == INDEX_OLDPWD)
-                {
-                     symtab_entry_setval(entry, __get_malloced_str(e));
-                }
-                else
-                {
-                    symtab_entry_setval(entry, e);
-                }
+                symtab_entry_setval(entry, e);
             }
             entry->flags = flags;
         }
@@ -576,7 +571,7 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
  * If this is a login shell, read and parse /etc/profile
  * and then ~/.profile.
  */
-void init_login()
+void init_login(void)
 {
     if(noprofile)
     {
@@ -632,7 +627,7 @@ void init_login()
 /*
  * similar to init_login(), except is invoked for interactive shells only.
  */
-void init_rc()
+void init_rc(void)
 {
     /* read global init script */
     struct source_s src;
@@ -793,7 +788,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                 }
                 if(strcmp(arg, "--help") == 0)                                          /* bash, csh */
                 {
-                    help(1, (char *[]){ "help", NULL });
+                    help_builtin(1, (char *[]){ "help", NULL });
                     //exit_gracefully(EXIT_SUCCESS, NULL);
                     exit(EXIT_SUCCESS);
                 }

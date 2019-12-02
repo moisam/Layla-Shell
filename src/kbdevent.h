@@ -28,6 +28,7 @@
 #define RESKEY      0
 #define MAX_KEY     256
 
+/* masks to indicate the status of meta keys */
 extern char ALT_MASK;
 extern char CTRL_MASK;
 extern char SHIFT_MASK;
@@ -87,88 +88,8 @@ extern char INTR_KEY  ;
 extern char EOF_KEY   ;
 extern char VLNEXT_KEY;
 
-/*
- * key order is defined in /usr/include/linux/input-event-codes.h,
- * which is included in /usr/include/linux/input.h
- */
-
-/*
-static int keytable[MAX_KEY] =
-{
-    RESKEY, ESC_KEY, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
-    '-', '=', '\b', '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i',
-    'o', 'p', '[', ']', '\n', CTRL_KEY, 'a', 's', 'd', 'f', 'g', 'h',
-    'j', 'k', 'l', ';', '\'', '`', SHIFT_KEY, '\\', 'z', 'x', 'c', 'v',
-    'b', 'n', 'm', ',', '.', '/', SHIFT_KEY, '*', ALT_KEY, ' ', CAPS_KEY,
-    F1_KEY, F2_KEY, F3_KEY, F4_KEY, F5_KEY, F6_KEY, F7_KEY, F8_KEY,
-    F9_KEY, F10_KEY, NUM_KEY, SCRL_KEY, '7', '8', '9', '-', '4', '5', '6',
-    '+', '1', '2', '3', '0', '.', RESKEY, RESKEY, RESKEY, F11_KEY, F12_KEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, ',', '\n',
-    CTRL_KEY, '/', RESKEY, ALT_KEY, '\n', HOME_KEY, UP_KEY, PGUP_KEY,
-    LEFT_KEY, RIGHT_KEY, END_KEY, DOWN_KEY, PGDOWN_KEY, INS_KEY, DEL_KEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, '=', RESKEY, RESKEY, RESKEY,
-    ',', RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, 
-};
-
-static int keytable_shift[MAX_KEY] =
-{
-    RESKEY, ESC_KEY, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
-    '_', '+', '\b', '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I',
-    'O', 'P', '{', '}', '\n', CTRL_KEY, 'A', 'S', 'D', 'F', 'G', 'H',
-    'J', 'K', 'L', ':', '"', '~', SHIFT_KEY, '|', 'Z', 'X', 'C', 'V',
-    'B', 'N', 'M', '<', '>', '?', SHIFT_KEY, '*', ALT_KEY, ' ', CAPS_KEY,
-    F1_KEY, F2_KEY, F3_KEY, F4_KEY, F5_KEY, F6_KEY, F7_KEY, F8_KEY,
-    F9_KEY, F10_KEY, NUM_KEY, SCRL_KEY, '7', '8', '9', '-', '4', '5', '6',
-    '+', '1', '2', '3', ',', '.', RESKEY, RESKEY, RESKEY, F11_KEY, F12_KEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, ',', '\n',
-    CTRL_KEY, '/', RESKEY, ALT_KEY, '\n', HOME_KEY, UP_KEY, PGUP_KEY,
-    LEFT_KEY, RIGHT_KEY, END_KEY, DOWN_KEY, PGDOWN_KEY, INS_KEY, DEL_KEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, '=', RESKEY, RESKEY, RESKEY,
-    ',', RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY,
-    RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, RESKEY, 
-};
-*/
-
-
-int rootperm(char *tag);
-// int open_kbd_device(char *tag);
-// int open_con_device(char *tag);
-// int get_next_key();
-// int get_next_key_con();
-// int get_next_key_kbd();
-int process_key(struct input_event event);
-// extern int (*get_next_key)();
-
 /* kbdevent2.c */
-int  rawon();
-void rawoff();
-// int  get_next_key2();
-int  get_next_key();
-char *get_key_str(int c);
+int  rawon(void);
+int  get_next_key(void);
 
 #endif

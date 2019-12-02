@@ -131,11 +131,11 @@ void SIGCHLD_handler(int signum __attribute__((unused)))
         /* tcsh extensions */
         if(optionx_set(OPTION_LIST_JOBS_LONG))
         {
-            jobs(2, (char *[]){ "jobs", "-l" });
+            jobs_builtin(2, (char *[]){ "jobs", "-l" });
         }
         else if(optionx_set(OPTION_LIST_JOBS))
         {
-            jobs(1, (char *[]){ "jobs"       });
+            jobs_builtin(1, (char *[]){ "jobs"       });
         }
         /* in tcsh, special alias jobcmd is run before running commands and when jobs change state */
         run_alias_cmd("jobcmd");
@@ -204,6 +204,9 @@ int main(int argc, char **argv)
     /* get the umask */
     init_umask();
     
+    /* init aliases */
+    memset(aliases, 0, sizeof(aliases));
+
     /*
      * if we have a script file name or a command string passed to us, initsh() will
      * load it into the following source struct.
@@ -319,6 +322,27 @@ int main(int argc, char **argv)
                fprintf(stderr, "%s: failed to start timer: %s\n", SHELL_NAME, strerror(errno));
             }
         }
+
+        /*
+         * speed up the startup of subshells by omitting some features that are used
+         * for interactive shells, like command history, aliases and dirstacks. in this
+         * case, we only init these features if this is NOT a subshell.
+         */
+
+        /* init history */
+        init_history();
+
+        /* init the directory stack */
+        init_dirstack();
+
+        /* get us some useful alias definitions */
+        init_aliases();
+    }
+    else
+    {
+        /* turn off options we don't need in a (non-interactive) subshell */
+        set_optionx(OPTION_EXPAND_ALIASES      , 0);
+        set_optionx(OPTION_SAVE_HIST           , 0);
     }
 
     set_signal_handler(SIGHUP, SIGHUP_handler);
@@ -379,9 +403,6 @@ int main(int argc, char **argv)
         set_signal_handler(SIGQUIT, SIGQUIT_handler);
         set_option('m', 0);
     }
-  
-    /* init aliases */
-    memset(__aliases, 0, sizeof(__aliases));
     
     /* init our internal clock */
     start_clock();
@@ -394,7 +415,7 @@ int main(int argc, char **argv)
     {
         pid_t ppid = getppid();
         char ppid_str[10];
-        _itoa(ppid_str, ppid);
+        sprintf(ppid_str, "%u", ppid);
         setenv("PPID", ppid_str, 1);
         struct symtab_entry_s *entry = add_to_symtab("PPID");
         if(entry)
@@ -402,29 +423,6 @@ int main(int argc, char **argv)
             symtab_entry_setval(entry, ppid_str);
             entry->flags |= FLAG_READONLY;
         }
-    }
-
-    /*
-     * speed up the startup of subshells by omitting some features that are used
-     * for interactive shells, like command history, aliases and dirstacks. in this
-     * case, we only init these features if this is NOT a subshell.
-     */
-    if(option_set('i'))
-    {
-        /* init history */
-        init_history();
-
-        /* init the directory stack */
-        init_dirstack();
-    
-        /* get us some useful alias definitions */
-        init_aliases();
-    }
-    else
-    {
-        /* turn off options we don't need in a (non-interactive) subshell */
-        set_optionx(OPTION_EXPAND_ALIASES      , 0);
-        set_optionx(OPTION_SAVE_HIST           , 0);
     }
 
     /* disable some builtin extensions in the posix '-P' mode */
@@ -493,20 +491,20 @@ int main(int argc, char **argv)
         parse_and_execute(&src);
     }
     //exit_gracefully(exit_status, NULL);
-    __exit(1, (char *[]){ "exit", NULL });
+    exit_builtin(1, (char *[]){ "exit", NULL });
 }
 
 
-#define SAVE_TO_HISTORY_AND_PRINT(cmd)      \
-do {                                        \
-    if(save_hist)                           \
-    {                                       \
-        save_to_history((cmd));             \
-    }                                       \
-    if(option_set('v'))                     \
-    {                                       \
-        fprintf(stderr, "%s\n", (cmd));     \
-    }                                       \
+#define SAVE_TO_HISTORY_AND_PRINT(cmd_node)     \
+do {                                            \
+    if(save_hist)                               \
+    {                                           \
+        save_to_history((cmd_node));            \
+    }                                           \
+    if(option_set('v'))                         \
+    {                                           \
+        fprintf(stderr, "%s\n", (cmd_node));    \
+    }                                           \
 } while(0)
 
 
@@ -668,7 +666,7 @@ int parse_and_execute(struct source_s *src)
                 SAVE_TO_HISTORY_AND_PRINT(buf);
                 break;
         }
-
+        
         /*
          * dump the Abstract Source Tree (AST) of this translation unit.
          * note that we are using an extended option '-d' which is not
@@ -750,6 +748,10 @@ int parse_and_execute(struct source_s *src)
         /* save the start of this line */
         src->wstart = src->curpos-(tok->text_len);
     }
+
+    /* don't leave any hanging token structs */
+    free_token(get_current_token());
+    free_token(get_previous_token());
 
     /* finished parsing and executing commands */
     fflush(stdout);

@@ -42,7 +42,7 @@
 extern struct termios tty_attr_old;
 
 /* jobs table for all the jobs running under this shell */
-struct job __jobs[MAX_JOBS];
+struct job_s jobs_table[MAX_JOBS];
 
 /* jobs count */
 int total_jobs   = 0;
@@ -77,7 +77,7 @@ int listindex = 0;
  * update the job table entry with the exit status of the process with the
  * given pid.
  */
-void set_pid_exit_status(struct job *job, pid_t pid, int status)
+void set_pid_exit_status(struct job_s *job, pid_t pid, int status)
 {
     int i;
     if(!job || !job->pids || !job->exit_codes)
@@ -122,7 +122,7 @@ void set_pid_exit_status(struct job *job, pid_t pid, int status)
  * process to exit with non-zero exit status, otherwise its that of the process
  * whose pid == pgid of the job.
  */
-void set_job_exit_status(struct job *job, pid_t pid, int status)
+void set_job_exit_status(struct job_s *job, pid_t pid, int status)
 {
     if(!job)
     {
@@ -205,7 +205,7 @@ void set_job_exit_status(struct job *job, pid_t pid, int status)
  * update the job's exit status by updating the exit status of the job's member 
  * processes and setting the job's exit status accordingly.
  */
-void update_job_exit_status(struct job *job)
+void update_job_exit_status(struct job_s *job)
 {
     if(!job)
     {
@@ -253,7 +253,7 @@ inline int is_list_terminator(char *c)
  */
 void __output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_dead)
 {
-    struct job *job = get_job_by_any_pid(pid);
+    struct job_s *job = get_job_by_any_pid(pid);
     /* 
      * no job with this pid? probably it was a subshell or some command
      * substitution task. bail out.
@@ -387,12 +387,12 @@ int get_jobid(char *jobid_str)
     {
         return atoi(jobid_str);
     }
-    struct job *job;
+    struct job_s *job;
     if(*jobid_str == '?')
     {
         /* search for a job whose command contains the given string */
         jobid_str++;
-        for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+        for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
         {
             if(job->job_num == 0)
             {
@@ -408,7 +408,7 @@ int get_jobid(char *jobid_str)
     {
         /* search for a job whose command starts with the given string */
         size_t len = strlen(jobid_str);
-        for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+        for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
         {
             if(job->job_num == 0)
             {
@@ -427,11 +427,11 @@ int get_jobid(char *jobid_str)
 /*
  * get the number of current jobs.
  */
-int pending_jobs()
+int pending_jobs(void)
 {
     int count = 0;
-    struct job *job;
-    for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+    struct job_s *job;
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
         if(job->job_num != 0)
         {
@@ -456,8 +456,8 @@ int pending_jobs()
  */
 void kill_all_jobs(int signum, int flag)
 {
-    struct job *job;
-    for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+    struct job_s *job;
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
         if(job->job_num != 0)
         {
@@ -548,7 +548,7 @@ int replace_and_run(int startat, int argc, char **argv)
             }
             int len = strlen(buf);
             /* get the pgid of the job given the jobspec */
-            struct job *job = get_job_by_jobid(get_jobid(buf));
+            struct job_s *job = get_job_by_jobid(get_jobid(buf));
             if(!job)
             {
                 fprintf(stderr, "%s: unknown job: %s\n", UTILITY, buf);
@@ -600,7 +600,7 @@ int replace_and_run(int startat, int argc, char **argv)
 /*
  * output the status of a job.. called by the jobs builtin utility (see below).
  */
-void output_status(struct job *job, int flags)
+void output_status(struct job_s *job, int flags)
 {
     if(!job)
     {
@@ -647,12 +647,12 @@ void output_status(struct job *job, int flags)
  * explanation on how to use this utility.
  */
 
-int jobs(int argc, char **argv)
+int jobs_builtin(int argc, char **argv)
 {
     int flags        = 0;
     int i;
     int finish       = 0;
-    struct job *job;
+    struct job_s *job;
     /****************************
      * process the arguments
      ****************************/
@@ -734,7 +734,7 @@ int jobs(int argc, char **argv)
         return 0;
     }
     /* we have no arguments. list all unnotified jobs */
-    for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
         if(job->job_num != 0)
         {
@@ -747,7 +747,7 @@ int jobs(int argc, char **argv)
      * i.e. we might get two or more jobs denoted with '+' or '-'.
      * so, loop through the job list again and kill those who need killing.
      */
-    for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
         if(job->job_num != 0)
         {
@@ -765,14 +765,14 @@ int jobs(int argc, char **argv)
  * check for any child processes that has changed status since our last check.
  * called by cmdline() every time its about to print $PS1.
  */
-void check_on_children()
+void check_on_children(void)
 {
     /* check for children who died while we were away */
     int i, status = 0;
     for(i = 0; i < listindex; i++)
     {
         //__output_status(deadlist[i].pid, deadlist[i].status, 0, stderr, 1);
-        struct job *job = get_job_by_any_pid(deadlist[i].pid);
+        struct job_s *job = get_job_by_any_pid(deadlist[i].pid);
         if(job)
         {
             status = deadlist[i].status;
@@ -802,7 +802,7 @@ void check_on_children()
         {
             break;
         }
-        struct job *job = get_job_by_any_pid(pid);
+        struct job_s *job = get_job_by_any_pid(pid);
         if(job)
         {
             //set_pid_exit_status(job, pid, status);
@@ -861,7 +861,7 @@ void notice_termination(pid_t pid, int status)
         listindex++;
     }
     /* update the job table entry with the child process status */
-    struct job *job = get_job_by_any_pid(pid);
+    struct job_s *job = get_job_by_any_pid(pid);
     if(job)
     {
         /* if the job is stopped, save the terminal state so we can restore it later with fg or wait */
@@ -957,40 +957,18 @@ int rip_dead(pid_t pid)
 
 
 /*
- * return a job entry given the pgid of the job.. if the job is not found, return NULL.
- */
-struct job *get_job_by_pid(pid_t pgid)
-{
-    /* job control must be on */
-    if(!option_set('m') || !pgid)
-    {
-        return NULL;
-    }
-    struct job *job;
-    for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
-    {
-        if(job->pgid == pgid)
-        {
-            return job;
-        }
-    }
-    return NULL;
-}
-
-
-/*
  * return a job entry given the pid of any process in the job pipeline..
  * if the job is not found, return NULL.
  */
-struct job *get_job_by_any_pid(pid_t pid)
+struct job_s *get_job_by_any_pid(pid_t pid)
 {
     /* job control must be on */
     if(!option_set('m') || !pid)
     {
         return NULL;
     }
-    struct job *job;
-    for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+    struct job_s *job;
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
         int i;
         if(!job->pids)
@@ -1012,15 +990,15 @@ struct job *get_job_by_any_pid(pid_t pid)
 /*
  * return a job entry given the job id.. if the job is not found, return NULL.
  */
-struct job *get_job_by_jobid(int n)
+struct job_s *get_job_by_jobid(int n)
 {
     /* job control must be on */
     if(!option_set('m') || !n)
     {
         return NULL;
     }
-    struct job *job;
-    for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+    struct job_s *job;
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
         if(job->job_num == n)
         {
@@ -1036,7 +1014,7 @@ struct job *get_job_by_jobid(int n)
  * 
  * returns 1 if the current job is set successfully, 0 otherwise.
  */
-int set_cur_job(struct job *job)
+int set_cur_job(struct job_s *job)
 {
     /* job control must be on */
     if(!option_set('m') || !job)
@@ -1069,7 +1047,7 @@ int set_cur_job(struct job *job)
  * 
  * returns the new job struct, or NULL on error.
  */
-struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, int is_bg)
+struct job_s *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, int is_bg)
 {
     /* set the $! special parameter */
     if(is_bg)
@@ -1088,14 +1066,14 @@ struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, i
     }
 
     /* find an empty slot in the jobs table */
-    struct job *job, *j2;
-    for(job = &__jobs[0]; job < &__jobs[MAX_JOBS]; job++)
+    struct job_s *job, *j2;
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
         if(job->job_num == 0)
         {
             /* find the highest job number */
             int jnum = 0;
-            for(j2 = &__jobs[0]; j2 < &__jobs[MAX_JOBS]; j2++)
+            for(j2 = &jobs_table[0]; j2 < &jobs_table[MAX_JOBS]; j2++)
             {
                 if(j2->job_num > jnum)
                 {
@@ -1138,7 +1116,7 @@ struct job *add_job(pid_t pgid, pid_t pids[], int pid_count, char *commandstr, i
  * returns the job number if it was successfully removed from the jobs table,
  * or 0 if the job is not found in the table.
  */
-int kill_job(struct job *job)
+int kill_job(struct job_s *job)
 {
     /* job control must be on */
     if(!option_set('m'))
@@ -1147,7 +1125,7 @@ int kill_job(struct job *job)
     }
 
     int res = 0;
-    struct job *job2;
+    struct job_s *job2;
     if(job)
     {
         res = job->job_num;
@@ -1188,13 +1166,13 @@ int kill_job(struct job *job)
         int last_job       = 0;
         int last_suspended = 0;
         /* shift jobs down by one */
-        for(job2 = &job[1]; job2 < &__jobs[MAX_JOBS]; job2++, job++)
+        for(job2 = &job[1]; job2 < &jobs_table[MAX_JOBS]; job2++, job++)
         {
             if(job2->job_num == 0)
             {
                 continue;
             }
-            memcpy(job, job2, sizeof(struct job));
+            memcpy(job, job2, sizeof(struct job_s));
             job2->job_num    = 0;
             job2->commandstr = 0;
             job2->proc_count = 0;
@@ -1229,7 +1207,7 @@ int kill_job(struct job *job)
 /*
  * return the total number of jobs.
  */
-int get_total_jobs()
+int get_total_jobs(void)
 {
     return total_jobs;
 }

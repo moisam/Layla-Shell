@@ -78,7 +78,7 @@ int    core_signals[] = { SIGINT, SIGQUIT, SIGTERM, SIGTSTP, SIGTTIN, SIGTTOU, S
 /*
  * save the default sigaction for each signal.
  */
-void save_signals()
+void save_signals(void)
 {
     int i = 1;
     for( ; i < total_signames; i++)

@@ -24,7 +24,7 @@
 #include "getkey.h"
 
 
-int getkey()
+int getkey(void)
 {
     char buf[1];
     int res;

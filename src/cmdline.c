@@ -90,7 +90,7 @@ static int __heredocs = 0;                 /* count heredocs */
  * kill input by emptying the command buffer, printing a newline followed by
  * the first prompt, and updating the cursor position.
  */
-void kill_input()
+void kill_input(void)
 {
     cmdbuf_index = 0;
     cmdbuf_end   = 0;
@@ -100,12 +100,28 @@ void kill_input()
     update_row_col();
     start_row    = get_terminal_row();
     start_col    = get_terminal_col();
+
+    if(incomplete_cmd)
+    {
+        free(incomplete_cmd);
+        incomplete_cmd = NULL;
+    }
+
+    while(heredocs > 0)
+    {
+        heredocs--;
+        if(heredoc_mark[heredocs])
+        {
+            free(heredoc_mark[heredocs]);
+            heredoc_mark[heredocs] = 0;
+        }
+    }
 }
 
 /*
  * main interactive shell REPL (Read-Execute-Print-Loop).
  */
-void cmdline()
+void cmdline(void)
 {
     char *cmd;
     //int  stat = EXIT_SUCCESS;
@@ -149,7 +165,7 @@ void cmdline()
         /* check for mail */
         if(check_for_mail())
         {
-            mail(2, (char *[]){"mail", "-q", NULL});
+            mailcheck_builtin(2, (char *[]){"mail", "-q", NULL});
         }
 
         /* in tcsh, special alias periodic is run every tperiod minutes */
@@ -191,8 +207,8 @@ void cmdline()
                 continue;
             }
             //exit_gracefully(stat, NULL);
-            __exit(1, (char *[]){ "exit", NULL });
-            /* if we return from __exit(), it means we have pending jobs */
+            exit_builtin(1, (char *[]){ "exit", NULL });
+            /* if we return from exit_builtin(), it means we have pending jobs */
             continue;
         }
 
@@ -237,7 +253,7 @@ int ext_cmdbuf(size_t howmuch)
  * returns a pointer to the buffer if the command is read successfully,
  * NULL if there's no input or EOF is reached.
  */
-char *read_cmd()
+char *read_cmd(void)
 {
     cmdbuf_index = 0;
     cmdbuf_end   = 0;
@@ -620,7 +636,7 @@ char *read_cmd()
                         else
                         {
                             strcpy(cmdbuf, p);
-                            free(p);
+                            free_malloced_str(p);
                             output_cmd();
                             printf("\n");
                             cmdbuf_end = strlen(cmdbuf);
@@ -635,40 +651,45 @@ char *read_cmd()
                 
                 cmdbuf[cmdbuf_end  ] = '\n';
                 cmdbuf[cmdbuf_end+1] = '\0';
-                if(is_incomplete_cmd(incomplete_cmd ? 0 : 1))
+                c = is_incomplete_cmd(incomplete_cmd ? 0 : 1);
+                if(c < 0)           /* error parsing command line */
+                {
+                    kill_input();
+                    break;
+                }
+                else if(c > 0)      /* incomplete command in the buffer */
                 {
                     print_prompt2();
-                    char *tmp = (char *)0;
+                    char *tmp = NULL;
                     size_t sz = strlen(cmdbuf)+1;
                     if(incomplete_cmd)
                     {
                         sz += strlen(incomplete_cmd);
                     }
                     tmp = malloc(sz);
-                    if(!tmp)
+                    if(tmp)
                     {
-                        goto _process;
+                        if(incomplete_cmd)
+                        {
+                            strcpy(tmp, incomplete_cmd);
+                            free(incomplete_cmd);
+                        }
+                        else
+                        {
+                            tmp[0] = '\0';
+                        }
+                        incomplete_cmd = tmp;
+                        strcat(incomplete_cmd, cmdbuf);
+                        cmdbuf_end = 0;
+                        cmdbuf[cmdbuf_end] = '\0';
+                        cmdbuf_index = cmdbuf_end;
+                        update_row_col();
+                        start_col = get_terminal_col();
+                        start_row = get_terminal_row();
+                        continue;
                     }
-                    if(incomplete_cmd)
-                    {
-                        strcpy(tmp, incomplete_cmd);
-                        free(incomplete_cmd);
-                    }
-                    else
-                    {
-                        tmp[0] = '\0';
-                    }
-                    incomplete_cmd = tmp;
-                    strcat(incomplete_cmd, cmdbuf);
-                    cmdbuf_end = 0;
-                    cmdbuf[cmdbuf_end] = '\0';
-                    cmdbuf_index = cmdbuf_end;
-                    update_row_col();
-                    start_col = get_terminal_col();
-                    start_row = get_terminal_row();
-                    continue;
                 }
-_process:
+
                 cmdbuf_end   = glue_cmd_pieces();
                 in_heredoc   = -1;
                 if(!heredocs)
@@ -702,13 +723,13 @@ int is_incomplete_cmd(int first_time)
     size_t  cmd_len = strlen(cmd);
     size_t  i = 0;
 
+    /*
+     * if we are inside a here-document, check if the last entered line matches
+     * the here-document marker word, which signals the end of the here-document.
+     */
     if(in_heredoc >= 0)
     {
         /* if no here-document mark is present, just wait for EOF by the user */
-        if(!heredoc_mark[in_heredoc])
-        {
-            return 1;
-        }
         cmd[cmd_len-1] = '\0';
         char *nl = strrchr(cmd, '\n');
         cmd[cmd_len-1] = '\n';
@@ -832,7 +853,7 @@ int is_incomplete_cmd(int first_time)
                 if(cmd[i+1] == '<')
                 {
                     i += 2;
-                    /* <<< introduces here-string (non-POSIX extension) */
+                    /* <<< introduces here-strings (non-POSIX extension) */
                     if(i < cmd_len && cmd[i] == '<')
                     {
                         break;
@@ -858,7 +879,8 @@ int is_incomplete_cmd(int first_time)
                     }
                     if(cmd[i] == '\0')
                     {
-                        break;
+                        fprintf(stderr, "%s: missing here-document delimiter word after << or <<-\n", SHELL_NAME);
+                        return -1;
                     }
                     if(!heredoc_mark[__heredocs])
                     {
@@ -870,7 +892,8 @@ int is_incomplete_cmd(int first_time)
                         heredoc_mark[__heredocs] = malloc(j-i+1);
                         if(!heredoc_mark[__heredocs])
                         {
-                            return 0;     /* TODO: output a decent error message and bail out */
+                            fprintf(stderr, "%s: insufficient memory to save here-document delimiter word\n", SHELL_NAME);
+                            return -1;
                         }
                         strncpy(heredoc_mark[__heredocs], cmd+i, j-i);
                         heredoc_mark[__heredocs][j-i  ] = '\n';
@@ -1048,7 +1071,7 @@ check:
  *
  * returns the total length of the command lines.
  */
-size_t glue_cmd_pieces()
+size_t glue_cmd_pieces(void)
 {
     size_t cmdbuf_len = strlen(cmdbuf);
     if(!incomplete_cmd)

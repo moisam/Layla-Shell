@@ -637,10 +637,10 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
             }
         }
         /* search for aliases */
-        extern struct  alias_s __aliases[MAX_ALIASES];  /* builtins/alias.c */
+        extern struct  alias_s aliases[MAX_ALIASES];  /* builtins/alias.c */
         for(i = 0; i < MAX_ALIASES; i++)
         {
-            char *cmd = __aliases[i].name;
+            char *cmd = aliases[i].name;
             if(!cmd)
             {
                 continue;
@@ -978,7 +978,7 @@ int match_hostname(char *name, char **matches, int max)
 /*
  * get all the hostnames from the hosts database.
  */
-char **get_hostnames()
+char **get_hostnames(void)
 {
     int checkf = 0;
     int i = 0;
@@ -1148,7 +1148,7 @@ int match_username(char *name, char **matches, int max)
 /*
  * get all the usernames from the passwd database.
  */
-char **get_usernames()
+char **get_usernames(void)
 {
     int checkf = 0;
     int i = 0;

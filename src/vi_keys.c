@@ -27,15 +27,7 @@
 #include "debug.h"
 
 /* defined in cmdline.c */
-extern char     *cmdbuf      ;
-extern uint16_t  cmdbuf_index;
-extern uint16_t  cmdbuf_end  ;
-extern uint16_t  cmdbuf_size ;
 extern long      CMD_BUF_SIZE;
-extern int       terminal_row;
-extern int       terminal_col;
-extern int       VGA_WIDTH   ;
-extern int       VGA_HEIGHT  ;
 extern int       start_row   ;
 extern int       start_col   ;
 extern int       insert      ;
@@ -80,7 +72,7 @@ void clear_cmd(int startat)
  * command manually so we can calculate how many newlines are there and
  * update the start_row and terminal_row variables correctly.
  */
-void output_cmd()
+void output_cmd(void)
 {
     update_row_col();
     char *p = cmdbuf;
@@ -166,7 +158,7 @@ void do_insert(char c)
  * handle the kill key (default is ^U), which clears the current command from
  * the screen and the buffer.
  */
-void do_kill_key()
+void do_kill_key(void)
 {
     if(!cmdbuf_end)
     {
@@ -441,7 +433,7 @@ void do_left_key(int count)
 /*
  * handle the HOME key, which moves the cursor to the beginning of the command line.
  */
-void do_home_key()
+void do_home_key(void)
 {
     /* we are already at the first char */
     if(cmdbuf_index <= 0)
@@ -457,7 +449,7 @@ void do_home_key()
 /*
  * handle the END key, which moves the cursor to the end of the command line.
  */
-void do_end_key()
+void do_end_key(void)
 {
     /* we are already at the last char */
     if(cmdbuf_index >= cmdbuf_end)

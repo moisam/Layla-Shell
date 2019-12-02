@@ -24,17 +24,17 @@
 
 /* vi_keys.c */
 void clear_cmd(int startat);
-void output_cmd();
+void output_cmd(void);
 void do_insert(char c);
-void do_kill_key();
+void do_kill_key(void);
 void do_del_key(int count);
 void do_backspace(int count);
 void do_up_key(int count);
 void do_down_key(int count);
 void do_right_key(int count);
 void do_left_key(int count);
-void do_home_key();
-void do_end_key();
+void do_home_key(void);
+void do_end_key(void);
 void print_ctrl_key(char c);
 void yank(int start, int end);
 
@@ -42,6 +42,6 @@ extern char *savebuf     ;
 extern int   savebuf_size;
 
 /* vi.c */
-int vi_cmode();
+int vi_cmode(void);
 
 #endif

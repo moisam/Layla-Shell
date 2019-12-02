@@ -35,7 +35,7 @@
 /*
  * initialize a subshell's environment.
  */
-void init_subshell()
+void init_subshell(void)
 {
     /* make sure we have the shell's PGID */
     setpgid(0, tty_pid);
@@ -89,7 +89,7 @@ void init_subshell()
 /*
  * increment the value of the $SUBSHELL variable when we're running a subshell.
  */
-void inc_subshell_var()
+void inc_subshell_var(void)
 {
     subshell_level++;
     char buf[8];
@@ -108,7 +108,7 @@ void inc_subshell_var()
 /*
  * set the value of $SHLVL to that of $SUBSHELL.
  */
-void set_shlvl_var()
+void set_shlvl_var(void)
 {
     /*
      * increment the shell nesting level (bash and tcsh).
