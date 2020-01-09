@@ -79,8 +79,8 @@ enum token_type_e
         TOKEN_ANDGREAT,         /* '&>'  */
         TOKEN_AND_GREAT_GREAT,  /* '&>>' */
         /* others */
-        TOKEN_OPENBRACE,        /* '(' */
-        TOKEN_CLOSEBRACE,       /* ')' */
+        TOKEN_LEFT_PAREN,        /* '(' */
+        TOKEN_RIGHT_PAREN,       /* ')' */
         TOKEN_PIPE,             /* '|' */
         TOKEN_LESS,             /* '<' */
         TOKEN_GREAT,            /* '>' */

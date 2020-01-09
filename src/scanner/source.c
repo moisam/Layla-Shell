@@ -106,14 +106,14 @@ char next_char(struct source_s *src)
         /* save the current char */
         c1 = src->buffer[src->curpos];
     }
-    /* get the next char */
-    char c2 = src->buffer[++src->curpos];
     /* did we reach EOF? */
-    if(src->curpos >= src->bufsize)
+    if(++src->curpos >= src->bufsize)
     {
         src->curpos = src->bufsize;
         return EOF;
     }
+    /* get the next char */
+    char c2 = src->buffer[src->curpos];
     /* if the current char is '\n', adjust line and char pointers */
     if(c1 == '\n')
     {

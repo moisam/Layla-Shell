@@ -155,8 +155,8 @@ char *get_token_description(enum token_type_e type)
         /* unknown keyword */
         case TOKEN_KEYWORD_NA      : return "unknown keyword";
         /* others */
-        case TOKEN_OPENBRACE       : return "'('"            ;
-        case TOKEN_CLOSEBRACE      : return "')'"            ;
+        case TOKEN_LEFT_PAREN      : return "'('"            ;
+        case TOKEN_RIGHT_PAREN     : return "')'"            ;
         case TOKEN_PIPE            : return "'|'"            ;
         case TOKEN_LESS            : return "'<'"            ;
         case TOKEN_GREAT           : return "'>'"            ;
@@ -185,7 +185,7 @@ int is_keyword(char *str)
     /* sanity check */
     if(!str || !*str)
     {
-        return 0;
+        return -1;
     }
     int i;
     for(i = 0; i < keyword_count; i++)
@@ -211,8 +211,8 @@ int is_separator_tok(enum token_type_e type)
 {
     switch(type)
     {
-        case TOKEN_OPENBRACE      :
-        case TOKEN_CLOSEBRACE     :
+        case TOKEN_LEFT_PAREN     :
+        case TOKEN_RIGHT_PAREN    :
         case TOKEN_KEYWORD_LBRACE :
         case TOKEN_KEYWORD_RBRACE :
         case TOKEN_KEYWORD_BANG   :
@@ -253,8 +253,8 @@ void set_token_type(struct token_s *tok)
     {
         switch(tok->text[0])
         {
-            case '(': t = TOKEN_OPENBRACE     ; break;
-            case ')': t = TOKEN_CLOSEBRACE    ; break;
+            case '(': t = TOKEN_LEFT_PAREN    ; break;
+            case ')': t = TOKEN_RIGHT_PAREN   ; break;
             case '{': t = TOKEN_KEYWORD_LBRACE; break;
             case '}': t = TOKEN_KEYWORD_RBRACE; break;
             case '!': t = TOKEN_KEYWORD_BANG  ; break;
@@ -521,105 +521,6 @@ struct token_s *get_previous_token(void)
 
 
 /*
- * for the opening brace nc, loop through the input source until we find
- * the matching closing brace.. this looping involves skipping quote chars
- * and quoted strings, as well as nested braces of all types.. all chars
- * from the opening to the closing braces, and anything in between, are
- * added to the token buffer as part of the current token.
- * 
- * returns 1 if the closing brace is found, 0 otherwise.
- */
-int brace_loop(char nc, struct source_s *src)
-{
-    /* add opening brace to buffer */
-    add_to_buf(next_char(src));
-    /* determine which closing brace to search for */
-    char opening_brace = nc, closing_brace;
-    if(opening_brace == '{')
-    {
-        closing_brace = '}';
-    }
-    else if(opening_brace == '[')
-    {
-        closing_brace = ']';
-    }
-    else
-    {
-        closing_brace = ')';
-    }
-    /* count the number of opening and closing braces we encounter */
-    int ob_count = 1, cb_count = 0;
-    char pc = nc;
-    /* get the next char */
-    while((nc = next_char(src)) > 0)
-    {
-        /* add it to the buffer */
-        add_to_buf(nc);
-        /* we have a quote char */
-        if((nc == '"') || (nc == '\'') || (nc == '`'))
-        {
-            /* if it's an escaped quote, pass */
-            if(pc == '\\')
-            {
-                continue;
-            }
-            char quote = nc;
-            char nc2 = 0;
-            /* loop till we get EOF (-1) or ERRCHAR (0) */
-            while((nc2 = next_char(src)) > 0)
-            {
-                /* add char to buffer */
-                add_to_buf(nc2);
-                /* we have a closing quote matching our opening quote */
-                if(nc2 == quote)
-                {
-                    if(nc != '\\')
-                    {
-                        /* if it's not escaped, break the loop */
-                        break;
-                    }
-                }
-                /* save the current char, so we can check for escaped quotes */
-                nc = nc2;
-            }
-            continue;
-        }
-        if((pc != '\\'))
-        {
-            /* we have an unquoted opening brace char */
-            if(nc == opening_brace)
-            {
-                ob_count++;
-            }
-            /* we have an unquoted closing brace char */
-            else if(nc == closing_brace)
-            {
-                cb_count++;
-            }
-        }
-        /* if we have a matching number of opening and closing braces, break the loop */
-        if(ob_count == cb_count)
-        {
-            break;
-        }
-        pc = nc;
-    }
-    /* unmatching opening and closing brace count */
-    if(ob_count != cb_count)
-    {
-        src->curpos = src->bufsize;
-        cur_tok = &eof_token;
-        fprintf(stderr, "%s: missing closing brace '%c'\n",
-                SHELL_NAME, closing_brace);
-        /* return failure */
-        return 0;
-    }
-    /* closing brace found. return success */
-    return 1;
-}
-
-
-/*
  * duplicate a token struct.
  * 
  * returns the newly alloc'd token struct, or NULL in case of error.
@@ -652,7 +553,7 @@ struct token_s *dup_token(struct token_s *tok)
 void free_token(struct token_s *tok)
 {
     /* don't attempt to free the EOF token */
-    if(tok == &eof_token)
+    if(!tok || tok == &eof_token)
     {
         return;
     }
@@ -694,6 +595,7 @@ int is_token_of_type(struct token_s *tok, enum token_type_e type)
     {
         return 1;
     }
+
     /* type can be any one of elif, else, or fi */
     if(type == TOKEN_KEYWORDS_ELIF_ELSE_FI)
     {
@@ -704,6 +606,7 @@ int is_token_of_type(struct token_s *tok, enum token_type_e type)
             return 1;
         }
     }
+    
     /*
      * case items should end in ';;' but sometimes the last 
      * item might end in 'esac'. non-POSIX extensions include
@@ -720,6 +623,7 @@ int is_token_of_type(struct token_s *tok, enum token_type_e type)
             return 1;
         }
     }
+    
     /* type can be any one of esac or ;; */
     if(type == TOKEN_DSEMI_ESAC)
     {
@@ -728,6 +632,7 @@ int is_token_of_type(struct token_s *tok, enum token_type_e type)
             return 1;
         }
     }
+    
     /* token doesn't match the given type */
     return 0;
 }
@@ -761,7 +666,7 @@ struct token_s *tokenize(struct source_s *src)
     tok_bufindex     = 0;
     tok_buf[0]       = '\0';
     
-    /* same the current token in the prev token pointer */
+    /* save the current token in the prev token pointer */
     if(cur_tok)
     {
         if(prev_tok)
@@ -812,7 +717,9 @@ struct token_s *tokenize(struct source_s *src)
                  * quote and the matching closing quote, to the token buffer.
                  */
                 add_to_buf(nc);
-                i = find_closing_quote(src->buffer+src->curpos+1, (prev_char(src) == '$') ? 1 : 0);
+                i = find_closing_quote(src->buffer+src->curpos,
+                                       (nc == '"') ? 1 : 0,
+                                       (prev_char(src) == '$') ? 1 : 0);
                 while(i--)
                 {
                     add_to_buf(next_char(src));
@@ -822,6 +729,7 @@ struct token_s *tokenize(struct source_s *src)
             case '\\':
                 /* get the next char after the backslah */
                 nc2 = next_char(src);
+
                 /*
                  * discard backslash+newline '\\n' combination.. in an interactive shell, this
                  * case shouldn't happen as the read_cmd() function discards the '\\n' sequence
@@ -832,8 +740,10 @@ struct token_s *tokenize(struct source_s *src)
                 {
                     break;
                 }
+
                 /* add the backslah to the token buffer */
                 add_to_buf(nc);
+                
                 /* add the escaped char to the token buffer */
                 if(nc2 > 0)
                 {
@@ -845,15 +755,23 @@ struct token_s *tokenize(struct source_s *src)
                 /* add the '$' to buffer and check the char after it */
                 add_to_buf(nc);
                 nc = peek_char(src);
+                
                 /* we have a '${', '$(' or '$[' sequence */
                 if(nc == '{' || nc == '(' || nc == '[')
                 {
                     /* add the opening brace and everything up to the closing brace to the buffer */
-                    if(!brace_loop(nc, src))
+                    i = find_closing_brace(src->buffer+src->curpos+1, 0);
+                    if(i == 0)
                     {
                         /* closing brace not found */
                         return &err_token;
                     }
+                    
+                    while(i--)
+                    {
+                        add_to_buf(next_char(src));
+                    }
+                    add_to_buf(next_char(src));     /* add the closing brace */
                 }
                 /*
                  * we have a special parameter name, such as $0, $*, $@, $#,
@@ -882,6 +800,7 @@ struct token_s *tokenize(struct source_s *src)
                     endloop = 1;
                     break;
                 }
+                
                 /* add the operator to buffer and check the char after it */
                 add_to_buf(nc);
                 pc = peek_char(src);
@@ -895,6 +814,7 @@ struct token_s *tokenize(struct source_s *src)
                 {
                     add_to_buf(next_char(src));
                     pc = peek_char(src);
+                    
                     /* peek at the next char to identify three-char operator tokens */
                     if(nc == '<' && (pc == '-' || pc == '<'))       /* <<- and <<< */
                     {
@@ -913,6 +833,7 @@ struct token_s *tokenize(struct source_s *src)
                     endloop = 1;
                     break;
                 }
+                
                 /* add the operator to buffer and check the char after it */
                 add_to_buf(nc);
                 pc = peek_char(src);
@@ -920,6 +841,7 @@ struct token_s *tokenize(struct source_s *src)
                 if(nc == pc)
                 {
                     add_to_buf(next_char(src));
+                    
                     /* identify ';;&' */
                     if(nc == ';')
                     {
@@ -929,30 +851,24 @@ struct token_s *tokenize(struct source_s *src)
                             add_to_buf(next_char(src));
                         }
                     }
-                    endloop = 1;
-                    break;
                 }
                 /* identify ';&' and ';|' */
-                if(nc == ';' && (pc == '&' || pc == '|'))
+                else if(nc == ';' && (pc == '&' || pc == '|'))
                 {
                     add_to_buf(next_char(src));
-                    endloop = 1;
-                    break;
                 }
                 /* identify '&>' */
-                if(nc == '&' && pc == '>')
+                else if(nc == '&' && pc == '>')
                 {
                     add_to_buf(next_char(src));
+                    
                     /* identify '&>>' */
                     pc = peek_char(src);
                     if(pc == '>')
                     {
                         add_to_buf(next_char(src));
                     }
-                    endloop = 1;
-                    break;
                 }
-                /* nothing of the above matched. we have a single-char token */
                 endloop = 1;
                 break;
 
@@ -970,33 +886,36 @@ struct token_s *tokenize(struct source_s *src)
                     endloop = 1;
                     break;
                 }
-                /* check the char after the brace */
-                pc = peek_char(src);
-                if(nc == '}' || (!isalnum(pc) && pc != '_'))   /* not a {var} I/O redirection word */
+                add_to_buf(nc);
+
+                if(nc == '}')
                 {
-                    /* single char keywords '}' or '{' */
-                    add_to_buf(nc);
-                    endloop = 1;
                     break;
                 }
+
                 /* add the opening brace and everything up to the closing brace to the buffer */
-                unget_char(src);
-                if(!brace_loop(nc, src))
+                i = find_closing_brace(src->buffer+src->curpos, 0);
+                if(i == 0)
                 {
                     /* closing brace not found */
                     return &err_token;
+                }
+                while(i--)
+                {
+                    add_to_buf(next_char(src));
                 }
                 break;
                 
             case '(':
             case ')':
-                /* if the '!' keyword or the brace delimits the current token, delimit it */
+                /* if the brace delimits the current token, delimit it */
                 if(tok_bufindex > 0)
                 {
                     unget_char(src);
                     endloop = 1;
                     break;
                 }
+                
                 if(nc == '(')
                 {
                     /*
@@ -1005,19 +924,25 @@ struct token_s *tokenize(struct source_s *src)
                      * all of these are non-POSIX extensions.
                      */
                     pc = prev_char(src);
+
                     /* check if we have '((', '<(' or '>(' */
                     if(peek_char(src) == '(' || pc == '<' || pc == '>')
                     {
-                        unget_char(src);    /* the 1st '(' */
-                        /* add the opening brace and everything up to the closing brace to the buffer */
-                        if(!brace_loop(nc, src))
+                        i = find_closing_brace(src->buffer+src->curpos, 0);
+                        if(i == 0)
                         {
                             /* closing brace not found */
                             return &err_token;
                         }
+
+                        while(i--)
+                        {
+                            add_to_buf(next_char(src));
+                        }
                         break;
                     }
                 }
+                
                 /* single char delimiters */
                 add_to_buf(nc);
                 endloop = 1;
@@ -1051,6 +976,7 @@ struct token_s *tokenize(struct source_s *src)
                     endloop = 1;
                     break;
                 }
+                
                 /* otherwise return it as a token by itself */
                 add_to_buf(nc);
                 endloop = 1;
@@ -1064,6 +990,7 @@ struct token_s *tokenize(struct source_s *src)
                     endloop = 1;
                     break;
                 }
+                
                 /*
                  * >#((expr)) and <#((expr)) are non-POSIX extensions to move
                  * I/O file pointers to the offset specified by expr.
@@ -1081,6 +1008,7 @@ struct token_s *tokenize(struct source_s *src)
                             /* add both braces to buffer */
                             add_to_buf(nc);
                             add_to_buf(nc2);
+                            
                             /*
                              * loop to find the matching 2 braces, but no need to call the heavy guns,
                              * aka brace_loop().
@@ -1105,15 +1033,17 @@ struct token_s *tokenize(struct source_s *src)
                         }
                     }
                 }
+                
                 /* 
                  * bash and zsh identify # comments in non-interactive shells, and in interactive
                  * shells with the interactive_comments option.
                  */
-                if(option_set('i') && !optionx_set(OPTION_INTERACTIVE_COMMENTS))
+                if(interactive_shell && !optionx_set(OPTION_INTERACTIVE_COMMENTS))
                 {
                     add_to_buf(nc);
                     break;
                 }
+                
                 /* 
                  * otherwise discard the comment as per POSIX section 2.3, but return a newline
                  * token (the newline is technically part of the comment itself).
@@ -1133,6 +1063,7 @@ struct token_s *tokenize(struct source_s *src)
                 add_to_buf(nc);
                 break;
         }
+        
         /* is the token delimited? */
         if(endloop)
         {
