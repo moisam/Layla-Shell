@@ -20,7 +20,7 @@
  */    
 
 /* macro definition needed to use setenv() */
-#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +31,7 @@
 #include <locale.h>
 #include <sys/wait.h>
 #include "cmd.h"
+#include "sig.h"
 #include "debug.h"
 #include "backend/backend.h"
 #include "symtab/symtab.h"
@@ -40,13 +41,13 @@
 pid_t  tty_pid;
 
 /* flag to indicate if we are reading from stdin */
-int    read_stdin       = 1;
+int    read_stdin        = 0;
 
-/* flag to break out of loops when SIGINT is received */
-int    SIGINT_received  = 0;
+/* flag to indicate whether the shell is interactive or not */
+int    interactive_shell = 0;
 
 /* flag to indicate a signal was received and handled by trap_handler() */
-int    signal_received  = 0;
+int    signal_received   = 0;
 
 #define CLOCKID CLOCK_REALTIME
 
@@ -79,15 +80,11 @@ static void SIGALRM_handler(int sig __attribute__((unused)),
 /*
  * signal handler for SIGINT (interrupt signal).
  */
-void SIGINT_handler(int signum __attribute__((unused)))
+void SIGINT_handler(int signum)
 {
-    SIGINT_received = 1;
-    signal_received = 1;
+    signal_received = signum;
     /* force break from any running loop */
-    if(cur_loop_level)
-    {
-        req_break = 1;
-    }
+    req_break = cur_loop_level;
 }
 
 
@@ -97,7 +94,7 @@ void SIGINT_handler(int signum __attribute__((unused)))
 void SIGQUIT_handler(int signum)
 {
     fprintf(stderr, "%s: received signal %d\n", SHELL_NAME, signum);
-    signal_received = 1;
+    signal_received = signum;
 }
 
 
@@ -114,14 +111,14 @@ void SIGWINCH_handler(int signum)
 /*
  * signal handler for SIGCHLD (child status change signal).
  */
-void SIGCHLD_handler(int signum __attribute__((unused)))
+void SIGCHLD_handler(int signum)
 {
     int pid, status, save_errno = errno;
     status = 0;
     while(1)
     {
         status = 0;
-        pid = waitpid(-1, &status, WUNTRACED|WNOHANG);
+        pid = waitpid(-1, &status, WUNTRACED|WCONTINUED|WNOHANG);
         //if(WIFEXITED(status)) status = WEXITSTATUS(status);
         if(pid <= 0)
         {
@@ -141,6 +138,7 @@ void SIGCHLD_handler(int signum __attribute__((unused)))
         run_alias_cmd("jobcmd");
     }
     errno = save_errno;
+    signal_received = signum;
 }
 
 
@@ -149,11 +147,7 @@ void SIGCHLD_handler(int signum __attribute__((unused)))
  */
 void SIGHUP_handler(int signum)
 {
-    /* only interactive shells worry about killing their child jobs */
-    if(option_set('i'))
-    {
-        kill_all_jobs(SIGHUP, JOB_FLAG_DISOWNED);
-    }
+    kill_all_jobs(SIGHUP, JOB_FLAG_DISOWNED);
     exit_gracefully(signum+128, NULL);
 }
 
@@ -200,9 +194,6 @@ int main(int argc, char **argv)
     
     /* init traps table */
     init_traps();
-
-    /* get the umask */
-    init_umask();
     
     /* init aliases */
     memset(aliases, 0, sizeof(aliases));
@@ -217,6 +208,10 @@ int main(int argc, char **argv)
     /* parse the command line options, if any */
     int islogin = parse_shell_args(argc, argv, &src);
     set_option('L', islogin ? 1 : 0);
+    
+    /* save the options string before we read startup scripts */
+    symtab_save_options();
+    
     if(islogin)
     {
         set_optionx(OPTION_LOGIN_SHELL, 1);
@@ -256,29 +251,64 @@ int main(int argc, char **argv)
         }
         symtab_save_options();
     }
+
+    /* not in privileged mode? reset ids (bash) */
+    if(!option_set('p'))
+    {
+        uid_t euid = geteuid(), ruid = getuid();
+        gid_t egid = getegid(), rgid = getgid();
+        if(euid != ruid)
+        {
+            seteuid(ruid);
+        }
+        if(egid != rgid)
+        {
+            setegid(rgid);
+        }
+        /* bash doesn't read startup files in this case */
+        noprofile = 1;
+        norc      = 1;
+    }
     
-    /* 
-     * save the signals we got from our parent, so that we can reset 
-     * them in our children later on.
-     * NOTE: if you changed any of the signal actions below, make sure to mirror
-     *       those changes in trap.c in the case switch where we reset signal actions
-     *       to their default values. don't also forget the processing of the -q option
-     *       down below, which affects SIGQUIT.
+    /*
+     * we check to see if this is a login shell. If so, read /etc/profile
+     * and then ~/.profile.
      */
-    save_signals();    
+    if(islogin)
+    {
+        init_login();
+    }
+
+    /*
+     * check for and execute $ENV file, if any (if not in privileged mode).
+     * if not privileged, ksh also uses /etc/suid_profile instead of $ENV
+     * (but we pass this one).
+     */
+    if(interactive_shell)
+    {
+        init_rc();
+    }
+    
+    /*
+     * the restricted mode '-r' is enabled in initsh() below, after $ENV and .profile
+     * scripts have been read and executed (above). this is in conformance
+     * to ksh behaviour.
+     */
+
+    /* init environ and finish initialization */
+    initsh(argv, read_stdin);
 
     /* if interactive shell ... */
-    if(option_set('i'))
+    if(interactive_shell)
     {
-        signal(SIGQUIT, SIG_IGN);
-        signal(SIGTERM, SIG_IGN);
+        set_signal_handler(SIGQUIT , SIG_IGN);
+        set_signal_handler(SIGTERM , SIG_IGN);
         if(option_set('m'))
         {
-            signal(SIGTSTP, SIG_IGN);
-            signal(SIGTTIN, SIG_IGN);
-            signal(SIGTTOU, SIG_IGN);
+            set_signal_handler(SIGTSTP , SIG_IGN);
+            set_signal_handler(SIGTTIN , SIG_IGN);
+            set_signal_handler(SIGTTOU , SIG_IGN);
         }
-        set_signal_handler(SIGCHLD , SIGCHLD_handler );
         set_signal_handler(SIGINT  , SIGINT_handler  );
         set_signal_handler(SIGWINCH, SIGWINCH_handler);
         set_optionx(OPTION_INTERACTIVE_COMMENTS, 1);
@@ -344,56 +374,10 @@ int main(int argc, char **argv)
         set_optionx(OPTION_EXPAND_ALIASES      , 0);
         set_optionx(OPTION_SAVE_HIST           , 0);
     }
-
-    set_signal_handler(SIGHUP, SIGHUP_handler);
-
-    /* not in privileged mode? reset ids (bash) */
-    if(!option_set('p'))
-    {
-        uid_t euid = geteuid(), ruid = getuid();
-        gid_t egid = getegid(), rgid = getgid();
-        if(euid != ruid)
-        {
-            seteuid(ruid);
-        }
-        if(egid != rgid)
-        {
-            setegid(rgid);
-        }
-        /* bash doesn't read startup files in this case */
-        noprofile = 1;
-        norc      = 1;
-    }
     
-    /*
-     * we check to see if this is a login shell. If so, read /etc/profile
-     * and then ~/.profile.
-     */
-    if(islogin)
-    {
-        init_login();
-    }
+    set_signal_handler(SIGCHLD, SIGCHLD_handler);
+    set_signal_handler(SIGHUP , SIGHUP_handler );
 
-    /*
-     * check for and execute $ENV file, if any (if not in privileged mode).
-     * if not privileged, ksh also uses /etc/suid_profile instead of $ENV
-     * (but we pass this one).
-     */
-    if(option_set('i'))
-    {
-        init_rc();
-    }
-    
-    /*
-     * the restricted mode '-r' is enabled in initsh() below, after $ENV and .profile
-     * scripts have been read and executed (above). this is in conformance
-     * to ksh behaviour.
-     */
-
-
-    /* init environ and finish initialization */
-    initsh(argc, argv, read_stdin);
-    
     /*
      * tcsh accepts -q, which causes SIGQUIT to be caught and job control to be
      * disabled.
@@ -402,7 +386,20 @@ int main(int argc, char **argv)
     {
         set_signal_handler(SIGQUIT, SIGQUIT_handler);
         set_option('m', 0);
+        
+        /* update the options string */
+        symtab_save_options();
     }
+    
+    /* 
+     * save the signals we got from our parent, so that we can reset 
+     * them in our children later on.
+     * NOTE: if you changed any of the signal actions below, make sure to mirror
+     *       those changes in trap.c in the case switch where we reset signal actions
+     *       to their default values. don't also forget the processing of the -q option
+     *       down below, which affects SIGQUIT.
+     */
+    save_signals();    
     
     /* init our internal clock */
     start_clock();
@@ -490,6 +487,9 @@ int main(int argc, char **argv)
     {
         parse_and_execute(&src);
     }
+
+    /* execute any EXIT trap */
+    trap_handler(0);
     //exit_gracefully(exit_status, NULL);
     exit_builtin(1, (char *[]){ "exit", NULL });
 }
@@ -527,13 +527,18 @@ int parse_and_execute(struct source_s *src)
     /* save the start of this line */
     src->wstart = src->curpos;
 
+    /* sanitize our indices for the next round */
+    req_continue   = 0;
+    req_break      = 0;
+    cur_loop_level = 0;
+
     /*
      * the -n option means read commands but don't execute them.
      * only effective in non-interactive shells (POSIX says interactive shells
      * may safely ignore it). this option is good for checking a script for
      * syntax errors.
      */
-    int noexec = (option_set('n') && !option_set('i'));
+    int noexec = (option_set('n') && !interactive_shell);
     int i      = src->curpos;
     int res    = 1;             /* the result of parsing/executing */
     struct token_s  *tok  = tokenize(src);
@@ -572,7 +577,7 @@ int parse_and_execute(struct source_s *src)
      * we save history commands when the shell is interactive and we're reading
      * from stdin.
      */
-    int save_hist = option_set('i') && src->srctype == SOURCE_STDIN;
+    int save_hist = interactive_shell && src->srctype == SOURCE_STDIN;
 
     /* clear the parser's error flag */
     parser_err = 0;
@@ -587,7 +592,7 @@ int parse_and_execute(struct source_s *src)
     while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
     {
         /* parse the next command */
-        struct node_s *cmd = parse_complete_command(tok);
+        struct node_s *cmd = parse_list(tok);
         tok = get_current_token();
 
         /* parser encountered an error */
@@ -605,13 +610,6 @@ int parse_and_execute(struct source_s *src)
         if(!cmd)
         {
             break;
-        }
-
-        /* we've got a command. now are we going to execute it? */
-        if(noexec)
-        {
-            free_node_tree(cmd);
-            continue;
         }
 
         if(!cmd->lineno)
@@ -677,33 +675,43 @@ int parse_and_execute(struct source_s *src)
             dump_node_tree(cmd, 1);
         }
 
-        /* now execute the command */
-        if(!do_complete_command(src, cmd))
+        /* we've got a command. now are we going to execute it? */
+        if(noexec)
         {
-            /* we've got a return statement */
-            if(return_set)
-            {
-                return_set = 0;
-                /*
-                 * we should return from dot files AND functions. calling return outside any
-                 * function/script should cause the shell to exit.
-                 */
-                if(src->srctype == SOURCE_STDIN)
-                {
-                    exit_gracefully(exit_status, NULL);
-                }
-            }
+            free_node_tree(cmd);
+            continue;
+        }
+
+        /* now execute the command */
+        if(!do_list(src, cmd, NULL))
+        {
             /* failed to execute command. bail out */
-            else
-            {
-                res = 0;
-            }
+            res = 0;
             free_node_tree(cmd);
             break;
         }
+        
+
+        /* free the nodetree */
         free_node_tree(cmd);
         fflush(stdout);
         fflush(stderr);
+
+        /* we've got a return statement */
+        if(return_set)
+        {
+            return_set = 0;
+            /*
+             * we should return from dot files AND functions. calling return outside any
+             * function/script should cause the shell to exit.
+             */
+            if(src->srctype == SOURCE_STDIN)
+            {
+                exit_gracefully(exit_status, NULL);
+            }
+            res = 0;
+            break;
+        }
 
         /*
          * POSIX does not specify the -t (or onecmd) option, as it says it is
@@ -756,7 +764,9 @@ int parse_and_execute(struct source_s *src)
     /* finished parsing and executing commands */
     fflush(stdout);
     fflush(stderr);
-    SIGINT_received = 0;
+
+    /* reset the received signal flag */
+    signal_received = 0;
 
     /* restore the terminal's non-canonical mode if needed */
     if(read_stdin)
@@ -779,55 +789,62 @@ int parse_and_execute(struct source_s *src)
  * 
  * returns 1 if the file is loaded successfully, 0 otherwise.
  */
-int read_file(char *__filename, struct source_s *src)
+int read_file(char *filename, struct source_s *src)
 {
     errno = 0;
-    if(!__filename)
-    {
-        return 0;
-    }
-    char *filename = word_expand_to_str(__filename);
     if(!filename)
     {
         return 0;
     }
+    
+    char *filename2 = word_expand_to_str(filename);
+    if(!filename2)
+    {
+        return 0;
+    }
+    
     char *tmpbuf = NULL;
     FILE *f      = NULL;
-    if(strchr(filename, '/'))
+    if(strchr(filename2, '/'))
     {
         /* pathname with '/', try opening it */
-        f = fopen(filename, "r");
+        f = fopen(filename2, "r");
     }
     else
     {
         /* pathname with no slashes, try to locate it */
-        size_t len = strlen(filename);
+        size_t len = strlen(filename2);
+
         /* try CWD */
         char tmp[len+3];
         strcpy(tmp, "./");
-        strcat(tmp, filename);
+        strcat(tmp, filename2);
         f = fopen(tmp, "r");
         if(f)   /* file found */
         {
             goto read;
         }
+
         /* search using $PATH */
-        char *path = search_path(filename, NULL, 0);
+        char *path = search_path(filename2, NULL, 0);
         if(!path)   /* file not found */
         {
-            free(filename);
+            free(filename2);
             return 0;
         }
+        
         f = fopen(path, "r");
         free_malloced_str(path);
         if(f)
         {
             goto read;
         }
+        
         /* failed to open the file */
-        free(filename);
+        free(filename2);
         return 0;
     }
+    
     /* failed to open the file */
     if(!f)
     {
@@ -840,6 +857,7 @@ read:
     {
         goto error;
     }
+    
     /* get the file length */
     long i;
     if((i = ftell(f)) == -1)
@@ -847,12 +865,14 @@ read:
         goto error;
     }
     rewind(f);
+    
     /* alloc buffer */
     tmpbuf = malloc(i+1);
     if(!tmpbuf)
     {
         goto error;
     }
+    
     /* read the file */
     long j = fread(tmpbuf, 1, i, f);
     if(j != i)
@@ -864,10 +884,9 @@ read:
     src->buffer   = tmpbuf;
     src->bufsize  = i;
     src->srctype  = SOURCE_EXTERNAL_FILE;
-    src->srcname  = get_malloced_str(filename);
-    free(filename);
+    src->srcname  = get_malloced_str(filename2);
+    free(filename2);
     src->curpos   = INIT_SRC_POS;
-    //free(filename);
     return 1;
     
 error:
@@ -875,10 +894,12 @@ error:
     {
         fclose(f);
     }
+
     if(tmpbuf)
     {
         free(tmpbuf);
     }
-    free(filename);
+    
+    free(filename2);
     return 0;
 }

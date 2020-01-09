@@ -568,16 +568,6 @@ char *evaluate_prompt(char *PS)
                                 j += strlen(s);
                                 break;
                             }
-#if 0
-                            if(src && (src->srctype == SOURCE_FUNCTION || src->srctype == SOURCE_EVAL))
-                            {
-                                /* use $0, as it should hold the name of the function or eval command */
-                                s = get_shell_varp("0", SHELL_NAME);
-                                strcat(prompt, s);
-                                j += strlen(s);
-                                break;
-                            }
-#endif
                         }
                         /* NOTE: fall through to handle '%N' if the current command is not a function or eval cmd */
                         __attribute__((fallthrough));
@@ -592,13 +582,6 @@ char *evaluate_prompt(char *PS)
                                 strcat(prompt, s);
                                 j += strlen(s);
                             }
-#if 0
-                            if(src && src->srcname)
-                            {
-                                strcat(prompt, src->srcname);
-                                j += strlen(src->srcname);
-                            }
-#endif
                             else
                             {
                                 /* if no file or function name, use $0 (as in zsh) */
@@ -908,12 +891,12 @@ char *evaluate_prompt(char *PS)
         }
     } while(++i < PS_len);
     
-    /************************************************
-     * now do POSIX style on the prompt. that means parameter expansion, command
-     * substitution, arithmetic expansion, and quote removal (but don't remove
-     * whitespace chars).
-     ************************************************/
-    struct word_s *w = word_expand_one_word(prompt, WORD_EXPANSION_NO_FIELD_SPLIT);
+    /*
+     * now go POSIX-style on the prompt. that means parameter expansion,
+     * command substitution, arithmetic expansion, and quote removal (but
+     * don't remove whitespace chars).
+     */
+    struct word_s *w = word_expand_one_word(prompt, 0);
     if(w)
     {
         /* perform pathname expansion and quote removal */

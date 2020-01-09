@@ -19,6 +19,9 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
+/* required macro definition for confstr() */
+#define _POSIX_C_SOURCE 200809L
+
 #include <ctype.h>
 #include <signal.h>
 #include <stdio.h>
@@ -80,6 +83,44 @@ int isroot(void)
 
 
 /*
+ * get the default path for searching commands.
+ */
+char *get_default_path(void)
+{
+    char *path = NULL;
+    
+#ifdef _CS_PATH
+    
+    size_t len = (size_t)confstr(_CS_PATH, (char *)NULL, (size_t)0);
+    if(len > 0)
+    {
+        path = malloc(len + 2);
+        if(path)
+        {
+            *path = '\0';
+            confstr(_CS_PATH, path, len);
+        }
+        else
+        {
+            path = COMMAND_DEFAULT_PATH;
+        }
+    }
+    else
+    {
+        path = COMMAND_DEFAULT_PATH;
+    }
+
+#else
+
+    path = COMMAND_DEFAULT_PATH;
+        
+#endif
+    
+    return path;
+}
+
+
+/*
  * search the path for the given file.. if use_path is NULL, we use the value
  * of $PATH, otherwise we use the value of use_path as the search path.. if
  * exe_only is non-zero, we search for executable files, otherwise we search
@@ -92,9 +133,8 @@ char *search_path(char *file, char *use_path, int exe_only)
     /* bash extension for ignored executable files */
     char *EXECIGNORE = get_shell_varp("EXECIGNORE", NULL);
     /* use the given path or, if null, use $PATH */
-    char *PATH = use_path ? use_path : getenv("PATH");
-    char *p    = PATH;
-    char *p2;
+    char *PATH = use_path ? use_path : get_shell_varp("PATH", NULL);
+    char *p = PATH, *p2;
     
     while(p && *p)
     {
@@ -214,7 +254,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         if(flag_set(flags, FORK_COMMAND_IGNORE_HUP))
         {
             /* tcsh ignores the HUP signal here */
-            if(signal(SIGHUP, SIG_IGN) == SIG_ERR)
+            if(set_signal_handler(SIGHUP, SIG_IGN) != 0)
             {
                 fprintf(stderr, "%s: failed to ignore SIGHUP: %s\n", UTILITY, strerror(errno));
             }
@@ -279,8 +319,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         tcsetpgrp(0, child_pid);
     }
 
-    int   status;
-    waitpid(child_pid, &status, WUNTRACED);
+    int status = wait_on_child(child_pid, NULL, NULL);
     if(WIFSTOPPED(status) && option_set('m'))
     {
         struct job_s *job = add_job(child_pid, (pid_t[]){child_pid}, 1, argv[0], 0);

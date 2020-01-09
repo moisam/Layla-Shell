@@ -209,7 +209,8 @@ long eval_div(struct stack_item_s *a1, struct stack_item_s *a2)
     if(!n2)
     {
         fprintf(stderr, "%s: Division by zero\n", SHELL_NAME);
-        return error = 1, 0;
+        error = 1;
+        return 0;
     }
     return long_value(a1) / n2;
 }
@@ -221,7 +222,8 @@ long eval_mod(struct stack_item_s *a1, struct stack_item_s *a2)
     if(!n2)
     {
         fprintf(stderr, "%s: Division by zero\n", SHELL_NAME);
-        return error = 1, 0;
+        error = 1;
+        return 0;
     }
     return long_value(a1) % n2;
 }

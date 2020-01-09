@@ -2,7 +2,7 @@
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
  *    Copyright 2016, 2017, 2018, 2019 (c)
  * 
- *    file: signames.h
+ *    file: sig.h
  *    This file is part of the Layla Shell project.
  *
  *    Layla Shell is free software: you can redistribute it and/or modify
@@ -24,11 +24,11 @@
 
 #include <signal.h>
 
-extern char *signames[];
-// extern int   total_signames;
+#define SIGNAL_COUNT      32
 
-#define total_signames      32
+extern char *signames[];
 
 struct sigaction *get_sigaction(int signum);
+void   save_signals(void);
 
 #endif

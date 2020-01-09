@@ -1641,7 +1641,7 @@ select:
                 }
                 count = strlen(buf);
                 /* assume implicit '*' if no regex chars as per POSIX */
-                if(!has_regex_chars(buf, count))
+                if(!has_glob_chars(buf, count))
                 {
                     buf[count  ] =  '*';
                     buf[count+1] = '\0';
@@ -1692,7 +1692,7 @@ select:
                 }
                 count = strlen(buf);
                 /* assume implicit '*' if no regex chars as per POSIX */
-                if(!has_regex_chars(buf, count))
+                if(!has_glob_chars(buf, count))
                 {
                     buf[count  ] =  '*';
                     buf[count+1] = '\0';

@@ -22,11 +22,15 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-
+/* if you don't want to define the debu function, command the following line */
 #define DEBUG_MODE
 
-
+/*
+ * depending on whether you commented the line above or not, the debug function
+ * will either be defined as a null macro, or as a function to output debug info.
+ */
 #ifndef DEBUG_MODE
+
 #define debug(...)
 
 #else
@@ -35,7 +39,6 @@ void __debug(const char *file, const char *function, char *format, ...);
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define debug(...)  __debug(__FILENAME__, __FUNCTION__, __VA_ARGS__)
 
-#endif
+#endif  /* DEBUG_MODE */
 
-
-#endif
+#endif  /* DEBUG_H */

@@ -2,7 +2,7 @@
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
  *    Copyright 2016, 2017, 2018, 2019 (c)
  * 
- *    file: signames.c
+ *    file: sig.c
  *    This file is part of the Layla Shell project.
  *
  *    Layla Shell is free software: you can redistribute it and/or modify
@@ -71,8 +71,7 @@ char *signames[] =
     "SIGSYS"   ,	/* Bad system call.                       - 31 */
 };
 
-struct sigaction signal_handlers[total_signames];
-int    core_signals[] = { SIGINT, SIGQUIT, SIGTERM, SIGTSTP, SIGTTIN, SIGTTOU, SIGCHLD };
+struct sigaction signal_handlers[SIGNAL_COUNT];
 
 
 /*
@@ -81,23 +80,10 @@ int    core_signals[] = { SIGINT, SIGQUIT, SIGTERM, SIGTSTP, SIGTTIN, SIGTTOU, S
 void save_signals(void)
 {
     int i = 1;
-    for( ; i < total_signames; i++)
+    for( ; i < SIGNAL_COUNT; i++)
     {
         sigaction(i, NULL, &signal_handlers[i]);
     }
-}
-
-
-/*
- * reset signal to the action it had when the shell started.
- */
-void reset_signal(int signum)
-{
-    if(signum <= 0 || signum >= total_signames)
-    {
-        return;
-    }
-    sigaction(signum, &signal_handlers[signum], NULL);
 }
 
 
@@ -106,7 +92,7 @@ void reset_signal(int signum)
  */
 struct sigaction *get_sigaction(int signum)
 {
-    if(signum <= 0 || signum >= total_signames)
+    if(signum <= 0 || signum >= SIGNAL_COUNT)
     {
         return NULL;
     }

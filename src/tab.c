@@ -115,9 +115,8 @@ int autocomplete_path(char *file, char **results, int __count)
     extern char *__next_path;
     extern char *get_next_filename(char *__path, int *n, int report_err);
     extern struct dirent **eps;
-    extern char *default_path;      /* builtins/command.c */
 
-    char *PATH = get_shell_varp("PATH", default_path);
+    char *PATH = get_shell_varp("PATH", get_default_path());
     char *p    = PATH;
     char *p2;
     int  count = __count;
@@ -401,17 +400,12 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         }
         i--;
     }
-#if 0
-    while(!isspace(cmdbuf[i]) && cmdbuf[i] != '@' && 
-          cmdbuf[i] != '~' && cmdbuf[i] != '$' && i != 0)
-    {
-        i--;
-    }
-#endif
+
     if(isspace(cmdbuf[i]))
     {
         i++;
     }
+    
     /* are we at the start of the command line? */
     if(i == 0)
     {
@@ -713,7 +707,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         i = strlen(tmp);
         /* append '*' only if tmp doesn't contain regex chars *, ? and [ */
         int star = 0;
-        if(!has_regex_chars(tmp, i))
+        if(!has_glob_chars(tmp, i))
         {
             tmp[i] = '*';
             tmp[i+1] = '\0';

@@ -21,6 +21,7 @@
 
 #define _XOPEN_SOURCE   500     /* fdopen() */
 
+#include <signal.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -47,10 +48,16 @@ void init_subshell(void)
     set_option('m', 0);
 
     /* turn off the interactive mode */
-    set_option('i', 0);
+    interactive_shell = 0;
 
-    /* reset signals, traps and stdin */
-    asynchronous_prologue();
+
+    if(!option_set('m'))
+    {
+        set_signal_handler(SIGINT , SIG_IGN);
+        set_signal_handler(SIGQUIT, SIG_IGN);
+        close(0);
+        open("/dev/null", O_RDONLY);
+    }
 
     /* forget about all aliases (they are an interactive feature, anyway) */
     unset_all_aliases();

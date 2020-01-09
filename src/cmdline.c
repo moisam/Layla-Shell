@@ -204,10 +204,13 @@ void cmdline(void)
             {
                 /* tcsh outputs a message in this case */
                 fprintf(stderr, "Use \"exit\" to leave\n");
+                clearerr(stdin);
                 continue;
             }
-            //exit_gracefully(stat, NULL);
+
+            /* try to exit (this will execute any EXIT traps) */
             exit_builtin(1, (char *[]){ "exit", NULL });
+            
             /* if we return from exit_builtin(), it means we have pending jobs */
             continue;
         }
@@ -333,42 +336,52 @@ char *read_cmd(void)
             signal_received = 0;
             continue;
         }
+        
+        /*
+         * this flag tells us whether we've received an EOF (CTRL-D) with a
+         * non-empty buffer, in which case we'll consider the command line complete,
+         * without actually calling is_incomplete_cmd() to do the check.
+         */
+        int force_eof = 0;
 
         /***********************
          * get next key stroke
          ***********************/
         c = get_next_key();
+
         /* EOF key */
         if(c == EOF_KEY)
         {
-            if(cmdbuf_index == 0)
-            {
-                if(++eofs >= max_eofs)
-                {
-                    return NULL;
-                }
-                else
-                {
-                    continue;
-                }
-            }
             /* if we received CTRL-D with cmd in buffer, finish the command */
             if(incomplete_cmd)
             {
                 c = '\n';
+                /* indicate we shouldn't call is_incomplete_cmd() on this input */
+                force_eof = 1;
             }
-            /* otherwise, beep in error (bash) */
             else
             {
+                /* if the buffer is empty, count the number of EOFs we received */
+                if(cmdbuf_index == 0)
+                {
+                    /* if EOFs reached the threshold, return NULL */
+                    if(++eofs >= max_eofs)
+                    {
+                        return NULL;
+                    }
+                }
+                /* otherwise, beep in error (bash) */
                 beep();
                 continue;
             }
         }
+
         /* invalid key */
         if(c == 0)
         {
             continue;
         }
+        
         /* count tabs */
         if(c != '\t')
         {
@@ -421,16 +434,19 @@ char *read_cmd(void)
                     {
                         i--;
                     }
+
                     if(isspace(cmdbuf[i]) || cmdbuf[i] == '\0')
                     {
                         while(i &&  isspace(cmdbuf[i]))
                         {
                             i--;    /* skip trailing spaces */
                         }
+                        
                         while(i && !isspace(cmdbuf[i]))
                         {
                             i--;    /* skip prev word */
                         }
+                        
                         if(isspace(cmdbuf[i]))
                         {
                             i++;
@@ -442,10 +458,12 @@ char *read_cmd(void)
                         {
                             i--;    /* skip prev word */
                         }
+                        
                         while(i &&  isspace(cmdbuf[i]))
                         {
                             i--;    /* skip trailing spaces */
                         }
+                        
                         if(isspace(cmdbuf[i]))
                         {
                             i++;
@@ -467,6 +485,7 @@ char *read_cmd(void)
                         {
                             i++;    /* skip leading spaces */
                         }
+                        
                         while(i < cmdbuf_end && !isspace(cmdbuf[i]))
                         {
                             i++;    /* skip next word */
@@ -525,6 +544,7 @@ char *read_cmd(void)
                 {
                     continue;
                 }
+                
                 int z = cmdbuf_index-1;
                 while(z >= 0)
                 {
@@ -533,17 +553,20 @@ char *read_cmd(void)
                         z++;
                         break;
                     }
+                    
                     if(z == 0)
                     {
                         break;
                     }
                     z--;
                 }
+                
                 if(z == cmdbuf_index)
                 {
                     continue;
                 }
                 update_row_col();
+                
                 size_t old_row = terminal_row, old_col = terminal_col;
                 move_cur(start_row, start_col);
                 printf("%*s", cmdbuf_end, " ");
@@ -553,11 +576,13 @@ char *read_cmd(void)
                 {
                     ;
                 }
+                
                 int  diff = cmdbuf_index-z;
                 cmdbuf_index -= diff;
                 cmdbuf_end   -= diff;
                 move_cur(start_row, start_col);
                 printf("%s", cmdbuf);
+                
                 do
                 {
                     if(old_col == 1)
@@ -583,10 +608,12 @@ char *read_cmd(void)
                 {
                     c = vi_cmode();
                 }
+                
                 if(c != '\n' && c != '\r')
                 {
                     break;
                 }
+                
                 /* NOTE: fall through to the next case */
                 __attribute__((fallthrough));
                 
@@ -608,6 +635,7 @@ char *read_cmd(void)
                             {
                                 free(incomplete_cmd);
                             }
+                            
                             incomplete_cmd = NULL;
                             cmdbuf_index = 0;
                             cmdbuf_end   = 0;
@@ -651,7 +679,17 @@ char *read_cmd(void)
                 
                 cmdbuf[cmdbuf_end  ] = '\n';
                 cmdbuf[cmdbuf_end+1] = '\0';
-                c = is_incomplete_cmd(incomplete_cmd ? 0 : 1);
+                /* did we receive CTRL-D on this line? */
+                if(force_eof)
+                {
+                    c = 0;
+                }
+                else
+                {
+                    c = is_incomplete_cmd(incomplete_cmd ? 0 : 1);
+                }
+
+                /* further action depends on whether the command is complete or not */
                 if(c < 0)           /* error parsing command line */
                 {
                     kill_input();
@@ -662,10 +700,12 @@ char *read_cmd(void)
                     print_prompt2();
                     char *tmp = NULL;
                     size_t sz = strlen(cmdbuf)+1;
+
                     if(incomplete_cmd)
                     {
                         sz += strlen(incomplete_cmd);
                     }
+
                     tmp = malloc(sz);
                     if(tmp)
                     {
@@ -678,6 +718,7 @@ char *read_cmd(void)
                         {
                             tmp[0] = '\0';
                         }
+                        
                         incomplete_cmd = tmp;
                         strcat(incomplete_cmd, cmdbuf);
                         cmdbuf_end = 0;
@@ -690,12 +731,13 @@ char *read_cmd(void)
                     }
                 }
 
-                cmdbuf_end   = glue_cmd_pieces();
-                in_heredoc   = -1;
+                cmdbuf_end = glue_cmd_pieces();
+                in_heredoc = -1;
                 if(!heredocs)
                 {
                     return cmdbuf;
                 }
+                
                 while(heredocs > 0)
                 {
                     heredocs--;
@@ -721,7 +763,7 @@ int is_incomplete_cmd(int first_time)
 {
     char   *cmd = cmdbuf;
     size_t  cmd_len = strlen(cmd);
-    size_t  i = 0;
+    size_t  i = 0, j;
 
     /*
      * if we are inside a here-document, check if the last entered line matches
@@ -798,50 +840,102 @@ int is_incomplete_cmd(int first_time)
         }
     }
 
+    int endme = 0;
+    
     do
     {
         switch(cmd[i])
         {
             case '{':
-                open_cb++ ;
+                if(quotes == '\'')
+                {
+                    break;
+                }
+                
+                open_cb++;
+                j = find_closing_brace(cmd+i, (quotes == '"') ? 1 : 0);
+                if(j == 0)  /* closing brace not found */
+                {
+                    endme = 1;
+                }
+                else
+                {
+                    close_cb++;
+                }
                 break;
                 
             case '(':
+                if(quotes == '\'')
+                {
+                    break;
+                }
+                
                 open_rb++ ;
-                break;
-                
-            case '}':
-                close_cb++;
-                break;
-                
-            case ')':
-                close_rb++;
+                j = find_closing_brace(cmd+i, (quotes == '"') ? 1 : 0);
+                if(j == 0)  /* closing brace not found */
+                {
+                    endme = 1;
+                }
+                else
+                {
+                    close_rb++;
+                }
                 break;
                 
             case '\'':
+                /* single quotes has no effect inside double quotes */
+                if(quotes == '"')
+                {
+                    break;
+                }
+                /* end of a partially started single-quoted string */
+                else if(quotes == '\'')
+                {
+                    quotes = 0;
+                    break;
+                }
+                
+                while(++i < cmd_len)
+                {
+                    if(cmd[i] == '\'')
+                    {
+                        break;
+                    }
+                }
+                
+                /* closing quote not found */
+                if(cmd[i] != '\'')
+                {
+                    endme = 1;
+                }
+                break;
+                
+            case '\\':
+                /* backslash has no effect inside single quotes */
+                if(quotes != '\'')
+                {
+                    i++;
+                }
+                break;
+                
             case '"':
             case '`':
-                /*
-                 * we have to manually scan for quotes, as we cannot call find_closing_quote(),
-                 * for the command might have been entered in pieces (several lines).
-                 */
-                /* skip the quote if it is escaped */
-                if((i != 0) && (cmd[i-1] == '\\'))
+                /* double and back quotes have no effect inside single quotes */
+                if(quotes == '\'')
                 {
-                    /* single quotes cannot be escaped inside single quotes */
-                    if(quotes == '\'' && cmd[i] == '\'')
-                    {
-                        quotes = 0;
-                    }
-                    continue;
+                    break;
                 }
-                /* check if we're already in quotes */
-                if(quotes)
+                /* end of a partially started single-quoted string */
+                else if(quotes == cmd[i])
                 {
-                    if(cmd[i] == quotes)
-                    {
-                        quotes = 0;
-                    }
+                    quotes = 0;
+                    break;
+                }
+
+                j = find_closing_quote(cmd+i, (quotes == '"') ? 1 : 0, 0);
+                if(j == 0)  /* closing quote not found */
+                {
+                    endme = 1;
                 }
                 else
                 {
@@ -858,15 +952,18 @@ int is_incomplete_cmd(int first_time)
                     {
                         break;
                     }
+                    
                     if(in_heredoc == -1)
                     {
                         in_heredoc = 0;
                     }
+                    
                     /* here-document redirection operators are '<<' and '<<-', according to POSIX */
                     if(i < cmd_len && cmd[i] == '-')
                     {
                         i++;
                     }
+                    
                     /*
                      * strictly speaking, POSIX says the heredoc word should come directly
                      * after the '<<' or '<<-' operator, with no intervening spaces.
@@ -877,11 +974,13 @@ int is_incomplete_cmd(int first_time)
                     {
                         i++;
                     }
+                    
                     if(cmd[i] == '\0')
                     {
                         fprintf(stderr, "%s: missing here-document delimiter word after << or <<-\n", SHELL_NAME);
                         return -1;
                     }
+                    
                     if(!heredoc_mark[__heredocs])
                     {
                         size_t j = i;
@@ -890,11 +989,13 @@ int is_incomplete_cmd(int first_time)
                             j++;
                         }
                         heredoc_mark[__heredocs] = malloc(j-i+1);
+                        
                         if(!heredoc_mark[__heredocs])
                         {
                             fprintf(stderr, "%s: insufficient memory to save here-document delimiter word\n", SHELL_NAME);
                             return -1;
                         }
+                        
                         strncpy(heredoc_mark[__heredocs], cmd+i, j-i);
                         heredoc_mark[__heredocs][j-i  ] = '\n';
                         heredoc_mark[__heredocs][j-i+1] = '\0';
@@ -903,6 +1004,11 @@ int is_incomplete_cmd(int first_time)
                     __heredocs++;
                 }
                 break;
+        }
+        
+        if(endme)
+        {
+            break;
         }
     } while(++i < cmd_len);
 
@@ -1022,6 +1128,11 @@ check:
                         index = NULL;
                     }
                 }
+                else
+                {
+                    index = NULL;
+                }
+                
                 /*
                  *  check if we've got a keyword (must be preceded by a separator
                  *  operator or start of line).

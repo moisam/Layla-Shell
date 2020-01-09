@@ -19,8 +19,8 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-#ifndef CMD_H
-#define CMD_H
+#ifndef SHELL_H
+#define SHELL_H
 
 #include <stdio.h>
 #include <string.h>
@@ -140,9 +140,12 @@
 #define WORDLIST_ADD_SPACES             1
 #define WORDLIST_NO_SPACES              0
 
-/* values of the do_field_splitting parameter of word_expand_one_word() */
-#define WORD_EXPANSION_FIELD_SPLIT      1
-#define WORD_EXPANSION_NO_FIELD_SPLIT   0
+// #define WORD_EXPANSION_FIELD_SPLIT      1
+// #define WORD_EXPANSION_NO_FIELD_SPLIT   0
+/* word expansion flags for the word_expand() function */
+#define FLAG_PATHNAME_EXPAND            (1 << 0)
+#define FLAG_REMOVE_QUOTES              (1 << 1)
+#define FLAG_FIELD_SPLITTING            (1 << 2)
 
 /*
  * flags for the 'force_export_all' parameter of the do_export_vars()
@@ -158,7 +161,7 @@
 /* POSIX says non-interactive shell should exit on syntax errors */
 #define EXIT_IF_NONINTERACTIVE()                    \
 do {                                                \
-        if(!option_set('i'))                        \
+        if(!interactive_shell)                        \
             exit_gracefully(EXIT_FAILURE, NULL);    \
 } while(0);
 
@@ -309,7 +312,7 @@ void    set_shlvl_var(void);
 
 /* initsh.c */
 extern  int  startup_finished;
-void    initsh(int argc, char **argv, int init_tty);
+void    initsh(char **argv, int init_tty);
 void    init_login(void);
 void    init_rc(void);
 int     parse_shell_args(int argc, char **argv, struct source_s *src);
@@ -354,14 +357,15 @@ void    strcat_c(char *str, int pos, char chr);
 int     is_same_str(char *s1, char *s2);
 char   *strchr_any(char *string, char *chars);
 char   *list_to_str(char **list);
-char   *quote_val(char *val, int add_quotes);
+char   *quote_val(char *val, int add_quotes, int escape_sq);
 int     get_linemax(void);
 int     check_buffer_bounds(int *count, int *len, char ***names);
 
 /* helpfunc.c */
+extern  char *COMMAND_DEFAULT_PATH;
 int     beep(void);
+char   *get_default_path(void);
 char   *search_path(char *file, char *use_path, int exe_only);
-void    save_signals(void);
 int     fork_command(int argc, char **argv, char *use_path, char *UTILITY,
                      int flags, int flagarg);
 int     isroot(void);
@@ -374,14 +378,14 @@ void    set_shell_varp(char *name, char *val);
 
 /* wordexp.c */
 int     is_restrict_var(char *name);
-size_t  find_closing_quote(char *data, int sq_nesting);
-size_t  find_closing_brace(char *data);
+size_t  find_closing_quote(char *data, int in_double_quotes, int sq_nesting);
+size_t  find_closing_brace(char *data, int in_double_quotes);
 void    delete_char_at(char *str, size_t index);
 char   *substitute_str(char *s1, char *s2, size_t start, size_t end);
 char   *get_all_vars(char *prefix);
 char   *pos_params_expand(char *tmp, int in_double_quotes);
 
-struct  word_s *word_expand(char *orig_word);
+struct  word_s *word_expand(char *orig_word, int flags);
 struct  word_s *word_expand_one_word(char *orig_word, int do_field_splitting);
 char   *word_expand_to_str(char *word);
 char   *wordlist_to_str(struct word_s *word, int add_spaces);
@@ -423,8 +427,6 @@ extern  int subshell_level;
 void    init_shell_vars(char *pw_name, gid_t gid, char *fullpath);
 int     is_pos_param(char *var_name);
 int     is_special_param(char *var_name);
-struct  word_s *get_all_pos_params(char which, int quoted);
-struct  word_s *get_pos_params(char which, int quoted, int offset, int count);
 char   *get_all_pos_params_str(char which, int quoted);
 char   *get_pos_params_str(char which, int quoted, int offset, int count);
 int     pos_param_count(void);
@@ -436,11 +438,15 @@ void    set_internal_exit_status(int status);
 void    reset_pos_params(void);
 
 /* main.c */
-extern  int SIGINT_received;
 extern  int signal_received;
 extern  int read_stdin;
+extern  int interactive_shell;
+
 int     parse_and_execute(struct source_s *src);
 int     read_file(char *filename, struct source_s *src);
+int     set_signal_handler(int signum, void (handler)(int));
+void    SIGCHLD_handler(int signum);
+void    SIGINT_handler(int signum);
 
 /* functab.c */
 #include "symtab/symtab.h"
@@ -556,8 +562,10 @@ int     get_jobid(char *jobid_str);
 int     get_total_jobs(void);
 void    set_job_exit_status(struct job_s *job, pid_t pid, int status);
 void    set_pid_exit_status(struct job_s *job, pid_t pid, int status);
+int     get_pid_exit_status(struct job_s *job, pid_t pid);
 int     pending_jobs(void);
 void    kill_all_jobs(int signum, int flag);
+int     rip_dead(pid_t pid);
 
 /* builtins/kill.c */
 int     kill_builtin(int argc, char **argv);
@@ -579,7 +587,6 @@ int     true_builtin(int argc, char **argv);
 int     type_builtin(int argc, char **argv);
 
 /* builtins/umask.c */
-void    init_umask(void);
 int     umask_builtin(int argc, char **argv);
 
 /* builtins/ulimit.c */
@@ -680,7 +687,7 @@ void    exit_gracefully(int stat, char *errmsg);
 extern  int tried_exit;
 
 /* builtins/export.c */
-void    purge_quoted_val(char *val);
+void    print_quoted_val(char *val);
 void    purge_quoted(char *prefix, char *name, char *val);
 int     export_builtin(int argc, char **argv);
 int     is_list_terminator(char *c);
@@ -688,7 +695,7 @@ void    do_export_vars(int force_export_all);
 void    do_export_table(struct symtab_s *symtab, int force_export_all);
 
 /* builtins/hash.c */
-extern  struct hashtab_s *utility_hashes;
+extern  struct hashtab_s *utility_hashtable;
 void    init_utility_hashtable(void);
 int     hash_utility(char *utility, char *path);
 void    unhash_utility(char *utility);
@@ -699,12 +706,10 @@ int     hash_builtin(int argc, char **argv);
 int     readonly_builtin(int argc, char **argv);
 
 /* builtins/return.c */
-extern  int return_set;
 int     return_builtin(int argc, char **argv);
 
 /* builtins/set.c */
 int     option_set(char which);
-void    reset_options(void);
 void    reset_non_posix_options(void);
 void    set_option(char option, int set);
 int     do_options(char *ops, char *extra);
@@ -740,6 +745,7 @@ void   restore_trap(char *name, struct trap_item_s *saved);
 struct trap_item_s *get_trap_item(char *trap);
 void   block_traps(void);
 void   unblock_traps(void);
+void   do_pending_traps(void);
 
 /* builtins/unset.c */
 int    unset_builtin(int argc, char **argv);

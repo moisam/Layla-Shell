@@ -73,7 +73,7 @@ struct symtab_entry_s *add_func(char *name)
         return entry;
     }
     /* add a new entry */
-    entry = __add_to_symtab(name, func_table);
+    entry = add_to_any_symtab(name, func_table);
     if(entry)
     {
         entry->val_type = SYM_FUNC;
@@ -135,7 +135,7 @@ void purge_exported_funcs(void)
                     else
                     {
                         /* print the name=val string */
-                        char *val = quote_val(entry->val, 1);
+                        char *val = quote_val(entry->val, 1, 0);
                         printf("export %s=%s\n", entry->name, val);
                         if(val)
                         {

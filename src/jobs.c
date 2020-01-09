@@ -19,6 +19,9 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
+/* macro definitions needed to use WCONTINUED */
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -31,8 +34,9 @@
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include "cmd.h"
-#include "symtab/symtab.h"
 #include "sig.h"
+#include "backend/backend.h"
+#include "symtab/symtab.h"
 #include "error/error.h"
 #include "debug.h"
 
@@ -71,6 +75,29 @@ struct
 } deadlist[32];
 
 int listindex = 0;
+
+
+/*
+ * update the job table entry with the exit status of the process with the
+ * given pid.
+ */
+int get_pid_exit_status(struct job_s *job, pid_t pid)
+{
+    int i;
+    if(!job || !job->pids || !job->exit_codes)
+    {
+        return 0;
+    }
+    /* search the job's pid list to find the given pid */
+    for(i = 0; i < job->proc_count; i++)
+    {
+        if(job->pids[i] == pid)
+        {
+            return job->exit_codes[i];
+        }
+    }
+    return 0;
+}
 
 
 /*
@@ -286,12 +313,13 @@ void __output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_d
     }
     else if(WIFCONTINUED(status))
     {
-        return;
+        //return;
+        strcpy(statstr, "Running          ");
     }
     else if(WIFSIGNALED (status))
     {
         int sig = WTERMSIG(status);
-        if(sig < 0 || sig >= total_signames)
+        if(sig < 0 || sig >= SIGNAL_COUNT)
         {
              sprintf(statstr, "Signaled(%3d)     ", sig);
         }
@@ -334,7 +362,10 @@ void __output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_d
     /* remove the job from the jobs table if it exited normally or by receiving a signal */
     if(rip_dead && (WIFSIGNALED(status) || WIFEXITED(status)))
     {
-        kill_job(job);
+        if(!WIFSTOPPED(status) && !WIFCONTINUED(status))
+        {
+            kill_job(job);
+        }
     }
 }
 
@@ -363,30 +394,44 @@ int get_jobid(char *jobid_str)
     {
         return 0;
     }
+    
     if(*jobid_str != '%')
     {
         return 0;
     }
+    
     if(strcmp(jobid_str, "%%") == 0)
     {
         return cur_job ;
     }
+    
     if(strcmp(jobid_str, "%+") == 0)
     {
         return cur_job ;
     }
+    
     if(strcmp(jobid_str, "%-") == 0)
     {
         return prev_job;
     }
+    
     if(!*++jobid_str)
     {
         return 0;
     }
+    
     if(*jobid_str >= '0' && *jobid_str <= '9')
     {
-        return atoi(jobid_str);
+        char *strend = NULL;
+        int jobid = strtol(jobid_str, &strend, 10);
+        if(*strend)
+        {
+            fprintf(stderr, "%s: invalid job id: %s\n", SHELL_NAME, jobid_str);
+            return 0;
+        }
+        return jobid;
     }
+
     struct job_s *job;
     if(*jobid_str == '?')
     {
@@ -398,6 +443,7 @@ int get_jobid(char *jobid_str)
             {
                 continue;
             }
+            
             if(strstr(job->commandstr, jobid_str))
             {
                 return job->job_num;
@@ -414,6 +460,7 @@ int get_jobid(char *jobid_str)
             {
                 continue;
             }
+            
             if(strncmp(job->commandstr, jobid_str, len) == 0)
             {
                 return job->job_num;
@@ -468,6 +515,7 @@ void kill_all_jobs(int signum, int flag)
             pid_t pid = -(job->pgid);
             kill(pid, SIGCONT);
             kill(pid, signum);
+            wait_on_child(job->pgid, NULL, job);
         }
     }
 }
@@ -738,7 +786,12 @@ int jobs_builtin(int argc, char **argv)
     {
         if(job->job_num != 0)
         {
+            /* force output_status() to print the job status */
+            job->flags &= ~JOB_FLAG_NOTIFIED;
+            /* print the job status */
             output_status(job, flags);
+            /* restore the notification flag */
+            job->flags |= JOB_FLAG_NOTIFIED;
         }
     }
     /* 
@@ -782,9 +835,13 @@ void check_on_children(void)
             {
                 if(!flag_set(job->flags, JOB_FLAG_FORGROUND))
                 {
+                    /* __output_status() will call kill_job() if needed */
                     __output_status(deadlist[i].pid, deadlist[i].status, 0, stderr, 1);
                 }
-                kill_job(job);
+                else
+                {
+                    kill_job(job);
+                }
             }
             /* or if it was stopped/continued and not notified, regardless of fg/bg status */
             else if(!WIFEXITED(status) && !flag_set(job->flags, JOB_FLAG_NOTIFIED))
@@ -797,7 +854,7 @@ void check_on_children(void)
     /* check for children who died but are not yet reported */
     while(1)
     {
-        pid_t pid = waitpid(-1, &status, WUNTRACED|WNOHANG);
+        pid_t pid = waitpid(-1, &status, WCONTINUED|WUNTRACED|WNOHANG);
         if(pid <= 0)
         {
             break;
@@ -812,9 +869,13 @@ void check_on_children(void)
             {
                 if(!flag_set(job->flags, JOB_FLAG_FORGROUND))
                 {
+                    /* __output_status() will call kill_job() if needed */
                     __output_status(pid, status, 0, stderr, 1);
                 }
-                kill_job(job);
+                else
+                {
+                    kill_job(job);
+                }
             }
             /* or if it was stopped/continued and not notified, regardless of fg/bg status */
             else if(!WIFEXITED(status) && !flag_set(job->flags, JOB_FLAG_NOTIFIED))

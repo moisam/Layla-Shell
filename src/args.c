@@ -173,8 +173,9 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit)
         }
         else
         {
-            argi = atoi(OPTIND->val);
-            if(!argi)
+            char *strend = NULL;
+            argi = strtol(OPTIND->val, &strend, 10);
+            if(*strend || !argi)
             {
                 argi = 1;
             }
@@ -194,7 +195,7 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit)
             fprintf(stderr, "%s: failed to process argv: %s\n", argv[0], strerror(errno));
             free_argv(&argv);
             /* POSIX says non-interactive shell should exit on Utility syntax errors */
-            if(!option_set('i'))
+            if(!interactive_shell)
             {
                 exit_gracefully(EXIT_FAILURE, NULL);
             }
@@ -290,7 +291,7 @@ loop:
         fprintf(stderr, "%s: unknown option: %c\n", argv[0], *p);
         free_argv(&argv);
         /* POSIX says non-interactive shell should exit on Utility syntax errors */
-        if(!option_set('i'))
+        if(!interactive_shell)
         {
             exit_gracefully(EXIT_FAILURE, NULL);
         }

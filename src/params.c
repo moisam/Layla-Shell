@@ -220,27 +220,6 @@ $*
 /*
  * return the values of all positional parameters, NULL if there is none.
  */
-struct word_s *get_all_pos_params(char which, int quoted)
-{
-    /* get the count of positional parameters */
-    struct symtab_entry_s *entry = get_symtab_entry("#");
-    if(!entry || !entry->val)
-    {
-        return NULL;
-    }
-    /* if the count is zero, return NULL */
-    if(entry->val[0] == '0')
-    {
-        return NULL;
-    }
-    int pos_params_count = atoi(entry->val);
-    return get_pos_params(which, quoted, 1, pos_params_count);
-}
-
-
-/*
- * similar to the above function, but returns a char *.
- */
 char *get_all_pos_params_str(char which, int quoted)
 {
     /* get the count of positional parameters */
@@ -254,128 +233,11 @@ char *get_all_pos_params_str(char which, int quoted)
 
 
 /*
- * return the values of positional parameters starting from parameter $offset and counting
- * count parameters.. the which parameter tells whether we want to access the parameters as
+ * return the values of positional parameters starting from parameter 'offset' and counting
+ * 'count' parameters.. the which parameter tells whether we want to access the parameters as
  * the $@ or the $* special parameter, which affects the number of fields we get (see the
  * POSIX excerpt comment above).. the quoted parameter indicates whether we should expand
  * the values as if we are doing it inside double quotes.
- */
-struct word_s *get_pos_params(char which, int quoted, int offset, int count)
-{
-    char   separator  = ' ';
-    char *IFS = get_shell_varp("IFS", NULL);
-    if(IFS)
-    {
-        separator = IFS[0];
-    }
-    size_t len        = 0;
-    int    i          = offset;
-    int    last       = i+count;
-    int    j          = pos_param_count()+1;
-    if(last > j)
-    {
-        last = j;
-    }
-    struct word_s *param       = NULL;
-    struct word_s *first_param = NULL;
-
-    /* with field separation */
-    if((which == '@') || (which == '*' && !quoted))
-    {
-        if(!IFS || *IFS)
-        {
-            i = offset;
-            while(i < last)
-            {
-                struct word_s *param2 = malloc(sizeof(struct word_s));
-                /* TODO: we should free the so-far allocated parameters */
-                if(!param2)
-                {
-                    goto memerror;
-                }
-                /* get the special parameter entry */
-                sprintf(buf, "%d", i);
-                char *p = get_shell_varp(buf, "");
-                size_t len2 = strlen(p);
-                param2->data = __get_malloced_str(p);
-                param2->next = NULL;
-                param2->len  = len2;
-                if(param)
-                {
-                    param->next = param2;
-                }
-                param = param2;
-                if(!first_param)
-                {
-                    first_param = param;
-                }
-                i++;
-            }
-            return first_param;
-        }
-    }
-
-    /* without field separation */
-    i = offset;
-    while(i < last)
-    {
-        sprintf(buf, "%d", i);
-        size_t len2 = strlen(get_shell_varp(buf, ""));
-        len += len2+1; /* 1 for the separator */
-        i++;
-    }
-    param = malloc(sizeof(struct word_s));
-    if(!param)
-    {
-        goto memerror;
-    }
-    char *params = malloc(len+1);
-    if(!params)
-    {
-        free(param);
-        goto memerror;
-    }
-    param->data = params;
-    param->next = NULL;
-    
-    char *p1 = params;
-    i = offset;
-    while(i < last)
-    {
-        sprintf(buf, "%d", i);
-        char *p2 = get_shell_varp(buf, "");
-        len = strlen(p2);
-        while((*p1++ = *p2++))
-        {
-            ;
-        }
-        /* as per POSIX, if IFS first char is NULL, concatenate params */
-        if(!separator)
-        {
-            p1--;
-        }
-        else
-        {
-            p1[-1] = separator;
-        }
-        i++;
-    }
-    *p1 = '\0';
-    if(separator)
-    {
-        p1[-1] = '\0';
-    }
-    param->len  = strlen(param->data);
-    return param;
-
-memerror:
-    fprintf(stderr, "%s: insufficient memory to load positional parameters\n", SHELL_NAME);
-    return NULL;
-}
-
-
-/*
- * similar to the above function, but returns a char *.
  */
 char *get_pos_params_str(char which, int quoted, int offset, int count)
 {
@@ -388,15 +250,16 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
         separator = *IFS;
     }
 
-    size_t len  = 0;
-    int    i    = offset;
-    int    last = i+count;
-    int    j    = pos_param_count()+1;
+    size_t len    = 0;
+    int    i      = offset;
+    int    last   = i+count;
+    int    j      = pos_param_count()+1;
+    char  *params = NULL, *p1 = NULL;
+
     if(last > j)
     {
         last = j;
     }
-    char *params = NULL, *p1 = NULL;
 
     if(which == '*' || (which == '@' && !quoted))
     {

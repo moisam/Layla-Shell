@@ -75,7 +75,7 @@ loop:
                     break;
                 }
                 /* find the closing brace */
-                i = find_closing_brace(p);
+                i = find_closing_brace(p, 0);
                 /* closing brace not found */
                 if(i == 0)
                 {
@@ -132,13 +132,15 @@ loop:
         }
         p++;
     }
+    
     if(list && j < list_count-1)
     {
         p = list[++j];
         str = p;
         goto loop;
     }
-    *count = list_count;
+    
+    (*count) = list_count;
     return list;
     
 err:
@@ -203,7 +205,7 @@ char **get_brace_list(char *str, size_t end, size_t *count)
             /* brace expressions can be nested, but we don't process nested expressions here */
             case '{':
                 ob++;
-                i = find_closing_brace(p1);
+                i = find_closing_brace(p1, 0);
                 if(i == 0)
                 {
                     break;
@@ -254,7 +256,7 @@ char **get_brace_list(char *str, size_t end, size_t *count)
                 {
                     if(*p1 == '{')
                     {
-                        i = find_closing_brace(p1);
+                        i = find_closing_brace(p1, 0);
                         p1 += i;
                     }
                     p1++;

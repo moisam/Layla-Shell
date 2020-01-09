@@ -23,12 +23,18 @@
 #include <stdarg.h>
 #include "debug.h"
 
+/*
+ * print a debug message, preceded by the filename and function name from which
+ * the error/message originated.. the message format and any extra arguments are
+ * passed to printf to be printed.. if the format field is NULL, the function
+ * prints the filename and function name in a separate line and returns.
+ */
 void __debug (const char *file, const char *function, char *format, ...)
 {
     fprintf(stderr, "%s: %s: ", file, function);
     if(!format)
     {
-        fprintf(stderr, "\r\n");
+        fprintf(stderr, "\n");
         return;
     }
     va_list args;

@@ -126,12 +126,18 @@ int is_same_str(char *s1, char *s2)
 
 /*
  * return the passed string value, quoted in a format that can
- * be used for reinput to the shell.
+ * be used for reinput to the shell.. if the 'add_quotes' flag is non-zero,
+ * the function surrounds val in double quotes.. if escape_sq is non-zero,
+ * all single quotes are backslash-escaped.
  */
-char *quote_val(char *val, int add_quotes)
+char *quote_val(char *val, int add_quotes, int escape_sq)
 {
+    /* escape single quotes only if not inside double quotes */
+    escape_sq = (escape_sq && !add_quotes);
+
     char *res = NULL;
     size_t len;
+    
     /* empty string */
     if(!val || !*val)
     {
@@ -144,6 +150,7 @@ char *quote_val(char *val, int add_quotes)
         strcpy(res, add_quotes ? "\"\"" : "");
         return res;
     }
+
     /* count the number of quotes needed */
     len = 0;
     char *v = val, *p;
@@ -151,6 +158,13 @@ char *quote_val(char *val, int add_quotes)
     {
         switch(*v)
         {
+            case '\'':
+                if(escape_sq)
+                {
+                    len++;
+                }
+                break;
+                    
             case '\\':
             case  '`':
             case  '$':
@@ -184,6 +198,16 @@ char *quote_val(char *val, int add_quotes)
     {
         switch(*v)
         {
+            case '\'':
+                if(escape_sq)
+                {
+                    /* add '\' for quoting */
+                    *p++ = '\\';
+                }
+                /* copy char */
+                *p++ = *v++;
+                break;
+                    
             case '\\':
             case  '`':
             case  '$':

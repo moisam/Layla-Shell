@@ -114,7 +114,7 @@ int check_env_file(void)
 /*
  * initialize the shell environment.
  */
-void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
+void initsh(char **argv, int init_tty)
 {
     size_t i;
     /* get the system-defined max length of pathnames */
@@ -140,6 +140,7 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
     char *p = NULL, *e;
     struct symtab_entry_s *entry;
     int len = 0;
+    char *strend = NULL;
     
     /*
      * populate our global symbol table from the environment
@@ -388,8 +389,8 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
                 {
                     break;
                 }
-                int n = atoi(p);
-                if(n <= 0 || n > MAX_CMD_HISTORY)
+                int n = strtol(p, &strend, 10);
+                if(*strend || n <= 0 || n > MAX_CMD_HISTORY)
                 {
                     n = MAX_CMD_HISTORY;
                 }
@@ -496,7 +497,7 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
         return;
     }
 
-    /* make sure our process group id is the same as our pid, and that the shell
+    /* make sure our process group id is the same as our pid, and that the terminal
      * knows we are the forground process.
      */
     setpgid(0, tty_pid);
@@ -514,18 +515,24 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
         {
             if(entry->val)
             {
-                VGA_WIDTH = atoi(entry->val);
+                VGA_WIDTH = strtol(entry->val, &strend, 10);
+                if(*strend)
+                {
+                    VGA_WIDTH = 0;
+                }
             }
         }
         else
         {
             entry = add_to_symtab("COLUMNS");
         }
+
         if(VGA_WIDTH <= 0)
         {
             VGA_WIDTH = 80;
             symtab_entry_setval(entry, "80");
         }
+        
         /* update the value of terminal rows in the symbol table */
         VGA_HEIGHT = 0;
         entry = get_symtab_entry("LINES");
@@ -533,13 +540,18 @@ void initsh(int argc __attribute__((unused)), char **argv, int init_tty)
         {
             if(entry->val)
             {
-                VGA_HEIGHT = atoi(entry->val);
+                VGA_HEIGHT = strtol(entry->val, &strend, 10);
+                if(*strend)
+                {
+                    VGA_HEIGHT = 0;
+                }
             }
         }
         else
         {
             entry = add_to_symtab("LINES");
         }
+        
         if(VGA_HEIGHT <= 0)
         {
             VGA_HEIGHT = 25;
@@ -659,15 +671,13 @@ void init_rc(void)
     }
 }
 
+
 /*
  * Parse command-line arguments and set the shell
  * options accordingly.
  */
 int parse_shell_args(int argc, char **argv, struct source_s *src)
 {
-    /* reset all options */
-    reset_options();
-
     /* then set some default options */
     set_option('h', 1);     /* hashing */
     set_option('m', 1);     /* job control */
@@ -709,7 +719,6 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
     /* automatically save history on exit */
     set_optionx(OPTION_SAVE_HIST           , 1);
     set_optionx(OPTION_PROMPT_PERCENT      , 1);
-    //set_option('d', 1); //
     
     /* now read command-line options */
     struct symtab_entry_s *entry;
@@ -724,38 +733,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
     {
         islogin = 1;
     }
-    /* we have one argument (the shell name or argv[0]) */
-    if(argc == 1)
-    {
-        /* $0 is the name of the shell or shell script */
-        entry = add_to_symtab("0");
-        symtab_entry_setval(entry, argv[0]);
-        entry = add_to_symtab("#");
-        symtab_entry_setval(entry, "0");
-        if(isatty(0) && isatty(2))
-        {
-            set_option('i', 1);     /* set interactive shell */
-            read_stdin    = 1;
-        }
-        goto init;
-    }
-    /* check for the '-c' option */
-    if(strcmp(argv[1], "-c") == 0)
-    {
-        i++;
-        expect_cmdstr = 1;
-        read_stdin    = 0;
-        end_loop      = 1;
-        set_option('c', 1);
-    }
-    /* check for the '-s' option */
-    else if(strcmp(argv[1], "-s") == 0)
-    {
-        i++;
-        expect_cmdstr = 0;
-        read_stdin    = 1;
-        set_option('s', 1);
-    }
+    
     /* parse the command line options */
     for( ; i < argc; i++)
     {
@@ -764,12 +742,43 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
         switch(arg[0])
         {
             case '-':
+                /* check for the '-c' option */
+                if(strcmp(arg, "-c") == 0)
+                {
+                    expect_cmdstr = 1;
+                    break;
+                }
+
+                /* check for the '-s' option */
+                if(strcmp(arg, "-s") == 0)
+                {
+                    read_stdin = 1;
+                    break;
+                }
+    
+                /* check for the '-i' option */
+                if(strcmp(arg, "-i") == 0)
+                {
+                    if((getuid() != geteuid()) || (getgid() != getegid()))
+                    {
+                        fprintf(stderr, 
+                            "%s: cannot set interactive flag: insufficient permissions\n",
+                            SHELL_NAME);
+                    }
+                    else
+                    {
+                        interactive_shell = 1;
+                    }
+                    break;
+                }
+    
                 if(arg[1] == '\0' || strcmp(arg, "--") == 0)    /* the -- and - special options */
                 {
                     end_loop = 1;
                     i++;
                     break;
                 }
+                
                 if(strcmp(arg, "--dirsfile") == 0 || strcmp(arg, "--dirs-file") == 0) /* bash */
                 {
                     read_dirsfile = 1;
@@ -786,38 +795,44 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                     }
                     break;
                 }
+                
                 if(strcmp(arg, "--help") == 0)                                          /* bash, csh */
                 {
                     help_builtin(1, (char *[]){ "help", NULL });
                     //exit_gracefully(EXIT_SUCCESS, NULL);
                     exit(EXIT_SUCCESS);
                 }
+                
                 if(strcmp(arg, "--init-file") == 0 || strcmp(arg, "--rcfile") == 0)     /* bash */
                 {
                     if(argv[++i] == NULL)
                     {
                         fprintf(stderr, "%s: missing argument: init/rc file name\n", SHELL_NAME);
                         //exit_gracefully(EXIT_FAILURE, NULL);
-                        exit(EXIT_SUCCESS);
+                        exit(EXIT_FAILURE);
                     }
                     rcfile = argv[i];
                     break;
                 }
+                
                 if(strcmp(arg, "--login") == 0 || strcmp(arg, "-l") == 0)               /* bash, csh */
                 {
                     islogin = 1;
                     break;
                 }
+                
                 if(strcmp(arg, "--noprofile") == 0)                                     /* bash */
                 {
                     noprofile = 1;
                     break;
                 }
+                
                 if(strcmp(arg, "--norc") == 0)                                          /* bash */
                 {
                     norc = 1;
                     break;
                 }
+                
                 if(strcmp(arg, "--posix") == 0)
                 {
                     /* enable POSIX strict behavior */
@@ -829,23 +844,27 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                     i++;
                     break;
                 }
+                
                 if(strcmp(arg, "--restricted") == 0)                                    /* bash */
                 {
                     set_option('r', 1);
                     set_optionx(OPTION_RESTRICTED_SHELL, 1);
                     break;
                 }
+                
                 if(strcmp(arg, "--verbose") == 0)                                       /* bash */
                 {
                     set_option('v', 1);
                     break;
                 }
+                
                 if(strcmp(arg, "--version") == 0)                                       /* bash, csh */
                 {
                     printf("version %s running on %s %s\n", shell_ver, CPU_ARCH, OS_TYPE);
                     //exit_gracefully(EXIT_SUCCESS, NULL);
                     exit(EXIT_SUCCESS);
                 }
+                
                 /* NOTE: fall through to the next case */
                 __attribute__((fallthrough));
                 
@@ -855,28 +874,33 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                     /* setx extended options (similar to bash's shopt utility options) */
                     __int64_t c;
                     arg = argv[++i];
+                    
                     if(!arg)
                     {
                         purge_xoptions('a', arg[0] == '-' ? 0 : 1);
                         break;
                     }
+                    
                     if((c = optionx_index(arg)) < 0)
                     {
                         fprintf(stderr, "%s: invalid option: %s\n", SHELL_NAME, arg);
                         break;
                     }
+                    
                     if(!set_optionx(c, arg[0] == '-' ? 1 : 0))
                     {
                         fprintf(stderr, "%s: error setting: %s\n", SHELL_NAME, arg);
                     }
                     break;
                 }
+                
                 if(strcmp(arg, "+-") == 0)    /* the +- special option behaves like -- (zsh extension) */
                 {
                     end_loop = 1;
                     i++;
                     break;
                 }
+                
                 /* normal, set-like options */
                 skip = do_options(argv[i], argv[i+1]);
                 if(skip < 0)    /* error parsing option */
@@ -890,6 +914,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                 end_loop = 1;
                 break;
         }
+        
         /* reached end of options? */
         if(end_loop)
         {
@@ -897,6 +922,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
         }
     }
     //debug ("i = %d\n", i);
+    
     /* the '-c' option was supplied */
     if(expect_cmdstr)
     {
@@ -905,17 +931,20 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
             fprintf(stderr, "%s: missing command string\n", SHELL_NAME);
             exit(EXIT_FAILURE);
         }
+        
         /* is it an empty string? exit 0 as per POSIX */
         if(argv[i][0] == '\0')
         {
             exit(EXIT_SUCCESS);
         }
+        
         /* otherwise, read it */
         src->buffer   = argv[i++];
         src->bufsize  = strlen(src->buffer);
         src->srctype  = SOURCE_CMDSTR;
         src->srcname  = NULL;
         src->curpos   = INIT_SRC_POS;
+        
         if(i >= argc)
         {
             /* $0 is the name of the shell or shell script */
@@ -927,6 +956,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
             entry = add_to_symtab("0");
             symtab_entry_setval(entry, argv[i++]);
         }
+        
         /* similar to $BASH_EXECUTION_STRING (bash) and $command (tcsh) */
         entry = add_to_symtab("COMMAND_STRING");
         symtab_entry_setval(entry, src->buffer);
@@ -934,16 +964,27 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
     /* the '-c' option was not supplied */
     else
     {
-        if(i >= argc || option_set('s'))
+        /* assume the -s option if no operands and the -c option is not specified (POSIX) */
+        if(i >= argc || read_stdin)
         {
             read_stdin = 1;
+            
+            /*
+             * and assume the -i option if on top of that, stdin and stderr are both
+             * connnected to the terminal.
+             */
+            if(isatty(0) && isatty(2))
+            {
+                interactive_shell = 1;
+            }
+
             /* $0 is the name of the shell or shell script */
             entry = add_to_symtab("0");
             symtab_entry_setval(entry, argv[0]);
         }
+        /* read the script file if the -s option was not supplied */
         else
         {
-            read_stdin = 0;
             char *cmdfile = argv[i++];
             if(!read_file(cmdfile, src))
             {
@@ -951,14 +992,13 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                         cmdfile, strerror(errno));
                 exit(EXIT_ERROR_NOENT);
             }
-            /* enfore non-interactive mode */
-            set_option('i', 0);
-            set_option('m', 0);
+            
             /* $0 is the name of the shell or shell script */
             entry = add_to_symtab("0");
             symtab_entry_setval(entry, cmdfile);
         }
     }
+
     /* parse the arguments, if any, adding them as positional parameters */
     char buf[32];
     for( ; i < argc; i++)
@@ -967,34 +1007,14 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
         entry = add_to_symtab(buf);
         symtab_entry_setval(entry, argv[i]);
     }
+    
     /* save the positional parameters count in $# */
     entry = add_to_symtab("#");
     sprintf(buf, "%d", param);
     symtab_entry_setval(entry, buf);
 
-init:
-    if(option_set('s') && !option_set('i'))
-    {
-        set_option('i', 1);
-    }
-    if(option_set('i') && !option_set('s'))
-    {
-        set_option('s', 1);
-    }
-    if(!option_set('i') && !option_set('c') && read_stdin)
-    {
-        if(isatty(0) && isatty(2))
-        {
-            set_option('i', 1);     /* set interactive shell */
-        }
-        else
-        {
-            set_option('i', 0);     /* set non-interactive shell */
-        }
-    }
-    
     /* if not an interactive shell ... */
-    if(!option_set('i'))
+    if(!interactive_shell)
     {
         set_option('m', 0);
         set_option('H', 0);
@@ -1024,6 +1044,7 @@ init:
     {
         entry = get_symtab_entry("EDITOR");
     }
+    
     if(entry && entry->val)
     {
         if(match_filename("*[Vv][Ii]*", entry->val, 0, 0))
