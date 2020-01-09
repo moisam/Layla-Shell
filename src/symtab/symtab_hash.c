@@ -230,15 +230,14 @@ void free_symtab(struct symtab_s *symtab)
  * the table, and then returns the new entry.. in case of insufficient memory,
  * this function exits the shell instead of returning NULL.
  */
-struct symtab_entry_s *__add_to_symtab(char *symbol, struct symtab_s *st)
+struct symtab_entry_s *add_to_any_symtab(char *symbol, struct symtab_s *st)
 {
     if(!st)
     {
         return NULL;
     }
     /* alloc memory for the struct */
-    struct symtab_entry_s *entry = (struct symtab_entry_s *)malloc
-                                    (sizeof(struct symtab_entry_s));
+    struct symtab_entry_s *entry = malloc(sizeof(struct symtab_entry_s));
     if(!entry)
     {
         exit_gracefully(EXIT_FAILURE, "Fatal error: No memory for new symbol table entry");
@@ -361,7 +360,7 @@ struct symtab_entry_s *add_to_symtab(char *symbol)
         return entry;
     }
     /* entry does not exists. add it */
-    entry = __add_to_symtab(symbol, st);
+    entry = add_to_any_symtab(symbol, st);
     /* local var inherits value and attribs of global var of the same name (bash) */
     if(optionx_set(OPTION_LOCAL_VAR_INHERIT) && st != symtab_stack.global_symtab)
     {
@@ -557,16 +556,16 @@ void merge_global(struct symtab_s *symtab)
                     {
                         /* find the global entry for this local entry */
                         struct symtab_entry_s *gentry = add_to_symtab(entry->name);
+                        
                         /* overwrite the global entry's value with the local one */
-                        if(gentry)
-                        {
-                            /* set the value */
-                            symtab_entry_setval(gentry, entry->val);
-                            /* set the flags */
-                            gentry->flags = entry->flags;
-                            /* unmark local command exports so they're not exported to other commands */
-                            gentry->flags &= ~FLAG_CMD_EXPORT;
-                        }
+                        /* set the value */
+                        symtab_entry_setval(gentry, entry->val);
+
+                        /* set the flags */
+                        gentry->flags = entry->flags;
+
+                        /* unmark local command exports so they're not exported to other commands */
+                        gentry->flags &= ~FLAG_CMD_EXPORT;
                     }
                 }
                 /* move on to the next entry */

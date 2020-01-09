@@ -64,13 +64,14 @@ struct symtab_entry_s
 
 
 /* values for the flags field of struct symtab_entry_s */
-#define FLAG_READONLY   (1 << 0)    /* entry is read only */
-#define FLAG_EXPORT     (1 << 1)    /* export entry to forked commands */
-#define FLAG_LOCAL      (1 << 2)    /* entry is local (to script or function) */
-#define FLAG_ALLCAPS    (1 << 3)    /* convert value to capital letters when assigned */
-#define FLAG_ALLSMALL   (1 << 4)    /* convert value to small letters when assigned */
-#define FLAG_FUNCTRACE  (1 << 5)    /* enable function tracing (bash, ksh) */
-#define FLAG_CMD_EXPORT (1 << 6)    /* used temporarily between cmd fork and exec */
+#define FLAG_EXPORT     (1 << 0)    /* export entry to forked commands */
+#define FLAG_READONLY   (1 << 1)    /* entry is read only */
+#define FLAG_CMD_EXPORT (1 << 2)    /* used temporarily between cmd fork and exec */
+#define FLAG_LOCAL      (1 << 3)    /* entry is local (to script or function) */
+
+#define FLAG_ALLCAPS    (1 << 4)    /* convert value to capital letters when assigned */
+#define FLAG_ALLSMALL   (1 << 5)    /* convert value to small letters when assigned */
+#define FLAG_FUNCTRACE  (1 << 6)    /* enable function tracing (bash, ksh) */
 
 /* the symbol table stack structure */
 #define MAX_SYMTAB	256      /* maximum allowed symbol tables in the stack */
@@ -91,7 +92,7 @@ struct symtab_s       *symtab_stack_push(void);
 struct symtab_s       *symtab_stack_pop(void);
 int                    rem_from_symtab(struct symtab_entry_s *entry, struct symtab_s *symtab);
 void                   rem_from_any_symtab(struct symtab_entry_s *entry);
-struct symtab_entry_s *__add_to_symtab(char *symbol, struct symtab_s *st);
+struct symtab_entry_s *add_to_any_symtab(char *symbol, struct symtab_s *st);
 struct symtab_entry_s *add_to_symtab(char *symbol);
 struct symtab_entry_s *do_lookup(char *str, struct symtab_s *symtable);
 struct symtab_entry_s *get_local_symtab_entry(char *str);
