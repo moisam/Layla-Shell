@@ -42,10 +42,11 @@
 #include "../kbdevent.h"
 #include "../builtins/setx.h"
 
+
 int cur_loop_level = 0;     /* current loop level (number of nested loops) */
-int req_loop_level = 0;     /* requested loop level */
 int req_break      = 0;     /* if set, break was encountered in a loop */
 int req_continue   = 0;     /* if set, continue was encountered in a loop */
+
 
 /*
  * this function handles the break builtin utility, which is used to break out
@@ -61,28 +62,31 @@ int break_builtin(int argc, char **argv)
     {
         BACKEND_RAISE_ERROR(BREAK_OUTSIDE_LOOP, NULL, NULL);
         /* POSIX says non-interactive shell should exit on syntax errors */
-        if(!option_set('i'))
+        if(!interactive_shell)
         {
             exit_gracefully(EXIT_FAILURE, NULL);
         }
         return 1;
     }
+    
     if(argc == 1)
     {
-        req_loop_level = 1;
+        req_break = 1;
     }
     else
     {
-        int n = atoi(argv[1]);
-        if(n < 1)
+        char *strend = NULL;
+        int n = strtol(argv[1], &strend, 10);
+        if(*strend || n < 1)
         {
+            fprintf(stderr, "break: invalid loop number: %s\n", argv[1]);
             return 1;
         }
-        req_loop_level = n;
+        req_break = n;
     }
-    req_break = req_loop_level;
     return 0;
 }
+
 
 /*
  * this function handles the continue builtin utility, which is used to continue
@@ -99,169 +103,128 @@ int continue_builtin(int argc, char **argv)
     {
         BACKEND_RAISE_ERROR(CONTINUE_OUTSIDE_LOOP, NULL, NULL);
         /* POSIX says non-interactive shell should exit on syntax errors */
-        if(!option_set('i'))
+        if(!interactive_shell)
         {
             exit_gracefully(EXIT_FAILURE, NULL);
         }
         return 1;
     }
+
     if(argc == 1)
     {
-        req_loop_level = 1;
+        req_continue = 1;
     }
     else
     {
-        int n = atoi(argv[1]);
-        if(n < 1)
+        char *strend = NULL;
+        int n = strtol(argv[1], &strend, 10);
+        if(*strend || n < 1)
         {
+            fprintf(stderr, "continue: invalid loop number: %s\n", argv[1]);
             return 1;
         }
-        req_loop_level = n;
+        req_continue = n;
     }
-    req_continue = req_loop_level;
     return 0;
 }
 
-#define ARG_COUNT   0x1000
-/*
- * peform word expansion on the list items and create a char ** array
- * from it, similar to the main() function's **argv list.
- * 
- * returns the string array on success, NULL if there's not enough memory
- * to store the string arguments, or if the word expansion results in an
- * empty list.
- */
-char **__make_list(struct word_s *first_tok, int *token_count)
-{
-    int count = 0;
-    char *tmp[ARG_COUNT];
-    struct word_s *t = first_tok;
-    while(t)
-    {
-        glob_t glob;
-        char **matches = get_filename_matches(t->data, &glob);
-        if(!matches || !matches[0])
-        {
-            globfree(&glob);
-            if(!optionx_set(OPTION_NULL_GLOB))       /* bash extension */
-            {
-                tmp[count++] = get_malloced_str(t->data);
-            }
-            if( optionx_set(OPTION_FAIL_GLOB))       /* bash extension */
-            {
-                fprintf(stderr, "%s: file globbing failed for %s\n", SHELL_NAME, t->data);
-                while(--count >= 0)
-                {
-                    free_malloced_str(tmp[count]);
-                }
-                return errno = ENOMEM, NULL;
-            }
-        }
-        else
-        {
-            char **m = matches;
-            size_t j = 0;
-            do
-            {
-                tmp[count++] = get_malloced_str(*m);
-                if(count >= ARG_COUNT)
-                {
-                    break;
-                }
-            } while(++m, ++j < glob.gl_pathc);
-            globfree(&glob);
-        }
-        if(count >= ARG_COUNT)
-        {
-            break;
-        }
-        t = t->next;
-    }
-    if(!count)
-    {
-        return NULL;
-    }
-    char **argv = malloc((count+1) * sizeof(char *));
-    if(!argv)
-    {
-        while(--count >= 0)
-        {
-            free_malloced_str(tmp[count]);
-        }
-        return errno = ENOMEM, NULL;
-    }
-    *token_count = count;
-    argv[count] = NULL;
-    while(--count >= 0)
-    {
-        argv[count] = tmp[count];
-    }
-    return argv;
-}
 
 /*
  * extract and return the word list that is used as part of the
- * for and select loops. if no *wordlist is provided, we use the value
+ * for and select loops. if no *nodelist is provided, we use the value
  * of the $@ special parameter, which contains the current values of the
  * positional parameters.
  *
  * returns the string array on success, NULL if there's not enough memory
- * to store the string arguments, or if the word list is empty.
+ * to store the words, or if the resultant word list is empty.
  */
-char **get_word_list(struct node_s *wordlist, int *_count)
+struct word_s *get_loop_wordlist(struct node_s *nodelist)
 {
-    struct word_s *prev = NULL;
-    struct word_s *head = NULL;
-    struct word_s *cur  = NULL;
-    struct word_s *tail = NULL;
-    int    count = 0;
-    char  **list = NULL;
-    *_count = 0;
+    struct word_s *w, *cur, *prev, *head = NULL, *tail = NULL;
     
-    if(wordlist)
+    if(nodelist)
     {
-        struct word_s tok_list_head;
-        tail = &tok_list_head;
-        wordlist = wordlist->first_child;
-        while(wordlist)
+        nodelist = nodelist->first_child;
+        while(nodelist)
         {
-            struct word_s *w = make_word(wordlist->val.str);
-            tail->next = w;
-            tail       = w;
-            count++;
-            wordlist = wordlist->next_sibling;
+            if((w = make_word(nodelist->val.str)) == NULL)
+            {
+                free_all_words(head);
+                fprintf(stderr, "%s: insufficient memory for loop's wordlist\n", SHELL_NAME);
+                return NULL;
+            }
+
+            if(head)
+            {
+                tail->next = w;
+            }
+            else
+            {
+                head = w;
+            }
+            
+            tail = w;
+            nodelist = nodelist->next_sibling;
         }
-        head = tok_list_head.next;
     }
     else
     {
         /* use the actual arguments to the script (i.e. "$@") */
-        struct symtab_entry_s *entry = get_symtab_entry("#");
-        count = atoi(entry->val);
-        if(count)
+        int count = get_shell_vari("#", 0);
+        int i = 1;
+        char buf[32];
+        
+        if(!count)
         {
-            head = get_all_pos_params('@', 1);
+            return NULL;
+        }
+
+        while(i <= count)
+        {
+            sprintf(buf, "%d", i);
+            char *p2 = get_shell_varp(buf, "");
+            
+            if((w = make_word(p2)) == NULL)
+            {
+                free_all_words(head);
+                fprintf(stderr, "%s: insufficient memory for loop's wordlist\n", SHELL_NAME);
+                return NULL;
+            }
+
+            if(head)
+            {
+                tail->next = w;
+            }
+            else
+            {
+                head = w;
+            }
+            
+            tail = w;
+            i++;
         }
     }
     
-    if(!head)
-    {
-        return NULL;
-    }
-
-    /* now do POSIX parsing on those tokens */
+    /* now go POSIX-style on those tokens */
     cur  = head;
     tail = head;
+    prev = NULL;
+
     while(cur)
     {
         /* then, word expansion */
-        struct word_s *w = word_expand(cur->data);
+        w = word_expand(cur->data,
+              FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES|FLAG_FIELD_SPLITTING);
+
         /* null? remove this token from list */
         if(!w)
         {
             w = cur->next;
+            /* free this word struct */
             free(cur->data);
             free(cur);
+            
+            /* and remove it from the list */
             if(prev)
             {
                 prev->next = w;
@@ -276,11 +239,14 @@ char **get_word_list(struct node_s *wordlist, int *_count)
         else
         {
             struct word_s *next = cur->next;
+            /* free this word struct */
             if(w != cur)
             {
                 free(cur->data);
                 free(cur);
             }
+            
+            /* and remove it from the list */
             if(prev)
             {
                 prev->next = w;
@@ -289,21 +255,22 @@ char **get_word_list(struct node_s *wordlist, int *_count)
             {
                 head = w;
             }
+
             /* find the last word */
             tail = w;
             while(tail->next)
             {
                 tail = tail->next;
             }
+            
+            /* and adjust the pointers */
             tail->next = next;
-            prev       = tail;
-            cur        = next;
+            prev = tail;
+            cur = next;
         }
     }
-    list = __make_list(head, &count);
-    free_all_words(head);
-    *_count = count;
-    return list;
+
+    return head;
 }
 
 
@@ -317,36 +284,40 @@ char **get_word_list(struct node_s *wordlist, int *_count)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
+int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
         return 0;
     }
+
     struct node_s *expr1 = node->first_child;
     if(!expr1 || expr1->type != NODE_ARITHMETIC_EXPR)
     {
         return 0;
     }
+    
     struct node_s *expr2 = expr1->next_sibling;
     if(!expr2 || expr2->type != NODE_ARITHMETIC_EXPR)
     {
         return 0;
     }
+    
     struct node_s *expr3 = expr2->next_sibling;
     if(!expr3 || expr3->type != NODE_ARITHMETIC_EXPR)
     {
         return 0;
     }
+    
     struct node_s *commands = expr3->next_sibling;
     if(!commands)
     {
         set_internal_exit_status(0);
         return 1;
     }
+    
     /* redirects specific to the loop should override global ones */
-    struct node_s *local_redirects = commands ? 
-                        commands->next_sibling : NULL;
+    struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
         redirect_list = local_redirects;
@@ -376,10 +347,10 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
 
     /* then loop as long as expr2 evaluates to non-zero result */
     int res   = 0;
-    int endme = 0;
     char *onestr = "1";
     cur_loop_level++;
-    while(!endme)
+
+    while(1)
     {
         str = expr2->val.str;
         if(str && *str)
@@ -395,38 +366,37 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
         {
             str2 = onestr;
         }
+
         /* perform the loop body */
         if(atol(str2))
         {
-            if(!do_do_group(src, commands, NULL))
+            do_do_group(src, commands, NULL);
+            
+            if(return_set || signal_received == SIGINT)
             {
-                res = 1;
+                break;
             }
-            if(SIGINT_received)
-            {
-                endme = 1;
-            }
+            
             if(req_break)
             {
                 req_break--;
-                endme = 1;
+                break;
             }
-            if(req_continue >= 1)
+            
+            if(req_continue)
             {
                 if(--req_continue)
                 {
-                    endme = 1;
+                    break;
                 }
             }
+            
             if(str2 != onestr)
             {
                 free(str2);
             }
             res = 1;
-            if(endme)
-            {
-                break;
-            }
+            
             /* evaluate expr3 */
             str = expr3->val.str;
             if(str && *str)
@@ -442,8 +412,8 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
         }
         else
         {
-            res   = 1;
-            endme = 1;
+            res = 1;
+            break;
         }
     }
     cur_loop_level--;
@@ -464,16 +434,17 @@ int  do_for_clause2(struct source_s *src, struct node_s *node, struct node_s *re
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
+int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
         return 0;
     }
+    
     struct node_s *index = node->first_child;
     if(index->type == NODE_ARITHMETIC_EXPR)
     {
-        return do_for_clause2(src, node, redirect_list);
+        return do_for_loop2(src, node, redirect_list);
     }
 
     struct node_s *wordlist = index->next_sibling;
@@ -481,21 +452,21 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
     {
         wordlist = NULL;
     }
-    struct node_s *commands = wordlist ? 
-                              wordlist->next_sibling : 
-                              index->next_sibling;
+    
+    struct node_s *commands = wordlist ? wordlist->next_sibling : index->next_sibling;
     if(!commands)
     {
         set_internal_exit_status(0);
         return 1;
     }
+
     /* redirects specific to the loop should override global ones */
-    struct node_s *local_redirects = commands ? 
-                        commands->next_sibling : NULL;
+    struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
         redirect_list = local_redirects;
     }
+
     if(redirect_list)
     {
         if(!redirect_prep_and_do(redirect_list))
@@ -504,73 +475,85 @@ int  do_for_clause(struct source_s *src, struct node_s *node, struct node_s *red
         }
     }
 
-    int    count = 0;
-    char **list  = get_word_list(wordlist, &count);
-    int i;
-    if(!count || !list)
+    struct word_s *list = get_loop_wordlist(wordlist);
+    if(!list)
     {
         set_internal_exit_status(0);
         restore_stds();
         return 1;
     }
-
     
-    int j     = 0;
-    int res   = 0;
-    int endme = 0;
     /* we should now be set at the first command inside the for loop */
+    int res = 0;
     char *index_name = index->val.str;
-    /*
-     * we set FLAG_CMD_EXPORT so that the index var will be exported to all commands
-     * inside the for loop.
-     */
-    if(do_set(index_name, NULL, 0, FLAG_CMD_EXPORT, 0) == -1)
+    struct word_s *l = list;
+
+    /* get our index variable's symbol table entry */
+    struct symtab_entry_s *entry = get_symtab_entry(index_name);
+    if(!entry)
     {
-        fprintf(stderr, "%s: can't assign to readonly variable\n", SHELL_NAME);
-        goto end;
+        entry = add_to_symtab(index_name);
+    }
+    
+    /* check we've got the entry */
+    if(!entry)
+    {
+        fprintf(stderr, "error: failed to add variable %s to symbol table\n", index_name);
+        /* set l to NULL so we won't enter the loop below */
+        l = NULL;
+        res = 0;
+    }
+    else
+    {
+        /* check we're not trying to assign to a readonly variable */
+        if(flag_set(entry->flags, FLAG_READONLY))
+        {
+            fprintf(stderr, "error: can't assign to readonly variable: %s\n", index_name);
+            /* set l to NULL so we won't enter the loop below */
+            l = NULL;
+            res = 0;
+        }
+        else
+        {
+            /*
+             * we set FLAG_CMD_EXPORT so that the index var will be exported to all commands
+             * inside the for loop.
+             */
+            symtab_entry_setval(entry, NULL);
+            entry->flags |= FLAG_CMD_EXPORT;
+        }
     }
     cur_loop_level++;
-// loop:
-    for( ; j < count; j++)
+
+    for( ; l; l = l->next)
     {
-        if(do_set(index_name, list[j], 0, 0, 0) == -1)
-        {
-            fprintf(stderr, "%s: can't assign to readonly variable\n", SHELL_NAME);
-            res = 0;
-            goto end;
-        }
-        if(!do_do_group(src, commands, NULL /* redirect_list */))
-        {
-            res = 1;
-        }
-        if(SIGINT_received)
-        {
-            endme = 1;
-        }
-        if(req_break)
-        {
-            req_break--, endme = 1;
-        }
-        if(req_continue >= 1)
-        {
-            if(--req_continue)
-            {
-                endme = 1;
-            }
-        }
-        if(endme)
+        symtab_entry_setval(entry, l->data);
+
+        do_do_group(src, commands, NULL);
+
+        if(return_set || signal_received == SIGINT)
         {
             break;
         }
+        
+        if(req_break)
+        {
+            req_break--;
+            break;
+        }
+        
+        if(req_continue)
+        {
+            if(--req_continue)
+            {
+                break;
+            }
+        }
         res = 1;
     }
-end:
-    for(i = 0; i < count; i++)
-    {
-        free_malloced_str(list[i]);
-    }
-    //free(list[0]);
-    free(list);
+
+    /* free used memory */
+    free_all_words(list);
     cur_loop_level--;
 
     if(local_redirects)
@@ -587,38 +570,39 @@ end:
  *    select name [in word-list]; do commands; done
  * 
  * this is a non-POSIX extension used by all major shells. you should notice the
- * similarity between this function's code and the do_for_clause() function above.
+ * similarity between this function's code and the do_for_loop() function above.
  * 
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
+int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
         return 0;
     }
+
     struct node_s *index    = node->first_child;
     struct node_s *wordlist = index->next_sibling;
     if(wordlist->type != NODE_WORDLIST)
     {
         wordlist = NULL;
     }
-    struct node_s *commands = wordlist ? 
-                              wordlist->next_sibling : 
-                              index->next_sibling;
+    
+    struct node_s *commands = wordlist ? wordlist->next_sibling : index->next_sibling;
     if(!commands)
     {
         set_internal_exit_status(0);
         return 1;
     }
+
     /* redirects specific to the loop should override global ones */
-    struct node_s *local_redirects = commands ? 
-                        commands->next_sibling : NULL;
+    struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
         redirect_list = local_redirects;
     }
+
     if(redirect_list)
     {
         if(!redirect_prep_and_do(redirect_list))
@@ -626,10 +610,10 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
             return 0;
         }
     }
-    int    count = 0;
-    char **list  = get_word_list(wordlist, &count);
-    int i;
-    if(!count || !list)
+    
+    struct word_s *list = get_loop_wordlist(wordlist);
+    
+    if(!list)
     {
         set_internal_exit_status(0);
         restore_stds();
@@ -638,16 +622,19 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
     
     /* we should now be set at the first command inside the for loop */
     char *index_name = index->val.str;
+    int j, res = 0, count = 0;
+    struct word_s *l = list;
+
     do_set(index_name, NULL, 0, 0, 0);
-    int j     = 0;
-    int res   = 0;
-    int endme = 0;
     cur_loop_level++;
-    for(j = 0; j < count; j++)
+    
+    for(j = 0, l = list; l; j++, l = l->next)
     {
-        fprintf(stderr, "%d\t%s\n", j+1, list[j]);
+        fprintf(stderr, "%d\t%s\n", j+1, list->data);
+        count++;
     }
-    for(;;)
+    
+    for( ; ; )
     {
         print_prompt3();
         if(read_builtin(2, (char *[]){ "read", "REPLY" }) != 0)
@@ -656,21 +643,24 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
             fprintf(stderr, "\n\n");
             break;
         }
+
         /* parse the selection */
         char *strend;
         struct symtab_entry_s *entry = get_symtab_entry("REPLY");
+        
         /*
          * empty response. ksh prints PS3, while bash and zsh reprint the select list.
          * the second approach seems more appropriate, so we follow it.
          */
         if(!entry->val || !entry->val[0])
         {
-            for(j = 0; j < count; j++)
+            for(j = 0, l = list; l; j++, l = l->next)
             {
-                fprintf(stderr, "%d\t%s\n", j+1, list[j]);
+                fprintf(stderr, "%d\t%s\n", j+1, list->data);
             }
             continue;
         }
+        
         int sel = strtol(entry->val, &strend, 10);
         /* invalid (non-numeric) response */
         if(strend == entry->val)
@@ -678,52 +668,55 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
             symtab_entry_setval(entry, NULL);
             continue;
         }
+        
         if(sel < 1 || sel > count)
         {
             symtab_entry_setval(entry, NULL);
             continue;
         }
-        do_set(index_name, list[sel-1], 0, 0, 0);
-        if(!do_do_group(src, commands, NULL /* redirect_list */))
+        
+        //do_set(index_name, list[sel-1], 0, 0, 0);
+        j = sel-1;
+        for(j = sel-1, l = list; j > 0; j--, l = l->next)
         {
-            res = 1;
+            ;
         }
-        if(SIGINT_received)
-        {
-            endme = 1;
-        }
-        if(req_break)
-        {
-            req_break--, endme = 1;
-        }
-        if(req_continue >= 1)
-        {
-            if(--req_continue)
-            {
-                endme = 1;
-            }
-        }
-        if(endme)
+        do_set(index_name, l->data, 0, 0, 0);
+        
+        do_do_group(src, commands, NULL);
+        
+        if(return_set || signal_received == SIGINT)
         {
             break;
         }
+        
+        if(req_break)
+        {
+            req_break--;
+            break;
+        }
+        
+        if(req_continue)
+        {
+            if(--req_continue)
+            {
+                break;
+            }
+        }
         res = 1;
+        
         /* if var is null, reprint the list */
         entry = get_symtab_entry("REPLY");
         if(!entry->val || !entry->val[0])
         {
-            for(j = 0; j < count; j++)
+            for(j = 0, l = list; l; j++, l = l->next)
             {
-                fprintf(stderr, "%d\t%s\n", j+1, list[j]);
+                fprintf(stderr, "%d\t%s\n", j+1, list->data);
             }
         }
     }
-    for(i = 0; i < count; i++)
-    {
-        free_malloced_str(list[i]);
-    }
-    //free(list[0]);
-    free(list);
+    
+    free_all_words(list);
     cur_loop_level--;
 
     if(local_redirects)
@@ -742,21 +735,23 @@ int  do_select_clause(struct source_s *src, struct node_s *node, struct node_s *
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_while_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
+int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
         return 0;
     }
+
     struct node_s *clause   = node->first_child;
     struct node_s *commands = clause->next_sibling;
+    
     /* redirects specific to the loop should override global ones */
-    struct node_s *local_redirects = commands ? 
-                        commands->next_sibling : NULL;
+    struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
         redirect_list = local_redirects;
     }
+    
     if(redirect_list)
     {
         if(!redirect_prep_and_do(redirect_list))
@@ -764,62 +759,48 @@ int  do_while_clause(struct source_s *src, struct node_s *node, struct node_s *r
             return 0;
         }
     }
-    int res         = 0;
-    int endme       = 0;
-    int first_round = 1;
-    cur_loop_level++;
     
+    int res = 0;
+    cur_loop_level++;
     do
     {
-        if(!do_compound_list(src, clause, NULL /* redirect_list */))
+        in_test_clause = 1;
+        if(!do_compound_list(src, clause, NULL))
         {
-            cur_loop_level--;
-            if(local_redirects)
-            {
-                restore_stds();
-            }
-            return 0;
+            res = 0;
+            in_test_clause = 0;
+            break;
         }
+        in_test_clause = 0;
+        
         if(exit_status == 0)
         {
-            if(!do_do_group(src, commands, NULL /* redirect_list */))
-            {
-                res = 1;
-            }
-            if(SIGINT_received)
-            {
-                endme = 1;
-            }
-            if(req_break)
-            {
-                req_break--, endme = 1;
-            }
-            if(req_continue >= 1)
-            {
-                if(--req_continue)
-                {
-                    endme = 1;
-                }
-            }
-            if(endme)
+            do_do_group(src, commands, NULL);
+            
+            if(return_set || signal_received == SIGINT)
             {
                 break;
             }
-            first_round = 0;
+            
+            if(req_break)
+            {
+                req_break--;
+                break;
+            }
+            
+            if(req_continue)
+            {
+                if(--req_continue)
+                {
+                    break;
+                }
+            }
             res = 1;
         }
         else
         {
-            if(first_round)
-            {
-                set_internal_exit_status(0);
-            }
-            cur_loop_level--;
-            if(local_redirects)
-            {
-                restore_stds();
-            }
-            return 1;
+            res = 1;
+            break;
         }
     } while(1);
     cur_loop_level--;
@@ -840,21 +821,22 @@ int  do_while_clause(struct source_s *src, struct node_s *node, struct node_s *r
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_until_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
+int do_until_loop(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
         return 0;
     }
+
     struct node_s *clause   = node->first_child;
     struct node_s *commands = clause->next_sibling;
     /* redirects specific to the loop should override global ones */
-    struct node_s *local_redirects = commands ? 
-                        commands->next_sibling : NULL;
+    struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
         redirect_list = local_redirects;
     }
+    
     if(redirect_list)
     {
         if(!redirect_prep_and_do(redirect_list))
@@ -862,61 +844,47 @@ int  do_until_clause(struct source_s *src, struct node_s *node, struct node_s *r
             return 0;
         }
     }
-    int res         = 0;
-    int endme       = 0;
-    int first_round = 1;
+    
+    int res = 0;
     cur_loop_level++;
-
     do
     {
-        if(!do_compound_list(src, clause, NULL /* redirect_list */))
+        in_test_clause = 1;
+        if(!do_compound_list(src, clause, NULL))
         {
-            cur_loop_level--;
-            if(local_redirects)
-            {
-                restore_stds();
-            }
-            return 0;
+            res = 0;
+            in_test_clause = 0;
+            break;
         }
+        in_test_clause = 0;
+        
         if(exit_status == 0)
         {
-            if(first_round)
-            {
-                set_internal_exit_status(0);
-            }
-            cur_loop_level--;
-            if(local_redirects)
-            {
-                restore_stds();
-            }
-            return 1;
+            res = 1;
+            break;
         }
         else
         {
-            if(!do_do_group(src, commands, NULL /* redirect_list */))
-            {
-                res = 1;
-            }
-            if(SIGINT_received)
-            {
-                endme = 1;
-            }
-            if(req_break)
-            {
-                req_break--, endme = 1;
-            }
-            if(req_continue >= 1)
-            {
-                if(--req_continue)
-                {
-                    endme = 1;
-                }
-            }
-            if(endme)
+            do_do_group(src, commands, NULL);
+            
+            if(return_set || signal_received == SIGINT)
             {
                 break;
             }
-            first_round = 0;
+            
+            if(req_break)
+            {
+                req_break--;
+                break;
+            }
+            
+            if(req_continue)
+            {
+                if(--req_continue)
+                {
+                    break;
+                }
+            }
             res = 1;
         }
     } while(1);

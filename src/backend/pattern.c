@@ -41,7 +41,7 @@
  * check if the string *p has any regular expression (regex) characters,
  * which are *, ?, [ and ].
  */
-int has_regex_chars(char *p, size_t len)
+int has_glob_chars(char *p, size_t len)
 {
     char *p2 = p+len;
     char ob = 0, cb = 0;    /* count of opening and closing brackets */
@@ -317,11 +317,6 @@ char **get_filename_matches(char *pattern, glob_t *matches)
     /* to guard our caller from trying to free an unused struct in case of expansion failure */
     matches->gl_pathc = 0;
     matches->gl_pathv = NULL;
-
-    if(option_set('f'))
-    {
-        return NULL;
-    }
 
     if(!pattern)
     {

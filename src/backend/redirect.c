@@ -363,14 +363,13 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
 /*
  * initialize the redirection table for the command to be executed.
  */
-int init_redirect_list(struct node_s *node, struct io_file_s *io_files)
+int init_redirect_list(struct io_file_s *io_files)
 {
     if(!io_files)
     {
         return 0;
     }
     int  i = 0;
-    int  total_redirects = 0;
     for( ; i < FOPEN_MAX; i++)
     {
         io_files[i].path        = NULL;
@@ -379,29 +378,7 @@ int init_redirect_list(struct node_s *node, struct io_file_s *io_files)
         io_files[i].open_mode   =  0;
         io_files[i].extra_flags =  0;
     }
-    if(!node)
-    {
-        return 0;
-    }
-
-    struct node_s *child = node->first_child;
-    /* prepare the redirections */
-    while(child)
-    {
-        if(child->type == NODE_IO_REDIRECT)
-        {
-            if(!redirect_prep_node(child, io_files))
-            {
-                total_redirects = -1;
-            }
-            else
-            {
-                total_redirects++;
-            }
-        }
-        child = child->next_sibling;
-    }
-    return total_redirects;
+    return 0;
 }
 
 
@@ -423,10 +400,12 @@ do {                                                    \
 int open_special(char *path, int mode)
 {
     int fd = -1, i, remote = 0;
+    char *strend = NULL;
+
     if(strstr(path, "/dev/fd/") == path)
     {
-        i = atoi(path+8);
-        if(i < 0)
+        i = strtol(path+8, &strend, 10);
+        if(*strend || i < 0)
         {
             return -1;
         }
@@ -486,13 +465,19 @@ int open_special(char *path, int mode)
         int port;
         struct sockaddr_in serv_addr;
         struct hostent *server;
-        port = atoi(s2);
+        port = strtol(s2, &strend, 10);
+        if(*strend)
+        {
+            return -1;
+        }
+
         fd = socket(AF_INET, (remote == 1) ? SOCK_STREAM : SOCK_DGRAM, 0);
         if(fd < 0) 
         {
             //fprintf(stderr, "%s: error opening socket: %s\n", SHELL_NAME, strerror(errno));
             return -1;
         }
+
         s2[-1] = '\0';
         server = gethostbyname(s1);
         if(server == NULL)
@@ -506,6 +491,7 @@ int open_special(char *path, int mode)
         serv_addr.sin_family = AF_INET;
         memcpy(server->h_addr_list[0], &serv_addr.sin_addr.s_addr, server->h_length);
         serv_addr.sin_port = htons(port);
+        
         if(connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
         {
             //fprintf(stderr, "%s: error connecting to socket: %s\n", SHELL_NAME, strerror(errno));
@@ -570,7 +556,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd)
                         {
                             if(S_ISREG(st.st_mode))
                             {
-                                fprintf(stderr, "%s: redirection fail: file already exists: %s\n", SHELL_NAME, path);
+                                fprintf(stderr, "%s: redirection failed: file already exists: %s\n", SHELL_NAME, path);
                                 free(path);
                                 return 0;
                             }
@@ -708,15 +694,31 @@ int redirect_prep_and_do(struct node_s *redirect_list)
     {
         return 1;
     }
+
     struct io_file_s io_files[FOPEN_MAX];
-    if(init_redirect_list(redirect_list, io_files) == -1)
+    struct node_s *child = redirect_list->first_child;
+
+    /* prepare the redirections */
+    init_redirect_list(io_files);
+    
+    while(child)
     {
-        return 0;
+        if(child->type == NODE_IO_REDIRECT)
+        {
+            if(!redirect_prep_node(child, io_files))
+            {
+                /* bail out on redirection error */
+                return 0;
+            }
+        }
+        child = child->next_sibling;
     }
+    
     if(!redirect_do(io_files, 1))
     {
         return 0;
     }
+    
     return 1;
 }
 
@@ -965,7 +967,7 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
 
                 case '`':
                     /* find the closing back quote */
-                    if((len = find_closing_quote(p, 0)) == 0)
+                    if((len = find_closing_quote(p, 0, 0)) == 0)
                     {
                         /* not found. print the ` and break */
                         fputc(*p, tmp);
@@ -993,7 +995,7 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                          */
                         case '\'':
                             /* find the closing quote */
-                            if((len = find_closing_quote(p+1, 1)) == 0)
+                            if((len = find_closing_quote(p+1, 0, 1)) == 0)
                             {
                                 /* not found. print the ' and break */
                                 fputc(*p, tmp);
@@ -1010,7 +1012,7 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                         case '{':
                         case '[':
                             /* find the closing quote */
-                            if((len = find_closing_brace(p+1)) == 0)
+                            if((len = find_closing_brace(p+1, 0)) == 0)
                             {
                                 /* not found. print the { or [ and break */
                                 fputc(*p, tmp);
@@ -1033,7 +1035,7 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                                 i++;
                             }
                             /* find the closing quote */
-                            if((len = find_closing_brace(p+1)) == 0)
+                            if((len = find_closing_brace(p+1, 0)) == 0)
                             {
                                 /* not found. print the ( and break */
                                 fputc(*p, tmp);

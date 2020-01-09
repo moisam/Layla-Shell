@@ -21,7 +21,7 @@
 
 /* macro definitions needed to use sig*() and setenv() */
 #define _POSIX_C_SOURCE 200112L
-/* for uslepp(), but also _POSIX_C_SOURCE shouldn't be >= 200809L */
+/* for usleep(), but also _POSIX_C_SOURCE shouldn't be >= 200809L */
 #define _XOPEN_SOURCE   500
 
 #include <ctype.h>
@@ -60,7 +60,7 @@
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_case_item(struct source_s *src, struct node_s *node, char *word, struct node_s *redirect_list)
+int do_case_item(struct source_s *src, struct node_s *node, char *word, struct node_s *redirect_list)
 {
     /* 
      * the root node is a NODE_CASE_ITEM. we need to iterate its 
@@ -69,30 +69,56 @@ int  do_case_item(struct source_s *src, struct node_s *node, char *word, struct 
     node = node->first_child;
     while(node && node->type == NODE_VAR)
     {
-        char *pat_str = word_expand_to_str(node->val.str);
-        if(pat_str)
+        /* 
+         * we need to perform tilde expansion, parameter expansion, command 
+         * substitution, and arithmetic expansion on the pattern string, but 
+         * no pathname expansion or field splitting.
+         */
+        char *pat_str = node->val.str;
+        struct word_s *w = word_expand_one_word(node->val.str, 0);
+        if(w)
         {
-            if(match_filename(pat_str, word, 1, 1))
+            pat_str = wordlist_to_str(w, WORDLIST_NO_SPACES);
+            free_all_words(w);
+        
+            if(!pat_str)
             {
-                struct node_s *commands = node->next_sibling;
-                while(commands && commands->type == NODE_VAR)
-                {
-                    commands = commands->next_sibling;
-                }
-                if(commands)
-                {
-                    int res = do_compound_list(src, commands, redirect_list);
-                    ERR_TRAP_OR_EXIT();
-                }
-                free(pat_str);
-                return 1;
+                node = node->next_sibling;
+                continue;
             }
+        }
+        
+        if(match_filename(pat_str, word, 1, 1))
+        {
+            struct node_s *commands = node->next_sibling;
+            while(commands && commands->type == NODE_VAR)
+            {
+                commands = commands->next_sibling;
+            }
+
+            if(commands)
+            {
+                int res = do_compound_list(src, commands, redirect_list);
+                ERR_TRAP_OR_EXIT();
+            }
+            
+            if(pat_str != node->val.str)
+            {
+                free(pat_str);
+            }
+            return 1;
+        }
+
+        if(pat_str != node->val.str)
+        {
             free(pat_str);
         }
+        
         node = node->next_sibling;
     }
     return 0;
 }
+
 
 /*
  * this function executes a case clause by trying to match and execute each case item,
@@ -106,12 +132,13 @@ int  do_case_item(struct source_s *src, struct node_s *node, char *word, struct 
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
+int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node || !node->first_child)
     {
         return 0;
     }
+
     struct node_s *word_node = node->first_child;
     struct node_s *item = word_node->next_sibling;
 
@@ -121,10 +148,12 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
     {
         local_redirects = local_redirects->next_sibling;
     }
+    
     if(local_redirects)
     {
         redirect_list = local_redirects;
     }
+    
     if(redirect_list)
     {
         if(!redirect_prep_and_do(redirect_list))
@@ -133,9 +162,28 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
         }
     }
 
-    /* get the word */
-    char *word = word_expand_to_str(word_node->val.str);
-    if(!word)
+    /* perform word expansion (including pathname expansion and quote removal) on the word */
+    char *word = word_node->val.str;
+    int empty_word = 0;
+    struct word_s *wordlist = word_expand_one_word(word_node->val.str, 0);
+    if(wordlist)
+    {
+        wordlist = pathnames_expand(wordlist);
+        remove_quotes(wordlist);
+        word = wordlist_to_str(wordlist, WORDLIST_NO_SPACES);
+        free_all_words(wordlist);
+        
+        if(!word)
+        {
+            empty_word = 1;
+        }
+    }
+    else
+    {
+        empty_word = 1;
+    }
+
+    if(empty_word)
     {
         BACKEND_RAISE_ERROR(EMPTY_CASE_WORD, NULL, NULL);
         if(local_redirects)
@@ -146,11 +194,13 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
         EXIT_IF_NONINTERACTIVE();
         return 0;
     }
-    
+
+    int match = 0;
     while(item)
     {
-        if(do_case_item(src, item, word, NULL /* redirect_list */))
+        if(do_case_item(src, item, word, NULL))
         {
+            match = 1;
             /* check for case items ending in ';&' */
             if(item->val_type == VAL_CHR && item->val.chr == '&')
             {
@@ -158,18 +208,21 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
                 item = item->next_sibling;
                 if(!item || item->type != NODE_CASE_ITEM)
                 {
-                    goto fin;
+                    break;
                 }
+
                 item = item->first_child;
                 if(!item || item->type != NODE_VAR)
                 {
-                    goto fin;
+                    break;
                 }
+                
                 struct node_s *commands = item->next_sibling;
                 while(commands && commands->type == NODE_VAR)
                 {
                     commands = commands->next_sibling;
                 }
+                
                 if(commands)
                 {
                     int res = do_compound_list(src, commands, redirect_list);
@@ -183,13 +236,17 @@ int  do_case_clause(struct source_s *src, struct node_s *node, struct node_s *re
                 item = item->next_sibling;
                 continue;
             }
-            goto fin;
+            break;
         }
         item = item->next_sibling;
     }
-    set_internal_exit_status(0);
     
-fin:
+    if(!match)
+    {
+        set_internal_exit_status(0);
+    }
+    
+// fin:
     free(word);
     if(local_redirects)
     {
@@ -207,17 +264,21 @@ fin:
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
+int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
 {
     if(!node)
     {
         return 0;
     }
+
+    int res = 0;
     struct node_s *clause = node->first_child;
     struct node_s *_then  = clause->next_sibling;
     struct node_s *_else  = NULL;
-    if(_then) _else = _then->next_sibling;
-    int res = 0;
+    if(_then)
+    {
+        _else = _then->next_sibling;
+    }
 
     /* redirects specific to the loop should override global ones */
     struct node_s *local_redirects = clause;
@@ -225,10 +286,12 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
     {
         local_redirects = local_redirects->next_sibling;
     }
+
     if(local_redirects)
     {
         redirect_list = local_redirects;
     }
+    
     if(redirect_list)
     {
         if(!redirect_prep_and_do(redirect_list))
@@ -237,17 +300,23 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
         }
     }
 
-    if(!do_compound_list(src, clause, NULL /* redirect_list */))
+    /* execute the test clause */
+    in_test_clause = 1;
+    if(!do_compound_list(src, clause, NULL))
     {
+        in_test_clause = 0;
         if(local_redirects)
         {
             restore_stds();
         }
         return 0;
     }
+    in_test_clause = 0;
+    
+    /* test clause returned true. execute the then clause */
     if(exit_status == 0)
     {
-        res = do_compound_list(src, _then, NULL /* redirect_list */);
+        res = do_compound_list(src, _then, NULL);
         ERR_TRAP_OR_EXIT();
         if(local_redirects)
         {
@@ -255,6 +324,8 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
         }
         return res;
     }
+    
+    /* test clause returned false. check if we have an else clause */
     if(!_else)
     {
         if(local_redirects)
@@ -263,9 +334,10 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
         }
         return 1;
     }
+    
     if(_else->type == NODE_IF)
     {
-        res = do_if_clause(src, _else, NULL /* redirect_list */);
+        res = do_if_clause(src, _else, NULL);
         ERR_TRAP_OR_EXIT();
         if(local_redirects)
         {
@@ -273,8 +345,10 @@ int  do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redi
         }
         return res;
     }
-    res = do_compound_list(src, _else, NULL /* redirect_list */);
+    
+    res = do_compound_list(src, _else, NULL);
     ERR_TRAP_OR_EXIT();
+    
     if(local_redirects)
     {
         restore_stds();
