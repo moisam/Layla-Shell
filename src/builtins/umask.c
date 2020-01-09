@@ -20,227 +20,165 @@
  */    
 
 #include <unistd.h>
+#include <fcntl.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #include "../cmd.h"
 
 #define UTILITY         "umask"
 
-/* the umask value of the shell process */
-static mode_t _umask = 0;
-
 /* umask value we will use when setting the umask in umask_builtin() below */
 int cur_perm = 0;
 
+/* constant values to represent the user, group and others */
+#define WHO_USER                (1 << 0)
+#define WHO_GROUP               (1 << 1)
+#define WHO_OTHER               (1 << 2)
 
-/*
- * intialize the umask by getting the current umask value.
- */
-void init_umask(void)
-{
-    _umask = umask(0);
-    umask(_umask);
-}
-
-
-/* constant values to represent the user, group, others, and noone */
-#define WHO_NOBODY      (0     )
-#define WHO_USER        (1 << 0)
-#define WHO_GROUP       (1 << 1)
-#define WHO_OTHER       (1 << 2)
+/* constant values to represent the actions we can perform on umask fields */
+#define ACTION_INVALID_ACTION   (1 << 0)
+#define ACTION_SET_ACTION       (1 << 1)    /* '=' */
+#define ACTION_CLEAR_ACTION     (1 << 2)    /* '-' */
+#define ACTION_ADD_ACTION       (1 << 3)    /* '+' */
 
 
 /*
  * convert a symbolic string of the chars u (user), g (group), o (others),
  * and a (all) to a numeric value that is easy to parse.
  */
-int get_who(char **__str)
+int get_who(char **str)
 {
-    char *str = *__str;
-    if(!*str)
+    int who = 0;
+    char *str2 = (*str);
+    while(*str2)
     {
-        return WHO_NOBODY;
-    }
-    int who = WHO_NOBODY;
+        switch(*str2)
+        {
+            case 'u':
+                who |= WHO_USER;
+                break;
 
-loop:
-    if     (*str == 'u')
-    {
-        who |= WHO_USER;
-    }
-    else if(*str == 'g')
-    {
-        who |= WHO_GROUP;
-    }
-    else if(*str == 'o')
-    {
-        who |= WHO_OTHER;
-    }
-    else if(*str == 'a')
-    {
-        who |= (WHO_USER|WHO_GROUP|WHO_OTHER);
-    }
-    else
-    {
-        *__str = str;
-        return who;
-    }
-    str++;
-    goto loop;
-}
+            case 'g':
+                who |= WHO_GROUP;
+                break;
 
+            case 'o':
+                who |= WHO_OTHER;
+                break;
 
-/* constant values to represent the actions we can perform on umask fields */
-#define ACTION_NO_ACTION        (0     )
-#define ACTION_INVALID_ACTION   (1 << 0)
-#define ACTION_IMPLIED_ACTION   (1 << 1)
-#define ACTION_SET_ACTION       (1 << 2)    /* '=' */
-#define ACTION_CLEAR_ACTION     (1 << 3)    /* '-' */
-#define ACTION_ADD_ACTION       (1 << 4)    /* '+' */
+            case 'a':
+                who |= (WHO_USER|WHO_GROUP|WHO_OTHER);
+                break;
 
-// #define EXTRA_SUID_SGID         (1 << 0)
-// #define EXTRA_VTX               (1 << 1)
-
-
-/*
- * return 1 if char c is a char representing a permission bit ('r' for read, 'w' for
- * write, 'x' for execute, ...).
- * return 0 otherwise.
- */
-static inline int isperm(char c)
-{
-    if(c == 'r' || c == 'w' || c == 'x' ||
-       c == 'X' || c == 's' || c == 't')
-    {
-        return 1;
+            default:
+                (*str) = str2;
+                return who;
+        }
+        str2++;
     }
-    return 0;
+
+    return who;
 }
 
 
 /*
- * return 1 if char c is a char representing an operator (+, -, =).
- * return 0 otherwise.
- */
-static inline int isop(char c)
-{
-    if(c == '+' || c == '-' || c == '=')
-    {
-        return 1;
-    }
-    return 0;
-}
-
-
-/*
- * process the symbolic permission string __str, which could contain either:
- * - one char (u, g, o) representing whose permission we should copy
- * - one or more chars (r, w, x) representing the permissions we should set
+ * process the symbolic permission string str, which should contain
+ * one or more chars (r, w, x), representing the permissions we should set.
  *
- * the result permissions field is placed in __perm, and consists of a
+ * the result permissions field is placed in perm, and consists of a
  * combination of read (04), write (02), and execute (01) perm bits.
  *
  * return value can be:
  * - ACTION_ADD_ACTION if the permissions bits should be added to the
- *   current bits
+ *     current bits
  * - ACTION_CLEAR_ACTION if the permissions bits should cleared
  * - ACTION_SET_ACTION if the permissions bits should be set exactly to the bits
- *   we have put in __perm
- *  - ACTION_NO_ACTION is __str is an empty string
- *  - ACTION_INVALID_ACTION if __str contains an invalid value.
+ *     we have put in perm
+ * - ACTION_INVALID_ACTION if str contains an invalid value.
  */
-int get_action(char **__str, int *__perm /*, int *extra */)
+int get_perm(char **str, int *perm)
 {
-    char *str = *__str;
-    if(!*str)
+    if(!str || !*str || !**str)
     {
-        return ACTION_NO_ACTION;
+        return ACTION_INVALID_ACTION;
     }
-    char op = *str++;
-    if(!isop(op))
+
+    char *str2 = (*str);
+    char op = *str2++;
+    int perm2 = 0, endme = 0;
+
+    if(op != '+' && op != '-' && op != '=')
     {
         fprintf(stderr, "%s: unknown operator -- %c\n", UTILITY, op);
         return ACTION_INVALID_ACTION;
     }
-    int perm = 0;
-    /* 1- POSIX permcopy */
-    if(*str == 'u' || *str == 'g' || *str == 'o')
+
+    switch(*str2)
     {
-        if     (*str == 'u')
-        {
-            perm = (cur_perm & S_IRWXU) >> 6;
-        }
-        else if(*str == 'g')
-        {
-            perm = (cur_perm & S_IRWXG) >> 3;
-        }
-        else if(*str == 'o')
-        {
-            perm =  cur_perm & S_IRWXO;
-        }
-    }
-    /* 2- POSIX permlist */
-    else if(isperm(*str))
-    {
-        do
-        {
-            /* 
-             * we take 'other' permissions as they are the
-             * common denominator (r=4, w=2, x=1).
-             */
-            if     (*str == 'r')
+        case 'r':
+        case 'w':
+        case 'x':
+        case 'X':
+            do
             {
-                perm |= S_IROTH;
-            }
-            else if(*str == 'w')
-            {
-                perm |= S_IWOTH;
-            }
-            else if(*str == 'x')
-            {
-                perm |= S_IXOTH;
-            }
-            else if(*str == 'X')
-            {
-                if((cur_perm & S_IXUSR) || (cur_perm & S_IXGRP) ||
-                   (cur_perm & S_IXOTH))
-                    perm |= S_IXOTH;
-            }
-            /*
-            else if(*str == 's') *extra |= EXTRA_SUID_SGID;
-            else if(*str == 't') *extra |= EXTRA_VTX;
-            */
-            else
-            {
-                fprintf(stderr, "%s: unknown permission bit -- %c\n", UTILITY, *str);
-                return ACTION_INVALID_ACTION;
-            }
-        } while(isperm(*++str));
-    }
-    else if(*str == ',' || *str == '\0' || isop(*str))
-    {
-        /*
-        *__str = str;
-        return ACTION_IMPLIED_ACTION;
-        */
-        goto fin;
-    }
-    else
-    {
-        fprintf(stderr, "%s: unknown permission bit -- %c\n", UTILITY, *str);
-        return ACTION_INVALID_ACTION;
+                /* 
+                 * we take 'other' permissions as they are the
+                 * common denominator (r=4, w=2, x=1).
+                 */
+                switch(*str2)
+                {
+                    case 'r':
+                        perm2 |= S_IROTH;
+                        break;
+
+                    case 'w':
+                        perm2 |= S_IWOTH;
+                        break;
+
+                    case 'x':
+                        perm2 |= S_IXOTH;
+                        break;
+
+                    case 'X':
+                        if((cur_perm & S_IXUSR) || (cur_perm & S_IXGRP) ||
+                           (cur_perm & S_IXOTH))
+                            perm2 |= S_IXOTH;
+                        break;
+
+                    case ',':
+                        endme = 1;
+                        break;
+                        
+                    default:
+                        fprintf(stderr, "%s: unknown permission bit -- %c\n", UTILITY, *str2);
+                        return ACTION_INVALID_ACTION;
+                }
+                
+                if(endme)
+                {
+                    break;
+                }
+            } while((*++str2));
+            break;
+
+        default:
+            fprintf(stderr, "%s: unknown permission bit -- %c\n", UTILITY, *str2);
+            return ACTION_INVALID_ACTION;
     }
 
-fin:
-    *__str  = str;
-    *__perm = perm;
+    (*str) = str2;
+    (*perm) = perm2;
+
     if(op == '+')
     {
         return ACTION_ADD_ACTION;
     }
+
     if(op == '-')
     {
         return ACTION_CLEAR_ACTION;
     }
+    
     return ACTION_SET_ACTION;
 }
 
@@ -259,15 +197,18 @@ int umask_builtin(int argc, char **argv)
 {
     int   symb_output = 0;
     char *permstr     = NULL;
-    int   who         = WHO_NOBODY;
+    int   who         = 0;
     int   action      = 0;
     int   new_perm    = 0;
     //int   extra_perm = 0;
-    cur_perm = ~(_umask) & 0777;
+    mode_t cur_umask = umask(0);
+    umask(cur_umask);
+    cur_perm = ~(cur_umask) & 0777;
     
     int v = 1, c, format = 0;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
     argi = 0;   /* defined in args.c */
+
     /****************************
      * process the options
      ****************************/
@@ -294,6 +235,7 @@ int umask_builtin(int argc, char **argv)
                 break;
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -310,7 +252,7 @@ int umask_builtin(int argc, char **argv)
             {
                 printf("umask ");
             }
-            printf("0%03o\n", _umask);
+            printf("0%03o\n", cur_umask);
         }
         else
         {
@@ -319,52 +261,42 @@ int umask_builtin(int argc, char **argv)
             {
                 printf("umask -S ");
             }
-            /* print user permission bits */
-            printf("u=");
-            if(!(_umask & S_IRUSR))
+            
+            char *letters = "ugo";
+            /* print the permission bits for u, g, o */
+            for(v = 0; v < 3; v++)
             {
-                putchar('r');
+                printf("%c=", letters[v]);
+                
+                /* print the permision bits */
+                if(cur_perm & S_IRUSR)
+                {
+                    putchar('r');
+                }
+            
+                if(cur_perm & S_IWUSR)
+                {
+                    putchar('w');
+                }
+            
+                if(cur_perm & S_IXUSR)
+                {
+                    putchar('x');
+                }
+                
+                /* print the separator char */
+                if(v == 0 || v == 1)
+                {
+                    putchar(',');
+                }
+                else
+                {
+                    putchar('\n');
+                }
+                
+                /* check the next set of permission bits */
+                cur_perm <<= 3;
             }
-            if(!(_umask & S_IWUSR))
-            {
-                putchar('w');
-            }
-            if(!(_umask & S_IXUSR))
-            {
-                putchar('x');
-            }
-            putchar(',');
-            /* print group permission bits */
-            printf("g=");
-            if(!(_umask & S_IRGRP))
-            {
-                putchar('r');
-            }
-            if(!(_umask & S_IWGRP))
-            {
-                putchar('w');
-            }
-            if(!(_umask & S_IXGRP))
-            {
-                putchar('x');
-            }
-            putchar(',');
-            /* print others permission bits */
-            printf("o=");
-            if(!(_umask & S_IROTH))
-            {
-                putchar('r');
-            }
-            if(!(_umask & S_IWOTH))
-            {
-                putchar('w');
-            }
-            if(!(_umask & S_IXOTH))
-            {
-                putchar('x');
-            }
-            putchar('\r');
-            putchar('\n');
         }
         return 0;
     }
@@ -373,134 +305,100 @@ int umask_builtin(int argc, char **argv)
     permstr = argv[v];
     
     /* octal integer mode */
-    if(*permstr == '0')
+    if(isdigit(*permstr))
     {
         new_perm = 0;
-        while(*++permstr)
+        do
         {
             if(*permstr >= '0' && *permstr <= '7')
             {
-                new_perm = (new_perm*8) + (*permstr-'0');
+                new_perm = (new_perm * 8) + ((*permstr) - '0');
             }
             else
             {
                 fprintf(stderr, "%s: illegal octal mode: %s\n", UTILITY, permstr);
                 return 1;
             }
-        }
-        /* forget about the SUID and SGID bits */
-        new_perm &= 0777;
-        _umask   = new_perm;
-        goto fin;
+        } while(*++permstr);
+        cur_umask = new_perm;
     }
-    
-    /* symbolic mode */
-    while(*permstr)
+    else
     {
-        /* 1- get the WHO */
-        if(*permstr == '+' || *permstr == '-' || *permstr == '=')
+        /* symbolic mode */
+        while(*permstr)
         {
-            who = (WHO_USER|WHO_OTHER|WHO_GROUP);
-        }
-        else if(*permstr == 'u' || *permstr == 'g' ||
-                *permstr == 'o' || *permstr == 'a')
-        {
-            who = get_who(&permstr);
-        }
-        else
-        {
-            fprintf(stderr, "%s: unknown who/action -- %c\n", UTILITY, *permstr);
-            break;
-        }
+            /* 1- get the WHO */
+            if(*permstr == '+' || *permstr == '-' || *permstr == '=')
+            {
+                who = (WHO_USER|WHO_OTHER|WHO_GROUP);
+            }
+            else if(*permstr == 'u' || *permstr == 'g' ||
+                    *permstr == 'o' || *permstr == 'a')
+            {
+                who = get_who(&permstr);
+            }
+            else
+            {
+                fprintf(stderr, "%s: unknown who/action -- %c\n", UTILITY, *permstr);
+                return 1;
+            }
         
-        /* 2- get the ACTIONs */
-        while(isop(*permstr))
-        {
-            if((action = get_action(&permstr, &new_perm /*, &extra_perm */))
-                        == ACTION_INVALID_ACTION)
+            /* 2- get the ACTIONs */
+            while(*permstr == '+' || *permstr == '-' || *permstr == '=')
             {
-                return 2;
-            }
+                if((action = get_perm(&permstr, &new_perm)) == ACTION_INVALID_ACTION)
+                {
+                    return 2;
+                }
             
-            /* 3- apply the ACTION */
-            if(new_perm == 0 && action != ACTION_SET_ACTION)
-            {
-                continue;
+                /* 3- apply the ACTION */
+                if(new_perm == 0 && action != ACTION_SET_ACTION)
+                {
+                    /* we can't apply + or - actions to an empty permission mask */
+                    continue;
+                }
+                
+                int mask_who = WHO_OTHER;
+                int mask_perm = 0007;
+                int perm = new_perm;
+                
+                for(v = 0; v < 3; v++)
+                {
+                    if(who & mask_who)
+                    {
+                        switch(action)
+                        {
+                            case ACTION_ADD_ACTION:
+                                cur_perm |= perm;
+                                break;
+                                
+                            case ACTION_SET_ACTION:
+                                cur_perm &= ~mask_perm;
+                                cur_perm |= perm;
+                                break;
+                                
+                            default:
+                                cur_perm &= ~perm;
+                                break;
+                        }
+                    }
+                    
+                    mask_who >>= 1;
+                    mask_perm <<= 3;
+                    perm <<= 3;
+                }
             }
-            //if(action == ACTION_IMPLIED_ACTION) continue;
-            if(who & WHO_USER)
+
+            /* skip any separator commans */
+            while(*permstr == ',')
             {
-                int perm = (new_perm << 6);
-                if(action == ACTION_ADD_ACTION)
-                {
-                    cur_perm |= perm;
-                }
-                else
-                {
-                    if(action == ACTION_SET_ACTION)
-                    {
-                        cur_perm &= 0077; //07077;
-                        cur_perm |= perm;
-                    }
-                    else if(perm)
-                    {
-                        //cur_perm &= 0077; //07077;
-                        cur_perm &= ~perm;
-                    }
-                }
-                //if(extra_perm & EXTRA_SUID_SGID) cur_perm |= S_ISUID;
-            }
-            if(who & WHO_GROUP)
-            {
-                int perm = (new_perm << 3);
-                if(action == ACTION_ADD_ACTION)
-                {
-                    cur_perm |= perm;
-                }
-                else
-                {
-                    if(action == ACTION_SET_ACTION)
-                    {
-                        cur_perm &= 0707; //07707;
-                        cur_perm |= perm;
-                    }
-                    else if(perm)
-                    {
-                        //cur_perm &= 0707; //07707;
-                        cur_perm &= ~perm;
-                    }
-                }
-                //if(extra_perm & EXTRA_SUID_SGID) cur_perm |= S_ISGID;
-            }
-            if(who & WHO_OTHER)
-            {
-                int perm = (new_perm << 0);
-                if(action == ACTION_ADD_ACTION)
-                {
-                    cur_perm |= perm;
-                }
-                else
-                {
-                    if(action == ACTION_SET_ACTION)
-                    {
-                        cur_perm &= 0770; //07770;
-                        cur_perm |= perm;
-                    }
-                    else if(perm)
-                    {
-                        //cur_perm &= 0770; //07770;
-                        cur_perm &= ~perm;
-                    }
-                }
+                permstr++;
             }
         }
-        //if(action == ACTION_INVALID_ACTION) break;        
-        while(*permstr == ',') permstr++;
+        cur_umask = ~cur_perm;
     }
-    _umask = ~cur_perm;
-    _umask &= 0777;
-    
-fin:
-    umask(_umask);
+
+    /* set the umask (umask's manpage says it ANDs the mask with 0777 for us) */
+    umask(cur_umask);
     return 0;
 }

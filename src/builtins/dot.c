@@ -54,6 +54,7 @@ int dot_builtin(int argc, char **argv)
                         "     usage: %s file\n", UTILITY, argv[0]);
         return 1;
     }
+
     /* then check we have enough args for the ksh-like usage */
     if(argc < 2)
     {
@@ -61,6 +62,7 @@ int dot_builtin(int argc, char **argv)
                         "     usage: %s file [args...]\n", UTILITY, argv[0]);
         return 1;
     }
+    
     /* get the dot file path */
     char *file  = argv[1];
     char *path  = NULL;
@@ -82,6 +84,7 @@ int dot_builtin(int argc, char **argv)
             fprintf(stderr, "%s: can't execute dot script: restricted shell\n", UTILITY);
             return 2;
         }
+        
         /* try to read the dot file */
         if(!read_file(file, &src))
         {
@@ -115,42 +118,50 @@ int dot_builtin(int argc, char **argv)
             sprintf(tmp, "./%s", file);
             path = get_malloced_str(tmp);
         }
+        
         /* still no luck? */
         if(!path)
         {
             fprintf(stderr, "%s: failed to find file: %s\n", UTILITY, file);
             return 127;
         }
+        
         /* try to read the dot file */
         if(!read_file(path, &src))
         {
             goto err;
         }
+        
         /* free temp memory */
         if(path != file)
         {
             free_malloced_str(path);
         }
     }
+    
     src.srctype = SOURCE_DOTFILE;
     set_internal_exit_status(0);
     
     /* save current positional parameters */
     char **pos = NULL;
+    
     /* set the new positional parameters, if any */
     int i, count = argc-2;
     char buf[32];
+
     /* we have new positional parameters */
     if(count)
     {
         /* save a copy of the current positional parameters list */
         pos = get_pos_paramsp();
+
         /* and replace them with the new positional parameters */
         for(i = 2; i < argc; i++)
         {
             sprintf(buf, "%d", i-1);
             set_shell_varp(buf, argv[i]);
         }
+
         /*
          * if the new positional parameters list is shorted than the old one,
          * set the rest of the old parameters list to NULL.
@@ -162,6 +173,7 @@ int dot_builtin(int argc, char **argv)
             set_shell_varp(buf, NULL);
         }
     }
+
     sprintf(buf, "%d", count);
     set_shell_varp("#", buf);
     
@@ -216,6 +228,7 @@ int dot_builtin(int argc, char **argv)
         free(pos);
     }
     free(src.buffer);
+
     /* and return */
     return exit_status;
     
@@ -225,6 +238,7 @@ err:
     {
         free_malloced_str(path);
     }
+
     if(src.buffer)
     {
         free(src.buffer);

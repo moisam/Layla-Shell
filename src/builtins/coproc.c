@@ -85,7 +85,7 @@ int coproc_builtin(int argc, char **argv, struct io_file_s *io_files)
     /* then start the coprocess */
     if((pid = fork_child()) == 0)     /* child process */
     {
-        asynchronous_prologue();
+        init_subshell();
         close(0);   /* stdin */
         dup  (rfiledes[0]);     /* read from the reading pipe */
         close(1);   /* stdout */

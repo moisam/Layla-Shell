@@ -50,13 +50,16 @@ int shift_builtin(int argc, char **argv)
         fprintf(stderr, "%s: too many arguments\n", UTILITY);
         return 1;
     }
+    
     struct symtab_entry_s *hash = get_symtab_entry("#");
     int params = atoi(hash->val);
     int shift = 1;
+    
     if(argc >= 2)
     {
-        shift = atoi(argv[1]);
-        if(shift > params || shift < 0)
+        char *strend = NULL;
+        shift = strtol(argv[1], &strend, 10);
+        if(*strend || shift > params || shift < 0)
         {
             if(optionx_set(OPTION_SHIFT_VERBOSE))
             {
@@ -64,6 +67,7 @@ int shift_builtin(int argc, char **argv)
             }
             return 2;
         }
+
         if(shift == 0)
         {
             return 0;
@@ -73,6 +77,7 @@ int shift_builtin(int argc, char **argv)
     int i, j = 1+shift;
     char buf[32];
     struct symtab_entry_s *entry1, *entry2;
+    
     for(i = 1; i <= params; i++, j++)
     {
         sprintf(buf, "%d", i);
@@ -92,6 +97,7 @@ int shift_builtin(int argc, char **argv)
             symtab_entry_setval(entry1, entry2->val);
         }
     }
+    
     params -= shift;
     sprintf(buf, "%d", params);
     symtab_entry_setval(hash, buf);

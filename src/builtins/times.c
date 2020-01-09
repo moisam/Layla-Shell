@@ -29,9 +29,6 @@
 
 #define UTILITY     "times"
 
-//static   clock_t st_time;
-static   clock_t en_time;
-//static   struct tms st_cpu;
 static   struct tms en_cpu;
 long int CLK_TCK = 60;
 double   st_time;
@@ -41,13 +38,29 @@ double   st_time;
  */
 void start_clock(void)
 {
+    long int CLK_TCK;
+    
+#ifdef _SC_CLK_TCK
+
     CLK_TCK = sysconf(_SC_CLK_TCK);
-    /* can't do without the clock */
+
+    /* can't do without the clock tick count */
     if(CLK_TCK <= 0)
     {
         fprintf(stderr, "%s: failed to init internal clock\n", UTILITY);
         exit(EXIT_FAILURE);
     }
+
+#elif defined HZ
+
+    CLK_TCK = HZ;
+
+#else
+
+    CLK_TCK = 60;
+
+#endif
+
     st_time = get_cur_time();
 }
 
@@ -62,7 +75,7 @@ void start_clock(void)
  * explanation on how to use this utility.
  */
 
-int times_builtin(int argc, char *argv[] __attribute__((unused)))
+int times_builtin(int argc, char **argv __attribute__((unused)))
 {
     /* we accept no arguments */
     if(option_set('P') && argc > 1)
@@ -70,24 +83,24 @@ int times_builtin(int argc, char *argv[] __attribute__((unused)))
         fprintf(stderr, "%s: should be called with no arguments\n", UTILITY);
         return 1;
     }
+    
     /* get the usage times */
-    en_time = times(&en_cpu);
-    if(en_time == -1)
+    if(times(&en_cpu) == -1)
     {
         fprintf(stderr, "%s: failed to read time: %s\n", UTILITY, strerror(errno));
         return 1;
     }
-    double utime   = ((double)en_cpu.tms_utime )/CLK_TCK;
-    double stime   = ((double)en_cpu.tms_stime )/CLK_TCK;
-    double cutime  = ((double)en_cpu.tms_cutime)/CLK_TCK;
-    double cstime  = ((double)en_cpu.tms_cstime)/CLK_TCK;
-    int    umins   = utime /60; utime  -= (umins *60);
-    int    smins   = stime /60; stime  -= (smins *60);
-    int    cumins  = cutime/60; cutime -= (cumins*60);
-    int    csmins  = cstime/60; cstime -= (csmins*60);
 
-    printf("%dm%.2fs %dm%.2fs\n%dm%.2fs %dm%.2fs\n",
-           umins , utime , smins , stime ,
-           cumins, cutime, csmins, cstime);
+    time_t utime   = en_cpu.tms_utime /CLK_TCK;
+    time_t stime   = en_cpu.tms_stime /CLK_TCK;
+    time_t cutime  = en_cpu.tms_cutime/CLK_TCK;
+    time_t cstime  = en_cpu.tms_cstime/CLK_TCK;
+    int    umins   = utime /60, usecs  = utime  % 60;
+    int    smins   = stime /60, ssecs  = stime  % 60;
+    int    cumins  = cutime/60, cusecs = cutime % 60;
+    int    csmins  = cstime/60, cssecs = cstime % 60;
+    printf("%dm%ds %dm%ds\n%dm%ds %dm%ds\n",
+           umins , usecs , smins , ssecs,
+           cumins, cusecs, csmins, cssecs);
     return 0;
 }

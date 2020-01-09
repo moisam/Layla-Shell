@@ -468,7 +468,7 @@ void purge_var(struct symtab_entry_s *entry, int name_only)
     if(entry->val_type != SYM_FUNC)
     {
         putchar('=');
-        purge_quoted_val(entry->val);
+        print_quoted_val(entry->val);
     }
     putchar('\n');
 }

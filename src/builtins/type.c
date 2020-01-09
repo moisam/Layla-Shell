@@ -27,6 +27,21 @@
 
 #define UTILITY         "type"
 
+/* helper macros */
+#define stringify(str)      #str
+
+#define print_type(arg, type)                                   \
+do {                                                            \
+    if(print_word)                                              \
+    {                                                           \
+        printf(stringify(type) "\n");                           \
+    }                                                           \
+    else                                                        \
+    {                                                           \
+        printf("%s is a shell " stringify(type) "\n", (arg));   \
+    }                                                           \
+} while(0)
+
 
 /*
  * the type builtin utility (POSIX).. used to print the type of an argument.
@@ -152,25 +167,20 @@ int type_builtin(int argc, char **argv)
                     else
                     {
                         printf("%s is aliased to ", argv[i]);
-                        purge_quoted_val(alias);
+                        print_quoted_val(alias);
                         printf("\n");
                     }
+
                     if(!print_all)
                     {
                         continue;
                     }
                 }
+
                 /* check if it is a keyword */
                 if(is_keyword (argv[i]) >= 0)
                 {
-                    if(print_word)
-                    {
-                        printf("keyword\n");
-                    }
-                    else
-                    {
-                        printf("%s is a shell keyword\n", argv[i]);
-                    }
+                    print_type(argv[i], keyword);
                     if(!print_all)
                     {
                         continue;
@@ -179,44 +189,34 @@ int type_builtin(int argc, char **argv)
                 /* check if it is a builtin utility */
                 if(is_builtin (argv[i]))
                 {
-                    if(print_word)
-                    {
-                        printf("builtin\n");
-                    }
-                    else
-                    {
-                        printf("%s is a shell builtin\n", argv[i]);
-                    }
+                    print_type(argv[i], builtin);
                     if(!print_all)
                     {
                         continue;
                     }
                 }
+                
                 /* check if it is a defined shell function */
                 if(search_funcs && is_function(argv[i]))
                 {
-                    if(print_word)
-                    {
-                        printf("function\n");
-                    }
-                    else
-                    {
-                        printf("%s is a shell function\n", argv[i]);
-                    }
+                    print_type(argv[i], function);
                     if(!print_all)
                     {
                         continue;
                     }
                 }
             }
+            
             /* now search for an external command with the given name */
             char *path = get_hashed_path(argv[i]);
             char *hpath = path;
+            
             /* no hashed path found. search in $PATH */
             if(!path)
             {
                 path = search_path(argv[i], NULL, 1);
             }
+            
             /* nothing found */
             if(!path)
             {
@@ -250,6 +250,7 @@ int type_builtin(int argc, char **argv)
                     printf("%s is %s\n", argv[i], path);
                 }
             }
+            
             if(path != hpath)
             {
                 free_malloced_str(path);

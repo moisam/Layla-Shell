@@ -33,7 +33,7 @@
 /*
  * print all the readonly variables.
  */
-void purge_readonlys(void)
+void print_readonlys(void)
 {
     int i;
     /* use an alpha list to sort variables alphabetically */
@@ -89,7 +89,7 @@ void purge_readonlys(void)
                         }
                         else
                         {
-                            char *val = quote_val(entry->val, 1);
+                            char *val = quote_val(entry->val, 1, 0);
                             if(val)
                             {
                                 str = alpha_list_make_str("readonly %s=%s", entry->name, val);
@@ -157,7 +157,7 @@ int readonly_builtin(int argc, char **argv)
                 return 0;
                 
             case 'p':
-                purge_readonlys();
+                print_readonlys();
                 return 0;
         }
     }
@@ -170,7 +170,7 @@ int readonly_builtin(int argc, char **argv)
     /* no arguments. print all the readonly variables */
     if(v >= argc)
     {
-        purge_readonlys();
+        print_readonlys();
         return 0;
     }
     

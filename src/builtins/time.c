@@ -117,7 +117,7 @@ int time_builtin(struct source_s *src, struct node_s *cmd)
     rstart = get_cur_time();
 
     /* execute the command(s) */
-    res = !do_complete_command(src, cmd);
+    res = !do_list(src, cmd, NULL);
     
     /* get end time */
     en_time = times(&en_cpu);

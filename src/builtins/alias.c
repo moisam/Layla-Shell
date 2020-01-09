@@ -92,11 +92,6 @@ void init_aliases(void)
     //set_alias("du", "du -ch");
     set_alias("r", "fc -s");    /* to quickly re-execute history commands */
     set_alias("memuse", "memusage");
-
-    set_alias("a", "d c ");
-    set_alias("d", "e ");
-    set_alias("e", "alias");
-    set_alias("c", "-p");
 }
 
 
@@ -152,7 +147,7 @@ int print_alias(char *name)
          */
         if(aliases[i].val)
         {
-            purge_quoted_val(aliases[i].val);
+            print_quoted_val(aliases[i].val);
         }
         printf("\n");
         if(name)

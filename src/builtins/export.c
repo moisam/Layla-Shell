@@ -40,7 +40,7 @@
  *
  * this function is called by the export, readonly and trap utilities.
  */
-void purge_quoted_val(char *val)
+void print_quoted_val(char *val)
 {
     /* null string */
     if(!val)
@@ -86,7 +86,7 @@ void purge_quoted(char *prefix, char *name, char *val)
     {
         /* print the name=val string */
         printf("%s %s=", prefix, name);
-        purge_quoted_val(val);
+        print_quoted_val(val);
         printf("\n");
     }
 }
@@ -95,7 +95,7 @@ void purge_quoted(char *prefix, char *name, char *val)
 /*
  * print all the exported variables.
  */
-void purge_exports(void)
+void print_exports(void)
 {
     int i;
     /* use an alpha list to sort variables alphabetically */
@@ -151,7 +151,7 @@ void purge_exports(void)
                         }
                         else
                         {
-                            char *val = quote_val(entry->val, 1);
+                            char *val = quote_val(entry->val, 1, 0);
                             if(val)
                             {
                                 str = alpha_list_make_str("%s %s=%s", prefix, entry->name, val);
@@ -227,7 +227,7 @@ int export_builtin(int argc, char **argv)
                 }
                 else
                 {
-                    purge_exports();
+                    print_exports();
                 }
                 return 0;
                 
@@ -257,7 +257,7 @@ int export_builtin(int argc, char **argv)
         }
         else
         {
-            purge_exports();
+            print_exports();
         }
         return 0;
     }
@@ -331,13 +331,13 @@ int export_builtin(int argc, char **argv)
             else
             {
                 /* get the value part */
-                char *val    = equals ? equals+1 : NULL;
+                char *val = equals ? equals+1 : NULL;
 
                 /* positional and special parameters can't be set like this */
                 if(is_pos_param(name_buf) || is_special_param(name_buf))
                 {
                     res = 1;
-                    fprintf(stderr, "export: error setting/unsetting '%s' is not allowed\n", name_buf);
+                    fprintf(stderr, "%s: error setting/unsetting '%s' is not allowed\n", UTILITY, name_buf);
                     continue;
                 }
 
@@ -349,29 +349,26 @@ int export_builtin(int argc, char **argv)
                     entry = add_to_symtab(name_buf);
                 }
 
-                if(entry)
+                /* set the value, if any */
+                if(val)
                 {
-                    /* set the value, if any */
-                    if(val)
+                    /* make sure we're not setting an already readonly variable */
+                    if(flag_set(entry->flags, FLAG_READONLY))
                     {
-                        /* make sure we're not setting an already readonly variable */
-                        if(flag_set(entry->flags, FLAG_READONLY))
-                        {
-                            fprintf(stderr," readonly: cannot set %s: readonly variable\n", name_buf);
-                            res = 1;
-                        }
-                        else
-                        {
-                            symtab_entry_setval(entry, val);
-                            /* set the flags */
-                            entry->flags |= FLAG_EXPORT;
-                        }
+                        fprintf(stderr," %s: cannot set %s: readonly variable\n", UTILITY, name_buf);
+                        res = 1;
                     }
                     else
                     {
+                        symtab_entry_setval(entry, val);
                         /* set the flags */
                         entry->flags |= FLAG_EXPORT;
                     }
+                }
+                else
+                {
+                    /* set the flags */
+                    entry->flags |= FLAG_EXPORT;
                 }
             }
         }
@@ -452,11 +449,6 @@ void do_export_table(struct symtab_s *symtab, int force_export_all)
                                 }
                                 free(f);
                             }
-                        }
-                        else
-                        {
-                            /* function has an empty body */
-                            setenv(entry->name, "", 1);
                         }
                     }
                     else

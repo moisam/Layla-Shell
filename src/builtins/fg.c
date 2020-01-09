@@ -25,14 +25,12 @@
 #include <errno.h>
 #include <sys/types.h>
 #include "../cmd.h"
+#include "../backend/backend.h"
 #include "../debug.h"
 
 /* defined in jobs.c */
 extern int cur_job ;
 extern int prev_job;
-
-/* defined in ../backend/backend.c */
-int wait_on_child(pid_t pid, struct node_s *cmd, struct job_s *job);
 
 #define UTILITY         "fg"
 
@@ -68,6 +66,7 @@ void do_fg(struct job_s *job)
     }
     /* continue the job and wait for it */
     kill(-(job->pgid), SIGCONT);
+    job->flags |= JOB_FLAG_FORGROUND;
     wait_on_child(job->pgid, NULL, job);
     /* restore our foreground pgid */
     if(tty)

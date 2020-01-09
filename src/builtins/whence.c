@@ -106,7 +106,7 @@ int whence_builtin(int argc, char **argv)
                 if(alias && alias != arg)
                 {
                     printf("%s is aliased to ", arg);
-                    purge_quoted_val(alias);
+                    print_quoted_val(alias);
                     printf("\n");
                     if(!print_all) continue;
                 }

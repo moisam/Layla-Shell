@@ -28,10 +28,11 @@
 #include "../backend/backend.h"
 #include "../debug.h"
 
-#define UTILITY         "command"
+#define UTILITY            "command"
 
 /* default path to use if $PATH is NULL or undefined */
-char *default_path = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin";
+// char *COMMAND_DEFAULT_PATH = "/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin";
+char *COMMAND_DEFAULT_PATH = "/bin:/usr/bin";
 
 
 /*
@@ -60,10 +61,11 @@ int search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH, i
         /* NOTE: Step 1-B is suppressed under 'command' invocation */
         if(dofunc)
         {
-            if(do_function_definition(src, cargc, cargv))
+            struct symtab_entry_s *func = get_func(cargv[0]);
+            if(func)
             {
-                //free_symtab(symtab_stack_pop());
-                return 0;
+                dump_node_tree(func->func_body, 0);
+                return !do_function_body(src, cargc, cargv);
             }
         }
 
@@ -167,9 +169,19 @@ int command_builtin(int argc, char **argv)
         return 2;
     }
     
-    /* if the caller provided a path, use it. otherwise use the default path */
-    char *PATH = use_default_path ? default_path : NULL;
+    /*
+     * if the caller provided a path, use it. otherwise use the default path.
+     * we try to get the default path by using POSIX's confstr() function, if
+     * defined. otherwise we use our own default value.
+     */
+    char *PATH = NULL;
+    int res = 0;
     
+    if(use_default_path)
+    {
+        PATH = get_default_path();
+    }
+
     /* the -v option was used: print the command's path */
     if(print_path)
     {
@@ -177,33 +189,45 @@ int command_builtin(int argc, char **argv)
         if(strchr(argv[i], '/'))
         {
             printf("%s\n", argv[i]);
-            return 0;
         }
-        /* check if the command name is a defined alias */
-        char *alias = get_alias_val(argv[i]);
-        if(alias && alias != argv[i])
+        else
         {
-            printf("alias %s='%s'\n", argv[i], alias);
-            return 0;
+            /* check if the command name is a defined alias */
+            char *alias = get_alias_val(argv[i]);
+            if(alias && alias != argv[i])
+            {
+                printf("alias %s='%s'\n", argv[i], alias);
+            }
+            /* check if the command name is a shell keyword, function, or builtin */
+            else if(is_keyword(argv[i]) >= 0 || is_builtin(argv[i]) || is_function(argv[i]))
+            {
+                printf("%s\n", argv[i]);
+            }
+            else
+            {
+                /* search the command name in the executable path */
+                char *path = search_path(argv[i], PATH, 1);
+                if(!path)
+                {
+                    /* we don't know what this command is */
+                    printf("%s is unknown\n", argv[i]);
+                    res = 3;
+                }
+                else
+                {
+                    /* print the external command's path */
+                    printf("%s\n", path);
+                    free_malloced_str(path);
+                }
+            }
         }
-        /* check if the command name is a shell keyword, function, or builtin */
-        if(is_keyword (argv[i]) >= 0 || is_builtin (argv[i]) || is_function(argv[i]))
+        
+        if(PATH != COMMAND_DEFAULT_PATH)
         {
-            printf("%s\n", argv[i]);
-            return 0;
+            free(PATH);
         }
-        /* search the command name in the executable path */
-        char *path = search_path(argv[i], PATH, 1);
-        if(!path)
-        {
-            /* we don't know what this command is */
-            printf("%s is unknown\n", argv[i]);
-            return 3;
-        }
-        /* print the external command's path */
-        printf("%s\n", path);
-        free_malloced_str(path);
-        return 0;
+        
+        return res;
     }
     
     /* the -V option was used: print our interpretation of the command */
@@ -215,43 +239,54 @@ int command_builtin(int argc, char **argv)
             printf("%s is %s\n", argv[i], argv[i]);
             return 0;
         }
-        /* check if the command name is a defined alias */
-        char *alias = get_alias_val(argv[i]);
-        if(alias && alias != argv[i])
+        else
         {
-            printf("%s is aliased to '%s'\n", argv[i], alias);
-            return 0;
+            /* check if the command name is a defined alias */
+            char *alias = get_alias_val(argv[i]);
+            if(alias && alias != argv[i])
+            {
+                printf("%s is aliased to '%s'\n", argv[i], alias);
+            }
+            /* check if the command name is a shell keyword */
+            else if(is_keyword (argv[i]) >= 0)
+            {
+                printf("%s is a shell keyword\n", argv[i]);
+            }
+            /* check if the command name is a shell builtin */
+            else if(is_builtin (argv[i]))
+            {
+                printf("%s is a shell builtin\n", argv[i]);
+            }
+            /* check if the command name is a shell function */
+            else if(is_function(argv[i]) )
+            {
+                printf("%s is a shell function\n", argv[i]);
+            }
+            else
+            {
+                /* search the command name in the executable path */
+                char *path = search_path(argv[i], PATH, 1);
+                if(!path)
+                {
+                    /* we don't know what this command is */
+                    printf("%s is unknown\n", argv[i]);
+                    res = 3;
+                }
+                else
+                {
+                    /* print the external command's path */
+                    printf("%s is %s\n", argv[i], path);
+                    free_malloced_str(path);
+                }
+            }
         }
-        /* check if the command name is a shell keyword */
-        if(is_keyword (argv[i]) >= 0)
+        
+        if(PATH != COMMAND_DEFAULT_PATH)
         {
-            printf("%s is a shell keyword\n", argv[i]);
-            return 0;
+            free(PATH);
         }
-        /* check if the command name is a shell builtin */
-        if(is_builtin (argv[i]))
-        {
-            printf("%s is a shell builtin\n", argv[i]);
-            return 0;
-        }
-        /* check if the command name is a shell function */
-        if(is_function(argv[i]) )
-        {
-            printf("%s is a shell function\n", argv[i]);
-            return 0;
-        }
-        /* search the command name in the executable path */
-        char *path = search_path(argv[i], PATH, 1);
-        if(!path)
-        {
-            /* we don't know what this command is */
-            printf("%s is unknown\n", argv[i]);
-            return 3;
-        }
-        /* print the external command's path */
-        printf("%s is %s\n", argv[i], path);
-        free_malloced_str(path);
-        return 0;
+        
+        return res;
     }
     
     /*
@@ -260,5 +295,11 @@ int command_builtin(int argc, char **argv)
      */
     int    cargc = argc-i;
     char **cargv = &argv[i];
-    return search_and_exec(NULL, cargc, cargv, PATH, SEARCH_AND_EXEC_DOFORK);
+    res = search_and_exec(NULL, cargc, cargv, PATH, SEARCH_AND_EXEC_DOFORK);
+    
+    if(PATH != COMMAND_DEFAULT_PATH)
+    {
+        free(PATH);
+    }
+    return res;
 }

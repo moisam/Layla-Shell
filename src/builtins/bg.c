@@ -46,8 +46,24 @@ void do_bg(struct job_s *job)
     char current = (job->job_num == cur_job ) ? '+' :
                    (job->job_num == prev_job) ? '-' : ' ';
     printf("[%d]%c %s\n", job->job_num, current, job->commandstr);
-    kill(-(job->pgid), SIGCONT);
 
+    /* make sure we have the correct job status in our table */
+    if(job->pids)
+    {
+        int i;
+        for(i = 0; i < job->proc_count; i++)
+        {
+            kill(job->pids[i], SIGCONT);
+            /*
+            if(waitpid(job->pids[i], &status, WNOHANG) > 0)
+            {
+                set_pid_exit_status(job, job->pids[i], status);
+            }
+            */
+        }
+    }
+    job->flags &= ~JOB_FLAG_FORGROUND;
+    
     /* set the $! special parameter */
     struct symtab_entry_s *entry = add_to_symtab("!");
     char buf[12];

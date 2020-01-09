@@ -185,7 +185,7 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int isha
             /* extract the numeric value */
             char *strend;
             long val = strtol(valstr, &strend, 10);
-            if(strend == valstr)
+            if(strend == valstr || *strend)
             {
                 /* no numeric value. maybe its a special string value */
                 if(strcmp(valstr, "unlimited") == 0)
@@ -233,7 +233,7 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int isha
                 }
             }
             /* now set the limit */
-            if(setrlimit(which, &limit) == -1)
+            if(setrlimit(which, &limit) != 0)
             {
                 fprintf(stderr, "%s: failed to set rlimit: %s\n", UTILITY, strerror(errno));
                 return 3;

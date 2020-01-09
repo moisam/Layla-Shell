@@ -56,12 +56,16 @@ int check_for_mail(void)
         /* ksh defaults to 600 secs, while bash uses 60 secs */
         symtab_entry_setval(entry, "600");
     }
-    int secs = atoi(entry->val);
+    
+    char *strend = NULL;
+    int secs = strtol(entry->val, &strend, 10);
+    
     /* zero or negative $MAILCHECK value. don't check for mail */
-    if(secs <= 0)
+    if(*strend || secs <= 0)
     {
         return 0;
     }
+    
     /* get the current time */
     time_t now = time(NULL);
 

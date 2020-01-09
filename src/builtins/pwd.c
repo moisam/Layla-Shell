@@ -22,12 +22,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include <errno.h>
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 
-#define L_OPTION    1   /* handle symbolic links logically */
-#define P_OPTION    2   /* handle symbolic links physically */
-
+// #define L_OPTION    1   /* handle symbolic links logically */
+// #define P_OPTION    2   /* handle symbolic links physically */
 #define UTILITY         "pwd"
 
 
@@ -44,18 +45,12 @@
 
 int pwd_builtin(int argc, char **argv)
 {
-    struct symtab_entry_s *entry = get_symtab_entry("PWD");
-    char *PWD = get_shell_varp("PWD", NULL);
-    if(!PWD || !*PWD)
-    {
-        fprintf(stderr, "%s: cannot read PWD variable: NULL value\n", UTILITY);
-        return 2;
-    }
     /* use the -L option by default */
-    int option = L_OPTION;
+    int l_option = 1;
     int v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
     argi = 0;   /* defined in args.c */
+
     /****************************
      * process the options
      ****************************/
@@ -65,21 +60,22 @@ int pwd_builtin(int argc, char **argv)
         {
             case 'h':
                 print_help(argv[0], REGULAR_BUILTIN_PWD, 1, 0);
-                break;
+                return 0;
                 
             case 'v':
                 printf("%s", shell_ver);
-                break;
+                return 0;
                 
             case 'L':
-                option = L_OPTION;
+                l_option = 1;
                 break;
                 
             case 'P':
-                option = P_OPTION;
+                l_option = 0;
                 break;                
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -87,41 +83,58 @@ int pwd_builtin(int argc, char **argv)
     }
     
     /* go POSIX-style on PWD */
-    if(option == P_OPTION)
+    if(l_option)
     {
-        goto do_p_option;
-    }
-    if(*PWD == '/')
-    {
-        char *p = PWD;
-        while(*p++)
+        char *wd = getenv("PWD");
+        if(wd && *wd == '/')
         {
-            /* we have "/." */
-            if(*p == '.' && p[-1] == '/')
+            char *p = wd;
+            int has_dot = 0;
+            
+            while((p = strstr(p, "/.")))
             {
                 /* we have "/./" or "/." */
-                if(p[1] == '/' || p[1] == '\0')
+                if(p[2] == '/' || p[2] == '\0')
                 {
-                    goto do_p_option;
+                    has_dot = 1;
+                    break;
                 }
+                
                 /* we have "/../" or "/.." */
-                if(p[1] == '.' && (p[2] == '/' || p[2] == '\0'))
+                if(p[2] == '.' && (p[3] == '/' || p[3] == '\0'))
                 {
-                    goto do_p_option;
+                    has_dot = 1;
+                    break;
                 }
+
+                /* not dot or dot-dot. skip it */
+                p += 2;
+            }
+            
+            if(!has_dot)
+            {
+                set_terminal_color(COL_WHITE, COL_DEFAULT);
+                printf("%s\n", wd);
+                return 0;
             }
         }
-        set_terminal_color(COL_WHITE, COL_DEFAULT);
-        printf("%s\n", PWD);
-        return 0;
     }
-do_p_option:
-    /*
-     * TODO: we should properly process POSIX's P-option here
-     */
+
+    if(cwd)
+    {
+        free(cwd);
+    }
+    
+    cwd = getcwd(NULL, 0);
+    if(!cwd)
+    {
+        fprintf(stderr, "%s: failed to read current working directory: %s\n", UTILITY, strerror(errno));
+        return 1;
+    }
+    
     set_terminal_color(COL_WHITE, COL_DEFAULT);
-    PWD = getcwd(NULL, 0);
-    printf("%s\n", PWD);
-    symtab_entry_setval(entry, PWD);
+    printf("%s\n", cwd);
+    
+    /* POSIX says we shouldn't update $PWD with the -P option */
     return 0;
 }

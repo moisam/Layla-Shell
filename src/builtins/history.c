@@ -245,18 +245,21 @@ void init_history(void)
     else
     {
         /* get the int value of the entry */
-        HISTSIZE = atoi(hsize);
-        if(HISTSIZE <= 0 || HISTSIZE > MAX_CMD_HISTORY)
+        char *strend = NULL;
+        HISTSIZE = strtol(hsize, &strend, 10);
+        if(*strend || HISTSIZE <= 0 || HISTSIZE > MAX_CMD_HISTORY)
         {
             /* invalid entry. use our default value */
             HISTSIZE = default_HISTSIZE;
         }
     }
+
     /* get the history file path */
     entry = get_symtab_entry("HISTFILE");
     char   *hist = entry ? entry->val : NULL;
     if(!hist || !*hist)
     {
+        fprintf(stderr, "%s: can't load history: $HISTFILE is null or empty\n", SHELL_NAME);
         /* no history file. no commands to load */
         return;
     }
@@ -266,11 +269,13 @@ void init_history(void)
         __hist_filename = get_malloced_str(hist);
         __hist = fopen(hist, "r");
     }
+    
     /* failed to open the file */
     if(!__hist)
     {
         return;
     }
+    
     /*
      *  get the total number of entries (not lines) in the history file..
      *  an entry might contain one or more lines, as in multiline commands
@@ -293,14 +298,17 @@ void init_history(void)
         count++;
     }
     hist_file_count = count;
+    
     /* history file is empty */
     if(!count)
     {
         fclose(__hist);
         return;
     }
+    
     /* rewind the file to read the commands */
     rewind(__hist);
+    
     /*
      * we want to get HISTSIZE entries from the file. if we have more, get only those.
      * otherwise, get 'em all.
@@ -319,6 +327,7 @@ void init_history(void)
         }
         count--;
     }
+    
     /* now read the entries in */
     while((line = read_line(__hist, 1, &is_timestamp)))
     {
@@ -357,6 +366,7 @@ void flush_history(void)
     {
         return;
     }
+
     /* no valid history file */
     if(!__hist_filename)
     {

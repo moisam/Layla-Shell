@@ -37,34 +37,35 @@
 
 int eval_builtin(int argc, char **argv)
 {
-    /*
-     * set the exit status to zero, so that if we had to return prematurely, we'll
-     * have the exit status set.
-     */
-    set_internal_exit_status(0);
+    /* nothing to be done */
     if(argc == 1)
     {
         return 0;
     }
+    
     /*
      * copy the list of arguments into a buffer, which we'll pass to do_cmd() so that
      * it will parse and execute it as if it was a script file.
      */
-    char   *cmd  = NULL;
-    int     i    = 1;
-    size_t  len  = 0;
+    char   *cmd = NULL;
+    int     i;
+    size_t  len = 0;
+
     /* calculate the memory required */
-    for( ; i < argc; i++)
+    for(i = 1; i < argc; i++)
     {
         len += strlen(argv[i])+1;
     }
+
     /* POSIX says we shall return 0 if we have NULL arguments */
     if(len == (size_t)argc)
     {
         return 0;
     }
-    /* account for the null terminating char */
+    
+    /* account for the null terminator */
     len++;
+    
     /* alloc the buffer */
     cmd = malloc(len);
     if(!cmd)
@@ -72,10 +73,10 @@ int eval_builtin(int argc, char **argv)
         fprintf(stderr, "eval: insufficient memory\n");
         return 1;
     }
-    i = 1;
+    cmd[0] = '\0';
+
     /* copy the args to buffer */
-    strcpy(cmd, argv[i++]);
-    for( ; i < argc; i++)
+    for(i = 1; i < argc; i++)
     {
         strcat(cmd, argv[i]);
         strcat(cmd, " "    );
@@ -88,16 +89,20 @@ int eval_builtin(int argc, char **argv)
     src.bufsize  = len-1;
     src.srctype  = SOURCE_EVAL;
     src.curpos   = INIT_SRC_POS;
-    src.srcname = NULL;
-    src.curline = 1;
+    src.srcname  = NULL;
+    src.curline  = 1;
 
     /* add a new entry to the callframe stack to reflect the new scope we're entering */
     callframe_push(callframe_new(argv[1], src.srcname, src.curline));
 
+    /* execute the commands */
     parse_and_execute(&src);
 
     /* pop the callframe entry we've added to the stack */
     callframe_popf();
+    
+    /* free used memory */
+    free(cmd);
 
     /* return the last command's exit status */
     return exit_status;

@@ -32,42 +32,52 @@
 
 #define UTILITY     "set"
 
-/*
- * options recognized by the shell.
- */
-struct
+/* all the short option option names */
+char *short_options = "abBCdeEfghHklLmnopPqrtTuvwxy";
+
+/* the long option names and whether each option is on or off */
+struct option_s
 {
-    int allexport  :1;    /* -a */
-    int notify     :1;    /* -b */
-    int braceexpand:1;    /* -B */
-    int noclobber  :1;    /* -C */
-    int dumpast    :1;    /* -d -- our own extension to dump parser's 
-                                   Abstract Source Tree or AST */
-    int errexit    :1;    /* -e */
-    int errtrace   :1;    /* -E */
-    int noglob     :1;    /* -f */
-    int nolog      :1;    /* -g (short option is our non-POSIX extension) */
-    int hashall    :1;    /* -h */
-    int histexpand :1;    /* -H */
-    int interactive:1;    /* -i */
-    int keyword    :1;    /* -k -- borrowed from ksh */
-    int login      :1;    /* -L */
-    int pipefail   :1;    /* -l (short option is our non-POSIX extension) */
-    int monitor    :1;    /* -m */
-    int noexec     :1;    /* -n */
-    int ignoreeof  :1;    /* -o (short option is our non-POSIX extension) */
-    int privileged :1;    /* -p */
-    int posix      :1;    /* -P (short option is our non-POSIX extension) */
-    int quit       :1;    /* -q -- borrowed from tcsh */
-    int restricted :1;    /* -r */
-    int onecmd     :1;    /* -t */
-    int functrace  :1;    /* -T */
-    int nounset    :1;    /* -u */
-    int verbose    :1;    /* -v */
-    int history    :1;    /* -w (short option is our non-POSIX extension) */
-    int xtrace     :1;    /* -x */
-    int vi         :1;    /* -y (short option is our non-POSIX extension) */
-} options;
+    char *name;
+    int   is_set;
+}
+shell_options[] =
+{
+    { "allexport"  , 0 },
+    { "notify"     , 0 },
+    { "braceexpand", 0 },
+    { "noclobber"  , 0 },
+    { "dumpast"    , 0 },
+    { "errexit"    , 0 },
+    { "errtrace"   , 0 },
+    { "noglob"     , 0 },
+    { "nolog"      , 0 },
+    { "hashall"    , 0 },
+    { "histexpand" , 0 },
+    { "keyword"    , 0 },
+    { "pipefail"   , 0 },
+    { "login"      , 0 },
+    { "monitor"    , 0 },
+    { "noexec"     , 0 },
+    { "ignoreeof"  , 0 },
+    { "privileged" , 0 },
+    { "posix"      , 0 },
+    { "quit"       , 0 },
+    { "restricted" , 0 },
+    { "onecmd"     , 0 },
+    { "functrace"  , 0 },
+    { "nounset"    , 0 },
+    { "verbose"    , 0 },
+    { "history"    , 0 },
+    { "xtrace"     , 0 },
+    { "vi"         , 0 },
+};
+
+int options_count = sizeof(shell_options)/sizeof(struct option_s);
+
+/* some important indices to the array above */
+#define OPTION_PRIVILEGED       18
+#define OPTION_RESTRICTED       21
 
 
 /*
@@ -78,121 +88,13 @@ struct
  */
 char short_option(char *long_option)
 {
-    if(strcmp(long_option, "allexport"  ) == 0)
+    int i;
+    for(i = 0; i < options_count; i++)
     {
-        return 'a';
-    }
-    if(strcmp(long_option, "notify"     ) == 0)
-    {
-        return 'b';
-    }
-    if(strcmp(long_option, "braceexpand") == 0)
-    {
-        return 'B';
-    }
-    if(strcmp(long_option, "noclobber"  ) == 0)
-    {
-        return 'C';
-    }
-    if(strcmp(long_option, "dumpast"    ) == 0)
-    {
-        return 'd';
-    }
-    if(strcmp(long_option, "errexit"    ) == 0)
-    {
-        return 'e';
-    }
-    if(strcmp(long_option, "errtrace"   ) == 0)
-    {
-        return 'E';
-    }
-    if(strcmp(long_option, "noglob"     ) == 0)
-    {
-        return 'f';
-    }
-    if(strcmp(long_option, "nolog"      ) == 0)
-    {
-        return 'g';
-    }
-    if(strcmp(long_option, "hashall"    ) == 0)
-    {
-        return 'h';
-    }
-    if(strcmp(long_option, "histexpand" ) == 0)
-    {
-        return 'H';
-    }
-    if(strcmp(long_option, "interactive") == 0)
-    {
-        return 'i';
-    }
-    if(strcmp(long_option, "keyword"    ) == 0)
-    {
-        return 'k';
-    }
-    if(strcmp(long_option, "pipefail"   ) == 0)
-    {
-        return 'l';
-    }
-    if(strcmp(long_option, "login"      ) == 0)
-    {
-        return 'L';
-    }
-    if(strcmp(long_option, "monitor"    ) == 0)
-    {
-        return 'm';
-    }
-    if(strcmp(long_option, "noexec"     ) == 0)
-    {
-        return 'n';
-    }
-    if(strcmp(long_option, "ignoreeof"  ) == 0)
-    {
-        return 'o';
-    }
-    if(strcmp(long_option, "privileged" ) == 0)
-    {
-        return 'p';
-    }
-    if(strcmp(long_option, "posix"      ) == 0)
-    {
-        return 'P';
-    }
-    if(strcmp(long_option, "quit"       ) == 0)
-    {
-        return 'q';
-    }
-    if(strcmp(long_option, "restricted" ) == 0)
-    {
-        return 'r';
-    }
-    if(strcmp(long_option, "onecmd"     ) == 0)
-    {
-        return 't';
-    }
-    if(strcmp(long_option, "functrace"  ) == 0)
-    {
-        return 'T';
-    }
-    if(strcmp(long_option, "nounset"    ) == 0)
-    {
-        return 'u';
-    }
-    if(strcmp(long_option, "verbose"    ) == 0)
-    {
-        return 'v';
-    }
-    if(strcmp(long_option, "history"    ) == 0)
-    {
-        return 'w';
-    }
-    if(strcmp(long_option, "xtrace"     ) == 0)
-    {
-        return 'x';
-    }
-    if(strcmp(long_option, "vi"         ) == 0)
-    {
-        return 'y';
+        if(strcmp(long_option, shell_options[i].name) == 0)
+        {
+            return short_options[i];
+        }
     }
     return 0;
 }
@@ -206,37 +108,13 @@ char short_option(char *long_option)
  */
 char *long_option(char short_opt)
 {
-    switch(short_opt)
+    int i;
+    for(i = 0; i < options_count; i++)
     {
-        case 'a': return "allexport"  ;
-        case 'b': return "notify"     ;
-        case 'B': return "braceexpand";
-        case 'C': return "noclobber"  ;
-        case 'd': return "dumpast"    ;
-        case 'e': return "errexit"    ;
-        case 'E': return "errtrace"   ;
-        case 'f': return "noglob"     ;
-        case 'g': return "nolog"      ;
-        case 'h': return "hashall"    ;
-        case 'H': return "histexpand" ;
-        case 'i': return "interactive";
-        case 'k': return "keyword"    ;
-        case 'l': return "pipefail"   ;
-        case 'L': return "login"      ;
-        case 'm': return "monitor"    ;
-        case 'n': return "noexec"     ;
-        case 'o': return "ignoreeof"  ;
-        case 'p': return "privileged" ;
-        case 'P': return "posix"      ;
-        case 'q': return "quit"       ;
-        case 'r': return "restricted" ;
-        case 't': return "onecmd"     ;
-        case 'T': return "functrace"  ;
-        case 'u': return "nounset"    ;
-        case 'v': return "verbose"    ;
-        case 'w': return "history"    ;
-        case 'x': return "xtrace"     ;
-        case 'y': return "vi"         ;
+        if(short_opt == short_options[i])
+        {
+            return shell_options[i].name;
+        }
     }
     return NULL;
 }
@@ -247,38 +125,14 @@ char *long_option(char short_opt)
  */
 int is_short_option(char which)
 {
-    switch(which)
+    char *p = short_options;
+    while(*p)
     {
-        case 'a':
-        case 'b':
-        case 'B':
-        case 'C':
-        case 'd':
-        case 'e':
-        case 'E':
-        case 'f':
-        case 'g':
-        case 'h':
-        case 'H':
-        case 'i':
-        case 'k':
-        case 'l':
-        case 'L':
-        case 'm':
-        case 'n':
-        case 'o':
-        case 'p':
-        case 'P':
-        case 'q':
-        case 'r':
-        case 't':
-        case 'T':
-        case 'u':
-        case 'v':
-        case 'w':
-        case 'x':
-        case 'y':
+        if(*p == which)
+        {
             return 1;
+        }
+        p++;
     }
     return 0;
 }
@@ -289,48 +143,15 @@ int is_short_option(char which)
  */
 int option_set(char which)
 {
-    switch(which)
+    int i;
+    for(i = 0; i < options_count; i++)
     {
-        case 'a': return options.allexport  ;
-        case 'b': return options.notify     ;
-        case 'B': return options.braceexpand;
-        case 'C': return options.noclobber  ;
-        case 'd': return options.dumpast    ;
-        case 'e': return options.errexit    ;
-        case 'E': return options.errtrace   ;
-        case 'f': return options.noglob     ;
-        case 'g': return options.nolog      ;
-        case 'h': return options.hashall    ;
-        case 'H': return options.histexpand ;
-        case 'i': return options.interactive;
-        case 'k': return options.keyword    ;
-        case 'l': return options.pipefail   ;
-        case 'L': return options.login      ;
-        case 'm': return options.monitor    ;
-        case 'n': return options.noexec     ;
-        case 'o': return options.ignoreeof  ;
-        case 'p': return options.privileged ;
-        case 'P': return options.posix      ;
-        case 'q': return options.quit       ;
-        case 'r': return options.restricted ;
-        case 't': return options.onecmd     ;
-        case 'T': return options.functrace  ;
-        case 'u': return options.nounset    ;
-        case 'v': return options.verbose    ;
-        case 'w': return options.history    ;
-        case 'x': return options.xtrace     ;
-        case 'y': return options.vi         ;
-        default : return 0                  ;
+        if(which == short_options[i])
+        {
+            return shell_options[i].is_set;
+        }
     }
-}
-
-
-/*
- * reset (unset) all options.
- */
-void reset_options(void)
-{
-    memset(&options, 0, sizeof(options));
+    return 0;
 }
 
 
@@ -343,41 +164,39 @@ void reset_options(void)
 void symtab_save_options(void)
 {
     /* $- is the current option flags. set it appropriately */
-    //struct symtab_entry_s *entry = add_to_symtab("-");
     char buf[32];
     char *b = buf;
-    if(options.allexport  ) *b++ = 'a';
-    if(options.notify     ) *b++ = 'b';
-    if(options.braceexpand) *b++ = 'B';
-    if(options.noclobber  ) *b++ = 'C';
-    if(options.dumpast    ) *b++ = 'd';
-    if(options.errexit    ) *b++ = 'e';
-    if(options.errtrace   ) *b++ = 'E';
-    if(options.noglob     ) *b++ = 'f';
-    if(options.nolog      ) *b++ = 'g';
-    if(options.hashall    ) *b++ = 'h';
-    if(options.histexpand ) *b++ = 'H';
-    if(options.interactive) *b++ = 'i';
-    if(options.keyword    ) *b++ = 'k';
-    if(options.pipefail   ) *b++ = 'l';
-    if(options.login      ) *b++ = 'L';
-    if(options.monitor    ) *b++ = 'm';
-    if(options.noexec     ) *b++ = 'n';
-    if(options.ignoreeof  ) *b++ = 'o';
-    if(options.privileged ) *b++ = 'p';
-    if(options.posix      ) *b++ = 'P';
-    if(options.quit       ) *b++ = 'q';
-    if(options.restricted ) *b++ = 'r';
-    if(options.onecmd     ) *b++ = 't';
-    if(options.functrace  ) *b++ = 'T';
-    if(options.nounset    ) *b++ = 'u';
-    if(options.verbose    ) *b++ = 'v';
-    if(options.history    ) *b++ = 'w';
-    if(options.xtrace     ) *b++ = 'x';
-    if(options.vi         ) *b++ = 'y';
+    int i;
+    for(i = 0; i < options_count; i++)
+    {
+        if(shell_options[i].is_set)
+        {
+            *b++ = short_options[i];
+        }
+    }
+    
+    /* add the interactive option if it's set */
+    if(interactive_shell)
+    {
+        *b++ = 'i';
+    }
+    
+    /* add the read stdin option if it's set */
+    if(read_stdin)
+    {
+        *b++ = 's';
+    }
+    
+    /* null-terminate the string */
     *b = '\0';
-    //symtab_entry_setval(entry, buf);
-    set_shell_varp("-", buf);
+
+    struct symtab_entry_s *entry = add_to_symtab("-");
+    if(entry)
+    {
+        entry->flags |= FLAG_READONLY;
+        symtab_entry_setval(entry, buf);
+    }
+
     /* save options in a colon-separated list, similar to what bash does */
     /* make a buffer as large as can be. 11 if the length of the longest option name */
     char buf2[((b-buf)*11)+1];
@@ -386,18 +205,18 @@ void symtab_save_options(void)
     while(*b)
     {
         char *o = long_option(*b);
-        sprintf(b2, "%s" , o);
-        b2 += strlen(o);
-        if(b[1])
+        if(o)
         {
-            *b2++ = ':';
-            *b2   = '\0';
+            sprintf(b2, "%s" , o);
+            b2 += strlen(o);
+            if(b[1])
+            {
+                *b2++ = ':';
+                *b2   = '\0';
+            }
         }
         b++;
     }
-    //entry = add_to_symtab("SHELLOPTS");
-    //symtab_entry_setval(entry, buf2);
-    //entry->flags |= FLAG_READONLY;
     set_shell_varp("SHELLOPTS", buf2);
 }
 
@@ -406,41 +225,17 @@ void symtab_save_options(void)
  * set or unset 'option'.. if 'set' is 0, the option is unset; if it is 1,
  * the option is set.
  */
-void set_option(char option, int set)
+void set_option(char short_opt, int set)
 {
-    switch(option)
+    int i;
+    for(i = 0; i < options_count; i++)
     {
-        case 'a': options.allexport   = set; break;
-        case 'b': options.notify      = set; break;
-        case 'B': options.braceexpand = set; break;
-        case 'C': options.noclobber   = set; break;
-        case 'd': options.dumpast     = set; break;
-        case 'e': options.errexit     = set; break;
-        case 'E': options.errtrace    = set; break;
-        case 'f': options.noglob      = set; break;
-        case 'g': options.nolog       = set; break;
-        case 'h': options.hashall     = set; break;
-        case 'H': options.histexpand  = set; break;
-        case 'i': options.interactive = set; break;
-        case 'k': options.keyword     = set; break;
-        case 'l': options.pipefail    = set; break;
-        case 'L': options.login       = set; break;
-        case 'm': options.monitor     = set; break;
-        case 'n': options.noexec      = set; break;
-        case 'o': options.ignoreeof   = set; break;
-        case 'p': options.privileged  = set; break;
-        case 'P': options.posix       = set; break;
-        case 'q': options.quit        = set; break;
-        case 'r': options.restricted  = set; break;
-        case 't': options.onecmd      = set; break;
-        case 'T': options.functrace   = set; break;
-        case 'u': options.nounset     = set; break;
-        case 'v': options.verbose     = set; break;
-        case 'w': options.history     = set; break;
-        case 'x': options.xtrace      = set; break;
-        case 'y': options.vi          = set; break;
+        if(short_opt == short_options[i])
+        {
+            shell_options[i].is_set = set;
+            return;
+        }
     }
-    symtab_save_options();
 }
 
 
@@ -450,79 +245,29 @@ void set_option(char option, int set)
  * option's state).. if 'onoff' is zero, each option is printed as -o or +o,
  * followed by the option's long name.
  */
-void purge_options(char onoff)
+void print_options(char onoff)
 {
-    if(onoff)   /* user specified '-o' */
+    int i;
+    for(i = 0; i < options_count; i++)
     {
-        printf("allexport  \t%s\n", options.allexport   ? "on" : "off");
-        printf("braceexpand\t%s\n", options.braceexpand ? "on" : "off");
-        printf("dumpast    \t%s\n", options.dumpast     ? "on" : "off");
-        printf("errexit    \t%s\n", options.errexit     ? "on" : "off");
-        printf("errtrace   \t%s\n", options.errtrace    ? "on" : "off");
-        printf("hashall    \t%s\n", options.hashall     ? "on" : "off");
-        printf("histexpand \t%s\n", options.histexpand  ? "on" : "off");
-        printf("history    \t%s\n", options.history     ? "on" : "off");
-        printf("functrace  \t%s\n", options.functrace   ? "on" : "off");
-        printf("ignoreeof  \t%s\n", options.ignoreeof   ? "on" : "off");
-        printf("interactive\t%s\n", options.interactive ? "on" : "off");
-        printf("login      \t%s\n", options.login       ? "on" : "off");
-        printf("keyword    \t%s\n", options.keyword     ? "on" : "off");
-        printf("monitor    \t%s\n", options.monitor     ? "on" : "off");
-        printf("onecmd     \t%s\n", options.onecmd      ? "on" : "off");
-        printf("noclobber  \t%s\n", options.noclobber   ? "on" : "off");
-        printf("noexec     \t%s\n", options.noexec      ? "on" : "off");
-        printf("noglob     \t%s\n", options.noglob      ? "on" : "off");
-        printf("nolog      \t%s\n", options.nolog       ? "on" : "off");
-        printf("notify     \t%s\n", options.notify      ? "on" : "off");
-        printf("nounset    \t%s\n", options.nounset     ? "on" : "off");
-        printf("pipefail   \t%s\n", options.pipefail    ? "on" : "off");
-        printf("privileged \t%s\n", options.privileged  ? "on" : "off");
-        printf("posix      \t%s\n", options.posix       ? "on" : "off");
-        printf("quit       \t%s\n", options.quit        ? "on" : "off");
-        printf("restricted \t%s\n", options.restricted  ? "on" : "off");
-        printf("verbose    \t%s\n", options.verbose     ? "on" : "off");
-        printf("vi         \t%s\n", options.vi          ? "on" : "off");
-        printf("xtrace     \t%s\n", options.xtrace      ? "on" : "off");
-    }
-    else        /* user specified '+o' */
-    {
-        printf("set %co allexport\n"  , options.allexport   ? '-' : '+');
-        printf("set %co braceexpand\n", options.braceexpand ? '-' : '+');
-        printf("set %co dumpast\n"    , options.dumpast     ? '-' : '+');
-        printf("set %co errexit\n"    , options.errexit     ? '-' : '+');
-        printf("set %co errtrace\n"   , options.errtrace    ? '-' : '+');
-        printf("set %co hashall\n"    , options.hashall     ? '-' : '+');
-        printf("set %co histexpand\n" , options.histexpand  ? '-' : '+');
-        printf("set %co history\n"    , options.history     ? '-' : '+');
-        printf("set %co functrace\n"  , options.functrace   ? '-' : '+');
-        printf("set %co ignoreeof\n"  , options.ignoreeof   ? '-' : '+');
-        printf("set %co interactive\n", options.interactive ? '-' : '+');
-        printf("set %co login\n"      , options.login       ? '-' : '+');
-        printf("set %co keyword\n"    , options.keyword     ? '-' : '+');
-        printf("set %co monitor\n"    , options.monitor     ? '-' : '+');
-        printf("set %co onecmd\n"     , options.onecmd      ? '-' : '+');
-        printf("set %co noclobber\n"  , options.noclobber   ? '-' : '+');
-        printf("set %co noexec\n"     , options.noexec      ? '-' : '+');
-        printf("set %co noglob\n"     , options.noglob      ? '-' : '+');
-        printf("set %co nolog\n"      , options.nolog       ? '-' : '+');
-        printf("set %co notify\n"     , options.notify      ? '-' : '+');
-        printf("set %co nounset\n"    , options.nounset     ? '-' : '+');
-        printf("set %co pipefail\n"   , options.pipefail    ? '-' : '+');
-        printf("set %co privileged\n" , options.privileged  ? '-' : '+');
-        printf("set %co posix\n"      , options.posix       ? '-' : '+');
-        printf("set %co quit\n"       , options.quit        ? '-' : '+');
-        printf("set %co restricted\n" , options.restricted  ? '-' : '+');
-        printf("set %co verbose\n"    , options.verbose     ? '-' : '+');
-        printf("set %co vi\n"         , options.vi          ? '-' : '+');
-        printf("set %co xtrace\n"     , options.xtrace      ? '-' : '+');
+        if(onoff)   /* user specified '-o' */
+        {
+            printf("%-11s\t%s\n", shell_options[i].name,
+                                  shell_options[i].is_set ? "on" : "off");
+        }
+        else        /* user specified '+o' */
+        {
+            printf("set %co %s\n", shell_options[i].is_set ? '-' : '+',
+                                   shell_options[i].name);
+        }
     }
 }
 
 
 /*
- * turn the previliged mode on (the -p option) or off (the +p option).
+ * reset uid and gid if the previliged mode is off (the +p option).
  */
-static inline void __do_privileged(int onoff)
+static inline void do_privileged(int onoff)
 {
     /* turning off privileged mode resets ids */
     if(!onoff)
@@ -538,24 +283,24 @@ static inline void __do_privileged(int onoff)
             setegid(rgid);
         }
     }
-    options.privileged = onoff;
+    shell_options[OPTION_PRIVILEGED].is_set = onoff;
 }
 
 
 /*
  * turn the restricted mode on (the -r option) or off (the +r option).
  */
-static inline int __do_restricted(int onoff)
+static inline int do_restricted(int onoff)
 {
     /* -r mode cannot be turned off */
-    if(!onoff && options.restricted)
+    if(!onoff && shell_options[OPTION_RESTRICTED].is_set)
     {
         fprintf(stderr, 
                 "%s: restricted flag cannot be unset after being set\n",
                 UTILITY);
         return 0;
     }
-    options.restricted = onoff;
+    shell_options[OPTION_RESTRICTED].is_set = onoff;
     return 1;
 }
 
@@ -565,19 +310,25 @@ static inline int __do_restricted(int onoff)
  */
 void reset_non_posix_options(void)
 {
-    options.braceexpand = 0;
-    options.dumpast     = 0;
-    options.errtrace    = 0;
-    options.histexpand  = 0;
-    options.keyword     = 0;
-    options.pipefail    = 0;
-    options.braceexpand = 0;
-    options.quit        = 0;
-    options.restricted  = 0;
-    options.onecmd      = 0;
-    options.functrace   = 0;
-    options.history     = 0;
-    __do_privileged(0);
+    int i;
+    static char *op = "BdEHklqrtTw";
+    char *p1 = op;
+    while(*p1)
+    {
+        char *p2 = short_options;
+        for(i = 0; i < options_count; i++, p2++)
+        {
+            if(*p1 == *p2)
+            {
+                shell_options[i].is_set = 0;
+                break;
+            }
+        }
+        p1++;
+    }
+    
+    /* reset the privileged option */
+    do_privileged(0);
 }
 
 
@@ -595,266 +346,93 @@ void reset_non_posix_options(void)
 int do_options(char *ops, char *extra)
 {
     char onoff = (*ops++ == '-') ? 1 : 0;
-    int  res   = 0;
+    int  i, res = 0;
     while(*ops)
     {
         switch(*ops)
         {
-            case 'a':
-                options.allexport  = onoff;
-                break;
-
-            case 'b':
-                options.notify     = onoff;
-                break;
-
-            case 'B':
-                options.braceexpand = onoff;
-                break;
-
-            case 'C':
-                options.noclobber  = onoff;
-                break;
-
-            case 'd':
-                options.dumpast    = onoff;
-                break;
-
-            case 'e':
-                options.errexit    = onoff;
-                break;
-
-            case 'E':
-                options.errtrace   = onoff;
-                break;
-
-            case 'f':
-                options.noglob     = onoff;
-                break;
-
-            case 'h':
-                options.hashall    = onoff;
-                break;
-
-            case 'H':
-                options.histexpand = onoff;
-                break;
-
             case 'L':
-                fprintf(stderr,
-                        "%s: cannot change the %s option when the shell is running\n",
-                        SHELL_NAME, "--login");
-                return -1;
-                
-            case 'k':
-                options.keyword    = onoff;
-                break;
-
-            case 'm':
-                options.monitor    = onoff;
-                break;
-
-            case 'n':
-                options.noexec     = onoff;
-                break;
-
-            case 'p':
-                __do_privileged(onoff);
-                break;
-
             case 'P':
                 fprintf(stderr,
-                        "%s: cannot change the %s option when the shell is running\n",
-                        SHELL_NAME, "--posix");
+                        "%s: cannot change the --%s option when the shell is running\n",
+                        UTILITY, long_option(*ops));
                 return -1;
                 
-            case 'q':
-                options.quit       = onoff;
+            case 'p':
+                do_privileged(onoff);
                 break;
 
             case 'r':
-                if(!__do_restricted(onoff))
+                if(!do_restricted(onoff))
                 {
                     return -1;
                 }
-                break;
-
-            case 't':
-                options.onecmd     = onoff;
-                break;
-
-            case 'T':
-                options.functrace  = onoff;
-                break;
-
-            case 'u':
-                options.nounset    = onoff;
-                break;
-
-            case 'v':
-                options.verbose    = onoff;
-                break;
-
-            case 'w':
-                options.history    = onoff;
-                break;
-
-            case 'x':
-                options.xtrace     = onoff;
-                break;
-
-            case 'i':
-                if(onoff && ((getuid() != geteuid()) || (getgid() != getegid())))
-                {
-                    fprintf(stderr, 
-                            "%s: cannot set interactive flag: insufficient permissions\n",
-                            UTILITY);
-                    return -1;
-                }
-                options.interactive = onoff;
                 break;
 
             case 'o':
                 if(!extra || !*extra)
                 {
-                    purge_options(onoff);
+                    print_options(onoff);
                     break;
                 }
+
                 /* get the long option */
-                if     (strcmp(extra, "allexport"  ) == 0)
-                {
-                    options.allexport   = onoff;
-                }
-                else if(strcmp(extra, "dumpast"    ) == 0)
-                {
-                    options.dumpast     = onoff;
-                }
-                else if(strcmp(extra, "braceexpand") == 0)
-                {
-                    options.braceexpand = onoff;
-                }
-                else if(strcmp(extra, "errexit"    ) == 0)
-                {
-                    options.errexit     = onoff;
-                }
-                else if(strcmp(extra, "errtrace"   ) == 0)
-                {
-                    options.errtrace    = onoff;
-                }
-                else if(strcmp(extra, "hashall"    ) == 0)
-                {
-                    options.hashall     = onoff;
-                }
-                else if(strcmp(extra, "histexpand" ) == 0)
-                {
-                    options.histexpand  = onoff;
-                }
-                else if(strcmp(extra, "history"    ) == 0)
-                {
-                    options.history     = onoff;
-                }
-                else if(strcmp(extra, "functrace"  ) == 0)
-                {
-                    options.functrace   = onoff;
-                }
-                else if(strcmp(extra, "ignoreeof"  ) == 0)
-                {
-                    options.ignoreeof   = onoff;
-                }
-                else if(strcmp(extra, "login"      ) == 0)
+                if(strcmp(extra, "login") == 0 || strcmp(extra, "posix") == 0)
                 {
                     fprintf(stderr,
-                            "%s: cannot change the %s option when the shell is running\n",
-                            SHELL_NAME, "--login");
+                            "%s: cannot change the --%s option when the shell is running\n",
+                            UTILITY, extra);
                     return -1;
                 }
-                else if(strcmp(extra, "keyword"    ) == 0)
+                else if(strcmp(extra, "privileged") == 0)
                 {
-                    options.keyword     = onoff;
+                    do_privileged(onoff);
                 }
-                else if(strcmp(extra, "monitor"    ) == 0)
+                else if(strcmp(extra, "restricted") == 0)
                 {
-                    options.monitor     = onoff;
-                }
-                else if(strcmp(extra, "onecmd"     ) == 0)
-                {
-                    options.onecmd      = onoff;
-                }
-                else if(strcmp(extra, "noclobber"  ) == 0)
-                {
-                    options.noclobber   = onoff;
-                }
-                else if(strcmp(extra, "noglob"     ) == 0)
-                {
-                    options.noglob      = onoff;
-                }
-                else if(strcmp(extra, "noexec"     ) == 0)
-                {
-                    options.noexec      = onoff;
-                }
-                else if(strcmp(extra, "nolog"      ) == 0)
-                {
-                    options.nolog       = onoff;
-                }
-                else if(strcmp(extra, "notify"     ) == 0)
-                {
-                    options.notify      = onoff;
-                }
-                else if(strcmp(extra, "nounset"    ) == 0)
-                {
-                    options.nounset     = onoff;
-                }
-                else if(strcmp(extra, "pipefail"   ) == 0)
-                {
-                    options.pipefail    = onoff;
-                }
-                else if(strcmp(extra, "privileged" ) == 0)
-                {
-                    __do_privileged(onoff);
-                }
-                else if(strcmp(extra, "posix"      ) == 0)
-                {
-                    fprintf(stderr,
-                            "%s: cannot change the %s option when the shell is running\n",
-                            SHELL_NAME, "--posix");
-                    return -1;
-                }
-                else if(strcmp(extra, "quit"       ) == 0)
-                {
-                    options.quit        = onoff;
-                }
-                else if(strcmp(extra, "restricted" ) == 0)
-                {
-                    if(!__do_restricted(onoff))
+                    if(!do_restricted(onoff))
                     {
                         return -1;
                     }
-                    break;
-                }
-                else if(strcmp(extra, "verbose"    ) == 0)
-                {
-                    options.verbose     = onoff;
-                }
-                else if(strcmp(extra, "vi"         ) == 0)
-                {
-                    options.vi          = onoff;
-                }
-                else if(strcmp(extra, "xtrace"     ) == 0)
-                {
-                    options.xtrace      = onoff;
                 }
                 else
                 {
-                    fprintf(stderr, "%s: unknown option: %s\n", UTILITY, extra);
-                    return -1;
+                    for(i = 0; i < options_count; i++)
+                    {
+                        if(strcmp(extra, shell_options[i].name) == 0)
+                        {
+                            shell_options[i].is_set = onoff;
+                            break;
+                        }
+                    }
+                
+                    /* unrecognized option */
+                    if(i == options_count)
+                    {
+                        fprintf(stderr, "%s: unknown option: %s\n", UTILITY, extra);
+                        return -1;
+                    }
                 }
                 res = 1;
                 break;
 
-            /* unrecognized option */
             default:
-                fprintf(stderr, "%s: unknown option: %c\n", UTILITY, *ops);
-                return -1;
+                for(i = 0; i < options_count; i++)
+                {
+                    if(*ops == short_options[i])
+                    {
+                        shell_options[i].is_set = onoff;
+                        break;
+                    }
+                }
+                
+                /* unrecognized option */
+                if(i == options_count)
+                {
+                    fprintf(stderr, "%s: unknown option: %c\n", UTILITY, *ops);
+                    return -1;
+                }
+                break;
         }
         ops++;
     }
@@ -884,6 +462,7 @@ int set_builtin(int argc, char **argv)
         struct alpha_list_s list;
         init_alpha_list(&list);
         struct symtab_stack_s *stack = get_symtab_stack();
+        
         /*
          * print all variables, starting from the global symbol table and walking down
          * to the local symbol table.
@@ -892,6 +471,7 @@ int set_builtin(int argc, char **argv)
         {
             /* fetch the next symbol table in the stack */
             struct symtab_s *symtab = stack->symtab_list[i];
+
             /*
              * for all but the local symbol table, we check the table lower down in the
              * stack to see if there is a local variable defined with the same name as
@@ -919,6 +499,7 @@ int set_builtin(int argc, char **argv)
                     {
                         /* check the lower symbol tables don't have the same variable defined */
                         struct symtab_entry_s *entry2 = get_symtab_entry(entry->name);
+
                         /* check we got an entry that is different from this one */
                         if(entry2 != entry)
                         {
@@ -926,6 +507,7 @@ int set_builtin(int argc, char **argv)
                             entry = entry->next;
                             continue;
                         }
+
                         /* get the formatted name=val string */
                         char *str = NULL;
                         if(!entry->val)
@@ -934,7 +516,7 @@ int set_builtin(int argc, char **argv)
                         }
                         else
                         {
-                            char *v = quote_val(entry->val, 1);
+                            char *v = quote_val(entry->val, 1, 0);
                             if(!v)
                             {
                                 str = alpha_list_make_str("%s=", entry->name);
@@ -962,6 +544,7 @@ int set_builtin(int argc, char **argv)
     }
 
     int params = 0;
+    int old_count = pos_param_count();
     char buf[32];
     struct symtab_entry_s *entry;
   
@@ -989,16 +572,20 @@ int set_builtin(int argc, char **argv)
                 reset_pos_params();
                 set_option('x', 0);
                 set_option('v', 0);
+                /* update the options string */
+                symtab_save_options();
                 i++;
                 break;
             }
 
             int skip = do_options(argv[i], argv[i+1]);
+
             /* error parsing option */
             if(skip < 0)
             {
                 return 1;
             }
+
             i += skip;
         }
         else
@@ -1013,6 +600,20 @@ int set_builtin(int argc, char **argv)
         sprintf(buf, "%d", ++params);
         entry = add_to_symtab(buf);
         symtab_entry_setval(entry, argv[i]);
+    }
+    
+    /* set the rest of parameters to NULL */
+    if(old_count >= 0)
+    {
+        for( ; i < old_count; i++)
+        {
+            sprintf(buf, "%d", ++params);
+            entry = get_symtab_entry(buf);
+            if(entry)
+            {
+                symtab_entry_setval(entry, NULL);
+            }
+        }
     }
   
     /* set the positional parameters count */
@@ -1075,7 +676,7 @@ int do_set(char* name_buf, char* val_buf, int set_global, int set_flags, int uns
         {
             if(!entry1)
             {
-                entry1 = __add_to_symtab(name_buf, globsymtab);
+                entry1 = add_to_any_symtab(name_buf, globsymtab);
             }
 
             if(entry2)

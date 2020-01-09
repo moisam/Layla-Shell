@@ -68,8 +68,9 @@ int getopts_builtin(int argc, char **argv)
     /* get the value of $OPTIND */
     if(OPTIND->val)
     {
-        argi = atoi(OPTIND->val);
-        if(argi <= 0)
+        char *strend = NULL;
+        argi = strtol(OPTIND->val, &strend, 10);
+        if(*strend || argi <= 0)
         {
             argi = 0;
         }

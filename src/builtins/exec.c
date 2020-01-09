@@ -170,7 +170,7 @@ int exec_builtin(int argc, char **argv)
     }
     
     /* in bash, a non-interactive shell exits here if the execfail shopt option is not set */
-    if(!option_set('i') && !optionx_set(OPTION_EXEC_FAIL))
+    if(!interactive_shell && !optionx_set(OPTION_EXEC_FAIL))
     {
         exit_gracefully(EXIT_FAILURE, NULL);
     }

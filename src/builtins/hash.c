@@ -31,13 +31,10 @@
  * their full pathnames, so that we can execute these utilities without having
  * to search through $PATH every time the utility is invoked.
  */
-struct hashtab_s *utility_hashes = NULL;
+struct hashtab_s *utility_hashtable = NULL;
 
 /* defined below */
 int rehash_all();
-
-/* defined in ../strbuf.c */
-char *__get_malloced_str(char *str);
 
 
 /*
@@ -45,7 +42,7 @@ char *__get_malloced_str(char *str);
  */
 void init_utility_hashtable(void)
 {
-    utility_hashes = new_hashtable();
+    utility_hashtable = new_hashtable();
 }
 
 
@@ -60,12 +57,12 @@ void init_utility_hashtable(void)
 int hash_utility(char *utility, char *path)
 {
     /* sanity checks */
-    if(!utility || !path || !utility_hashes)
+    if(!utility || !path || !utility_hashtable)
     {
         return 0;
     }
     /* hash the utility */
-    return add_hash_item(utility_hashes, utility, path) ? 1 : 0;
+    return add_hash_item(utility_hashtable, utility, path) ? 1 : 0;
 }
 
 
@@ -75,11 +72,11 @@ int hash_utility(char *utility, char *path)
  */
 void unhash_utility(char *utility)
 {
-    if(!utility || !utility_hashes)
+    if(!utility || !utility_hashtable)
     {
         return;
     }
-    rem_hash_item(utility_hashes, utility);
+    rem_hash_item(utility_hashtable, utility);
 }
 
 
@@ -91,11 +88,11 @@ void unhash_utility(char *utility)
  */
 char *get_hashed_path(char *utility)
 {
-    if(!utility || !utility_hashes)
+    if(!utility || !utility_hashtable)
     {
         return NULL;
     }
-    struct hashitem_s *entry = get_hash_item(utility_hashes, utility);
+    struct hashitem_s *entry = get_hash_item(utility_hashtable, utility);
     if(!entry)
     {
         return NULL;
@@ -131,7 +128,7 @@ int hash_builtin(int argc, char **argv)
     /* no arguments or options. print the hashed utilities and return */
     if(argc == 1)
     {
-        dump_hashtable(utility_hashes, NULL);
+        dump_hashtable(utility_hashtable, NULL);
         return 0;
     }
     int res = 0;
@@ -169,12 +166,12 @@ int hash_builtin(int argc, char **argv)
                 
             /* -r removes all hashed utilities from the table */
             case 'r':
-                rem_all_items(utility_hashes, 0);
+                rem_all_items(utility_hashtable, 0);
                 return 0;
                 
             /* -l prints the contents of the utilities hashtable */
             case 'l':
-                dump_hashtable(utility_hashes, NULL);
+                dump_hashtable(utility_hashtable, NULL);
                 return 0;
                 
             /* -d unhashes the upcoming arguments */
@@ -210,7 +207,7 @@ int hash_builtin(int argc, char **argv)
     /* no arguments. print the hashed utilities */
     if(v >= argc)
     {
-        dump_hashtable(utility_hashes, NULL);
+        dump_hashtable(utility_hashtable, NULL);
         return 0;
     }
 
@@ -283,10 +280,10 @@ int hash_builtin(int argc, char **argv)
 int rehash_all(void)
 {
     int res = 0;
-    if(utility_hashes->used)
+    if(utility_hashtable->used)
     {
-        struct hashitem_s **h1 = utility_hashes->items;
-        struct hashitem_s **h2 = utility_hashes->items + utility_hashes->size;
+        struct hashitem_s **h1 = utility_hashtable->items;
+        struct hashitem_s **h2 = utility_hashtable->items + utility_hashtable->size;
         for( ; h1 < h2; h1++)
         {
             struct hashitem_s *entry = *h1;

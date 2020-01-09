@@ -70,8 +70,8 @@ int return_builtin(int argc, char **argv)
     {
         res = exit_status;
     }
-    /* POSIX says we should set $? to the return value */
-    set_internal_exit_status(res);
+
+    
     /* set the return flag so the other functions will know we've encountered return */
     return_set = 1;
     return res;

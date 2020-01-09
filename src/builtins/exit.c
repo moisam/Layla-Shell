@@ -89,14 +89,24 @@ int exit_builtin(int argc, char **argv)
      */
     if(argc == 2)
     {
-        exit_status = (atoi(argv[1]) & 0xff);
+        char *strend = NULL;
+        int i = strtol(argv[1], &strend, 10);
+        if(*strend)
+        {
+            fprintf(stderr, "exit: invalid exit status: %s\n", argv[1]);
+            exit_status = 2;
+        }
+        else
+        {
+            exit_status = (i & 0xff);
+        }
     }
 
     /*
      * similar to bash and ksh, alert the user for the presence of running/suspended
      * jobs. if the user insists on exiting, don't alert them the 2nd time.
      */
-    if(option_set('i') && pending_jobs())
+    if(interactive_shell && pending_jobs())
     {
         /* list the pending jobs (bash extension) */
         if(optionx_set(OPTION_CHECK_JOBS))
@@ -105,18 +115,11 @@ int exit_builtin(int argc, char **argv)
         }
 
         /* interactive login shell will kill all jobs in exit_gracefully() below */
-        if(/* !option_set('L') || */ !optionx_set(OPTION_HUP_ON_EXIT))
+        if(!tried_exit)
         {
-            if(!tried_exit)
-            {
-                fprintf(stderr, "You have suspended (running) jobs.\n");
-                tried_exit = 1;
-                return 1;
-            }
-            else
-            {
-                kill_all_jobs(SIGHUP, JOB_FLAG_DISOWNED);
-            }
+            fprintf(stderr, "You have suspended (running) jobs.\n");
+            tried_exit = 1;
+            return 1;
         }
     }
 
@@ -174,9 +177,9 @@ void free_buffers(void)
     }
     
     /* free the hashed utilities table */
-    if(utility_hashes)
+    if(utility_hashtable)
     {
-        free_hashtable(utility_hashes);
+        free_hashtable(utility_hashtable);
     }
     
     /* free the command input buffer */
@@ -209,7 +212,7 @@ void exit_gracefully(int stat, char *errmsg)
      *  flush history list to the history file if the shell is interactive and
      *  the save_hist extended option is set.
      */
-    if(option_set('i') && optionx_set(OPTION_SAVE_HIST))
+    if(interactive_shell && optionx_set(OPTION_SAVE_HIST))
     {
         flush_history();
     }
@@ -253,6 +256,13 @@ void exit_gracefully(int stat, char *errmsg)
             parse_and_execute(&src);
             free(src.buffer);
         }
+
+        /* save the dirstack if login shell */
+        /* OPTION_SAVE_DIRS must be set to save dirs */
+        if(optionx_set(OPTION_SAVE_DIRS))
+        {
+            save_dirstack(NULL);
+        }
     }
     sigprocmask(SIG_UNBLOCK, &intmask, NULL);
 
@@ -268,20 +278,10 @@ void exit_gracefully(int stat, char *errmsg)
         fprintf(stderr, "%s: %s\n", SHELL_NAME, errmsg);
     }
 
-    /* interactive login shells send SIGHUP to jobs on exit */
-    if(/* option_set('L') && */ optionx_set(OPTION_HUP_ON_EXIT))
+    /* interactive login shells send SIGHUP to jobs on exit (bash) */
+    if(interactive_shell && option_set('L') && optionx_set(OPTION_HUP_ON_EXIT))
     {
         kill_all_jobs(SIGHUP, JOB_FLAG_DISOWNED);
-    }
-    
-    /* save the dirstack if login shell */
-    if(option_set('L'))
-    {
-        /* must be set to save dirs */
-        if(optionx_set(OPTION_SAVE_DIRS))
-        {
-            save_dirstack(NULL);
-        }
     }
     
     /* free our internal buffers (make valgrind happy) */

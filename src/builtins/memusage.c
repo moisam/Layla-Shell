@@ -260,7 +260,7 @@ void print_mu_stack(int lengthy)
 void print_mu_hashtab(int lengthy)
 {
     long long res[2];
-    long long i = memusage_hashtab(utility_hashes, res, 1);
+    long long i = memusage_hashtab(utility_hashtable, res, 1);
     printf("* Utility names and paths hashtable: ");
     if(!lengthy)
     {

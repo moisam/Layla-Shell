@@ -158,6 +158,8 @@ int fc_builtin(int argc, char **argv)
         return 1;
     }
 
+    char *strend = NULL;
+
     /* get the 'first' operand */
     if(v < argc)
     {
@@ -175,7 +177,11 @@ int fc_builtin(int argc, char **argv)
         /* check if the argument is numeric: -n, +n or n */
         if(*f == '-' || *f == '+' || isdigit(*f))
         {
-            first = atoi(f);
+            first = strtol(f, &strend, 10);
+            if(*strend)
+            {
+                first = 0;
+            }
         }
         else
         {
@@ -198,6 +204,7 @@ int fc_builtin(int argc, char **argv)
             first  = hist_total+first;
         }
     }
+
     /* get the 'last' operand */
     if(v < argc)
     {
@@ -214,7 +221,11 @@ int fc_builtin(int argc, char **argv)
         /* check if the argument is numeric: -n, +n or n */
         if(*f == '-' || *f == '+' || isdigit(*f))
         {
-            last = atoi(f);
+            last = strtol(f, &strend, 10);
+            if(*strend)
+            {
+                last = 0;
+            }
         }
         else
         {

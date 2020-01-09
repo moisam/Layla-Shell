@@ -20,7 +20,7 @@
  */    
 
 /* macro definition needed to use setenv() */
-#define _POSIX_C_SOURCE 200112L
+#define _POSIX_C_SOURCE 200809L
 
 #include <ctype.h>
 #include <stddef.h>
@@ -100,39 +100,47 @@ int cd_hyphen(void)
 {
     /* get the value of the old working dir from the $OLDPWD variable */
     struct symtab_entry_s *entry = get_symtab_entry("OLDPWD");
+    struct symtab_entry_s *entry2 = get_symtab_entry("PWD");
     if(!entry || !entry->val)
     {
         fprintf(stderr, "%s: failed to change directory: $OLDPWD is not set\n", UTILITY);
         return 3;
     }
+    
     /* get an malloc'd copy of the $OLDPWD */
     char *pwd = __get_malloced_str(entry->val);
     if(!pwd)
     {
+        fprintf(stderr, "%s: failed to change directory: %s\n", UTILITY, strerror(errno));
         return 3;
     }
+    
     /* change directory to the $OLDPWD */
     if(chdir(pwd) != 0)
     {
         fprintf(stderr, "%s: failed to change directory: %s\n", UTILITY, strerror(errno));
         return 3;
     }
+    
     /* set the new value of $PWD in both the environment and our shell variables list */
     setenv("PWD", pwd, 1);
-    struct symtab_entry_s *entry2 = get_symtab_entry("PWD");
-    setenv("OLDPWD", __get_malloced_str(entry2->val), 1);
-    symtab_entry_setval(entry, entry2->val);
+    setenv("OLDPWD", entry2 ? entry2->val : "", 1);
+    symtab_entry_setval(entry, entry2 ? entry2->val : NULL);
     symtab_entry_setval(entry2, pwd);
+    
     /* print the new current working dir */
     printf("%s\n", pwd);
+    
     /* and save it in the cwd global variable, after releasing its old value */
     if(cwd)
     {
         free(cwd);
     }
     cwd = pwd;
+    
     /* in tcsh, special alias cwdcmd is run after cd changes the directory */
     do_cwdcmd();
+    
     return 0;
 }
 
@@ -153,48 +161,6 @@ char *get_home(void)
      */
     if(!home || !*home)
     {
-#if 0
-        static struct passwd pwd;
-        static char *buf = NULL;
-        struct passwd *result;
-        /* have we been called before? */
-        if(buf)
-        {
-            free(buf);
-            buf = NULL;
-        }
-        /* get the size required to store the strings we'll get after calling getpwuid_r() */
-        long bufsize = sysconf(_SC_GETPW_R_SIZE_MAX);
-        int s;
-        uid_t euid = geteuid();
-        if(bufsize == -1)
-        {
-            bufsize = 1024;        /* NOTE: is this enough? */
-        }
-        /* allocate memory for the strings */
-        buf = malloc(bufsize);
-        if(buf == NULL)
-        {
-            fprintf(stderr, "%s: failed to get passwd struct: %s\n", SHELL_NAME, strerror(errno));
-            return NULL;
-        }
-        /* get the user's information */
-        s = getpwuid_r(euid, &pwd, buf, bufsize, &result);
-        if(result == NULL)
-        {
-            if (s == 0)
-            {
-                fprintf(stderr, "%s: user %d not found in the passwd database\n", SHELL_NAME, euid);
-            }
-            else
-            {
-                fprintf(stderr, "%s: failed to get passwd struct: %s\n", SHELL_NAME, strerror(s));
-            }
-            return NULL;
-        }
-        /* get the home dir */
-        home = pwd.pw_dir;
-#endif
         struct passwd *pw = getpwuid(geteuid());
         if(!pw)
         {
@@ -245,8 +211,12 @@ char *search_cdpath(char *directory, int *print_cwd)
                     }
             }
     }
+
     /* no $CDPATH. return the directory as-is */
-    if(!cdpath) return __get_malloced_str(directory);
+    if(!cdpath)
+    {
+        return __get_malloced_str(directory);
+    }
             
     char   *cp     = cdpath;
     size_t  dirlen = strlen(directory);
@@ -260,13 +230,15 @@ char *search_cdpath(char *directory, int *print_cwd)
         {
             cp++;
         }
-        size_t pathlen = (cp-cdpath);
+
         /*
          * get the next entry in $CDPATH.
          * we add three for \0 terminator, possible /, and leading dot
          * (in case the path is NULL and we need to append ./)
          */
+        size_t pathlen = (cp-cdpath);
         char path[pathlen+dirlen+3];
+
         if(pathlen == 0)
         {
             strcpy(path, "./");
@@ -281,6 +253,7 @@ char *search_cdpath(char *directory, int *print_cwd)
             }
             (*print_cwd) = 1;
         }
+
         /* form the new path as the path segment from $CDPATH plus the directory name */
         strcat(path, directory);
         if(stat(path, &st) == 0)
@@ -291,6 +264,7 @@ char *search_cdpath(char *directory, int *print_cwd)
                 return __get_malloced_str(path);
             }
         }
+        
         (*print_cwd) = 0;
         /* move on to the next entry in $CDPATH */
         cdpath = ++cp;
@@ -306,7 +280,7 @@ char *search_cdpath(char *directory, int *print_cwd)
  * 
  * returns 1 on success, 0 on failure.
  */
-int canonicalize(char *curpath)
+int absolute_pathname(char *curpath)
 {
     struct  stat st;
     char *cp1 = curpath;
@@ -315,7 +289,7 @@ int canonicalize(char *curpath)
     /* read curpath one char at a time */
     while(*cp1)
     {
-        if(strcmp(cp1, "..") == 0)
+        if(cp1[0] == '.' && cp1[1] == '.')
         {
             /*****************************
              * next component is dot-dot
@@ -332,30 +306,36 @@ int canonicalize(char *curpath)
                         {
                             pp--;
                         }
+                        
                         if(pp <= curpath)   /* prev is root */
                         {
                             cp2 = cp1;
                             break;
                         }
+                        
                         /* prev is not root */
                         char *pp2 = pp;
                         while(pp >= curpath && *pp != '/')      /* skip to prev's head */
                         {
                             pp--;
                         }
+                        
                         if(*pp == '/')
                         {
                             pp++;
                         }
+                        
                         if(strncmp(pp, "..", 2) == 0 && (pp[2] == '\0' || pp[2] == '/'))
                         {
                             /* prev is dot-dot ('..' or '../') */
                             cp2 = cp1;
                             break;
                         }
+                        
                         /* POSIX Step 8.b.i: check if preceding component is a dir */
                         size_t l = pp2-curpath+1;
                         char   prev[l+1];
+                        
                         strncpy(prev, curpath, l);
                         prev[l] = '\0';
                         if(stat(prev, &st) != 0 || !S_ISDIR(st.st_mode))
@@ -363,17 +343,20 @@ int canonicalize(char *curpath)
                             fprintf(stderr, "%s: not a directory: %s\n", UTILITY, prev);
                             return 0;
                         }
+                        
                         /* now remove prev and cur components */
                         pp2 = cp1+2;    /* skip current dot-dot */
                         while(*pp2 && *pp2 == '/')      /* skip all slashes after dot-dot */
                         {
                             pp2++;
                         }
+                        
                         cp2 = pp;
                         while((*pp++ = *pp2++))
                         {
                             ;
                         }
+                        
                         cp1 = cp2;
                         continue;
                     }
@@ -384,7 +367,7 @@ int canonicalize(char *curpath)
                     break;
             }
         }
-        else if(strcmp(cp1, ".") == 0)
+        else if(cp1[0] == '.')
         {
             /*****************************
              * next component is dot
@@ -394,11 +377,13 @@ int canonicalize(char *curpath)
             {
                 /* remove the dot */
                 delete_char_at(cp1, 0);
+                
                 /* and any slashes after it */
                 while(*cp1 == '/')
                 {
                     delete_char_at(cp1, 0);
                 }
+                
                 cp1 = cp2;
                 continue;
             }
@@ -409,6 +394,7 @@ int canonicalize(char *curpath)
         {
             cp2++;
         }
+        
         /* skip slashes */
         while(*cp2 && *cp2 == '/')
         {
@@ -426,11 +412,13 @@ int canonicalize(char *curpath)
         {
             ;
         }
+        
         while((*cp1++ = *cp2++))
         {
             ;
         }
     }
+    
     /* (2) look for trailing slashes ... */
     cp1 = curpath+strlen(curpath);
     cp2 = cp1-1;
@@ -438,11 +426,13 @@ int canonicalize(char *curpath)
     {
         ;
     }
+    
     /* ... and remove them */
     if(cp1 >= curpath && cp1 != cp2-1)
     {
         *++cp1 = '\0';
     }
+    
     /* (3) replace non-leading multiple slashes with a single slash */
     cp1 = curpath;
     while(*++cp1)
@@ -475,6 +465,7 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
         /* use our default length if the system has none defined */
         path_max = DEFAULT_PATH_MAX;
     }
+    
     /* curpath is longer than the maxium length */
     if(strlen(curpath) >= (size_t)path_max)
     {
@@ -484,6 +475,7 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
             fprintf(stderr, "%s: $PWD environment variable is not set\n", UTILITY);
             return 0;
         }
+        
         /* determine how much we need to cut from the beginning of curpath */
         if(pwd[pwdlen-1] == '/')
         {
@@ -497,6 +489,7 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
             can_do = strncmp(curpath, pwd2, pwdlen) == 0 ? 1 : 0;
             pwdlen++;
         }
+        
         /* make curpath a relative path */
         if(can_do)
         {
@@ -515,30 +508,26 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
 /*
  * the cd builtin utility (POSIX).
  * 
- * NOTE: this function follows the POSIX algorithm almost to the letter.
- *       you can check this by visiting this link:
- * 
+ * this function follows the POSIX algorithm almost to the letter.
+ * you can check this by visiting this link:
  *       http://pubs.opengroup.org/onlinepubs/9699919799/utilities/cd.html
- * 
- *       but this function is a horrible, horrible example of spaghetti code!
- *
- *  Update 29/08/2019: fixed the function by removing the goto statements
- *  and refactoring some functionality to separate functions (defined above).
  */
-int cd_builtin(int argc, char *argv[])
+int cd_builtin(int argc, char **argv)
 {
-    int     P_option = 0;
+    int     p_option = 0;
     int     v;
     char   *curpath   = NULL;
     char   *directory = NULL;
-    char   *pwd       = get_shell_varp("PWD", NULL);
+    char   *pwd       = getenv("PWD");
     size_t  pwdlen    = 0;
     int     print_cwd = 0;
+    struct  symtab_entry_s *entry;
+
     if(pwd && *pwd)
     {
         pwdlen = strlen(pwd);
     }
-    struct symtab_entry_s *entry;
+
     /*
      * in tcsh, cd accepts options similar to what dirs accept, namely: p, l, n, v.
      */
@@ -559,16 +548,19 @@ int cd_builtin(int argc, char *argv[])
         if(argv[v][0] == '-')
         {
             char *p = argv[v];
+
             /* stop parsing options when we hit '-' or '--' */
             if(strcmp(p, "-") == 0)
             {
                 break;
             }
+
             if(strcmp(p, "--") == 0)
             {
                 v++;
                 break;
             }
+            
             /* skip the '-' and parse the options string */
             p++;
             while(*p)
@@ -580,11 +572,11 @@ int cd_builtin(int argc, char *argv[])
                         return 0;
                         
                     case 'L':
-                        P_option = 0;
+                        p_option = 0;
                         break;
                         
                     case 'P':
-                        P_option = 1;
+                        p_option = 1;
                         break;
 
                     /* tcsh extensions: -v, -p, -l, -n */
@@ -609,7 +601,7 @@ int cd_builtin(int argc, char *argv[])
                         flags |= FLAG_DIRSTACK_WRAP_ENTRIES;
                         break;
                         
-                    default:                        
+                    default:
                         fprintf(stderr, "%s: unknown option: %s\n", UTILITY, argv[v]);
                         return 2;
                 }
@@ -632,20 +624,30 @@ int cd_builtin(int argc, char *argv[])
             curpath = __get_malloced_str(directory);
         }
     }
+    else if(argv[v][0] == '-' && argv[v][1] == '\0')
+    {
+        /* the hyphen '-' argument */
+        return cd_hyphen();
+    }
+    else if(argv[v][0] == '/' ||
+            (argv[v][0] == '.' &&
+             (argv[v][1] == '\0' || argv[v][1] == '/' || argv[v][1] == '.')))
+    {
+        /* first component is '/', '.' or '..' */
+        directory = argv[v];
+        curpath = __get_malloced_str(directory);
+    }
     else
     {
         /* use the dir argument */
         directory = argv[v];
-        if(strcmp(directory, "-") == 0)
-        {
-            return cd_hyphen();
-        }
+
         /* search the $CDPATH, if needed */
         curpath = search_cdpath(directory, &print_cwd);
     }
     
 start:
-    if(!P_option)
+    if(!p_option)
     {
         /* if curpath is relative, attach it to the current working directory */
         if(curpath && *curpath != '/' && pwd && *pwd)
@@ -669,7 +671,7 @@ start:
         }
 
         /* now canonicalize (remove dot and dot-dot components and convert to an absolute path) */
-        if(!canonicalize(curpath))
+        if(!absolute_pathname(curpath))
         {
             return 1;
         }
@@ -719,22 +721,24 @@ start:
     {
         symtab_entry_setval(entry, pwd);
     }
-    /* save the new current working directory in $PWD */
-    entry = add_to_symtab("PWD"   );
-    /*
-     * TODO: POSIX says we must set PWD to the string that would be output by `pwd -P`.
-     */
+
+    /* POSIX says we must set PWD to the string that would be output by `pwd -P` */
     if(cwd)
     {
         free(cwd);
     }
     cwd = getcwd(NULL, 0);
+
     /* and also save it in the environment */
     setenv("PWD", cwd, 1);
+
+    /* save the new current working directory in $PWD */
+    entry = add_to_symtab("PWD");
     if(entry)
     {
         symtab_entry_setval(entry, cwd);
     }
+
     if(print_dirstack)
     {
         purge_dirstack(flags);
@@ -744,7 +748,9 @@ start:
         printf("%s\n", cwd);
     }
     free(curpath);
+
     /* in tcsh, special alias cwdcmd is run after cd changes the directory */
     do_cwdcmd();
+
     return 0;
 }

@@ -206,7 +206,14 @@ int newgrp_builtin(int argc, char **argv)
     }
     else
     {
-        new_gid = atoi(group);
+        char *strend = NULL;
+        new_gid = strtol(group, &strend, 10);
+        if(*strend)
+        {
+            fprintf(stderr, "%s: invalid group id: %s\n", UTILITY, group);
+            goto fin;
+        }
+        
         grp = getgrgid(new_gid);
         if(!grp)
         {

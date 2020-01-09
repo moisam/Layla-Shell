@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <sys/wait.h>
 #include "../cmd.h"
+#include "../backend/backend.h"
 #include "../debug.h"
 
 #define UTILITY         "wait"
@@ -52,6 +53,7 @@ int wait_builtin(int argc, char **argv)
     int    v = 1, c;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
     argi = 0;   /* defined in args.c */
+    
     /****************************
      * process the options
      ****************************/
@@ -76,6 +78,7 @@ int wait_builtin(int argc, char **argv)
                 break;
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -105,16 +108,19 @@ int wait_builtin(int argc, char **argv)
                 {
                     continue;
                 }
+                
                 /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
                 if(job->tty_attr && isatty(0))
                 {
                     tcsetattr(0, TCSANOW, job->tty_attr);
                 }
+                
                 if(force)
                 {
                     kill(-job->pgid, SIGCONT);
                     kill(-job->pgid, SIGKILL);
                 }
+                
                 /* wait for all processes in job to exit */
                 j = 1;
                 for(i = 0; i < job->proc_count; i++, j <<= 1)
@@ -124,25 +130,36 @@ int wait_builtin(int argc, char **argv)
                         continue;
                     }
                     pid = job->pids[i];
+                    waiting_pid = pid;
+
                     if(waitpid(pid, &res, 0) < 0)
                     {
                         if(errno == EINTR)
                         {
                             /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
-                            if(option_set('i'))
+                            if(interactive_shell)
                             {
                                 jobs_builtin(1, (char *[]){ "jobs", NULL });
                             }
+                        
+                            /* execute any pending traps */
+                            waiting_pid = 0;
+                            do_pending_traps();
+                            
                             /* return 128 to indicate we were interrupted by a signal */
                             return 128;
                         }
                         res = rip_dead(pid);
                     }
+
+                    waiting_pid = 0;
                     set_pid_exit_status(job, pid, res);
                 }
+                
                 set_job_exit_status(job, job->pgid, job->status);
                 set_exit_status(res);
                 notice_termination(pid, res);
+                
                 if(wait_any)
                 {
                     return job->status;
@@ -154,11 +171,13 @@ int wait_builtin(int argc, char **argv)
     v--;
     
 read_next2:
+    
     if(++v >= argc)
     {
         return res;
     }
     arg = argv[v];
+    
     /* (a) argument is a job ID number */
     if(*arg == '%')
     {
@@ -177,18 +196,22 @@ read_next2:
             res = 127;
             goto read_next2;
         }
+        
         /* wait for all processes in job to exit */
         j = 1;
+        
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
         if(job->tty_attr && isatty(0))
         {
             tcsetattr(0, TCSANOW, job->tty_attr);
         }
+        
         if(force)
         {
             kill(-job->pgid, SIGCONT);
             kill(-job->pgid, SIGKILL);
         }
+        
         for(i = 0; i < job->proc_count; i++, j <<= 1)
         {
             if(job->child_exitbits & j)
@@ -196,20 +219,29 @@ read_next2:
                 continue;
             }
             pid = job->pids[i];
+            waiting_pid = pid;
+            
             if(waitpid(pid, &res, 0) < 0)
             {
                 if(errno == EINTR)
                 {
                     /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
-                    if(option_set('i'))
+                    if(interactive_shell)
                     {
                         jobs_builtin(1, (char *[]){ "jobs", NULL });
                     }
+                    
+                    /* execute any pending traps */
+                    waiting_pid = 0;
+                    do_pending_traps();
+                    
                     /* return 128 to indicate we were interrupted by a signal */
                     return 128;
                 }
                 res = rip_dead(pid);
             }
+
+            waiting_pid = 0;
             set_pid_exit_status(job, pid, res);
         }
         set_job_exit_status(job, job->pgid, job->status);
@@ -218,50 +250,64 @@ read_next2:
     /* (b) argument is a pid */
     else
     {
-        pid = atoi(arg);
+        char *strend = NULL;
+        pid = strtol(arg, &strend, 10);
+        
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(pid == 0)
+        if(*strend || pid == 0)
         {
             fprintf(stderr, "%s: invalid pid: %s\n", UTILITY, arg);
             res = 127;
             goto read_next2;
         }
+        
         job = get_job_by_any_pid(pid);
         if(job && job->tty_attr && isatty(0))
         {
             tcsetattr(0, TCSANOW, job->tty_attr);
         }
+        
         if(force)
         {
             kill(pid, SIGCONT);
             kill(pid, SIGKILL);
         }
-         /*
-          * error fetching child exit status. of all the possible causes,
-          * most probably is the fact that there is no children (in our case).
-          * which probably means that the exit status was collected
-          * in the SIGCHLD_handler() function in main.c.
-          */
+        
+        waiting_pid = pid;
         if(waitpid(pid, &res, 0) < 0)
         {
+            /*
+             * error fetching child exit status. of all the possible causes,
+             * most probably is the fact that there is no children (in our case).
+             * which probably means that the exit status was collected
+             * in the SIGCHLD_handler() function in main.c.
+             */
             if(errno == EINTR)
             {
                 /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
-                if(option_set('i'))
+                if(interactive_shell)
                 {
                     jobs_builtin(1, (char *[]){ "jobs", NULL });
                 }
+
+                /* execute any pending traps */
+                waiting_pid = 0;
+                do_pending_traps();
+
                 /* return 128 to indicate we were interrupted by a signal */
                 return 128;
             }
             res = rip_dead(pid);
         }
+        waiting_pid = 0;
     }
     set_exit_status(res);
     notice_termination(pid, res);
+    
     if(wait_any)
     {
         return res;
     }
+    
     goto read_next2;
 }

@@ -354,6 +354,7 @@ int read_builtin(int argc, char **argv)
     FILE  *infile       = stdin;  /* input source */
     int    infd         = 0;      /* optional file descriptor to read from */
     char  *msg          = NULL;   /* optional message to print before reading input */
+    char  *strend       = NULL;
     set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
     argi = 0;   /* defined in args.c */
     /****************************
@@ -406,8 +407,8 @@ int read_builtin(int argc, char **argv)
                 {
                     return 2;
                 }
-                max = atoi(__optarg);
-                if(max < 0)
+                max = strtol(__optarg, &strend, 10);
+                if(*strend || max < 0)
                 {
                     max = 0;
                 }
@@ -424,7 +425,13 @@ int read_builtin(int argc, char **argv)
                 {
                     return 2;
                 }
-                infd  = atoi(__optarg);
+                infd = strtol(__optarg, &strend, 10);
+                if(*strend)
+                {
+                    fprintf(stderr, "%s: invalid file descriptor: %s\n", UTILITY, argv[v]);
+                    return 2;
+                }
+                
                 if(infd >= 0 && infd  <= 9)
                 {
                     infile = fdopen(infd, "r");
@@ -433,6 +440,7 @@ int read_builtin(int argc, char **argv)
                         infile = stdin;
                     }
                 }
+                
                 if(infile == stdin)
                 {
                     fprintf(stderr, "%s: invalid file descriptor: %s\n", UTILITY, argv[v]);
@@ -446,8 +454,8 @@ int read_builtin(int argc, char **argv)
                 {
                     return 2;
                 }
-                timeout  = atoi(__optarg);
-                if(timeout < 0)
+                timeout = strtol(__optarg, &strend, 10);
+                if(*strend || timeout < 0)
                 {
                     timeout = 0;
                 }
@@ -511,6 +519,7 @@ int read_builtin(int argc, char **argv)
     }
 
     /* read input */
+    clearerr(infile);
     while(!feof(infile))
     {
         if(delim)
@@ -597,7 +606,7 @@ int read_builtin(int argc, char **argv)
         /* print PS2 if we need more input */
         if(read_more)
         {
-            if(isatty(infd) && option_set('i'))
+            if(isatty(infd) && interactive_shell)
             {
                 print_prompt2();
             }
@@ -622,6 +631,23 @@ int read_builtin(int argc, char **argv)
         if(echo_off)
         {
             echoon(infd);
+        }
+
+        for( ; v < argc; v++)
+        {
+            struct symtab_entry_s *entry = get_symtab_entry(argv[v]);
+            if(entry)
+            {
+                /* we can't set a readonly variable */
+                if(flag_set(entry->flags, FLAG_READONLY))
+                {
+                    fprintf(stderr, "%s: failed to set '%s': readonly variable\n", UTILITY, argv[v]);
+                }
+                else
+                {
+                    symtab_entry_setval(entry, NULL);
+                }
+            }
         }
         return 2;
     }
