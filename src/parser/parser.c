@@ -34,13 +34,6 @@
 /* top-down, recursive descent syntax parser */
 /*********************************************/
 
-/* pointer to the current function definition we're parsing */
-struct symtab_entry_s *current_func = NULL;
-
-/* dummy struct to indicate func definitions in src */
-struct node_s __node_func_def;
-struct node_s *node_func_def = &__node_func_def;
-
 /* flag to indicate a parsing error */
 int parser_err = 0;
 
@@ -246,73 +239,83 @@ struct node_s *substitute_alias(char *aliased_word, int *__check_next)
 
 /*
  * return the command string of the command being parsed.
-s */
+ */
 char *get_cmdwords(struct token_s *tok, int wstart)
 {
     if(!tok || !tok->src)
     {
         return NULL;
     }
-    struct source_s *src = tok->src;
+
     /* find the end of the command string */
+    struct source_s *src = tok->src;
     int wend = tok->linestart + tok->charno - tok->text_len;
+
     /* at the very first word we would have a -ve position */
     if(wstart < 0)
     {
         wstart = 0;
     }
+    
+    /* make sure we get the beginning of the word */
+    while(wstart > 0 && !isspace(src->buffer[wstart]))
+    {
+        wstart--;
+    }
+    
     /* skip spaces before the command string */
     while(isspace(src->buffer[wstart]))
     {
         wstart++;
     }
+
+    /* ignore separator operators at the end of a command */
+    char c = src->buffer[wend];
+    if(c == ')' || c == '&' || c == ';')
+    {
+        wend--;
+    }
+    
     /* ignore spaces after the command string */
     while(isspace(src->buffer[wend]))
     {
         wend--;
     }
+    
     /* make sure we get the last char in the command string */
     while(src->buffer[wend] && !isspace(src->buffer[wend]))
     {
         wend++;
     }
+    
     /* invalid pointers */
     if(wstart >= wend)
     {
         return NULL;
     }
+    
     /* return the malloc'd command string */
     return get_malloced_strl(src->buffer, wstart, wend-wstart);
 }
 
 
 /*
- * parse a complete command that starts with the given token.
- * 
- * returns the parsed nodetree, NULL on parsing errors.
+ * skip list terminator tokens, which include '&', ';' and '\n'.
  */
-struct node_s *parse_complete_command(struct token_s *tok)
+void skip_separator_operators()
 {
-    /* 
-     * a complete commmand is a list, followed by optional & or ; operators
-     * and/or newlines.
-     */
-    struct node_s *node = parse_list(tok);
-    if(!node)
-    {
-        return NULL;
-    }
-    tok = get_current_token();
+    struct token_s *tok = get_current_token();
+
     /* skip & and ; operators */
     if(tok->type == TOKEN_AND || tok->type == TOKEN_SEMI)
     {
         tok = tokenize(tok->src);
     }
+
     /* skip optional newlines */
     skip_newline_tokens();
-    /* return the parsed nodetree */
-    return node;
 }
+
 
 /*
  * parse a command list that starts with the given token.
@@ -341,14 +344,17 @@ struct node_s *parse_list(struct token_s *tok)
     }
     else
     {
-        /* list not ending in & or ;. retutn the list */
+        /* list not ending in & or ;. return the list */
+        skip_separator_operators();
         return node;
     }
+
     /* reached EOF? */
     if(tok->type == TOKEN_EOF)
     {
         return node;
     }
+    
     /* error getting the next token. abort parsing */
     if(tok->type == TOKEN_ERROR)
     {
@@ -366,6 +372,7 @@ struct node_s *parse_list(struct token_s *tok)
     set_node_val_chr(list, type == TOKEN_AND ? '&' : ';');
     add_child_node(list, node);
     list->lineno = node->lineno;
+
     /***************************************
      * NOTE: this is a heuristic, not part of 
      *       the POSIX Shell Grammar.
@@ -376,20 +383,23 @@ struct node_s *parse_list(struct token_s *tok)
         cmdline = get_cmdwords(tok, wstart);
         set_node_val_str(list, cmdline);
         free_malloced_str(cmdline);
-        /* skip optional newlines */
-        skip_newline_tokens();
+        skip_separator_operators();
         return list;
     }
+
     /* parse the second list */
     node = parse_list(tok);
     if(node)
     {
         add_child_node(list, node);
     }
+
     /* save the command line */
     cmdline = get_cmdwords(tok, wstart);
     set_node_val_str(list, cmdline);
     free_malloced_str(cmdline);
+    skip_separator_operators();
+    
     /* return the list */
     return list;
 }
@@ -410,102 +420,105 @@ struct node_s *parse_and_or(struct token_s *tok)
     struct node_s *and_or = NULL;
     struct node_s *node   = parse_pipeline(tok);
     enum token_type_e last_type = 0;
-loop:
-    if(!node)
+
+    while(node)
     {
-        /* return the AND-OR list we've got so far */
-        if(and_or)
+        tok = get_current_token();
+        int type = tok->type;
+        if(tok->type == TOKEN_AND_IF || tok->type == TOKEN_OR_IF)
         {
-            return and_or;
-        }
-        /* error parsing the first pipeline. abort parsing */
-        return NULL;
-    }
-    tok = get_current_token();
-    int type = tok->type;
-    if(tok->type == TOKEN_AND_IF || tok->type == TOKEN_OR_IF)
-    {
-        /* we have && or ||. skip and continue parsing the next pipeline */
-        tok->src->wstart = tok->src->curpos+1;
-        tok = tokenize(tok->src);
-        /* skip optional newlines */
-        skip_newline_tokens();
-    }
-    else
-    {
-        /* we don't have && or ||. finish parsing the list */
-        if(and_or)
-        {
-            struct node_s *child = new_node(last_type == TOKEN_AND_IF ? 
-                                            NODE_AND_IF : NODE_OR_IF);
-            if(!child)
-            {
-                free_node_tree(and_or);
-                return NULL;
-            }
-            add_child_node(child , node );
-            add_child_node(and_or, child);
-            char *cmdline = get_cmdwords(tok, wstart);
-            set_node_val_str(and_or, cmdline);
-            free_malloced_str(cmdline);
-            return and_or;
-        }
-        return node;
-    }
-    /* reached EOF or error getting the next token */
-    if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
-    {
-        PARSER_RAISE_ERROR(UNEXPECTED_TOKEN, get_previous_token(), TOKEN_EOF);
-        if(!and_or)
-        {
-            if(node)
-            {
-                /* free the partially parsed nodetree */
-                free_node_tree(node);
-            }
+            /* we have && or ||. skip and continue parsing the next pipeline */
+            tok->src->wstart = tok->src->curpos+1;
+            tok = tokenize(tok->src);
+            /* skip optional newlines */
+            skip_newline_tokens();
         }
         else
         {
-            /* free the partially parsed nodetree */
-            free_node_tree(and_or);
+            /* we don't have && or ||. finish parsing the list */
+            if(and_or)
+            {
+                struct node_s *child = new_node(last_type == TOKEN_AND_IF ? 
+                                                NODE_AND_IF : NODE_OR_IF);
+                if(!child)
+                {
+                    free_node_tree(and_or);
+                    and_or = NULL;
+                    break;
+                }
+                add_child_node(child , node );
+                add_child_node(and_or, child);
+                char *cmdline = get_cmdwords(tok, wstart);
+                set_node_val_str(and_or, cmdline);
+                free_malloced_str(cmdline);
+            }
+            else
+            {
+                and_or = node;
+            }
+            break;
         }
-        EXIT_IF_NONINTERACTIVE();
-        return NULL;
-    }
-    /* first child ever */
-    if(!and_or)
-    {
-        /* create a new node for the AND-OR list */
-        and_or = new_node(NODE_ANDOR);
-        if(!and_or)     /* insufficient memory */
+    
+        /* reached EOF or error getting the next token */
+        if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
         {
-            free_node_tree(node);
-            return NULL;
+            PARSER_RAISE_ERROR(UNEXPECTED_TOKEN, get_previous_token(), TOKEN_EOF);
+            if(!and_or)
+            {
+                if(node)
+                {
+                    /* free the partially parsed nodetree */
+                    free_node_tree(node);
+                }
+            }
+            else
+            {
+                /* free the partially parsed nodetree */
+                free_node_tree(and_or);
+            }
+            EXIT_IF_NONINTERACTIVE();
+            and_or = NULL;
+            break;
         }
-        /* add the pipeline to the AND-OR list */
-        add_child_node(and_or, node);
-        and_or->lineno = node->lineno;
-    }
-    else
-    {
-        /* second and subsequent pipelines in the AND-OR list */
-        struct node_s *child = new_node(last_type == TOKEN_AND_IF ? 
-                                        NODE_AND_IF : NODE_OR_IF);
-        if(!child)      /* insufficient memory */
+    
+        /* first child ever */
+        if(!and_or)
         {
-            free_node_tree(and_or);
-            free_node_tree(node  );
-            return NULL;
+            /* create a new node for the AND-OR list */
+            and_or = new_node(NODE_ANDOR);
+            if(!and_or)     /* insufficient memory */
+            {
+                free_node_tree(node);
+                break;
+            }
+            /* add the pipeline to the AND-OR list */
+            add_child_node(and_or, node);
+            and_or->lineno = node->lineno;
         }
-        /* add the pipeline to the AND-OR list */
-        add_child_node(child , node );
-        add_child_node(and_or, child);
-        child->lineno = node->lineno;
+        else
+        {
+            /* second and subsequent pipelines in the AND-OR list */
+            struct node_s *child = new_node(last_type == TOKEN_AND_IF ? 
+                                            NODE_AND_IF : NODE_OR_IF);
+            if(!child)      /* insufficient memory */
+            {
+                free_node_tree(and_or);
+                free_node_tree(node  );
+                and_or = NULL;
+                break;
+            }
+            /* add the pipeline to the AND-OR list */
+            add_child_node(child , node );
+            add_child_node(and_or, child);
+            child->lineno = node->lineno;
+        }
+        last_type = type;
+        /* parse the next pipeline */
+        node = parse_pipeline(tok);
     }
-    last_type = type;
-    /* parse the next pipeline */
-    node = parse_pipeline(tok);
-    goto loop;
+    
+    /* return the AND-OR list */
+    return and_or;
 }
 
 
@@ -542,19 +555,8 @@ struct node_s *parse_pipeline(struct token_s *tok)
      */
     while((node = parse_command(tok)))
     {
-        /* func definitions are skipped for now */
-        if(node == node_func_def)
-        {
-            tok = get_current_token();
-
-            /* save the start of this line */
-            tok->src->wstart = tok->src->curpos;
-
-            /* skip optional newlines */
-            skip_newline_tokens();
-            continue;
-        }
         tok = get_current_token();
+        tok->src->wstart = tok->src->curpos;
 
         /* we have a pipe operator ('|' or '|&') */
         if(tok->type == TOKEN_PIPE || tok->type == TOKEN_PIPE_AND)
@@ -662,23 +664,6 @@ struct node_s *parse_pipeline(struct token_s *tok)
 
 
 /*
- * skip list separators '&' and ';'.
- *
- * returns nothing.
- */
-void parse_separator(struct token_s *tok)
-{
-    if(tok->type == TOKEN_AND || tok->type == TOKEN_SEMI)
-    {
-        tok->src->wstart = tok->src->curpos;
-        tok = tokenize(tok->src);
-    }
-    /* skip optional newlines */
-    skip_newline_tokens2();
-}
-
-
-/*
  * parse a term (list) that starts with the given token, and stop when we get
  * the stop_at token.
  * 
@@ -694,12 +679,15 @@ struct node_s *parse_term(struct token_s *tok, enum token_type_e stop_at)
     }
     tok = get_current_token();
     enum token_type_e type = tok->type;
+
     if(tok->type == TOKEN_AND || tok->type == TOKEN_SEMI || tok->type == TOKEN_NEWLINE)
     {
         tok->src->wstart = tok->src->curpos;
         tok = tokenize(tok->src);
+
         /* skip optional newlines */
         skip_newline_tokens2();
+
         /* stop if the current token is the list terminator */
         if(is_token_of_type(tok, stop_at))
         {
@@ -710,11 +698,13 @@ struct node_s *parse_term(struct token_s *tok, enum token_type_e stop_at)
     {
         return node;
     }
+
     /* reached EOF */
     if(tok->type == TOKEN_EOF)
     {
         return node;
     }
+    
     /* error getting the next token */
     if(tok->type == TOKEN_ERROR)
     {
@@ -722,6 +712,7 @@ struct node_s *parse_term(struct token_s *tok, enum token_type_e stop_at)
         free_node_tree(node);
         return NULL;
     }
+    
     /* create a new node for the term */
     struct node_s *term = new_node(NODE_TERM);
     if(!term)       /* insufficient memory */
@@ -730,6 +721,7 @@ struct node_s *parse_term(struct token_s *tok, enum token_type_e stop_at)
         free_node_tree(node);
         return NULL;
     }
+    
     /* check how the term is terminated */
     if(type == TOKEN_AND)       /* term ends in '&' */
     {
@@ -745,6 +737,7 @@ struct node_s *parse_term(struct token_s *tok, enum token_type_e stop_at)
     }
     add_child_node(term, node);
     term->lineno = node->lineno;
+    
     /* return the term nodetree */
     return term;
 }
@@ -765,13 +758,17 @@ struct node_s *parse_compound_list(struct token_s *tok, enum token_type_e stop_a
     {
         return NULL;
     }
+
     /* skip optional newlines */
     skip_newline_tokens2();
+
     /* reached EOF or error parsing */
     if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
     {
+        free_node_tree(list);
         return NULL;
     }
+
     /* keep parsing until we get the stop_at token */
     while(!is_token_of_type(tok, stop_at))
     {
@@ -788,6 +785,7 @@ struct node_s *parse_compound_list(struct token_s *tok, enum token_type_e stop_a
                     return list;
                 }
             }
+
             /* parsing error. free partially parsed nodetree and return NULL */
             if(list->children == 0)
             {
@@ -795,18 +793,31 @@ struct node_s *parse_compound_list(struct token_s *tok, enum token_type_e stop_a
             }
             return NULL;
         }
+        
         /* add parsed term to the list */
         add_child_node(list, node);
         tok = get_current_token();
-        parse_separator(tok);
-        /* parse optional separators */
+
+        /* skip list separators '&' and ';' */
+        if(tok->type == TOKEN_AND || tok->type == TOKEN_SEMI)
+        {
+            tok->src->wstart = tok->src->curpos;
+            tok = tokenize(tok->src);
+        }
+
+        /* skip optional newlines */
+        skip_newline_tokens2();
         tok = get_current_token();
+        
         /* make sure we haven't reached EOF or an error token */
         if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
         {
             break;
         }
+
+        tok->src->wstart = tok->src->curpos;
     }
+    
     /* return the parsed nodetree */
     return list;
 }
@@ -821,75 +832,37 @@ struct node_s *parse_subshell(struct token_s *tok)
 {
     /* go past '(' */
     tok = tokenize(tok->src);
+    tok->src->wstart = tok->src->curpos;
+
     /* create a new node for the subshell */
     struct node_s *shell = new_node(NODE_SUBSHELL);
     if(!shell)
     {
         return NULL;
     }
+
     /* parse the compound list that forms the subshell's body */
-    struct node_s *node = parse_compound_list(tok, TOKEN_CLOSEBRACE);
+    struct node_s *node = parse_compound_list(tok, TOKEN_RIGHT_PAREN);
     tok = get_current_token();
+    
     /* current token should be a closing brace ')' */
-    if(tok->type != TOKEN_CLOSEBRACE)
+    if(tok->type != TOKEN_RIGHT_PAREN)
     {
         /* missing ')' */
-        PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, TOKEN_CLOSEBRACE);
+        PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, TOKEN_RIGHT_PAREN);
         free_node_tree(shell);
         free_node_tree(node);
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
+    
     /* skip the ')' */
     tok = tokenize(tok->src);
     add_child_node(shell, node);
     shell->lineno = node->lineno;
+    
     /* return the parsed nodetree */
     return shell;
-}
-
-
-/*
- * get the word list that we use in for and select loops, and case conditionals.
- * the list includes all words starting with the given token upto the first
- * non-word token (which can be a separator operator, the 'in' keyword, etc).
- * 
- * returns the word list as a nodetree, NULL in case of error.
- */
-struct node_s *get_wordlist(struct token_s *tok)
-{
-    /* current token is a newline or ; */
-    if(tok->type == TOKEN_NEWLINE || tok->type == TOKEN_SEMI)
-    {
-        return NULL;
-    }
-    /* create a new node for the list */
-    struct node_s *wordlist = new_node(NODE_WORDLIST);
-    if(!wordlist)   /* insufficient memory */
-    {
-        return NULL;
-    }
-    wordlist->lineno = tok->lineno;
-    /* parse tokens and add words until we have a non-word token */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_WORD)
-    {
-        /* create a new node for the next word */
-        struct node_s *word = new_node(NODE_VAR);
-        if(!word)   /* insufficient memory */
-        {
-            /* free the partially parsed nodetree */
-            free_node_tree(wordlist);
-            return NULL;
-        }
-        /* copy the name to the new node */
-        set_node_val_str(word, tok->text);
-        word->lineno = tok->lineno;
-        add_child_node(wordlist, word);
-        /* move on to the next token */
-        tok = tokenize(tok->src);
-    }
-    /* return the parsed nodetree */
-    return wordlist;
 }
 
 
@@ -910,9 +883,11 @@ struct node_s *parse_do_group(struct token_s *tok)
     }
     tok->src->wstart = tok->src->curpos;
     tok = tokenize(tok->src);
+
     /* parse the compound list */
     struct node_s *_do = parse_compound_list(tok, TOKEN_KEYWORD_DONE);
     tok = get_current_token();
+
     /* last token must be 'done' */
     if(tok->type != TOKEN_KEYWORD_DONE)
     {
@@ -922,8 +897,10 @@ struct node_s *parse_do_group(struct token_s *tok)
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
+
     /* skip the 'done' keyword */
     tok = tokenize(tok->src);
+    
     /* return the parsed nodetree */
     return _do;
 }
@@ -938,10 +915,13 @@ struct node_s *parse_brace_group(struct token_s *tok)
 {
     /* go past '{' */
     tok = tokenize(tok->src);
+    tok->src->wstart = tok->src->curpos;
+
     /* parse the compound list inside the braces */
     struct node_s *node = parse_compound_list(tok, TOKEN_KEYWORD_RBRACE);
     struct token_s *tok2;
     tok = get_current_token();
+
     /*
      * if we have a nested function that ends right before the current one, i.e. something like:
      *   f1 () {
@@ -959,12 +939,14 @@ struct node_s *parse_brace_group(struct token_s *tok)
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
+
     /* make sure the brace group ends with a closing right brace */
     if(tok->type == TOKEN_KEYWORD_RBRACE)
     {
         /* skip he '}' */
         tok = tokenize(tok->src);
     }
+
     /* return the parsed nodetree */
     return node;
 }
@@ -980,14 +962,14 @@ struct node_s *parse_compound_command(struct token_s *tok)
 {
     switch(tok->type)
     {
-        case TOKEN_KEYWORD_LBRACE: return parse_brace_group  (tok);
-        case TOKEN_OPENBRACE     : return parse_subshell     (tok);
-        case TOKEN_KEYWORD_FOR   : return parse_for_clause   (tok);
-        case TOKEN_KEYWORD_SELECT: return parse_select_clause(tok);
-        case TOKEN_KEYWORD_CASE  : return parse_case_clause  (tok);
-        case TOKEN_KEYWORD_IF    : return parse_if_clause    (tok);
-        case TOKEN_KEYWORD_WHILE : return parse_while_clause (tok);
-        case TOKEN_KEYWORD_UNTIL : return parse_until_clause (tok);
+        case TOKEN_KEYWORD_LBRACE: return parse_brace_group(tok);
+        case TOKEN_LEFT_PAREN    : return parse_subshell   (tok);
+        case TOKEN_KEYWORD_FOR   : return parse_for_loop   (tok);
+        case TOKEN_KEYWORD_SELECT: return parse_select_loop(tok);
+        case TOKEN_KEYWORD_CASE  : return parse_case_clause(tok);
+        case TOKEN_KEYWORD_IF    : return parse_if_clause  (tok);
+        case TOKEN_KEYWORD_WHILE : return parse_while_loop (tok);
+        case TOKEN_KEYWORD_UNTIL : return parse_until_loop (tok);
         default                  : return NULL;
     }
 }
@@ -1003,7 +985,7 @@ static inline int is_compound_keyword(struct token_s *tok)
 {
     /* POSIX-defined compound words */
     if((tok->type == TOKEN_KEYWORD_LBRACE) ||       /* '{' */
-       (tok->type == TOKEN_OPENBRACE     ) ||       /* '(' */
+       (tok->type == TOKEN_LEFT_PAREN    ) ||       /* '(' */
        (tok->type == TOKEN_KEYWORD_FOR   ) ||       /* 'for' */
        (tok->type == TOKEN_KEYWORD_CASE  ) ||       /* 'case' */
        (tok->type == TOKEN_KEYWORD_IF    ) ||       /* 'if' */
@@ -1012,11 +994,13 @@ static inline int is_compound_keyword(struct token_s *tok)
     {
         return 1;
     }
+
     /* non-POSIX compound word (only identified if POSIX mode is off) */
     if((tok->type == TOKEN_KEYWORD_SELECT) && !option_set('P'))
     {
         return 1;
     }
+    
     /* token is not a compound word */
     return 0;
 }
@@ -1029,20 +1013,23 @@ static inline int is_compound_keyword(struct token_s *tok)
  */
 struct node_s *parse_function_body(struct token_s *tok)
 {
-    /* parse function body (which is just a compound command */
+    /* parse function body (which is just a compound command) */
     struct node_s *compound = parse_compound_command(tok);
+
     /* error parsing or empty/missing function body */
     if(!compound)
     {
         return NULL;
     }
     tok = get_current_token();
+
     /* parse optional redirection list */
     struct node_s *redirect = parse_redirect_list(tok);
     if(redirect)
     {
         add_child_node(compound, redirect);
     }
+
     /* return the parsed nodetree */
     return compound;
 }
@@ -1062,10 +1049,15 @@ struct node_s *parse_function_body(struct token_s *tok)
  * 
  * returns the special node_func_def node to indicate the function body was
  * successfully parsed and added to the global functions table, or NULL on errors.
+ * the returned AST has the following structure:
+ * 
+ * NODE_FUNCTION (root node, val field contains function name as string)
+ * |--> NODE_LIST (function body as AST)
+ * +--> NODE_VAR (function body as string)
+ * 
  */
 struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
 {
-    enum token_type_e err_tok;
     /* special builtin utility names cannot be used as function names */
     if(is_special_builtin(tok->text))
     {
@@ -1074,80 +1066,98 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
-    /* add the function name to the functions table */
-    struct symtab_entry_s *func = add_func(tok->text);
+    
+    /* create the function's root node */
+    struct node_s *func = new_node(NODE_FUNCTION);
     if(!func)
     {
         return NULL;
     }
+    
+    /* set the function name */
+    set_node_val_str(func, tok->text);
+
     tok = get_current_token();
     int wstart = tok->src->curpos;
+    
     /* POSIX-style of function definitions */
-    if(tok->type == TOKEN_OPENBRACE)
+    if(tok->type == TOKEN_LEFT_PAREN)
     {
         /* skip the '(' */
         tok = tokenize(tok->src);
+    
         /* '(' should be followed by ')' */
-        if(tok->type != TOKEN_CLOSEBRACE)
+        if(tok->type != TOKEN_RIGHT_PAREN)
         {
             /* missing ')' */
-            err_tok = TOKEN_CLOSEBRACE;
-            goto err;
+            PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, TOKEN_RIGHT_PAREN);
+            EXIT_IF_NONINTERACTIVE();
+            free_node_tree(func);
+            return NULL;
         }
+        
         /* skip the ')' */
         tok = tokenize(tok->src);
     }
     /* if not using the function keyword, a missing '(' is an error */
     else if(!using_keyword)
     {
-        err_tok = TOKEN_OPENBRACE;
-        goto err;
+        PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, TOKEN_LEFT_PAREN);
+        EXIT_IF_NONINTERACTIVE();
+        free_node_tree(func);
+        return NULL;
     }
+    
     /* skip optional newlines */
-    while(tok->type != TOKEN_EOF && tok->type == TOKEN_NEWLINE)
-    {
-        tok = tokenize(tok->src);
-    }
+    skip_newline_tokens();
+    
     /* parse the function body */
     struct node_s *body = parse_function_body(tok);
     if(body)
     {
-        func->func_body = body;
+        add_child_node(func, body);
     }
-    func->val_type = SYM_FUNC;
+    else
+    {
+        fprintf(stderr, "%s: failed to parse function definition\n", SHELL_NAME);
+        EXIT_IF_NONINTERACTIVE();
+        free_node_tree(func);
+        return NULL;
+    }
     tok = get_current_token();
+    
     /*
      * our offset is relative to the start of the function, not the whole script. this will not
      * help us in getting the command string of this function (everything between the opening and
      * closing brace. we need to manipulate the offsets in order to get the correct offset for
      * each command parsed as part of the function definition.
      */
-    int l = tok->linestart, c = tok->charno;
-    tok->linestart = tok->src->curpos; tok->charno = 0;
+
     char *cmdline = get_cmdwords(tok, wstart);
-    tok->linestart = l; tok->charno = c;
-    symtab_entry_setval(func, cmdline);
+
+    struct node_s *func_str = new_node(NODE_VAR);
+    if(func_str)
+    {
+        set_node_val_str(func_str, cmdline);
+        add_child_node(func, func_str);
+    }
     free_malloced_str(cmdline);
-    set_internal_exit_status(0);
-    /*
-     * we are not going to execute the function body right now, so return a dummy nodetree
-     * to let the caller know we parsed the function definition successfully.
-     */
-    return node_func_def;
     
-err:
-    PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, err_tok);
-    set_internal_exit_status(1);
-    rem_from_symtab(func, func_table);
-    EXIT_IF_NONINTERACTIVE();
-    return NULL;
+    /* return the function's AST */
+    return func;
 }
 
 
 /* 
  * parse the simple command that starts with the given token.
  * 
- * returns the parsed nodetree, NULL on parsing errors.
+ * returns the parsed nodetree, NULL on parsing errors.. the tree
+ * of a parsed simple command looks like:
+ *
+ *      NODE_COMMAND
+ *        |---> NODE_VAR
+ *        |---> NODE_VAR
+ *        +---> ...
  */
 struct node_s *parse_simple_command(struct token_s *tok)
 {
@@ -1162,120 +1172,9 @@ struct node_s *parse_simple_command(struct token_s *tok)
     /*
      * flag to indicate if we need to check the following word for alias substitution.
      */
-    int alias_next_word = 0;
-
-    /*
-     *  parse the command prefix.. command prefixes can contain I/O redirections
-     *  and assignment words.
-     */
-    if(is_redirect_op(tok->text) || tok->type == TOKEN_IO_NUMBER || tok->type == TOKEN_ASSIGNMENT_WORD)
-    {
-        /* parse all the redirections and assignments in the command prefix */
-        while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
-        {
-            if(is_redirect_op(tok->text) || tok->type == TOKEN_IO_NUMBER)
-            {
-                struct node_s *redirect = parse_io_redirect(tok);
-                if(redirect)
-                {
-                    add_child_node(cmd, redirect);
-                }
-                /* stop parsing on redirection errors */
-                if(parser_err)
-                {
-                    free_node_tree(cmd);
-                    return NULL;
-                }
-            }
-            else if(tok->type == TOKEN_ASSIGNMENT_WORD)
-            {
-                /* add the assignment word to the command */
-                struct node_s *assign = new_node(NODE_ASSIGNMENT);
-                if(assign)
-                {
-                    set_node_val_str(assign, tok->text);
-                    assign->lineno = tok->lineno;
-                    add_child_node(cmd, assign);
-                }
-            }
-            else
-            {
-                break;
-            }
-            tok = tokenize(tok->src);
-        }
-    }
-
-    /* parse the command word proper */
-    if(tok->type != TOKEN_WORD)
-    {
-        /* no command word */
-        if(!cmd->children)
-        {
-            /* empty command */
-            free_node_tree(cmd);
-            cmd = NULL;
-        }
-        else
-        {
-            char *cmdline = get_cmdwords(tok, tok->src->wstart);
-            set_node_val_str(cmd, cmdline);   /* get the command line */
-            free_malloced_str(cmdline);
-        }
-        /* return the parsed command prefix */
-        return cmd;
-    }
-
-    /* check the command word for aliases */
-    int i;
-    struct node_s *word;
-    if(option_set('i') || optionx_set(OPTION_EXPAND_ALIASES))
-    {
-        char *s = get_malloced_str(tok->text);
-        word = substitute_alias(s, &alias_next_word);
-        if(word)
-        {
-            add_child_node(cmd, word);
-            i = 0;
-            /*
-             * add_child_node() adds only one child to the parent's count.
-             * we need to manually count the rest of the children and add them.
-             */
-            while(word->next_sibling)
-            {
-                i++;
-                word = word->next_sibling;
-            }
-            cmd->children += i;
-        }
-        else
-        {
-            word = new_node(NODE_VAR);
-            set_node_val_str(word, s);
-            add_child_node(cmd, word);
-        }
-        free_malloced_str(s);
-    }
-
-    /* is this a test or '[[' command? */
-    word = cmd->first_child;
-    int istest = (strcmp(word->val.str, "[[") == 0) ? 2 :
-                 (strcmp(word->val.str, "[" ) == 0) ? 1 : 0;
-    tok = tokenize(tok->src);
-
-    /* reached EOF */
-    if(tok->type == TOKEN_EOF)
-    {
-        return cmd;
-    }
-
-    /* error getting next token */
-    if(tok->type == TOKEN_ERROR)
-    {
-        /* free the partially parsed nodetree */
-        free_node_tree(cmd);
-        return NULL;
-    }
+    int alias_next_word = interactive_shell || optionx_set(OPTION_EXPAND_ALIASES);
+    int i, istest = 0;
+    struct node_s *word, *first = NULL;
 
     /* parse the command suffix */
     struct node_s *last = last_child(cmd);
@@ -1332,6 +1231,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
                     return NULL;
                 }
             }
+
             tok = get_current_token();
             alias_next_word = 0;
             continue;
@@ -1349,8 +1249,8 @@ struct node_s *parse_simple_command(struct token_s *tok)
 
             /* the test command accepts !, &&, ||, (, ) */
             if(tok->type != TOKEN_KEYWORD_BANG && tok->type != TOKEN_AND_IF && 
-               tok->type != TOKEN_OR_IF && tok->type != TOKEN_CLOSEBRACE &&
-               tok->type != TOKEN_OPENBRACE)
+               tok->type != TOKEN_OR_IF && tok->type != TOKEN_RIGHT_PAREN &&
+               tok->type != TOKEN_LEFT_PAREN)
             {
                 break;
             }
@@ -1365,6 +1265,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
         {
             /* add the assignment word to the command */
             struct node_s *assign = new_node(NODE_ASSIGNMENT);
+            
             if(assign)
             {
                 set_node_val_str(assign, tok->text);
@@ -1372,7 +1273,22 @@ struct node_s *parse_simple_command(struct token_s *tok)
                 add_child_node(cmd, assign);
                 last = assign;
             }
-            tok = tokenize(tok->src);
+            
+            /*
+             * check next token. if we've already read the next token in
+             * parse_command(), fetch that token without reading another token
+             * from the source. otherwise get the next token from the source.
+             */
+            struct token_s *tok2 = get_current_token();
+            if(tok2 == tok)
+            {
+                tok = tokenize(tok->src);
+            }
+            else
+            {
+                tok = tok2;
+            }
+
             alias_next_word = 0;
             continue;
         }
@@ -1385,6 +1301,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
             {
                 add_child_node(cmd, word);
                 i = 0;
+                
                 /*
                  * add_child_node() adds only one child to the parent's count.
                  * we need to manually count the rest of the children and add them.
@@ -1394,17 +1311,20 @@ struct node_s *parse_simple_command(struct token_s *tok)
                     i++;
                     word = word->next_sibling;
                 }
+                
                 cmd->children += i;
             }
             else
             {
                 word = new_node(NODE_VAR);
+                
                 if(!word)
                 {
                     /* free the partially parsed nodetree */
                     free_node_tree(cmd);
                     return NULL;
                 }
+                
                 set_node_val_str(word, tok->text);
                 add_child_node(cmd, word);
             }
@@ -1422,8 +1342,32 @@ struct node_s *parse_simple_command(struct token_s *tok)
             word->lineno = tok->lineno;
             add_child_node(cmd, word);
         }
+        
+        if(!first)
+        {
+            first = word;
+            /* check if this is a test or '[[' command */
+            istest = (strcmp(word->val.str, "[[") == 0) ? 2 :
+                     (strcmp(word->val.str, "[" ) == 0) ? 1 : 0;
+        }
+
         last = word;
-        tok = tokenize(tok->src);
+        /*
+         * check next token. if we've already read the next token in
+         * parse_command(), fetch that token without reading another token
+         * from the source. otherwise get the next token from the source.
+         */
+        struct token_s *tok2 = get_current_token();
+        if(tok2 == tok)
+        {
+            tok = tokenize(tok->src);
+        }
+        else
+        {
+            tok = tok2;
+        }
+        //tok = tokenize(tok->src);
+        
         /*
          * test command, when invoked as '[' or '[[', must end with a matching ']' or ']]'.
          * we test this in order not to overshoot while reading tokens, so that commands like
@@ -1471,11 +1415,13 @@ struct node_s *parse_command(struct token_s *tok)
         tok->src->wstart = tok->src->curpos;
         tok = tokenize(src);
     }
+
     /* reached EOF or error getting the next token */
     if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
     {
         return NULL;
     }
+    
     /* we have a compound command */
     if(is_compound_keyword(tok))
     {
@@ -1486,12 +1432,14 @@ struct node_s *parse_command(struct token_s *tok)
             return NULL;
         }
         tok = get_current_token();
+    
         /* parse the optional redirection list */
         struct node_s *redirect = parse_redirect_list(tok);
         if(redirect)
         {
             add_child_node(compound, redirect);
         }
+        
         /* return the parsed nodetree */
         return compound;
     }
@@ -1505,8 +1453,10 @@ struct node_s *parse_command(struct token_s *tok)
             return NULL;
         }
         tok->src->wstart = tok->src->curpos;
+        
         /* skip the time keyword */
         tok = tokenize(tok->src);
+        
         /*
          * if nothing comes after the 'time' keyword, return it as the backend will still
          * execute the time command.
@@ -1515,15 +1465,18 @@ struct node_s *parse_command(struct token_s *tok)
         {
             return t;
         }
+        
         /* parse the timed command */
         struct node_s *cmd = parse_command(tok);
         if(cmd)
         {
             add_child_node(t, cmd);
         }
+        
         /* return the parsed nodetree */
         return t;
     }
+    
     /* get a duplicate of the current token */
     struct token_s *tok2 = dup_token(tok);
     if(!tok2)
@@ -1531,16 +1484,9 @@ struct node_s *parse_command(struct token_s *tok)
         return NULL;
     }
 
-    /* save a temporary copy of our source struct's pointers */
-    struct source_s src2;
-    src2.curline = tok->src->curline;
-    src2.curchar = tok->src->curchar;
-    src2.curpos = tok->src->curpos;
-    src2.curlinestart = tok->src->curlinestart;
-    src2.wstart = tok->src->wstart;
-
     /* skip the current token so we can check the token after it */
     tok = tokenize(tok->src);
+    
     /* if we reached EOF, we should get an EOF token, not an ERROR token */
     if(tok->type == TOKEN_ERROR)
     {
@@ -1560,46 +1506,29 @@ struct node_s *parse_command(struct token_s *tok)
         {
             return NULL;
         }
-        int l = tok->src->curline, c = tok->src->curchar;
-        tok2->src->curline = 1;
-        tok2->src->curchar = 1;
         tok = tokenize(tok->src);
         /* parse the function definition */
         struct node_s *func = parse_function_definition(tok2, 1);
-        tok->src->curline += l;
-        tok->src->curchar += c;
         free_token(tok2);
         /* return the parsed nodetree */
         return func;
     }
     /* POSIX way of defining functions */
     else if(is_name(tok2->text) && !is_special_builtin(tok2->text) &&
-       tok->type != TOKEN_EOF && tok->type == TOKEN_OPENBRACE)
+       tok->type != TOKEN_EOF && tok->type == TOKEN_LEFT_PAREN)
     {
-        int l = tok->src->curline, c = tok->src->curchar;
-        tok->src->curline = 1;
-        tok->src->curchar = 1;
         /* parse the function definition */
         struct node_s *func = parse_function_definition(tok2, 0);
-        tok->src->curline += l;
-        tok->src->curchar += c;
         free_token(tok2);
         /* return the parsed nodetree */
         return func;
     }
+    
     /* we have a simple command */
-    /*
-     *  as we have read a token ahead, return the source pointers to the beginning
-     *  of the first token, so that parse_simple_command() will parse correctly.
-     */
-    tok->src->curline = src2.curline;
-    tok->src->curchar = src2.curchar;
-    tok->src->curpos = src2.curpos;
-    tok->src->curlinestart = src2.curlinestart;
-    tok->src->wstart = src2.wstart;
     /* parse the simple command */
     struct node_s *cmd = parse_simple_command(tok2);
     free_token(tok2);
+    
     /* return the parsed nodetree */
     return cmd;
 }

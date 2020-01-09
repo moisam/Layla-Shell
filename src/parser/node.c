@@ -210,7 +210,6 @@ char *get_node_type_str(enum node_type_e type)
 {
     switch(type)
     {
-        case NODE_PROGRAM          : return "NODE_PROGRAM"         ;
         case NODE_FUNCTION         : return "NODE_FUNCTION"        ;
         case NODE_SUBSHELL         : return "NODE_SUBSHELL"        ;
         case NODE_LIST             : return "NODE_LIST"            ;

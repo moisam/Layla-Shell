@@ -38,12 +38,14 @@
 struct node_s *parse_case_item(struct token_s *tok)
 {
     int lineno = tok->lineno;
+
     /* case items can begin with an optional '(' */
-    if(tok->type == TOKEN_OPENBRACE)
+    if(tok->type == TOKEN_LEFT_PAREN)
     {
         /* skip the '(' */
         tok = tokenize(tok->src);
     }
+
     /* create a new node for the case item */
     struct node_s *item = new_node(NODE_CASE_ITEM);
     if(!item)
@@ -51,8 +53,9 @@ struct node_s *parse_case_item(struct token_s *tok)
         return NULL;
     }
     item->lineno = lineno;
+    
     /* loop to get the pattern list, which ends with ')' */
-    while(tok->type != TOKEN_EOF && tok->type != TOKEN_CLOSEBRACE)
+    while(tok->type != TOKEN_EOF && tok->type != TOKEN_RIGHT_PAREN)
     {
         /* create a new node for the next pattern */
         struct node_s *word = new_node(NODE_VAR);
@@ -62,12 +65,15 @@ struct node_s *parse_case_item(struct token_s *tok)
             free_node_tree(item);
             return NULL;
         }
+        
         /* copy the pattern to the new node */
         set_node_val_str(word, tok->text);
         word->lineno = tok->lineno;
         add_child_node(item, word);
+        
         /* skip the pattern token */
         tok = tokenize(tok->src);
+        
         /* skip pipe operators, which are used to separate patterns */
         while(tok->type != TOKEN_EOF && tok->type == TOKEN_PIPE)
         {
@@ -76,13 +82,16 @@ struct node_s *parse_case_item(struct token_s *tok)
     }
     tok->src->wstart = tok->src->curpos;
     tok = tokenize(tok->src);
+    
     /* skip optional newlines */
     skip_newline_tokens2();
+    
     /* the next command begins after the ')' char */
     if(tok->src->buffer[tok->src->wstart] == ')')
     {
         tok->src->wstart++;
     }
+    
     /*
      * if we're running in POSIX mode, we only identify ';;' or 'esac' as
      * case item terminators.
@@ -116,6 +125,7 @@ struct node_s *parse_case_item(struct token_s *tok)
         }
     }
     tok = get_current_token();
+    
     /* check how this case item is terminated */
     if(tok->type == TOKEN_SEMI_AND)     /* ';&' */
     {
@@ -126,13 +136,16 @@ struct node_s *parse_case_item(struct token_s *tok)
     {
         set_node_val_chr(item, ';');
     }
+    
     /* skip any remaining terminators */
     while(tok->type == TOKEN_DSEMI || tok->type == TOKEN_SEMI_AND)
     {
         tok = tokenize(tok->src);
     }
+    
     /* skip optional newlines */
     skip_newline_tokens();
+    
     /* return the parsed nodetree */
     return item;
 }
@@ -146,8 +159,10 @@ struct node_s *parse_case_item(struct token_s *tok)
 struct node_s *parse_case_clause(struct token_s *tok)
 {
     int lineno = tok->lineno;
+    
     /* go past 'case' */
     tok = tokenize(tok->src);
+    
     /* have we reached EOF or error getting next token? */
     if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
     {
@@ -155,6 +170,7 @@ struct node_s *parse_case_clause(struct token_s *tok)
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
+    
     /* create a new node for the case clause */
     struct node_s *_case = new_node(NODE_CASE);
     if(!_case)
@@ -162,6 +178,7 @@ struct node_s *parse_case_clause(struct token_s *tok)
         return NULL;
     }
     _case->lineno = lineno;
+    
     /* create a new node for the name token */
     struct node_s *word = new_node(NODE_VAR);
     if(!word)
@@ -170,14 +187,18 @@ struct node_s *parse_case_clause(struct token_s *tok)
         free_node_tree(_case);
         return NULL;
     }
+    
     /* copy the name to the new node */
     set_node_val_str(word, tok->text);
     word->lineno = tok->lineno;
     add_child_node(_case, word);
+    
     /* skip the name token */
     tok = tokenize(tok->src);
+    
     /* skip optional newlines */
     skip_newline_tokens();
+    
     /* check for the 'in' keyword */
     if(tok->type != TOKEN_KEYWORD_IN)
     {
@@ -187,10 +208,13 @@ struct node_s *parse_case_clause(struct token_s *tok)
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
+    
     /* skip the 'in' keyword */
     tok = tokenize(tok->src);
+    
     /* skip optional newlines */
     skip_newline_tokens();
+    
     /* loop to parse the case item(s) until we hit EOF or esac, or an error occurs */
     while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR && tok->type != TOKEN_KEYWORD_ESAC)
     {
@@ -202,6 +226,7 @@ struct node_s *parse_case_clause(struct token_s *tok)
         }
         tok = get_current_token();
     }
+    
     /* the last token must be 'esac' */
     if(tok->type != TOKEN_KEYWORD_ESAC)
     {
@@ -211,8 +236,10 @@ struct node_s *parse_case_clause(struct token_s *tok)
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
+    
     /* skip the 'esac' keyword */
     tok = tokenize(tok->src);
+    
     /* return the parsed nodetree */
     return _case;
 }
@@ -226,8 +253,10 @@ struct node_s *parse_case_clause(struct token_s *tok)
 struct node_s *parse_if_clause(struct token_s *tok)
 {
     int lineno = tok->lineno;
+    
     /* go past 'if' */
     tok = tokenize(tok->src);
+    
     /* create a new node for the if clause */
     struct node_s *_if = new_node(NODE_IF);
     if(!_if)
@@ -235,6 +264,7 @@ struct node_s *parse_if_clause(struct token_s *tok)
         return NULL;
     }
     _if->lineno = lineno;
+    
     /* parse the test part before 'then' */
     struct node_s *compound = parse_compound_list(tok, TOKEN_KEYWORD_THEN);
     if(compound)
@@ -242,6 +272,7 @@ struct node_s *parse_if_clause(struct token_s *tok)
         add_child_node(_if, compound);
     }
     tok = get_current_token();
+    
     /* it should end with the 'then' keyword */
     if(tok->type != TOKEN_KEYWORD_THEN)
     {
@@ -252,8 +283,10 @@ struct node_s *parse_if_clause(struct token_s *tok)
         return NULL;
     }
     tok->src->wstart = tok->src->curpos+1;
+    
     /* go past the 'then' keyword */
     tok = tokenize(tok->src);
+    
     /* parse the 'then' compound list, which can end in 'elif', 'else' or 'fi' */
     compound = parse_compound_list(tok, TOKEN_KEYWORDS_ELIF_ELSE_FI);
     if(compound && compound->children)
@@ -264,6 +297,7 @@ struct node_s *parse_if_clause(struct token_s *tok)
     {
         /* missing 'else', 'elif' or 'fi' */
         PARSER_RAISE_ERROR_DESC(EXPECTED_TOKEN, tok, "expression");
+    
         /* free the partially parsed nodetree */
         free_node_tree(compound);
         free_node_tree(_if);
@@ -272,6 +306,7 @@ struct node_s *parse_if_clause(struct token_s *tok)
     }
     tok = get_current_token();
     tok->src->wstart = tok->src->curpos+1;
+    
     /*
      * if the next token is 'elif', parse the test and compound list as a nested 'if' clause.
      * this will help us bind each 'else' to the nearest 'if'.
@@ -295,12 +330,14 @@ struct node_s *parse_if_clause(struct token_s *tok)
         }
     }
     tok = get_current_token();
+    
     /* normally, if conditionals end in a fi keyword */
     if(tok->type == TOKEN_KEYWORD_FI)
     {
         tok = tokenize(tok->src);
         return _if;
     }
+    
     /*
      * if we had an 'elif' clause, token 'fi' would have been consumed
      * by it, so check the previous token.
@@ -310,9 +347,11 @@ struct node_s *parse_if_clause(struct token_s *tok)
     {
         return _if;
     }
+    
     /* token 'fi' is missing */
     tok = get_current_token();
     PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, TOKEN_KEYWORD_FI);
+    
     /* free the partially parsed nodetree */
     free_node_tree(_if);
     EXIT_IF_NONINTERACTIVE();

@@ -31,17 +31,67 @@
 
 
 /*
+ * get the word list that we use in for and select loops.
+ * the list includes all words starting with the given token upto the first
+ * non-word token (which can be a separator operator, the 'in' keyword, etc).
+ * 
+ * returns the word list as a nodetree, NULL in case of error.
+ */
+struct node_s *get_wordlist(struct token_s *tok)
+{
+    /* current token is a newline or ; */
+    if(tok->type == TOKEN_NEWLINE || tok->type == TOKEN_SEMI)
+    {
+        return NULL;
+    }
+
+    /* create a new node for the list */
+    struct node_s *wordlist = new_node(NODE_WORDLIST);
+    if(!wordlist)   /* insufficient memory */
+    {
+        return NULL;
+    }
+    wordlist->lineno = tok->lineno;
+    
+    /* parse tokens and add words until we have a non-word token */
+    while(tok->type != TOKEN_EOF && tok->type == TOKEN_WORD)
+    {
+        /* create a new node for the next word */
+        struct node_s *word = new_node(NODE_VAR);
+        if(!word)   /* insufficient memory */
+        {
+            /* free the partially parsed nodetree */
+            free_node_tree(wordlist);
+            return NULL;
+        }
+        
+        /* copy the name to the new node */
+        set_node_val_str(word, tok->text);
+        word->lineno = tok->lineno;
+        add_child_node(wordlist, word);
+        
+        /* move on to the next token */
+        tok = tokenize(tok->src);
+    }
+
+    /* return the parsed nodetree */
+    return wordlist;
+}
+
+
+/*
  * parse a traditional, POSIX-style 'for' loop:
  * 
  *     for i in list; do compound-list; done
  * 
  * returns the parsed nodetree, NULL on parsing errors.
  */
-struct node_s *parse_for_clause(struct token_s *tok)
+struct node_s *parse_for_loop(struct token_s *tok)
 {
     int lineno = tok->lineno;
     /* go past 'for' */
     tok = tokenize(tok->src);
+    
     /* we must have a name token */
     if(!is_name(tok->text))
     {
@@ -54,14 +104,16 @@ struct node_s *parse_for_clause(struct token_s *tok)
          */
         if(tok->text && tok->text[0] == '(' && tok->text[1] == '(' && !option_set('P'))
         {
-            return parse_for_clause2(tok);
+            return parse_for_loop2(tok);
         }
+        
         /* error parsing for loop */
         PARSER_RAISE_ERROR_DESC(MISSING_FOR_NAME, tok, NULL);
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
     tok->type = TOKEN_NAME;
+
     /* create a new node for the loop */
     struct node_s *_for = new_node(NODE_FOR);
     if(!_for)
@@ -69,6 +121,7 @@ struct node_s *parse_for_clause(struct token_s *tok)
         return NULL;
     }
     _for->lineno = lineno;
+
     /* create a new node for the name token */
     struct node_s *name = new_node(NODE_VAR);
     if(!name)
@@ -77,38 +130,49 @@ struct node_s *parse_for_clause(struct token_s *tok)
         free_node_tree(_for);
         return NULL;
     }
+
     /* copy the name to the new node */
     set_node_val_str(name, tok->text);
     name->lineno = tok->lineno;
     add_child_node(_for, name);
+    
     /* skip the name token */
     tok = tokenize(tok->src);
+    
     /* skip optional newlines */
     skip_newline_tokens();
+    
     /* check for the 'in' keyword, which is optional */
     if(tok->type == TOKEN_KEYWORD_IN)
     {
         tok = tokenize(tok->src);
+    
         /* get the word list after 'in' */
         struct node_s *wordlist = get_wordlist(tok);
         if(wordlist)
         {
             add_child_node(_for, wordlist);
         }
+        
         /* skip newline and ; operators */
-        if(tok->type == TOKEN_NEWLINE || tok->type == TOKEN_SEMI)
+        tok = get_current_token();
+        if(tok->type == TOKEN_SEMI)
         {
             tok = tokenize(tok->src);
         }
+        
         /* skip optional newlines */
         skip_newline_tokens();
     }
+
     /* parse the loop body, which is a do group */
+    tok = get_current_token();
     struct node_s *parse_group = parse_do_group(tok);
     if(parse_group)
     {
         add_child_node(_for, parse_group);
     }
+    
     /* return the parsed nodetree */
     return _for;
 }
@@ -121,59 +185,71 @@ struct node_s *parse_for_clause(struct token_s *tok)
  * this is a non-POSIX extension used by all major shells.
  * returns the parsed nodetree, NULL on parsing errors.
  */
-struct node_s *parse_for_clause2(struct token_s *tok)
+struct node_s *parse_for_loop2(struct token_s *tok)
 {
     int lineno = tok->lineno;
+    
     /* check we have '((' */
     if(!tok->text || tok->text[0] != '(' || tok->text[1] != '(')
     {
-        PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, TOKEN_OPENBRACE);
+        PARSER_RAISE_ERROR(EXPECTED_TOKEN, tok, TOKEN_LEFT_PAREN);
         EXIT_IF_NONINTERACTIVE();
         return NULL;
     }
+    
     int  i = 2;
     char *p = tok->text+i;
     char *pend = tok->text+tok->text_len;
     char *expr[3] = { NULL, NULL, NULL };
     expr[0] = p;
+    
     /* get expression #1 */
     while(*p && *p != ';')
     {
         p++;
     }
+    
     /* check we haven't reached EOF */
     if(p >= pend)
     {
         goto eof;
     }
+    
     /* NULL-terminate the expr temporarily so that we can copy it */
     *p ='\0';
     expr[0] = get_malloced_str(expr[0]);
+    
     /* remove the NULL terminator we've just inserted */
     *p++ = ';';
+    
     /* get expression #2 */
     expr[1] = p;
     while(*p && *p != ';')
     {
         p++;
     }
+    
     /* check we haven't reached EOF */
     if(p >= pend)
     {
         free_malloced_str(expr[0]);
         goto eof;
     }
+    
     /* NULL-terminate the expr temporarily so that we can copy it */
     *p ='\0';
     expr[1] = get_malloced_str(expr[1]);
+    
     /* remove the NULL terminator we've just inserted */
     *p++ = ';';
+    
     /* get expression #3 */
     expr[2] = p;
     while(*p && *p != ')')
     {
         p++;
     }
+    
     /* check we haven't reached EOF */
     if(p >= pend || p[1] != ')')
     {
@@ -181,11 +257,14 @@ struct node_s *parse_for_clause2(struct token_s *tok)
         free_malloced_str(expr[1]);
         goto eof;
     }
+    
     /* NULL-terminate the expr temporarily so that we can copy it */
     *p ='\0';
     expr[2] = get_malloced_str(expr[2]);
+    
     /* remove the NULL terminator we've just inserted */
     *p++ = ')';
+    
     /* create the node tree */
     struct node_s *_for = new_node(NODE_FOR);
     if(!_for)       /* insufficient memory */
@@ -201,6 +280,7 @@ struct node_s *parse_for_clause2(struct token_s *tok)
         return NULL;
     }
     _for->lineno = lineno;
+    
     /* add the 3 expressions to the nodetree */
     for(i = 0; i < 3; i++)
     {
@@ -223,21 +303,27 @@ struct node_s *parse_for_clause2(struct token_s *tok)
         expr[i] = NULL;
         add_child_node(_for, node);
     }
+    
     /* now get the loop body */
     tok = tokenize(tok->src);
+    
     /* skip newline and ; operators */
     if(tok->type == TOKEN_NEWLINE || tok->type == TOKEN_SEMI)
     {
         tok = tokenize(tok->src);
     }
+    
     /* skip optional newlines */
     skip_newline_tokens();
+    tok = get_current_token();
+    
     /* parse the loop body, which is a do group */
     struct node_s *parse_group = parse_do_group(tok);
     if(parse_group)
     {
         add_child_node(_for, parse_group);
     }
+    
     /* return the parsed nodetree */
     return _for;
     
@@ -256,11 +342,13 @@ eof:
  * this is a non-POSIX extension used by all major shells.
  * returns the parsed nodetree, NULL on parsing errors.
  */
-struct node_s *parse_select_clause(struct token_s *tok)
+struct node_s *parse_select_loop(struct token_s *tok)
 {
     int lineno = tok->lineno;
+    
     /* go past 'select' */
     tok = tokenize(tok->src);
+    
     /* we must have a name token */
     if(!is_name(tok->text))
     {
@@ -269,6 +357,7 @@ struct node_s *parse_select_clause(struct token_s *tok)
         return NULL;
     }
     tok->type = TOKEN_NAME;
+    
     /* create a new node for the loop */
     struct node_s *select = new_node(NODE_SELECT);
     if(!select)
@@ -276,6 +365,7 @@ struct node_s *parse_select_clause(struct token_s *tok)
         return NULL;
     }
     select->lineno = lineno;
+    
     /* create a new node for the name token */
     struct node_s *name = new_node(NODE_VAR);
     if(!name)
@@ -284,14 +374,18 @@ struct node_s *parse_select_clause(struct token_s *tok)
         free_node_tree(select);
         return NULL;
     }
+    
     /* copy the name to the new node */
     set_node_val_str(name, tok->text);
     name->lineno = tok->lineno;
     add_child_node(select, name);
+    
     /* skip the name token */
     tok = tokenize(tok->src);
+    
     /* skip optional newlines */
     skip_newline_tokens();
+    
     /* check for the 'in' keyowrd */
     if(tok->type == TOKEN_KEYWORD_IN)
     {
@@ -302,20 +396,25 @@ struct node_s *parse_select_clause(struct token_s *tok)
         {
             add_child_node(select, wordlist);
         }
+        
         /* skip newline and ; operators */
         if(tok->type == TOKEN_NEWLINE || tok->type == TOKEN_SEMI)
         {
             tok = tokenize(tok->src);
         }
+        
         /* skip optional newlines */
         skip_newline_tokens();
     }
+    
     /* parse the loop body, which is a do group */
+    tok = get_current_token();
     struct node_s *parse_group = parse_do_group(tok);
     if(parse_group)
     {
         add_child_node(select, parse_group);
     }
+    
     /* return the parsed nodetree */
     return select;
 }
@@ -326,12 +425,14 @@ struct node_s *parse_select_clause(struct token_s *tok)
  * 
  * returns the parsed nodetree, NULL on parsing errors.
  */
-struct node_s *parse_while_clause(struct token_s *tok)
+struct node_s *parse_while_loop(struct token_s *tok)
 {
     int lineno = tok->lineno;
     tok->src->wstart = tok->src->curpos;
+    
     /* go past 'while' */
     tok = tokenize(tok->src);
+    
     /* create a new node for the while clause */
     struct node_s *_while = new_node(NODE_WHILE);
     if(!_while)
@@ -339,17 +440,21 @@ struct node_s *parse_while_clause(struct token_s *tok)
         return NULL;
     }
     _while->lineno = lineno;
+    
     /* parse the test clause, which ends with the 'do' keyword */
     struct node_s *compound = parse_compound_list(tok, TOKEN_KEYWORD_DO);
     if(compound)
     {
         add_child_node(_while, compound);
+        
         /* parse the loop body, which is a do group */
+        tok = get_current_token();
         struct node_s *parse_group = parse_do_group(tok);
         if(parse_group)
         {
             add_child_node(_while, parse_group);
         }
+        
         /* return the parsed nodetree */
         return _while;
     }
@@ -368,12 +473,14 @@ struct node_s *parse_while_clause(struct token_s *tok)
  * 
  * returns the parsed nodetree, NULL on parsing errors.
  */
-struct node_s *parse_until_clause(struct token_s *tok)
+struct node_s *parse_until_loop(struct token_s *tok)
 {
     int lineno = tok->lineno;
     tok->src->wstart = tok->src->curpos;
+    
     /* go past 'until' */
     tok = tokenize(tok->src);
+    
     /* create a new node for the until clause */
     struct node_s *_until = new_node(NODE_UNTIL);
     if(!_until)
@@ -381,17 +488,21 @@ struct node_s *parse_until_clause(struct token_s *tok)
         return NULL;
     }
     _until->lineno = lineno;
+    
     /* parse the test clause, which ends with the 'do' keyword */
     struct node_s *compound = parse_compound_list(tok, TOKEN_KEYWORD_DO);
     if(compound)
     {
         add_child_node(_until, compound);
+        
         /* parse the loop body, which is a do group */
+        tok = get_current_token();
         struct node_s *parse_group = parse_do_group(tok);
         if(parse_group)
         {
             add_child_node(_until, parse_group);
         }
+        
         /* return the parsed nodetree */
         return _until;
     }

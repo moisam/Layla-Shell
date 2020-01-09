@@ -63,24 +63,22 @@ do                                                              \
 } while(0)
 
 /* parser functions */
-struct node_s *parse_complete_command(struct token_s *tok);
 struct node_s *parse_list(struct token_s *tok);
 struct node_s *parse_and_or(struct token_s *tok);
 struct node_s *parse_pipeline(struct token_s *tok);
-void           parse_separator(struct token_s *tok);
 struct node_s *parse_term(struct token_s *tok, enum token_type_e stop_at);
 struct node_s *parse_compound_list(struct token_s *tok, enum token_type_e stop_at);
 struct node_s *parse_subshell(struct token_s *tok);
 struct node_s *get_wordlist(struct token_s *tok);
 struct node_s *parse_do_group(struct token_s *tok);
-struct node_s *parse_for_clause2(struct token_s *tok);
-struct node_s *parse_for_clause(struct token_s *tok);
-struct node_s *parse_select_clause(struct token_s *tok);
+struct node_s *parse_for_loop2(struct token_s *tok);
+struct node_s *parse_for_loop(struct token_s *tok);
+struct node_s *parse_select_loop(struct token_s *tok);
 struct node_s *parse_case_item(struct token_s *tok);
 struct node_s *parse_case_clause(struct token_s *tok);
 struct node_s *parse_if_clause(struct token_s *tok);
-struct node_s *parse_while_clause(struct token_s *tok);
-struct node_s *parse_until_clause(struct token_s *tok);
+struct node_s *parse_while_loop(struct token_s *tok);
+struct node_s *parse_until_loop(struct token_s *tok);
 struct node_s *parse_brace_group(struct token_s *tok);
 struct node_s *parse_compound_command(struct token_s *tok);
 struct node_s *parse_file_redirect(struct token_s *tok);
@@ -97,9 +95,6 @@ char          *get_alias_val(char *cmd);
 struct node_s *io_file_node(int fd, char type, char *namestr, int lineno);
 struct word_s *get_heredoc(struct source_s *src, int strip, int *expand);
 int            is_name(char *str);
-
-/* pointer to the current function definition we're parsing */
-extern struct symtab_entry_s *current_func;
 
 /* flag to indicate a parsing error */
 extern int parser_err;

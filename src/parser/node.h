@@ -28,8 +28,8 @@
 enum node_type_e
 {
     /* program structs */
-    NODE_PROGRAM,           /* the whole translation unit nodetree */
     NODE_FUNCTION,          /* function definition nodetree */
+
     /* POSIX shell constructs */
     NODE_COMMAND,           /* simple command */
     NODE_VAR,               /* variable name (or simply, a word) */
@@ -38,23 +38,24 @@ enum node_type_e
     NODE_IO_HERE,           /* heredoc I/O redirection */
     NODE_BANG,              /* bang '!' keyword */
     NODE_PIPE,              /* pipeline */
-
-    NODE_SUBSHELL,          /* subshell */
     NODE_LIST,              /* list (sequential or asynchronous) */
     NODE_ANDOR,             /* AND-OR list */
     NODE_AND_IF,            /* command on the rightside of a logical AND operator */
     NODE_OR_IF,             /* similar for a logical OR operator */
     NODE_TERM,              /* term (similar to an AND-OR list) */
-    NODE_WORDLIST,          /* wordlist for use in for and select loops, or case conditionals */
+    NODE_SUBSHELL,          /* subshell */
+    NODE_CASE,              /* case conditional */
+    NODE_CASE_ITEM,         /* case item */
+    NODE_IF,                /* if conditional */
     NODE_FOR,               /* for loop */
     NODE_SELECT,            /* select loop */
-    NODE_CASE_ITEM,         /* case item */
-    NODE_CASE,              /* case conditional */
-    NODE_IF,                /* if conditional */
     NODE_WHILE,             /* while loop */
     NODE_UNTIL,             /* until loop */
+    NODE_WORDLIST,          /* wordlist for use in for and select loops, or case conditionals */
     NODE_IO_REDIRECT_LIST,  /* list of I/O redirections */
+
     NODE_ASSIGNMENT,        /* variable assignment */
+    
     /* non-POSIX extensions */
     NODE_ARITHMETIC_EXPR,   /* arithmetic expression in the form ((expr)) */
     NODE_TIME,              /* command preceded by the 'time' keyword */
