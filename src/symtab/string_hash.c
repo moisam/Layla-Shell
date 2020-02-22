@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: string_hash.c
  *    This file is part of the Layla Shell project.
@@ -99,7 +99,7 @@ struct hashtab_s *new_hashtable_sz(int size)
     struct hashtab_s *table = malloc(sizeof(struct hashtab_s));
     if(!table)
     {
-        fprintf(stderr, "%s: insufficient memory for creating hash table\n", SHELL_NAME);
+        PRINT_ERROR("%s: insufficient memory for creating hash table\n", SHELL_NAME);
         return NULL;
     }
     table->size   = size;               /* use the given size */
@@ -109,7 +109,7 @@ struct hashtab_s *new_hashtable_sz(int size)
     if(!table->items)
     {
         free(table);
-        fprintf(stderr, "%s: insufficient memory for creating hash table\n", SHELL_NAME);
+        PRINT_ERROR("%s: insufficient memory for creating hash table\n", SHELL_NAME);
         return NULL;
     }
     memset(table->items, 0, itemsz);    /* init buckets list */
@@ -281,7 +281,7 @@ struct hashitem_s *add_hash_item(struct hashtab_s *table, char *key, char *value
     entry = malloc(sizeof(struct hashitem_s));
     if(!entry)
     {
-        fprintf(stderr, "%s: failed to malloc hashtable item\n", SHELL_NAME);
+        PRINT_ERROR("%s: failed to malloc hashtable item\n", SHELL_NAME);
         return NULL;
     }
     /* initialize it */
@@ -330,7 +330,7 @@ struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, long value
     entry = malloc(sizeof(struct hashitem_s));
     if(!entry)
     {
-        fprintf(stderr, "%s: failed to malloc hashtable item\n", SHELL_NAME);
+        PRINT_ERROR("%s: failed to malloc hashtable item\n", SHELL_NAME);
         return NULL;
     }
     /* initialize it */

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: symtab_hash.c
  *    This file is part of the Layla Shell project.
@@ -396,6 +396,27 @@ struct symtab_entry_s *do_lookup(char *str, struct symtab_s *symtab)
         /* found the string */
         if(is_same_str(entry->name, str))
         {
+            /* if special or numeric var, update the var's value */
+            char *val = NULL;
+            if(flag_set(entry->flags, FLAG_SPECIAL_VAR))
+            {
+                val = get_special_var(entry->name, entry->val);
+            }
+
+            /*
+            if(flag_set(entry->flags, FLAG_INTVAL) && entry->val)
+            {
+                val = arithm_expand(entry->val);
+            }
+            */
+            
+            if(val)
+            {
+                free_malloced_str(entry->val);
+                entry->val = get_malloced_str(val);
+                free(val);
+            }
+            
             return entry;
         }
         /* no match. check the next entry in the bucket */
@@ -478,11 +499,8 @@ struct symtab_stack_s *get_symtab_stack(void)
  */
 void symtab_entry_setval(struct symtab_entry_s *entry, char *val)
 {
-    /* free old value */
-    if(entry->val)
-    {
-        free_malloced_str(entry->val);
-    }
+    char *old_val = entry->val;
+
     /* new value is NULL */
     if(!val)
     {
@@ -490,18 +508,53 @@ void symtab_entry_setval(struct symtab_entry_s *entry, char *val)
     }
     else
     {
-        char *val2 = get_malloced_str(val);
-        entry->val = val2;
+        int free_val = 0;
         /* FLAG_ALLCAPS means we should transform all letters in value to capital */
         if(flag_set(entry->flags, FLAG_ALLCAPS))
         {
-            strupper(val2);
+            val = __get_malloced_str(val);
+            strupper(val);
+            free_val = 1;
         }
         /* FLAG_ALLSMALL means we should transform all letters in value to small */
         else if(flag_set(entry->flags, FLAG_ALLSMALL))
         {
-            strlower(val2);
+            val = __get_malloced_str(val);
+            strlower(val);
+            free_val = 1;
         }
+
+        /* if special var, do whatever needs to be done in response to its new value */
+        if(flag_set(entry->flags, FLAG_SPECIAL_VAR))
+        {
+            set_special_var(entry->name, val);
+        }
+        
+        /* if int variable, perform arithmetic evaluation on the value (bash) */
+        if(flag_set(entry->flags, FLAG_INTVAL))
+        {
+            val = arithm_expand(val);
+            free_val = 1;
+        }
+        
+        /* if error (e.g. arithmetic expansion failed), bail out */
+        if(!val)
+        {
+            return;
+        }
+        
+        entry->val = get_malloced_str(val);
+        
+        if(free_val && val)
+        {
+            free(val);
+        }
+    }
+
+    /* free old value */
+    if(old_val)
+    {
+        free_malloced_str(old_val);
     }
 }
 
@@ -537,63 +590,27 @@ void merge_global(struct symtab_s *symtab)
                 /* don't merge explicitly declared local variables */
                 if(!flag_set(entry->flags, FLAG_LOCAL))
                 {
-                    /*
-                     * check for assignments to special variables like RANDOM, SECONDS and DIRSTACK. these
-                     * assignments, when done as part of a builtin utility invocation, must be added to the
-                     * current shell's execution environment. that's why we save them separately, otherwise
-                     * they become just regular symbol table entries.
-                     */
-                    int i;
-                    for(i = 0; i < special_var_count; i++)
-                    {
-                        if(strcmp(special_vars[i].name, entry->name) == 0)
-                        {
-                            set_special_var(entry->name, entry->val);
-                            break;
-                        }
-                    }
-                    if(i == special_var_count)
-                    {
-                        /* find the global entry for this local entry */
-                        struct symtab_entry_s *gentry = add_to_symtab(entry->name);
+                    /* find the global entry for this local entry */
+                    struct symtab_entry_s *gentry = add_to_symtab(entry->name);
                         
-                        /* overwrite the global entry's value with the local one */
-                        /* set the value */
-                        symtab_entry_setval(gentry, entry->val);
+                    /* overwrite the global entry's value with the local one */
+                    symtab_entry_setval(gentry, entry->val);
 
-                        /* set the flags */
-                        gentry->flags = entry->flags;
+                    /* set the flags */
+                    gentry->flags |= entry->flags;
 
-                        /* unmark local command exports so they're not exported to other commands */
-                        gentry->flags &= ~FLAG_CMD_EXPORT;
-                    }
+                    /*
+                     * unmark local command exports so they're not exported to 
+                     * other commands, but don't mark the global entry with the 
+                     * local flag.
+                     */
+                    gentry->flags &= ~(FLAG_CMD_EXPORT | FLAG_LOCAL);
                 }
                 /* move on to the next entry */
                 entry = entry->next;
             }
         }
     }
-}
-
-
-/*
- * return a string that describes the given symbol type.. used in debugging to
- * help us print debug messages.
- */
-char *get_symbol_type_str(enum symbol_type type)
-{
-    switch(type)
-    {
-        case SYM_STR:
-            return "SYM_STR" ;
-            
-        case SYM_CHR:
-            return "SYM_CHR" ;
-            
-        case SYM_FUNC:
-            return "SYM_FUNC";
-    }
-    return "UNKNOWN";
 }
 
 

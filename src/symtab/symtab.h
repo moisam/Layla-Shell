@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: symtab.h
  *    This file is part of the Layla Shell project.
@@ -32,7 +32,6 @@
 enum symbol_type
 {
     SYM_STR ,
-    SYM_CHR ,
     SYM_FUNC,
 };
 
@@ -40,9 +39,9 @@ enum symbol_type
 struct symtab_entry_s
 {
     char     *name;                   /* key */
-    enum      symbol_type val_type;    /* type of value */
+    enum      symbol_type val_type;   /* type of value */
     char     *val;                    /* value */
-    unsigned  int flags;             /* flags like readonly, export, ... */
+    unsigned  int flags;              /* flags like readonly, export, ... */
     struct    symtab_entry_s *next;   /* pointer to the next entry */
     struct    node_s *func_body;      /* for functions, the nodetree of the function body */
 };
@@ -64,14 +63,16 @@ struct symtab_entry_s
 
 
 /* values for the flags field of struct symtab_entry_s */
-#define FLAG_EXPORT     (1 << 0)    /* export entry to forked commands */
-#define FLAG_READONLY   (1 << 1)    /* entry is read only */
-#define FLAG_CMD_EXPORT (1 << 2)    /* used temporarily between cmd fork and exec */
-#define FLAG_LOCAL      (1 << 3)    /* entry is local (to script or function) */
-
-#define FLAG_ALLCAPS    (1 << 4)    /* convert value to capital letters when assigned */
-#define FLAG_ALLSMALL   (1 << 5)    /* convert value to small letters when assigned */
-#define FLAG_FUNCTRACE  (1 << 6)    /* enable function tracing (bash, ksh) */
+#define FLAG_EXPORT         (1 << 0)    /* export entry to forked commands */
+#define FLAG_READONLY       (1 << 1)    /* entry is read only */
+#define FLAG_CMD_EXPORT     (1 << 2)    /* used temporarily between cmd fork and exec */
+#define FLAG_LOCAL          (1 << 3)    /* entry is local (to script or function) */
+#define FLAG_ALLCAPS        (1 << 4)    /* convert value to capital letters when assigned */
+#define FLAG_ALLSMALL       (1 << 5)    /* convert value to small letters when assigned */
+#define FLAG_FUNCTRACE      (1 << 6)    /* enable function tracing (bash, ksh) */
+#define FLAG_INTVAL         (1 << 7)    /* assign only integer values (bash) */
+#define FLAG_SPECIAL_VAR    (1 << 8)    /* special shell variable, e.g. $TPERIOD or $RANDOM */
+#define FLAG_TEMP_VAR       (1 << 9)    /* temp var (used during arithmetic expansion) */
 
 /* the symbol table stack structure */
 #define MAX_SYMTAB	256      /* maximum allowed symbol tables in the stack */

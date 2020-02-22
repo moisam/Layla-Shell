@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: symtab_hash.h
  *    This file is part of the Layla Shell project.
