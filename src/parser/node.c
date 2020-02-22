@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: node.c
  *    This file is part of the Layla Shell project.
@@ -236,6 +236,7 @@ char *get_node_type_str(enum node_type_e type)
         case NODE_SELECT           : return "NODE_SELECT"          ;
         case NODE_ARITHMETIC_EXPR  : return "NODE_ARITHMETIC_EXPR" ;
         case NODE_TIME             : return "NODE_TIME"            ;
+        case NODE_COPROC           : return "NODE_COPROC"          ;
     }
     return "UNKNOWN";
 }

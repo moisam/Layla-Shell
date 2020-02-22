@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: redirect.c
  *    This file is part of the Layla Shell project.
@@ -167,10 +167,10 @@ struct node_s *parse_file_redirect(struct token_s *tok)
     tok = tokenize(tok->src);
 
     /* reached EOF or error getting next token */
-    if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR || tok->text[0] == '\n')
+    if(tok->type == TOKEN_EOF || tok->text[0] == '\n')
     {
         /* free the partially parsed nodetree */
-        fprintf(stderr, "%s: missing or invalid redirected filename\n", SHELL_NAME);
+        PRINT_ERROR("%s: missing or invalid redirected filename\n", SHELL_NAME);
         free_node_tree(file);
         return NULL;
     }
@@ -201,7 +201,7 @@ struct node_s *parse_file_redirect(struct token_s *tok)
         strtol(name->val.str , &strend, 10);
         if(strend == name->val.str)     /* error parsing number means we've got a file name */
         {
-            fprintf(stderr, "%s: cannot redirect output to file `%s`: restricted shell\n", SHELL_NAME, name->val.str);
+            PRINT_ERROR("%s: cannot redirect output to file `%s`: restricted shell\n", SHELL_NAME, name->val.str);
             free_node_tree(file);
             return NULL;
         }
@@ -355,10 +355,10 @@ struct node_s *parse_heredoc_redirect(struct token_s *tok)
     }
 
     /* store the here-doc body */
-    heredoc_node->val.str = heredoc_body->data;
+    heredoc_node->val.str = get_malloced_str(heredoc_body->data);
     heredoc_node->val_type = VAL_STR;
     add_child_node(file, heredoc_node);
-    free(heredoc_body);
+    free_all_words(heredoc_body);
 
     /* return the here-doc nodetree */
     return file;
@@ -462,7 +462,7 @@ int is_redirect_op(char *str)
 struct node_s *parse_redirect_list(struct token_s *tok)
 {
     /* reached EOF or error */
-    if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
+    if(tok->type == TOKEN_EOF)
     {
         return NULL;
     }
@@ -511,108 +511,17 @@ struct word_s *get_heredoc(struct source_s *src, int strip, int *expand)
     {
         return NULL;
     }
-
-    /*
-     * skip any optional spaces before the heredoc delimiter word.. while this behavior
-     * is non-POSIX, it is quite common, and so we have to deal with it (in POSIX,
-     * the heredoc delimiter word and the heredoc redirection operator (<< or <<-)
-     * should have no spaces between them).
-     */
-    while(*orig_cmd && isspace(*orig_cmd) && *orig_cmd != '\n')
-    {
-        orig_cmd++;
-        src->curpos++;
-    }
-    char *cmd   = orig_cmd;
-    char delim[256];        /* heredoc delimiter word */
-    int  heredoc_len = 0;   /* length of heredoc body text */
-    (*expand) = 1;          /* expand by default, unless delimiter is quoted */
-
-    /* 
-     * find the end of the delimiter word by skipping all non-space chars, semi-colons
-     * and ampersands.
-     */
-    while(*cmd && !isspace(*cmd) && *cmd != ';' && *cmd != '&')
-    {
-        cmd++;
-    }
-
-    /* empty delimiter word */
-    if(cmd == orig_cmd)
-    {
-        delim[0] = '\0';
-    }
-    else
-    {
-        /* copy delimiter */
-        char *c1 = orig_cmd;
-        char *c2 = delim;
-        while(c1 < cmd)
-        {
-            if(*c1 == '"' || *c1 == '\'')
-            {
-                /* word has single or double quotes. skip the quote char */
-                c1++;
-                /* we will not expand this heredoc */
-                (*expand) = 0;
-            }
-            else
-            {
-                /* word has a backslash-quoted character. skip the backslash char */
-                if(*c1 == '\\')
-                {
-                    /* we will not expand this heredoc */
-                    (*expand) = 0;
-                    c1++;
-                }
-                /* copy the next char */
-                *c2++ = *c1++;
-            }
-        }
-        /* terminate the copied word with newline and NULL */
-        *c2++ = '\n';
-        *c2   = '\0';
-    }
-
-    /* get the next newline char */
-    char *nl = strchr(orig_cmd, '\n');
-    char *end;
-
-    /* missing newline char */
-    if(!nl)
-    {
-        BACKEND_RAISE_ERROR(HEREDOC_MISSING_NEWLINE, NULL, NULL);
-        return NULL;
-    }
-
-    /* empty heredoc delimiter word */
-    if(delim[0] == '\0')
-    {
-        BACKEND_RAISE_ERROR(HEREDOC_EXPECTED_DELIM, NULL, NULL);
-        return NULL;
-    }
-    else
-    {
-        /*
-         * get the heredoc length.. the body ends with the first occurrence of the delimiter
-         * word that's followed by a newline char.
-         */
-        end = strstr(++nl, delim);
-        if(!end)
-        {
-            /* remove the newline char to print delimiter nicely */
-            delim[cmd - orig_cmd] = '\0';
-            BACKEND_RAISE_ERROR(HEREDOC_EXPECTED_DELIM, delim, NULL);
-            return NULL;
-        }
-        heredoc_len = end - nl;
-    }
+    
+    char *delim, *nl;
+    char *end = heredoc_end(orig_cmd, expand, &delim, &nl, 0);
+    int heredoc_len = end - nl;
 
     /* now get the heredoc proper */
     char *heredoc = malloc(heredoc_len+1);
     if(!heredoc)        /* insufficient memory */
     {
-        BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "storing here-document", NULL);
+        PRINT_ERROR("%s: insufficient memory for %s\n", SHELL_NAME, 
+                    "storing here-document");
         return NULL;
     }
 
@@ -667,7 +576,8 @@ struct word_s *get_heredoc(struct source_s *src, int strip, int *expand)
     struct word_s *t = malloc(sizeof(struct word_s));
     if(!t)      /* insufficient memory */
     {
-        BACKEND_RAISE_ERROR(INSUFFICIENT_MEMORY, "parsing heredoc", NULL);
+        PRINT_ERROR("%s: insufficient memory for %s\n", SHELL_NAME, 
+                    "parsing heredoc");
         free(heredoc);
         return NULL;
     }
@@ -677,4 +587,179 @@ struct word_s *get_heredoc(struct source_s *src, int strip, int *expand)
 
     /* return the here-document */
     return t;
+}
+
+
+char *herestr_end(char *cmd)
+{
+    /* skip any optional spaces before the here-string */
+    while(isspace(*cmd) && *cmd != '\n')
+    {
+        cmd++;
+    }
+
+    /* empty here-string */
+    if(!*cmd || *cmd == '\n')
+    {
+        return NULL;
+    }
+
+    /* get the end of the here-string */
+    while(*cmd && *cmd != '\n')
+    {
+        cmd++;
+    }
+    
+    return cmd;
+}
+
+
+/*
+ * find the end of a here-document.. the delimiter word is stored in __delim, and
+ * the start of the here-document's body is stored in __start.. if the delimiter
+ * is quoted, the document is not to be expanded, and we store 0 in expand, otherwise
+ * we store 1.. if last_char is non-zero, it contains the character that can occur
+ * after the ending delimiter word (instead of \n or \0).. this is useful when we
+ * are parsing a here-document that's part of command substitution, for example.
+ * 
+ * returns a pointer to the end of the here-document's body, or NULL in case of error.
+ */
+char *heredoc_end(char *orig_cmd, int *expand, char **__delim, char **__start, char last_char)
+{
+    /*
+     * skip any optional spaces before the heredoc delimiter word.. while this behavior
+     * is non-POSIX, it is quite common, and so we have to deal with it (in POSIX,
+     * the heredoc delimiter word and the heredoc redirection operator (<< or <<-)
+     * should have no spaces between them).
+     */
+    while(isspace(*orig_cmd) && *orig_cmd != '\n')
+    {
+        orig_cmd++;
+    }
+
+    char *cmd   = orig_cmd;
+    char delim[256];        /* heredoc delimiter word */
+    int delim_len = 0;
+    char *c1, *c2;
+    (*expand) = 1;          /* expand by default, unless delimiter is quoted */
+
+    /* 
+     * find the end of the delimiter word by skipping all non-space chars, semi-colons
+     * and ampersands.
+     */
+    while(*cmd && !isspace(*cmd) && *cmd != ';' && *cmd != '&')
+    {
+        cmd++;
+    }
+
+    /* empty delimiter word */
+    if(cmd == orig_cmd)
+    {
+        delim[0] = '\0';
+    }
+    else
+    {
+        /* copy delimiter */
+        c1 = orig_cmd;
+        c2 = delim;
+        while(c1 < cmd)
+        {
+            if(*c1 == '"' || *c1 == '\'')
+            {
+                /* word has single or double quotes. skip the quote char */
+                c1++;
+                /* we will not expand this heredoc */
+                (*expand) = 0;
+            }
+            else
+            {
+                /* word has a backslash-quoted character. skip the backslash char */
+                if(*c1 == '\\')
+                {
+                    /* we will not expand this heredoc */
+                    (*expand) = 0;
+                    c1++;
+                }
+                /* copy the next char */
+                *c2++ = *c1++;
+            }
+        }
+        *c2 = '\0';
+        delim_len = c2-delim;
+    }
+
+    /* get the next newline char */
+    char *nl = strchr(orig_cmd, '\n');
+    char *end;
+
+    /* missing newline char */
+    if(!nl)
+    {
+        PRINT_ERROR("%s: missing newline at beginning of heredoc\n", SHELL_NAME);
+        return NULL;
+    }
+
+    /* empty heredoc delimiter word */
+    if(delim[0] == '\0')
+    {
+        PRINT_ERROR("%s: expected heredoc delimiter\n", SHELL_NAME);
+        return NULL;
+    }
+
+    char *start = ++nl;
+    while(*start)
+    {
+        /*
+         * get the heredoc length.. the body ends with the first occurrence of the delimiter
+         * word that's followed by a newline char.
+         */
+        end = strstr(start, delim);
+        if(!end)
+        {
+            break;
+        }
+        
+        char c = end[delim_len];
+        if(c == '\n' || c == '\0' || c == last_char)
+        {
+            /*
+             * the delimiter is followed by newline, or is the last word in input,
+             * or is followed by the given char.. now check that its preceded by
+             * newline, or that it has whitespace (but nothing else) before it on
+             * the line.
+             */
+            int bailout = 0;
+            c1 = end;
+            while(*(--c1) != '\n')
+            {
+                if(!isspace(*c1))
+                {
+                    bailout = 1;
+                    break;
+                }
+            }
+            
+            if(!bailout)
+            {
+                break;
+            }
+        }
+        
+        start = end+delim_len;
+        end = NULL;
+    }
+
+    if(!end)
+    {
+        PRINT_ERROR("%s: expected heredoc delimiter: %s\n", SHELL_NAME, delim);
+        return NULL;
+    }
+    
+    /* terminate the copied word with newline and NULL */
+    *c2++ = '\n';
+    *c2   = '\0';
+    
+    (*__delim) = get_malloced_str(delim);
+    (*__start) = nl;
+    return end;
 }

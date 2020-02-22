@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: conditionals.c
  *    This file is part of the Layla Shell project.
@@ -164,7 +164,7 @@ struct node_s *parse_case_clause(struct token_s *tok)
     tok = tokenize(tok->src);
     
     /* have we reached EOF or error getting next token? */
-    if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
+    if(tok->type == TOKEN_EOF)
     {
         PARSER_RAISE_ERROR(UNEXPECTED_TOKEN, get_previous_token(), TOKEN_EOF);
         EXIT_IF_NONINTERACTIVE();
@@ -216,7 +216,7 @@ struct node_s *parse_case_clause(struct token_s *tok)
     skip_newline_tokens();
     
     /* loop to parse the case item(s) until we hit EOF or esac, or an error occurs */
-    while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR && tok->type != TOKEN_KEYWORD_ESAC)
+    while(tok->type != TOKEN_EOF && tok->type != TOKEN_KEYWORD_ESAC)
     {
         /* parse the next case item */
         struct node_s *item = parse_case_item(tok);

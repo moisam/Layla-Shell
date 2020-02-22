@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: node.h
  *    This file is part of the Layla Shell project.
@@ -59,6 +59,7 @@ enum node_type_e
     /* non-POSIX extensions */
     NODE_ARITHMETIC_EXPR,   /* arithmetic expression in the form ((expr)) */
     NODE_TIME,              /* command preceded by the 'time' keyword */
+    NODE_COPROC,            /* command preceded by the 'coproc' keyword */
 };
 
 /*

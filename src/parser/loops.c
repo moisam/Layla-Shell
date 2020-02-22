@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: loops.c
  *    This file is part of the Layla Shell project.
@@ -177,6 +177,63 @@ struct node_s *parse_for_loop(struct token_s *tok)
     return _for;
 }
 
+
+/*
+ * skip all characters until we find the given char.. this involves skipping 
+ * over quoted strings, semicolons, and word expansion structs.
+ */
+char *find_char(char *str, char c)
+{
+    size_t i;
+    int endme = 0;
+    
+    while(*str)
+    {
+        switch(*str)
+        {
+            case  '"':
+            case '\'':
+            case  '`':
+                /*
+                 * for quote chars, add the quote, as well as everything between this
+                 * quote and the matching closing quote, to the command line.
+                 */
+                i = find_closing_quote(str, (*str == '"') ? 1 : 0, 0);
+                str += i;
+                break;
+                
+            case '\\':
+                str++;
+                break;
+                
+            case '{':
+            case '(':
+            case '[':
+                /* add the opening brace and everything up to the closing brace to the buffer */
+                i = find_closing_brace(str, 0);
+                str += i;
+                break;
+                
+            default:
+                if(*str == c)
+                {
+                    endme = 1;
+                    break;
+                }
+        }
+        
+        if(endme)
+        {
+            break;
+        }
+        
+        str++;
+    }
+    
+    return str;
+}
+
+
 /* 
  * parse the second form of 'for' loops:
  * 
@@ -201,33 +258,20 @@ struct node_s *parse_for_loop2(struct token_s *tok)
     char *p = tok->text+i;
     char *pend = tok->text+tok->text_len;
     char *expr[3] = { NULL, NULL, NULL };
+
     expr[0] = p;
-    
-    /* get expression #1 */
-    while(*p && *p != ';')
-    {
-        p++;
-    }
+    p = find_char(p, ';');
     
     /* check we haven't reached EOF */
     if(p >= pend)
     {
         goto eof;
     }
-    
-    /* NULL-terminate the expr temporarily so that we can copy it */
-    *p ='\0';
-    expr[0] = get_malloced_str(expr[0]);
-    
-    /* remove the NULL terminator we've just inserted */
-    *p++ = ';';
+    expr[0] = get_malloced_strl(expr[0], 0, p-expr[0]);
     
     /* get expression #2 */
-    expr[1] = p;
-    while(*p && *p != ';')
-    {
-        p++;
-    }
+    expr[1] = ++p;
+    p = find_char(p, ';');
     
     /* check we haven't reached EOF */
     if(p >= pend)
@@ -235,20 +279,11 @@ struct node_s *parse_for_loop2(struct token_s *tok)
         free_malloced_str(expr[0]);
         goto eof;
     }
-    
-    /* NULL-terminate the expr temporarily so that we can copy it */
-    *p ='\0';
-    expr[1] = get_malloced_str(expr[1]);
-    
-    /* remove the NULL terminator we've just inserted */
-    *p++ = ';';
+    expr[1] = get_malloced_strl(expr[1], 0, p-expr[1]);
     
     /* get expression #3 */
-    expr[2] = p;
-    while(*p && *p != ')')
-    {
-        p++;
-    }
+    expr[2] = ++p;
+    p = find_char(p, ')');
     
     /* check we haven't reached EOF */
     if(p >= pend || p[1] != ')')
@@ -257,13 +292,7 @@ struct node_s *parse_for_loop2(struct token_s *tok)
         free_malloced_str(expr[1]);
         goto eof;
     }
-    
-    /* NULL-terminate the expr temporarily so that we can copy it */
-    *p ='\0';
-    expr[2] = get_malloced_str(expr[2]);
-    
-    /* remove the NULL terminator we've just inserted */
-    *p++ = ')';
+    expr[2] = get_malloced_strl(expr[2], 0, p-expr[2]);
     
     /* create the node tree */
     struct node_s *_for = new_node(NODE_FOR);

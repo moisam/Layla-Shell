@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: parser.h
  *    This file is part of the Layla Shell project.
@@ -39,13 +39,10 @@
 
 /* skip optional newlines */
 #define skip_newline_tokens()                                   \
-do                                                              \
+while(tok->type == TOKEN_NEWLINE)                               \
 {                                                               \
-    while(tok->type == TOKEN_NEWLINE)                           \
-    {                                                           \
-        tok = tokenize(tok->src);                               \
-    }                                                           \
-} while(0)
+    tok = tokenize(tok->src);                                   \
+}
 
 /*
  *  skip optional newlines and update the source struct's wstart pointer
@@ -53,14 +50,11 @@ do                                                              \
  *  to know where the current command line starts in the input source).
  */
 #define skip_newline_tokens2()                                  \
-do                                                              \
+while(tok->type == TOKEN_NEWLINE)                               \
 {                                                               \
-    while(tok->type == TOKEN_NEWLINE)                           \
-    {                                                           \
-        tok->src->wstart = tok->src->curpos;                    \
-        tok = tokenize(tok->src);                               \
-    }                                                           \
-} while(0)
+    tok->src->wstart = tok->src->curpos;                        \
+    tok = tokenize(tok->src);                                   \
+}                                                               \
 
 /* parser functions */
 struct node_s *parse_list(struct token_s *tok);
@@ -95,8 +89,11 @@ char          *get_alias_val(char *cmd);
 struct node_s *io_file_node(int fd, char type, char *namestr, int lineno);
 struct word_s *get_heredoc(struct source_s *src, int strip, int *expand);
 int            is_name(char *str);
+char          *herestr_end(char *cmd);
+char          *heredoc_end(char *orig_cmd, int *expand, char **__delim, char **start, char last_char);
+int            next_cmd_word(char **start, char **end, int do_braces);
 
 /* flag to indicate a parsing error */
-extern int parser_err;
+extern int     parser_err;
 
 #endif
