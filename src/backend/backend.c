@@ -1,6 +1,6 @@
 /* 
- *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Programmed By: Mohammed Isam [mohammed_isam1984@yahoo.com]
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: backend.c
  *    This file is part of the Layla Shell project.
@@ -38,9 +38,11 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include "backend.h"
+#include "../sig.h"
 #include "../error/error.h"
 #include "../debug.h"
 #include "../kbdevent.h"
+#include "../builtins/builtins.h"
 #include "../builtins/setx.h"
 
 /* current function level (number of nested function calls) */
@@ -78,7 +80,7 @@ do {                                                \
 
 #define PRINT_EXIT_STATUS(status)                   \
 do {                                                \
-    if(interactive_shell &&                           \
+    if(interactive_shell &&                         \
        optionx_set(OPTION_PRINT_EXIT_VALUE) &&      \
        WIFEXITED((status)) && WEXITSTATUS((status)))\
     {                                               \
@@ -86,10 +88,6 @@ do {                                                \
                 WEXITSTATUS(status));               \
     }                                               \
 } while(0)
-
-
-/* defined below */
-char *get_cmdstr(struct node_s *cmd);
 
 
 /*
@@ -103,9 +101,8 @@ pid_t fork_child(void)
     useconds_t usecs = 1;
     pid_t pid;
     sigset_t sigset;
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &sigset, NULL);
+    SIGNAL_BLOCK(SIGCHLD, sigset);
+
     while(tries--)
     {
         if((pid = fork()) < 0)
@@ -123,7 +120,8 @@ pid_t fork_child(void)
         }
         break;
     }
-    sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+    
+    SIGNAL_UNBLOCK(sigset);
     return pid;
 }
 
@@ -175,6 +173,24 @@ _wait:
     /* collect the status. if stopped, add as background job */
     if(option_set('m') && (WIFSTOPPED(status) || WIFSIGNALED(status)))
     {
+        int sig = WIFSTOPPED(status) ? WSTOPSIG(status) : WTERMSIG(status);
+        if(job)
+        {
+            set_pid_exit_status(job, pid, status);
+            set_cur_job(job);
+            /* if a foreground job received a signal, send it to the shell too */
+            if(flag_set(job->flags, JOB_FLAG_FORGROUND))
+            {
+                kill(0, sig);
+            }
+        }
+        else
+        {
+            kill(0, sig);
+        }
+        
+        notice_termination(pid, status, 1);
+#if 0
         /* command doesn't have a job yet. create a new job */
         if(!job)
         {
@@ -187,8 +203,9 @@ _wait:
             }
             set_pid_exit_status(job, pid, status);
             set_cur_job(job);
-            notice_termination(pid, status);
+            notice_termination(pid, status, 1);
         }
+#endif
     }
     else
     {
@@ -211,7 +228,7 @@ _wait:
                      * a non-zero status field (that's why we check exit status using
                      * the macro WIFEXITED, not by hand).
                      */
-                    if(!(job->child_exitbits & j))
+                    if(!flag_set(job->child_exitbits, j))
                     {
                         pid = job->pids[i];
                         status = 0;
@@ -230,24 +247,6 @@ _wait:
 
     /* return the exit status */
     return status;
-}
-
-
-/*
- * set the value of the underscore '$_' variable.
- */
-static inline void set_underscore_val(char *val, int set_env)
-{
-    struct symtab_entry_s *entry = add_to_symtab("_");
-    if(!entry)
-    {
-        return;
-    }
-    symtab_entry_setval(entry, val);
-    if(set_env)
-    {
-        setenv("_", val, 1);
-    }
 }
 
 
@@ -298,10 +297,12 @@ void do_exec_script(char *path, int argc, char **argv)
     char *first = get_first_line(path);
     char *argv2[argc+3];
     int i = 0, lsh = 0;
+    
     if(!first)
     {
         lsh = 1;     /* use our shell */
     }
+    
     /* does the first line contain interpreter name with an optional argument? */
     char *space = first ? strchr(first, ' ') : NULL;
     if(lsh)
@@ -309,6 +310,7 @@ void do_exec_script(char *path, int argc, char **argv)
         /* in tcsh, special alias 'shell' give the full pathname of the shell to use */
         char *s = "shell";
         char *sh = get_alias_val(s);
+        
         if(sh && sh != s)
         {
              space = strchr(sh, ' ');
@@ -327,36 +329,30 @@ void do_exec_script(char *path, int argc, char **argv)
     if(space)
     {
         *space = '\0';
-        while(isspace(*++space)) ;
+        while(isspace(*++space))
+        {
+            ;
+        }
         argv2[i++] = space;
     }
+    
     /* copy the rest of args */
     char **v1 = argv, **v2 = &argv2[i];
-    while((*v2++ = *v1++)) ;
-    /* fork a subshell to execute the script */
-    pid_t pid;
-    if((pid = fork_child()) < 0)
+    while((*v2++ = *v1++))
     {
-        fprintf(stderr, "%s: failed to fork subshell to execute script: %s\n",
-                SHELL_NAME, strerror(errno));
-        return;
+        ;
     }
-    else if(pid == 0)
-    {
-        set_underscore_val(argv2[0], 1);    /* absolute pathname of command exe */
-        /*
-         * TODO: turn off resricted mode in the new shell (bash).
-         */
-        execvp(argv2[0], argv2);
-    }
-    else
-    {
-        wait_on_child(pid, NULL, NULL);
-        if(first)
-        {
-            free_malloced_str(first);
-        }
-    }
+    
+    /* execute the script */
+    set_underscore_val(argv2[0], 1);    /* absolute pathname of command exe */
+    
+    /* reset the OPTIND variable */
+    set_shell_varp("OPTIND", "1");
+    
+    /*
+     * TODO: turn off resricted mode in the new shell (bash).
+     */
+    execvp(argv2[0], argv2);
 }
 
 
@@ -386,7 +382,7 @@ int do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, 
 
     if(internal_cmd)
     {
-        int res = internal_cmd(argc, argv);
+        int res = do_builtin_internal(internal_cmd, argc, argv);
         set_underscore_val(argv[argc-1], 0);
         return res;
     }
@@ -421,7 +417,7 @@ int do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, 
         if(startup_finished && option_set('r'))
         {
             /* r-shells can't specify commands with '/' in their names */
-            fprintf(stderr, "%s: can't execute '%s': restricted shell\n", SHELL_NAME, cmdname);
+            PRINT_ERROR("%s: can't execute '%s': restricted shell\n", SHELL_NAME, cmdname);
             goto err;
         }
         set_underscore_val(cmdname, 1);    /* absolute pathname of command exe */
@@ -548,90 +544,8 @@ int do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_l
         }
     }
 
-    /* run a background (asynchronous) list */
-    if(!wait)
-    {
-        pid_t pid;
-        if((pid = fork_child()) < 0)
-        {
-            BACKEND_RAISE_ERROR(FAILED_TO_FORK, strerror(errno), NULL);
-            return 0;
-        }
-        else if(pid > 0)
-        {
-            struct job_s *job;
-            char *cmdstr = get_cmdstr(node);
-            /*
-             * add as a new job if job control is on, or set $! if job control is off.
-             * we add the job giving it the tty's pgid, then reset that to the
-             * job's pgid if the '-m' option is set (see code below).
-             */
-            job = add_job(tty_pid, (pid_t[]){pid}, 1, cmdstr, 1);
-
-            /*
-             * if job control is on, set the current job, or complain if the
-             * job couldn't be added.
-             */
-            if(option_set('m'))
-            {
-                setpgid(pid, pid);
-                if(!job)
-                {
-                    BACKEND_RAISE_ERROR(FAILED_TO_ADD_JOB, NULL, NULL);
-                    if(cmdstr)
-                    {
-                        free(cmdstr);
-                    }
-                    //return 0;
-                }
-                else
-                {
-                    job->pgid = pid;
-                    set_cur_job(job);
-                    fprintf(stderr, "[%d] %u\n", job->job_num, pid);
-                }
-            }
-            set_internal_exit_status(0);
-            /*
-             * give the child process a headstart, in case the scheduler decided to run us first.
-             * we wouldn't need to do this if we used vfork() instead of fork(), but the former has
-             * a lot of limitations and things we need to worry about if we're using it. still, it
-             * would be worth our while using vfork() instead of fork().
-             * TODO: use vfork() in this function and in do_complete_command() instead of fork().
-             */
-            sigset_t sigset;
-            sigemptyset(&sigset);
-            sigsuspend(&sigset);
-            //usleep(1);
-            if(cmdstr)
-            {
-                free(cmdstr);
-            }
-            return 1;
-        }
-        else
-        {
-            /* init our subshell environment */
-            init_subshell();
-
-            /* execute the AND-OR list in the background */
-            int res = do_and_or(src, cmd, redirects, 0);
-            if(!res)
-            {
-                exit(exit_status);
-            }
-
-            /* execute the rest of the AND-OR list */
-            if(cmd->next_sibling)
-            {
-                do_list(src, cmd->next_sibling, redirects);
-            }
-            exit(exit_status);
-        }
-    }
-
     /* run a foreground (sequential) list */
-    int res = do_and_or(src, cmd, redirects, 1);
+    int res = do_and_or(src, cmd, redirects, wait);
     if(!res)
     {
         return 0;
@@ -643,7 +557,7 @@ int do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_l
         return res;
     }
     
-    if(cmd->next_sibling)
+    if(cmd->next_sibling && cmd->next_sibling != redirects)
     {
         res = do_list(src, cmd->next_sibling, redirects);
     }
@@ -666,10 +580,21 @@ int do_and_or(struct source_s *src, struct node_s *node, struct node_s *redirect
         return 0;
     }
 
+    /* get the command line */
+    char *cmdstr = (node->val_type == VAL_STR) ? node->val.str : NULL;
+
+    /*
+     * add as a new job if job control is on, or set $! if job control is off.
+     */
+    int job_control = option_set('m');
+    struct job_s *job = job_control ? new_job(cmdstr, !fg) : NULL;
+    
+#if 0
     if(node->type != NODE_ANDOR)
     {
         int is_bang = (node->type == NODE_BANG);
-        res = do_pipeline(src, node, redirect_list, fg);
+        res = do_pipeline(src, node, redirect_list, job, fg);
+        
         /* 
          * exit on failure? only applicable to commands that are:
          * - having a non-zero exit status
@@ -683,39 +608,108 @@ int do_and_or(struct source_s *src, struct node_s *node, struct node_s *redirect
          * 
          * NOTE: see also the loop below.
          */
-        if(exit_status && !is_bang && option_set('e') && !in_test_clause)
+        if(exit_status && !is_bang && !in_test_clause)
         {
             trap_handler(ERR_TRAP_NUM);
-            exit_gracefully(EXIT_FAILURE, NULL);
+            if(option_set('e'))
+            {
+                exit_gracefully(EXIT_FAILURE, NULL);
+            }
         }
+        
+        /*
+         * failed to execute command, or foreground pipeline finished execution.
+         * remove the job we've added to the job table.
+         */
+        if(!res || (job && job->child_exits == job->proc_count))
+        {
+            free_job(job, 1);
+        }
+        else if(job)
+        {
+            add_job(job);
+            free(job);
+        }
+        
+        /* free temp memory */
+
         return res;
     }
-    node = node->first_child;
+#endif
+    
+    /* run a background (asynchronous) list */
+    if(!fg)
+    {
+        pid_t pid;
+        if((pid = fork_child()) < 0)
+        {
+            PRINT_ERROR("%s: failed to fork: %s\n", SHELL_NAME, strerror(errno));
+            free_job(job, 1);
+            return 0;
+        }
+        else if(pid > 0)
+        {
+            if(job)
+            {
+                /* this will also set the job's pgid */
+                add_pid_to_job(job, pid);
+                add_job(job);
+                fprintf(stderr, "[%d] %u\n", job->job_num, pid);
+                free(job);
+            }
+            
+            set_internal_exit_status(0);
+
+            /*
+             * give the child process a headstart, in case the scheduler decided to run us first.
+             * we wouldn't need to do this if we used vfork() instead of fork(), but the former has
+             * a lot of limitations and things we need to worry about if we're using it. still, it
+             * would be worth our while using vfork() instead of fork().
+             * TODO: use vfork() in this function and in do_complete_command() instead of fork().
+             */
+            //sigset_t sigset;
+            //sigemptyset(&sigset);
+            //sigsuspend(&sigset);
+            usleep(1);
+
+            return 1;
+        }
+
+        /* init our subshell environment */
+        init_subshell();
+        setpgid(0, pid);
+    }
+    
+    if(node->type == NODE_ANDOR)
+    {
+        node = node->first_child;
+    }
     
     struct node_s *cmd = node;
-
-    /* update the options string */
-    symtab_save_options();
     
     while(cmd)
     {
         int is_bang = (node->type == NODE_BANG);
-        res = do_pipeline(src, cmd, redirect_list, fg);
+        res = do_pipeline(src, cmd, redirect_list, job, fg);
         if(res == 0)
         {
+            free_job(job, 1);
             break;
         }
 
-        if(exit_status && !is_bang && !node->next_sibling &&
-            option_set('e') && !in_test_clause)
+        if(exit_status && !is_bang && !node->next_sibling && !in_test_clause)
         {
             trap_handler(ERR_TRAP_NUM);
-            exit_gracefully(EXIT_FAILURE, NULL);
+            if(option_set('e'))
+            {
+                exit_gracefully(EXIT_FAILURE, NULL);
+            }
         }
 
         /* break or continue encountered inside the list */
         if(cur_loop_level && (req_break || req_continue))
         {
+            free_job(job, 1);
             break;
         }
 
@@ -725,7 +719,7 @@ int do_and_or(struct source_s *src, struct node_s *node, struct node_s *redirect
         {
             /* determine whether to execute the next command/pipeline or skip it */
             if((!exit_status && node->type == NODE_AND_IF) ||
-               (exit_status && node->type != NODE_AND_IF))
+               (exit_status && node->type == NODE_OR_IF))
             {
                 cmd = node->first_child;
                 break;
@@ -737,40 +731,39 @@ int do_and_or(struct source_s *src, struct node_s *node, struct node_s *redirect
              * in both cases, we skip the current clause and check the next one.
              */
         }
-    }
-    
-    return res;
-}
 
-
-#if 0
-/*
- * set the exit status after executing a pipeline.
- */
-void pipeline_set_exit_status(int status, int is_bang)
-{
-    /* invert the result if the pipeline has a bang */
-    if(is_bang)
-    {
-        set_internal_exit_status(!status);
-    }
-
-    /* exit on failure? */
-    if(!is_bang && status)
-    {
-        /*
-         * NOTE: we are mixing POSIX and ksh-behavior, where ERR trap is exec'd
-         *       when a command has non-zero exit status (ksh), while -e causes
-         *       errors to execute ERR trap (ksh) and exit the shell (POSIX).
-         */
-        trap_handler(ERR_TRAP_NUM);
-        if(option_set('e'))
+        if(fg)
         {
-            exit_gracefully(EXIT_FAILURE, NULL);
+            /*
+             * failed to execute command, or foreground pipeline finished execution.
+             * remove the job we've added to the job table.
+             */
+            if(job && job->child_exits == job->proc_count)
+            {
+                free_job(job, 1);
+            }
+            else if(job)
+            {
+                add_job(job);
+                free(job);
+            }
+        
+            if(cmd)
+            {
+                job = job_control ? new_job(cmdstr, !fg) : NULL;
+            }
         }
     }
+
+    if(!fg)
+    {
+        exit(exit_status);
+    }
+
+    /* free temp memory */
+
+    return res;
 }
-#endif
 
 
 /*
@@ -779,11 +772,13 @@ void pipeline_set_exit_status(int status, int is_bang)
  * stdout of the command on the leftside of the operator to stdin of the command
  * on the rightside of the operator. if the pipeline is preceded by a bang '!',
  * we logically inverse the pipeline's exit status after it finishes execution.
+ * if job control is not active, 'job' is NULL, and 'wait' tells us whether the
+ * pipeline is to be waited for (as a foreground job).
  * 
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg)
+int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redirect_list, struct job_s *job, int wait)
 {
     if(!node)
     {
@@ -792,27 +787,42 @@ int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redire
 
     int is_bang = 0;
     int res = 0;
+    int tty = cur_tty_fd();
+    pid_t tty_fg_pgid = tcgetpgrp(tty);
+    int is_fg = (job && flag_set(job->flags, JOB_FLAG_FORGROUND));
+
+    /* check for bang */
     if(node->type == NODE_BANG)
     {
         is_bang = 1;
         node = node->first_child;
     }
 
+    /* is it a simple commnad? */
     if(node->type != NODE_PIPE)
     {
-        res = do_command(src, node, redirect_list);
+        res = do_command(src, node, redirect_list, job);
         if(res && is_bang)
         {
             /* invert the result if the pipeline has a bang */
             set_internal_exit_status(!exit_status);
+            if(job)
+            {
+                set_job_exit_status(job, job->pgid, !exit_status);
+            }
         }
+        
+        /* reset the terminal's foreground pgid */
+        if(is_fg)
+        {
+            tcsetpgrp(tty, tty_fg_pgid);
+        }
+
         return res;
     }
 
     struct node_s *cmd = node->first_child;
     pid_t pid;
-    pid_t all_pids[node->children];
-    int count = 0;
     int filedes[2];
 
     /* create pipe */
@@ -822,10 +832,11 @@ int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redire
      * last command of a foreground pipeline (in the absence of job control) will
      * be run by the shell itself (bash).
      */
-    int lastpipe = (fg && !option_set('m') && optionx_set(OPTION_LAST_PIPE));
+    int lastpipe = (is_fg && optionx_set(OPTION_LAST_PIPE));
+
     if(lastpipe)
     {
-        pid = tty_pid;
+        pid = shell_pid;
         close(0);   /* stdin */
         dup2(filedes[0], 0);
     }
@@ -834,22 +845,18 @@ int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redire
         /* fork the last command */
         if((pid = fork_child()) == 0)
         {
-#if 0
-            /* tell the terminal who's the foreground pgid now */
-            if(option_set('m'))
+            if(is_fg)
             {
-                setpgid(0, 0);
-                if(fg)
-                {
-                    tcsetpgrp(0, pid);
-                }
+                /* set the pgid of a foreground job to the leader process's pid */
+                setpgid(pid, pid);
+
+                /* set the terminal's foreground pgid */
+                //tcsetpgrp(cur_tty_fd(), pid);
             }
             else
-#endif
-            if(!option_set('m'))
             {
-                set_signal_handler(SIGINT , SIG_IGN);
-                set_signal_handler(SIGQUIT, SIG_IGN);
+                /* set the pgid of a background job to the parent (subshell) pid */
+                setpgid(pid, getppid());
             }
 
             /* 2nd command component of command line */
@@ -859,32 +866,33 @@ int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redire
             close(filedes[1]);
 
             /* standard input now comes from pipe */
-            do_command(src, cmd, redirect_list);
+            do_command(src, cmd, redirect_list, NULL /* job */);
             exit(exit_status);
         }
         else if(pid < 0)
         {
-            BACKEND_RAISE_ERROR(FAILED_TO_FORK, strerror(errno), NULL);
+            PRINT_ERROR("%s: failed to fork: %s\n", SHELL_NAME, strerror(errno));
             return 0;
         }
-    }
 
-#if 0
-    /* set fg process group id if job control is enabled */
-    if(option_set('m'))
-    {
-        setpgid(pid, pid);
-        if(fg)
+        if(is_fg)
         {
-            if(pid != tty_pid)
-            {
-                tcsetpgrp(0, pid);
-            }
+            /* this will also set the job's pgid */
+            add_pid_to_job(job, pid);
+
+            /* set the pgid of a foreground job to the leader process's pid */
+            setpgid(pid, pid);
+
+            /* set the terminal's foreground pgid */
+            //tcsetpgrp(cur_tty_fd(), pid);
+        }
+        else
+        {
+            /* set the pgid of a background job to the our (subshell) pid */
+            setpgid(pid, getpid());
         }
     }
-#endif
 
-    all_pids[count++] = pid;
     cmd = cmd->next_sibling;
     while(cmd)
     {
@@ -900,21 +908,16 @@ int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redire
         /* fork the first command */
         if((pid2 = fork_child()) == 0)
         {
-#if 0
-            if(option_set('m'))
+            if(is_fg)
             {
-                setpgid(0, pid);
-                if(fg)
-                {
-                    tcsetpgrp(0, pid);
-                }
+                /* set the pgid of a foreground job to the leader process's pid */
+                setpgid(pid2, pid);
             }
             else
             {
-                set_signal_handler(SIGINT , SIG_IGN);
-                set_signal_handler(SIGQUIT, SIG_IGN);
+                /* set the pgid of a background job to the parent (subshell) pid */
+                setpgid(pid2, getppid());
             }
-#endif
 
             /* first command of pipeline */
             close(1);   /* stdout */
@@ -931,16 +934,28 @@ int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redire
                 close(filedes2[0]);
                 close(filedes2[1]);
             }
-            do_command(src, cmd, redirect_list);
+
+            do_command(src, cmd, redirect_list, NULL /* job */);
             exit(exit_status);
         }
         else if(pid2 < 0)
         {
-            BACKEND_RAISE_ERROR(FAILED_TO_FORK, strerror(errno), NULL);
+            PRINT_ERROR("%s: failed to fork: %s\n", SHELL_NAME, strerror(errno));
             return 0;
         }
 
-        all_pids[count++] = pid2;
+        if(is_fg)
+        {
+            add_pid_to_job(job, pid2);
+            /* set the pgid of a foreground job to the leader process's pid */
+            setpgid(pid2, pid);
+        }
+        else
+        {
+            /* set the pgid of a background job to the our (subshell) pid */
+            setpgid(pid2, getpid());
+        }
+
         close(filedes[1]);
         close(filedes[0]);
 
@@ -951,41 +966,10 @@ int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redire
         }
     }
 
-    /* TODO: use correct command str */
-    char *cmdstr = get_cmdstr(node);
-
-    /* $! will be set in add_job() */
-    struct job_s *job = NULL;
-
-    /*
-     * add as a new job if job control is on, or set $! if job control is off.
-     * we add the job giving it the tty's pgid, then reset that to the
-     * job's pgid if the '-m' option is set (see code below).
-     */
-    job = add_job(tty_pid, all_pids, count, cmdstr, !fg);
-
-    /*
-     * if job control is on, set the current job.
-     */
-    if(option_set('m'))
-    {
-        if(job)
-        {
-            job->pgid = pid;
-            set_cur_job(job);
-        }
-    }
-
-    /* free temp memory */
-    if(cmdstr)
-    {
-        free(cmdstr);
-    }
-
     /* run the last command in this process if extended option 'lastpipe' is set (bash) */
     if(lastpipe)
     {
-        do_command(src, cmd, redirect_list);
+        do_command(src, cmd, redirect_list, job);
         if(job)
         {
             set_pid_exit_status(job, pid, exit_status);
@@ -996,31 +980,35 @@ int do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redire
         open("/dev/tty", O_RDWR);
     }
 
-    if(fg)
+    if(is_fg || wait)
     {
         res = wait_on_child(pid, node, job);
-#if 0
-        /* reset the terminal's foreground pgid */
-        if(option_set('m'))
-        {
-            tcsetpgrp(0, tty_pid);
-        }
-#endif
-        /* invert the result if the pipeline has a bang */
-        if(is_bang)
-        {
-            set_internal_exit_status(!res);
-        }
-        PRINT_EXIT_STATUS(exit_status);
-        return !res;
     }
     else
     {
-        fprintf(stderr, "[%d] %u %s\n", job->job_num, pid, job->commandstr);
-        /* invert the result if the pipeline has a bang */
-        set_internal_exit_status(is_bang ? 1 : 0);
-        return 1;
+        res = 0;
     }
+    
+    /* invert the result if the pipeline has a bang */
+    if(is_bang)
+    {
+        set_internal_exit_status(!res);
+    }
+
+    if(is_fg)
+    {
+        /* reset the terminal's foreground pgid */
+        tcsetpgrp(tty, tty_fg_pgid);
+
+        if(job)
+        {
+            set_job_exit_status(job, pid, !exit_status);
+        }
+        
+        PRINT_EXIT_STATUS(exit_status);
+    }
+
+    return !res;
 }
 
 
@@ -1037,11 +1025,13 @@ int do_compound_list(struct source_s *src, struct node_s *node, struct node_s *r
     {
         return 0;
     }
+
     if(node->type != NODE_LIST)
     {
         return do_list(src, node, redirect_list);
     }
     node = node->first_child;
+    
     int res = 0;
     while(node)
     {
@@ -1095,7 +1085,7 @@ int do_subshell(struct source_s *src, struct node_s *node, struct node_s *redire
     pid_t pid;
     if((pid = fork_child()) < 0)
     {
-        BACKEND_RAISE_ERROR(FAILED_TO_FORK, strerror(errno), NULL);
+        PRINT_ERROR("%s: failed to fork: %s\n", SHELL_NAME, strerror(errno));
         return 0;
     }
     else if(pid > 0)
@@ -1110,7 +1100,8 @@ int do_subshell(struct source_s *src, struct node_s *node, struct node_s *redire
     /* perform I/O redirections */
     if(redirect_list)
     {
-        if(!redirect_prep_and_do(redirect_list))
+        int saved_fd[3] = { -1, -1, -1 };
+        if(!redirect_prep_and_do(redirect_list, saved_fd))
         {
             return 0;
         }
@@ -1245,7 +1236,6 @@ int do_function_definition(struct node_s *node)
     }
     
     set_internal_exit_status(0);
-    dump_node_tree(func->func_body, 1);
     return 1;
 }
 
@@ -1313,6 +1303,10 @@ int do_function_body(struct source_s *src, int argc, char **argv)
                 src2.bufsize  = strlen(f);
                 src2.curpos   = INIT_SRC_POS;
                 
+                /* save the current and previous token pointers */
+                struct token_s *old_current_token = dup_token(get_current_token());
+                struct token_s *old_previous_token = dup_token(get_previous_token());
+                
                 struct token_s *tok = tokenize(&src2);
                 struct node_s *body = parse_function_body(tok);
                 if(body)
@@ -1320,6 +1314,14 @@ int do_function_body(struct source_s *src, int argc, char **argv)
                     func->func_body = body;
                 }
                 func->val_type = SYM_FUNC;
+    
+                /* don't leave any hanging token structs */
+                free_token(get_current_token());
+                free_token(get_previous_token());
+
+                /* restore token pointers */
+                set_current_token(old_current_token);
+                set_previous_token(old_previous_token);
             }
         }
         else
@@ -1331,7 +1333,7 @@ int do_function_body(struct source_s *src, int argc, char **argv)
     struct node_s *body = func->func_body;
     if(!body || !body->first_child)
     {
-        fprintf(stderr, "%s: function %s has an empty body\n", SHELL_NAME, argv[0]);
+        PRINT_ERROR("%s: function %s has an empty body\n", SHELL_NAME, argv[0]);
         return 1;
     }
     
@@ -1344,67 +1346,34 @@ int do_function_body(struct source_s *src, int argc, char **argv)
     
     if(maxlevel && cur_func_level >= maxlevel)
     {
-        fprintf(stderr, "%s: can't execute the call to %s: maximum function nesting reached\n", 
-                SHELL_NAME, argv[0]);
+        PRINT_ERROR("%s: can't execute the call to %s: maximum function nesting reached\n", 
+                    SHELL_NAME, argv[0]);
         return 0;
     }
     cur_func_level++;
     //symtab_stack_push();
     
-    /* save current positional parameters - similar to what we do in dot.c */
-    callframe_push(callframe_new(argv[0], src->srcname, src->curline));
+    /*
+     * NOTE: here we push a new callframe and set the current line number 
+     *       to the line number where the function was defined.
+     *       this info is used by the 'caller' builtin utility (bash extension).
+     * 
+     * TODO: we should use the correct line number where the function is
+     *       actually called.. see the following link of the expected
+     *       behavior of the 'caller' builtin:
+     * 
+     *       http://web.archive.org/web/20170606145050/http://wiki.bash-hackers.org/commands/builtin/caller
+     */
+    int saved_line = src->curline;
+    callframe_push(callframe_new(argv[0], src->srcname, saved_line));
+    src->curline = body->lineno;
     
-    int  i;
-    char buf[32];
-    struct symtab_s *st = get_local_symtab();
     /* set param $0 (bash doesn't set $0 to the function's name) */
+    struct symtab_s *st = get_local_symtab();
     struct symtab_entry_s *param = add_to_any_symtab("0", st);
     if(param)
     {
         symtab_entry_setval(param, argv[0]);
-        param->flags = FLAG_LOCAL|FLAG_READONLY;
-    }
-    
-    /* set arguments $1...$argc-1 */
-    for(i = 1; i < argc; i++)
-    {
-        sprintf(buf, "%d", i);
-        param = add_to_any_symtab(buf, st);
-        if(param)
-        {
-            symtab_entry_setval(param, argv[i]);
-            param->flags = FLAG_LOCAL|FLAG_READONLY;
-        }
-    }
-    
-    /*
-     * overshadow the rest of the parameters, if any, so that the user cannot
-     * access them behind our back.
-     */
-    param = get_symtab_entry("#");
-    if(param && param->val)
-    {
-        int old_count = atoi(param->val);
-        if(old_count > 0)
-        {
-            for( ; i <= old_count; i++)
-            {
-                sprintf(buf, "%d", i);
-                param = add_to_any_symtab(buf, st);
-                if(param)
-                {
-                    param->flags = FLAG_LOCAL|FLAG_READONLY;
-                }
-            }
-        }
-    }
-    
-    /* set our new param $# */
-    param = add_to_any_symtab("#", st);
-    if(param)
-    {
-        sprintf(buf, "%d", argc-1);
-        symtab_entry_setval(param, buf);
         param->flags = FLAG_LOCAL|FLAG_READONLY;
     }
     
@@ -1415,6 +1384,17 @@ int do_function_body(struct source_s *src, int argc, char **argv)
         symtab_entry_setval(param, argv[0]);
         param->flags = FLAG_LOCAL|FLAG_READONLY;
     }
+    
+    /* set the new positional parameters */
+    set_local_pos_params(argc-1, &argv[1]);
+
+    /*
+     * the DEBUG trap is executed (bash):
+     * - before each simple command
+     * - before each for, case, select, and arithmetic for commands
+     * - before the first command in a shell function
+     */
+    trap_handler(DEBUG_TRAP_NUM);    
     
     /*
      * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
@@ -1469,90 +1449,16 @@ int do_function_body(struct source_s *src, int argc, char **argv)
     restore_trap("RETURN", ret  );
     restore_trap("ERR"   , err  );
     restore_trap("EXIT"  , ext  );
+
+    /* 
+     * NOTE: the positional parameters will be restored when we pop the local
+     *       symbol table back in do_simple_command().
+     */
     
-    /* restore pos parameters - similar to what we do in dot.c */
-    /*
-    if(pos)
-    {
-        set_pos_paramsp(pos);
-        for(i = 0; pos[i]; i++)
-        {
-            free(pos[i]);
-        }
-        free(pos);
-    }
-    */
     callframe_popf();
     cur_func_level--;
+    src->curline = saved_line;
     return res;
-}
-
-
-/*
- * search the list of special builtin utilities looking for a utility whose name matches
- * argv[0] of the passed **argv list. if found, we execute the special builtin utility,
- * passing it the **argv list as if we're executing an external command, then we return 1.
- * otherwise, we return 0 to indicate we failed in finding a special builtin utility whose
- * name matches the command we are meant to execute (that is, argv[0]).
- */
-int do_special_builtin(int argc, char **argv)
-{
-    char   *cmd = argv[0];
-    size_t  cmdlen = strlen(cmd);
-    int     j;
-    for(j = 0; j < special_builtin_count; j++)
-    {
-        if(special_builtins[j].namelen != cmdlen)
-        {
-            continue;
-        }
-        if(strcmp(special_builtins[j].name, cmd) == 0)
-        {
-            if(!flag_set(special_builtins[j].flags, BUILTIN_ENABLED))
-            {
-                return 0;
-            }
-            int (*func)(int, char **) = (int (*)(int, char **))special_builtins[j].func;
-            int status = do_exec_cmd(argc, argv, NULL, func);
-            set_internal_exit_status(status);
-            return 1;
-        }
-    }
-    return 0;
-}
-
-
-/*
- * search the list of regular builtin utilities looking for a utility whose name matches
- * argv[0] of the passed **argv list. if found, we execute the regular builtin utility,
- * passing it the **argv list as if we're executing an external command, then we return 1.
- * otherwise, we return 0 to indicate we failed in finding a regular builtin utility whose
- * name matches the command we are meant to execute (that is, argv[0]).
- */
-int do_regular_builtin(int argc, char **argv)
-{
-    char   *cmd = argv[0];
-    size_t  cmdlen = strlen(cmd);
-    int     j;
-    for(j = 0; j < regular_builtin_count; j++)
-    {
-        if(strlen(regular_builtins[j].name) != cmdlen)
-        {
-            continue;
-        }
-        if(strcmp(regular_builtins[j].name, cmd) == 0)
-        {
-            if(!flag_set(regular_builtins[j].flags, BUILTIN_ENABLED))
-            {
-                return 0;
-            }
-            int (*func)(int, char **) = (int (*)(int, char **))regular_builtins[j].func;
-            int status = do_exec_cmd(argc, argv, NULL, func);
-            set_internal_exit_status(status);
-            return 1;
-        }
-    }
-    return 0;
 }
 
 
@@ -1571,7 +1477,7 @@ static inline void free_argv(int argc, char **argv)
         {
             char *p = argv[argc]+8, *strend = p;
             int fd = strtol(p, &strend, 10);
-            if(p != strend)
+            if(!*strend && fd > 2)
             {
                 close(fd);
             }
@@ -1600,7 +1506,7 @@ static inline void free_argv(int argc, char **argv)
  * shell) returns 1 on success and 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int do_simple_command(struct source_s *src, struct node_s *node)
+int do_simple_command(struct source_s *src, struct node_s *node, struct job_s *job)
 {
     struct io_file_s io_files[FOPEN_MAX];
     int i, dofork;
@@ -1610,9 +1516,25 @@ int do_simple_command(struct source_s *src, struct node_s *node)
     
     /* then loop through the command and its arguments */
     struct node_s *child = node->first_child;
-    int argc = 0;           /* arguments count */
-    int targc = 0;          /* total alloc'd arguments count */
+
+    /* arguments count */
+    int argc = 0;
+
+    /* total alloc'd arguments count */
+    int targc = 0;
+
+    /* the arguments array */
     char **argv = NULL;
+    
+    /*
+     * the flags we'll use when word-expanding the command arguments.. if the 
+     * command is the test command '[[', we don't perform pathname expansion or
+     * field splitting (bash).. for all other commands, we perform the whole 
+     * host of word expansions.
+     */
+    int word_expand_flags = FLAG_PATHNAME_EXPAND | FLAG_REMOVE_QUOTES |
+                            FLAG_FIELD_SPLITTING | FLAG_STRIP_VAR_ASSIGN |
+                            FLAG_EXPAND_VAR_ASSIGN;
 
     /************************************/
     /* 1- collect command arguments     */
@@ -1650,7 +1572,7 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                                   (child2->val.chr == IO_FILE_GREAT) ? '>' : 0;
                         if(op && (s = redirect_proc(op, s)))
                         {
-                            arg = get_malloced_str(s);
+                            arg = s;
                             if(check_buffer_bounds(&argc, &targc, &argv))
                             {
                                 argv[argc++] = arg;
@@ -1659,6 +1581,7 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                         }
                     }
                 }
+
                 if(!redirect_prep_node(child, io_files))
                 {
                     total_redirects = -1;
@@ -1679,103 +1602,83 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                 if(!argc || option_set('k'))
                 {
                     s = strchr(child->val.str, '=');
+                    
                     int len = s-child->val.str;
-                    char *name = malloc(len+1);
+                    char *name = get_malloced_strl(child->val.str, 0, len);
+
                     if(!name)
                     {
                         break;
                     }
-                    strncpy(name, child->val.str, len);
-                    name[len] = '\0';
+                
+                    /*
+                     * support bash extended += operator. currently we only add
+                     * strings, we don't support numeric addition. so 1+=2 will give
+                     * you "12", not "3".
+                     */
+                    int append = 0;
+                    if(name[len-1] == '+')
+                    {
+                        name[len-1] = '\0';
+                        append = SET_FLAG_APPEND;
+                        len--;
+                    }
+
                     if(is_name(name))
                     {
                         /*
-                         * support bash extended += operator. currently we only add
-                         * strings, we don't support numeric addition. so 1+=2 will give
-                         * you "12", not "3".
+                         * is it a local entry? if not, create a local copy, 
+                         * so we don't affect other commands when they access 
+                         * the same var.
                          */
-                        int add = 0;
-                        if(name[len-1] == '+')
-                        {
-                            name[len-1] = '\0';
-                            add = 1;
-                            len--;
-                        }
-
-                        /* is this shell restricted? */
-                        if(startup_finished && option_set('r') && is_restrict_var(name))
-                        {
-                            /* r-shells can't set/unset SHELL, ENV, FPATH, or PATH */
-                            fprintf(stderr, "%s: restricted shells can't set %s\n", SHELL_NAME, name);
-                            free(name);
-                            /* POSIX says non-interactive shells exit on var assignment errors */
-                            EXIT_IF_NONINTERACTIVE();
-                            break;
-                        }
-
-                        /* can't set positional and special params that way */
-                        if(is_pos_param(name) || is_special_param(name))
-                        {
-                            fprintf(stderr, "%s: error setting/unsetting '%s' is not allowed\n", SHELL_NAME, name);
-                            free(name);
-                            EXIT_IF_NONINTERACTIVE();
-                            break;
-                        }
-
-                        /* can't set readonly variables */
                         struct symtab_entry_s *entry = get_symtab_entry(name);
-                        if(entry && flag_set(entry->flags, FLAG_READONLY))
+                        if(entry)
                         {
-                            fprintf(stderr, "%s: cannot set '%s': readonly variable\n", SHELL_NAME, name);
-                            free(name);
-                            EXIT_IF_NONINTERACTIVE();
-                            break;
-                        }
-
-                        /* get the variable's old value */
-                        char *old_val = NULL;
-                        if(add && entry)
-                        {
-                            old_val = get_malloced_str(entry->val);
-                        }
-
-                        /* word-expand the value */
-                        char *val = word_expand_to_str(s+1);
-
-                        /* add local entry */
-                        entry = add_to_symtab(name);
-
-                        /* regular shell and normal variable. set the value */
-                        if(add && old_val)
-                        {
-                            s = malloc(strlen(old_val)+strlen(val)+1);
-                            if(s)
+                            struct symtab_entry_s *entry2 = add_to_symtab(name);
+                            if(entry2 != entry)
                             {
-                                strcpy(s, old_val);
-                                strcat(s, val);
-                                entry->val = get_malloced_str(s);
-                                free(s);
+                                symtab_entry_setval(entry2, entry->val);
+                                entry2->flags = entry->flags;
+                                entry = entry2;
                             }
-                            free_malloced_str(old_val);
                         }
                         else
                         {
-                            entry->val = get_malloced_str(val);
-                            if(old_val)
+                            entry = add_to_symtab(name);
+                        }
+
+                        /* can't set readonly variables */
+                        if(flag_set(entry->flags, FLAG_READONLY))
+                        {
+                            READONLY_ASSIGN_ERROR(SHELL_NAME, name);
+                        }
+                        else
+                        {
+                            /* word-expand the value */
+                            char *val = word_expand_to_str(s+1);
+                            do_set(name, val, FLAG_CMD_EXPORT, 0, append);
+                            if(val)
                             {
-                                free_malloced_str(old_val);
+                                free(val);
                             }
                         }
-                        entry->flags |= FLAG_CMD_EXPORT;
-
-                        if(val)
-                        {
-                            free(val);
-                        }
                     }
-                    free(name);
+                    
+                    if(append)
+                    {
+                        name[len  ] = '+';
+                        name[len+1] = '\0';
+                    }
+                    free_malloced_str(name);
                     break;
                 }
+                /* 
+                 * if the word is an assignment word that occurs after the 
+                 * command name, we won't convert whitespace chars to 
+                 * spaces, as this is not considered a variable assignment.
+                 */
+                word_expand_flags &= ~(FLAG_STRIP_VAR_ASSIGN | FLAG_EXPAND_VAR_ASSIGN);
+                
                 /*
                  * WARNING: don't put any case here! we want to fall through.
                  */
@@ -1798,6 +1701,7 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                         /* get the index of the closing '))' or ']' */
                         int match = 0;
                         arg = s+strlen(s)-1;
+
                         /* check we have a matching closing '))' or ']' */
                         if(*s == '(')
                         {
@@ -1808,6 +1712,7 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                         {
                             match = !strncmp(arg, "]", 1);
                         }
+
                         /* convert `((expr))` and `$[expr]` to `let "expr"` */
                         if(match)
                         {
@@ -1817,10 +1722,12 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                             {
                                 argv[argc++] = get_malloced_str("let");
                             }
+
                             if(check_buffer_bounds(&argc, &targc, &argv))
                             {
                                 argv[argc++] = get_malloced_str(s+2);
                             }
+                            
                             (*arg) = c;
                             break;
                         }
@@ -1833,36 +1740,35 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                     else if(strcmp(s, "noglob") == 0 && !option_set('P'))
                     {
                         set_option('f', 1);
-                        /* update the options string */
-                        symtab_save_options();
                         continue;
                     }
+                    /*
+                     * if this is the test command '[[', don't perform pathname expansion or
+                     * field splitting on the cominng arguments (bash).
+                     */
+                    else if(strcmp(s, "[[") == 0)
+                    {
+                        word_expand_flags = 0;
+                    }
                 }
+
                 /* go POSIX style on the word */
-                struct word_s *w = word_expand(s,
-                                    FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES|FLAG_FIELD_SPLITTING);
-                if(!w)
-                {
-                    break;
-                }
-                /*
-                if(!argc && (strncmp(s, "$((", 3) == 0))
-                {
-                    free_all_words(w);
-                    break;
-                }
-                */
-                /* now parse the words */
+                struct word_s *w = word_expand(s, word_expand_flags);
                 struct word_s *w2 = w;
-                /* we will get NULL if pathname expansion fails */
+                
+                /* we will get NULL if expansion fails */
                 if(!w)
                 {
-                    free_argv(argc, argv);
+                    if(argv)
+                    {
+                        free_argv(argc, argv);
+                    }
                     set_option('f', saved_noglob);
                     /* update the options string */
                     symtab_save_options();
                     return 0;
                 }
+
                 /* add the words to the arguments list */
                 while(w2)
                 {
@@ -1873,10 +1779,12 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                     }
                     w2 = w2->next;
                 }
+                
                 free_all_words(w);
         }
         child = child->next_sibling;
     }
+
     /* even if arc == 0, we need to alloc memory for argv */
     if(check_buffer_bounds(&argc, &targc, &argv))
     {
@@ -1884,8 +1792,6 @@ int do_simple_command(struct source_s *src, struct node_s *node)
         argv[argc] = NULL;
     }
     set_option('f', saved_noglob);
-    /* update the options string */
-    symtab_save_options();
     
     /*
      * interactive shells check for a directory passed as the command word (bash).
@@ -1942,14 +1848,16 @@ int do_simple_command(struct source_s *src, struct node_s *node)
     }
     
     //int  builtin =  is_builtin(argv[0]);
-    /*
-     * this call returns 1 if argv[0] is a special builtin utility, -1 if argv[0]
-     * is a regular builtin utility, and 0 otherwise.
-     */
-    int builtin  = is_enabled_builtin(argv[0]);
-    /* this call returns 1 if argv[0] is a defined shell function, 0 otherwise */
-    int function = is_function(argv[0]);
     struct symtab_entry_s *entry;
+    /*
+     * this call returns the struct builtin_s of the command if it refers to a
+     * builtin utility, NULL otherwise.
+     */
+    struct builtin_s *builtin = is_enabled_builtin(argv[0]);
+    /*
+     * this call returns 1 if argv[0] is a defined shell function, 0 otherwise.
+     */
+    int function = is_function(argv[0]);
 
     if(total_redirects == -1)
     {
@@ -1963,6 +1871,7 @@ int do_simple_command(struct source_s *src, struct node_s *node)
         {
             EXIT_IF_NONINTERACTIVE();
         }
+        
         /* I/O redirection failure */
         free_argv(argc, argv);
         free_symtab(symtab_stack_pop());
@@ -2060,11 +1969,17 @@ int do_simple_command(struct source_s *src, struct node_s *node)
     /* in zsh, hook function preexec is run before running each command (similar to a tcsh's special alias) */
     run_alias_cmd("preexec");
 
+    /*
+     * the DEBUG trap is executed (bash):
+     * - before each simple command
+     * - before each for, case, select, and arithmetic for commands
+     * - before the first command in a shell function
+     */
     trap_handler(DEBUG_TRAP_NUM);    
 
     /*
      * return if argc == 0 (if the command consisted of redirections and/or
-     * variable assignments, they would have been executed in the above code).
+     * variable assignments, they would have been executed in the code above).
      */
     if(argc == 0)
     {
@@ -2074,24 +1989,27 @@ int do_simple_command(struct source_s *src, struct node_s *node)
     }
     
     pid_t child_pid = 0;
+    int is_fg = (job && flag_set(job->flags, JOB_FLAG_FORGROUND));
+
     if(dofork && (child_pid = fork_child()) == 0)
     {
-#if 0
-        if(option_set('m'))
+        /* set our pgid */
+        if(job)
         {
-            /*
-             * if we are running from a subshell, don't reset our PGID, or else we'll receive a SIGTTOU if
-             * we needed to output to the terminal, and SIGTTIN if we needed to read from it. this is because
-             * our parent (the subshell) has the same PGID as its parent (the original shell), but we won't
-             * share that PGID with them if we changed it.
-             */
-            if(subshell_level == 0)
+            /* set the job's pgid if not yet set */
+            add_pid_to_job(job, child_pid);
+            setpgid(child_pid, job->pgid);
+            if(is_fg)
             {
-                setpgid(0, 0);
-                tcsetpgrp(0, child_pid);
+                tcsetpgrp(cur_tty_fd(), job->pgid);
             }
         }
-#endif
+        else if(is_fg)
+        {
+            tcsetpgrp(cur_tty_fd(), getpgrp());
+        }
+        
+        /* reset traps */
         reset_nonignored_traps();
 
         /* export the variables marked for export */
@@ -2101,6 +2019,7 @@ int do_simple_command(struct source_s *src, struct node_s *node)
 
     if(child_pid == 0)
     {
+#if 0
         /*
          * we need to handle the special case of coproc, as this command opens
          * a pipe between the shell and the new coprocess before local redirections
@@ -2108,35 +2027,46 @@ int do_simple_command(struct source_s *src, struct node_s *node)
          * I/O redirections.
          */
         if(argc && strcmp(argv[0], "coproc") == 0 && 
-            flag_set(special_builtins[REGULAR_BUILTIN_COPROC].flags, BUILTIN_ENABLED))
+            flag_set(COPROC_BUILTIN.flags, BUILTIN_ENABLED))
         {
+            /*
+             * we can't simply call do_builtin_internal() because coproc accepts
+             * a third argument.
+             */
+            save_OPTIND();
             int res = coproc_builtin(argc, argv, io_files);
+            reset_OPTIND();
             set_internal_exit_status(res);
             free_argv(argc, argv);
             return !res;
         }
+#endif
         
         /*
-         * for all builtins, exept 'exec', we'll save (and later restore) the standard
+         * for all builtins, except 'exec', we'll save (and later restore) the standard
          * input/output/error streams.
          */
-        int savestd = !argc || (strcmp(argv[0], "exec") != 0);
+        int do_savestd = (strcmp(argv[0], "exec") != 0);
+        int saved_fd[3] = { -1, -1, -1 };
         
         /* perform I/O redirection, if any */
-        if(total_redirects && !redirect_do(io_files, savestd))
+        if(total_redirects && !redirect_do(io_files, do_savestd, saved_fd))
         {
             if(dofork)
             {
                 exit(EXIT_FAILURE);
             }
+
             /* I/O redirection failure */
             free_argv(argc, argv);
             free_symtab(symtab_stack_pop());
+            
             /* restore standard streams */
-            if(savestd)
+            if(do_savestd)
             {
-                restore_stds();
+                restore_stds(saved_fd);
             }
+            
             return 0;
         }
 
@@ -2156,119 +2086,128 @@ int do_simple_command(struct source_s *src, struct node_s *node)
                 s = node->val.str;
                 if(s[strlen(s)-1] == '&')
                 {
-                    res = bg_builtin(2, (char *[]){ "bg", argv[0], NULL });
+                    res = do_builtin_internal(bg_builtin, 2, (char *[]){ "bg", argv[0], NULL });
                 }
                 else
                 {
-                    res = fg_builtin(2, (char *[]){ "fg", argv[0], NULL });
+                    res = do_builtin_internal(fg_builtin, 2, (char *[]){ "fg", argv[0], NULL });
                 }
-                //while(argc--) free_malloced_str(argv[argc]);
                 free_argv(argc, argv);
                 
-                if(savestd && total_redirects)
+                if(do_savestd && total_redirects)
                 {
-                    restore_stds();
+                    restore_stds(saved_fd);
                 }
+
                 if(exit_status)
                 {
                     EXIT_IF_NONINTERACTIVE();
                 }
+                
                 return res;
             }
         }
         
         /* POSIX Command Search and Execution Algorithm:      */
         search_and_exec(src, argc, argv, NULL, SEARCH_AND_EXEC_DOFUNC);
+
         if(dofork)
         {
-            BACKEND_RAISE_ERROR(FAILED_TO_EXEC, argv[0], strerror(errno));
-            if(errno == ENOEXEC)
+            PRINT_ERROR("%s: failed to execute `%s`: %s\n", 
+                        SHELL_NAME, argv[0], strerror(errno));
+            switch(errno)
             {
-                exit(EXIT_ERROR_NOEXEC);
-            }
-            else if(errno == ENOENT)
-            {
-                exit(EXIT_ERROR_NOENT);
-            }
-            else
-            {
-                exit(EXIT_FAILURE);
+                case ENOEXEC: exit(EXIT_ERROR_NOEXEC);
+                case ENOENT : exit(EXIT_ERROR_NOENT );
+                default     : exit(EXIT_FAILURE     );
             }
         }
         else
         {
-            i = 0;
-            if((strcmp(argv[0], "break"   ) == 0) ||
-               (strcmp(argv[0], "continue") == 0) ||
-               (strcmp(argv[0], "return"  ) == 0))
+            if(builtin)
             {
-                i = 1;
-            }
-            else
-            {
+                /*
+                 * non-interactive shells exit if a special builtin returned non-zero
+                 * or error status (except if it is break, continue, or return).
+                 */
                 i = 0;
+                if((strcmp(builtin->name, "break"   ) == 0) ||
+                   (strcmp(builtin->name, "continue") == 0) ||
+                   (strcmp(builtin->name, "return"  ) == 0))
+                {
+                    i = 1;
+                }
+                
+                /*
+                 * additionally, bash and zsh ignore the non-zero return value of dot,
+                 * while ksh doesn't.. we will follow the former if the proper option
+                 * is set.
+                 */
+                if(optionx_set(OPTION_IGNORE_DOT_RES) &&
+                   (strcmp(builtin->name, ".") == 0 || strcmp(builtin->name, "dot") == 0))
+                {
+                    i = 1;
+                }
+                
+                /* do the same for test or [[ */
+                if(optionx_set(OPTION_IGNORE_TEST_RES) &&
+                   (strcmp(builtin->name, "test") == 0 || builtin->name[0] == '['))
+                {
+                    i = 1;
+                }
+                
+                if(exit_status && i == 0 &&
+                   flag_set(builtin->flags, BUILTIN_SPECIAL_BUILTIN))
+                {
+                    debug ("$$$$$$$$$$$ exit_status = %d\n", exit_status);
+                    EXIT_IF_NONINTERACTIVE();
+                }
             }
-            free_argv(argc, argv);
 
             /* restore standard streams */
-            if(savestd && total_redirects)
+            if(do_savestd && total_redirects)
             {
-                restore_stds();
+                restore_stds(saved_fd);
             }
 
             MERGE_GLOBAL_SYMTAB();
-            
-            /*
-             * non-interactive shells exit if a special builtin returned non-zero
-             * or error status (except if it is break, continue, or return).
-             */
-            if(exit_status && builtin > 0 && i == 0)
-            {
-                EXIT_IF_NONINTERACTIVE();
-            }
-
+            free_argv(argc, argv);
             return 1;
         }
     }
+    
     /* ... and parent countinues over here ...    */
-
-#if 0
-    /*
-     * NOTE: we re-set the process group id here (and above in the child process) to make
-     *       sure it gets set whether the parent or child runs first (i.e. avoid race condition).
-     */
-    if(option_set('m'))
+    if(job)
     {
-        /*
-         * see the comments above to understand why we perform this check for a subshell first.
-         */
-        if(subshell_level == 0)
+        /* set the job's pgid if not yet set */
+        add_pid_to_job(job, child_pid);
+        setpgid(child_pid, job->pgid);
+        if(is_fg)
         {
-            setpgid(child_pid, 0);
-            /* tell the terminal who's the foreground pgid now */
-            tcsetpgrp(0, child_pid);
+            tcsetpgrp(cur_tty_fd(), job->pgid);
         }
     }
-#endif
-    
-    int status = wait_on_child(child_pid, node, NULL);
-
-#if 0
-    /* reset the terminal's foreground pgid */
-    if(option_set('m'))
+    else if(is_fg)
     {
-        tcsetpgrp(0, tty_pid);
+        tcsetpgrp(cur_tty_fd(), getpgrp());
     }
-#endif
+    
+    int status = wait_on_child(child_pid, node, job);
 
     PRINT_EXIT_STATUS(status);
 
 
-    /* if we forked, we didn't hash the utility's path in our
+    if(is_fg)
+    {
+        tcsetpgrp(cur_tty_fd(), shell_pid);
+    }
+
+    /*
+     * if we forked, we didn't hash the utility's path in our
      * hashtable. if so, do it now.
      */
-    int cmdfound = WIFEXITED(status) && WEXITSTATUS(status) != 126 && WEXITSTATUS(status) != 127;
-    if(option_set('h') && cmdfound && dofork)
+    //int cmdfound = WIFEXITED(status) && WEXITSTATUS(status) != 126 && WEXITSTATUS(status) != 127;
+    if(option_set('h') /* && cmdfound */ && dofork)
     {
         if(!strchr(argv[0], '/'))
         {
@@ -2310,7 +2249,8 @@ int do_simple_command(struct source_s *src, struct node_s *node)
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
-int do_command(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
+int do_command(struct source_s *src, struct node_s *node,
+               struct node_s *redirect_list, struct job_s *job)
 {
     if(!node)
     {
@@ -2323,10 +2263,13 @@ int do_command(struct source_s *src, struct node_s *node, struct node_s *redirec
             return do_function_definition(node);
 
         case NODE_COMMAND:
-            return do_simple_command(src, node);
+            return do_simple_command(src, node, job);
 
         case NODE_TIME:
             return time_builtin(src, node->first_child);
+            
+        case NODE_COPROC:
+            return coproc_builtin(src, node->first_child, node->first_child->next_sibling);
 
         default:
             return do_compound_command(src, node, redirect_list);

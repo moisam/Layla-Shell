@@ -1,6 +1,6 @@
 /* 
- *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Programmed By: Mohammed Isam [mohammed_isam1984@yahoo.com]
+ *    Copyright 2016, 2017, 2018, 2019, 2020  (c)
  * 
  *    file: backend.h
  *    This file is part of the Layla Shell project.
@@ -31,10 +31,11 @@
 int   do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, char **));
 pid_t fork_child(void);
 int   wait_on_child(pid_t pid, struct node_s *cmd, struct job_s *job);
+char *get_cmdstr(struct node_s *cmd);
 
 int   do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
 int   do_and_or(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg);
-int   do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int wait);
+int   do_pipeline(struct source_s *src, struct node_s *node, struct node_s *redirect_list, struct job_s *job, int wait);
 void  do_separator(struct source_s *src, struct node_s *node);
 int   do_compound_list(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
 int   do_subshell(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
@@ -51,20 +52,18 @@ int   do_brace_group(struct source_s *src, struct node_s *node, struct node_s *r
 int   do_compound_command(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
 int   do_function_body(struct source_s *src, int argc, char **argv);
 int   do_function_definition(struct node_s *node);
-int   do_simple_command(struct source_s *src, struct node_s *node);
-int   do_command(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
+int   do_simple_command(struct source_s *src, struct node_s *node, struct job_s *job);
+int   do_command(struct source_s *src, struct node_s *node, struct node_s *redirect_list, struct job_s *job);
 void  inc_subshell_var(void);
-
-int   do_special_builtin(int argc, char **argv);
-int   do_regular_builtin(int argc, char **argv);
 
 int   break_builtin(int argc, char **argv);
 int   continue_builtin(int argc, char **argv);
 // void SIGCHLD_handler(int signum);
 
 /* pattern.c */
+int   match_pattern(char *pattern, char *str);
+int   match_pattern_ext(char *pattern, char *str);
 int   match_filename(char *pattern, char *str, int print_err, int ignore);
-// int  __match_pattern(char *pattern, char *str);
 char **get_filename_matches(char *path, glob_t *matches);
 int   match_prefix(char *pattern, char *str, int longest);
 int   match_suffix(char *pattern, char *str, int longest);
@@ -74,17 +73,18 @@ int   match_ignore(char *pattern, char *filename);
 /* redirect.c */
 int   redirect_prep_node(struct node_s *child, struct io_file_s *io_files);
 int   init_redirect_list(struct io_file_s *io_files);
-int   redirect_prep_and_do(struct node_s *redirect_list);
+int   redirect_prep_and_do(struct node_s *redirect_list, int *saved_fd);
 char *redirect_proc(char op, char *cmdline);
 int   file_redirect_prep(struct node_s *node, struct io_file_s *io_file);
 int   heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file);
-int   redirect_do(struct io_file_s *io_files, int do_savestd);
-void  save_std(int fd);
-void  restore_stds(void);
+int   redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd);
+void  save_std(int fd, int *saved_fd);
+void  restore_stds(int *saved_fd);
 
-/* coprocess file descriptors */
+/* coprocess file descriptors and pid */
 extern int rfiledes[];
 extern int wfiledes[];
+extern pid_t coproc_pid ;
 
 /*
  * flag to indicate we want to restore the standard streams after executing an

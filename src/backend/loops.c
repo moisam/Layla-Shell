@@ -1,6 +1,6 @@
 /* 
- *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Programmed By: Mohammed Isam [mohammed_isam1984@yahoo.com]
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: loops.c
  *    This file is part of the Layla Shell project.
@@ -40,6 +40,7 @@
 #include "../error/error.h"
 #include "../debug.h"
 #include "../kbdevent.h"
+#include "../builtins/builtins.h"
 #include "../builtins/setx.h"
 
 
@@ -60,7 +61,7 @@ int break_builtin(int argc, char **argv)
 {
     if(!cur_loop_level)
     {
-        BACKEND_RAISE_ERROR(BREAK_OUTSIDE_LOOP, NULL, NULL);
+        PRINT_ERROR("%s: break clause outside a loop\n", SHELL_NAME);
         /* POSIX says non-interactive shell should exit on syntax errors */
         if(!interactive_shell)
         {
@@ -79,7 +80,7 @@ int break_builtin(int argc, char **argv)
         int n = strtol(argv[1], &strend, 10);
         if(*strend || n < 1)
         {
-            fprintf(stderr, "break: invalid loop number: %s\n", argv[1]);
+            PRINT_ERROR("break: invalid loop number: %s\n", argv[1]);
             return 1;
         }
         req_break = n;
@@ -101,7 +102,7 @@ int continue_builtin(int argc, char **argv)
 {
     if(!cur_loop_level)
     {
-        BACKEND_RAISE_ERROR(CONTINUE_OUTSIDE_LOOP, NULL, NULL);
+        PRINT_ERROR("%s: continue clause outside a loop\n", SHELL_NAME);
         /* POSIX says non-interactive shell should exit on syntax errors */
         if(!interactive_shell)
         {
@@ -120,7 +121,7 @@ int continue_builtin(int argc, char **argv)
         int n = strtol(argv[1], &strend, 10);
         if(*strend || n < 1)
         {
-            fprintf(stderr, "continue: invalid loop number: %s\n", argv[1]);
+            PRINT_ERROR("continue: invalid loop number: %s\n", argv[1]);
             return 1;
         }
         req_continue = n;
@@ -150,7 +151,7 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
             if((w = make_word(nodelist->val.str)) == NULL)
             {
                 free_all_words(head);
-                fprintf(stderr, "%s: insufficient memory for loop's wordlist\n", SHELL_NAME);
+                PRINT_ERROR("%s: insufficient memory for loop's wordlist\n", SHELL_NAME);
                 return NULL;
             }
 
@@ -187,7 +188,7 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
             if((w = make_word(p2)) == NULL)
             {
                 free_all_words(head);
-                fprintf(stderr, "%s: insufficient memory for loop's wordlist\n", SHELL_NAME);
+                PRINT_ERROR("%s: insufficient memory for loop's wordlist\n", SHELL_NAME);
                 return NULL;
             }
 
@@ -317,6 +318,7 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
     }
     
     /* redirects specific to the loop should override global ones */
+    int saved_fd[3] = { -1, -1, -1 };
     struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
@@ -325,7 +327,7 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
 
     if(redirect_list)
     {
-        if(!redirect_prep_and_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list, saved_fd))
         {
             return 0;
         }
@@ -336,17 +338,25 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
     char *str2;
     if(str && *str)
     {
+        /*
+         * the DEBUG trap is executed (bash):
+         * - before each simple command
+         * - before each for, case, select, and arithmetic for commands
+         * - before the first command in a shell function
+         */
+        trap_handler(DEBUG_TRAP_NUM);    
+        
         str2 = arithm_expand(str);
         if(!str2)     /* invalid expr */
         {
-            restore_stds();
+            restore_stds(saved_fd);
             return 0;
         }
         free(str2);
     }
 
     /* then loop as long as expr2 evaluates to non-zero result */
-    int res   = 0;
+    int res = 0;
     char *onestr = "1";
     cur_loop_level++;
 
@@ -355,11 +365,17 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
         str = expr2->val.str;
         if(str && *str)
         {
+            trap_handler(DEBUG_TRAP_NUM);    
             str2 = arithm_expand(str);
             if(!str2)       /* invalid expr */
             {
                 res = 0;
                 break;
+            }
+            
+            if(!*str2)      /* empty expression, treat as 1 */
+            {
+                str2 = onestr;
             }
         }
         else                /* treat it as 1 and loop */
@@ -367,7 +383,10 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
             str2 = onestr;
         }
 
-        /* perform the loop body */
+        /*
+         * perform the loop body (we don't need to call strtol(), because we
+         * know arithm_expand() only returns a string-formatted number.
+         */
         if(atol(str2))
         {
             do_do_group(src, commands, NULL);
@@ -401,11 +420,12 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
             str = expr3->val.str;
             if(str && *str)
             {
+                trap_handler(DEBUG_TRAP_NUM);    
                 str2 = arithm_expand(str);
                 if(!str2)     /* invalid expr */
                 {
-                    restore_stds();
-                    return 0;
+                    res = 0;
+                    break;
                 }
                 free(str2);
             }
@@ -420,7 +440,7 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
 
     if(local_redirects)
     {
-        restore_stds();
+        restore_stds(saved_fd);
     }
     return res;
 }
@@ -461,6 +481,7 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
     }
 
     /* redirects specific to the loop should override global ones */
+    int saved_fd[3] = { -1, -1, -1 };
     struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
@@ -469,7 +490,7 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
 
     if(redirect_list)
     {
-        if(!redirect_prep_and_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list, saved_fd))
         {
             return 0;
         }
@@ -479,7 +500,7 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
     if(!list)
     {
         set_internal_exit_status(0);
-        restore_stds();
+        restore_stds(saved_fd);
         return 1;
     }
     
@@ -498,7 +519,8 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
     /* check we've got the entry */
     if(!entry)
     {
-        fprintf(stderr, "error: failed to add variable %s to symbol table\n", index_name);
+        PRINT_ERROR("%s: failed to add variable %s to symbol table\n", 
+                    SHELL_NAME, index_name);
         /* set l to NULL so we won't enter the loop below */
         l = NULL;
         res = 0;
@@ -508,7 +530,7 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
         /* check we're not trying to assign to a readonly variable */
         if(flag_set(entry->flags, FLAG_READONLY))
         {
-            fprintf(stderr, "error: can't assign to readonly variable: %s\n", index_name);
+            READONLY_ASSIGN_ERROR(SHELL_NAME, index_name);
             /* set l to NULL so we won't enter the loop below */
             l = NULL;
             res = 0;
@@ -525,11 +547,18 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
     }
     cur_loop_level++;
 
+    /*
+     * the DEBUG trap is executed (bash):
+     * - before each simple command
+     * - before each for, case, select, and arithmetic for commands
+     * - before the first command in a shell function
+     */
+    trap_handler(DEBUG_TRAP_NUM);    
+    
     for( ; l; l = l->next)
     {
         symtab_entry_setval(entry, l->data);
-
-        do_do_group(src, commands, NULL);
+        res = do_do_group(src, commands, NULL);
 
         if(return_set || signal_received == SIGINT)
         {
@@ -549,7 +578,7 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
                 break;
             }
         }
-        res = 1;
+        //res = 1;
     }
 
     /* free used memory */
@@ -558,7 +587,7 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
 
     if(local_redirects)
     {
-        restore_stds();
+        restore_stds(saved_fd);
     }
     return res;
 }
@@ -582,6 +611,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
         return 0;
     }
 
+    int saved_fd[3] = { -1, -1, -1 };
     struct node_s *index    = node->first_child;
     struct node_s *wordlist = index->next_sibling;
     if(wordlist->type != NODE_WORDLIST)
@@ -605,7 +635,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
 
     if(redirect_list)
     {
-        if(!redirect_prep_and_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list, saved_fd))
         {
             return 0;
         }
@@ -616,7 +646,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
     if(!list)
     {
         set_internal_exit_status(0);
-        restore_stds();
+        restore_stds(saved_fd);
         return 1;
     }
     
@@ -628,6 +658,14 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
     do_set(index_name, NULL, 0, 0, 0);
     cur_loop_level++;
     
+    /*
+     * the DEBUG trap is executed (bash):
+     * - before each simple command
+     * - before each for, case, select, and arithmetic for commands
+     * - before the first command in a shell function
+     */
+    trap_handler(DEBUG_TRAP_NUM);    
+
     for(j = 0, l = list; l; j++, l = l->next)
     {
         fprintf(stderr, "%d\t%s\n", j+1, list->data);
@@ -637,7 +675,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
     for( ; ; )
     {
         print_prompt3();
-        if(read_builtin(2, (char *[]){ "read", "REPLY" }) != 0)
+        if(do_builtin_internal(read_builtin, 2, (char *[]){ "read", "REPLY" }) != 0)
         {
             res = 0;
             fprintf(stderr, "\n\n");
@@ -675,7 +713,6 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
             continue;
         }
         
-        //do_set(index_name, list[sel-1], 0, 0, 0);
         j = sel-1;
         for(j = sel-1, l = list; j > 0; j--, l = l->next)
         {
@@ -721,7 +758,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
 
     if(local_redirects)
     {
-        restore_stds();
+        restore_stds(saved_fd);
     }
     return res;
 }
@@ -742,6 +779,7 @@ int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redi
         return 0;
     }
 
+    int saved_fd[3] = { -1, -1, -1 };
     struct node_s *clause   = node->first_child;
     struct node_s *commands = clause->next_sibling;
     
@@ -754,7 +792,7 @@ int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redi
     
     if(redirect_list)
     {
-        if(!redirect_prep_and_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list, saved_fd))
         {
             return 0;
         }
@@ -807,7 +845,7 @@ int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redi
 
     if(local_redirects)
     {
-        restore_stds();
+        restore_stds(saved_fd);
     }
     return res;
 }
@@ -828,6 +866,7 @@ int do_until_loop(struct source_s *src, struct node_s *node, struct node_s *redi
         return 0;
     }
 
+    int saved_fd[3] = { -1, -1, -1 };
     struct node_s *clause   = node->first_child;
     struct node_s *commands = clause->next_sibling;
     /* redirects specific to the loop should override global ones */
@@ -839,7 +878,7 @@ int do_until_loop(struct source_s *src, struct node_s *node, struct node_s *redi
     
     if(redirect_list)
     {
-        if(!redirect_prep_and_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list, saved_fd))
         {
             return 0;
         }
@@ -892,7 +931,7 @@ int do_until_loop(struct source_s *src, struct node_s *node, struct node_s *redi
 
     if(local_redirects)
     {
-        restore_stds();
+        restore_stds(saved_fd);
     }
     return res;
 }

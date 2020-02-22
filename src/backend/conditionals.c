@@ -1,6 +1,6 @@
 /* 
- *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Programmed By: Mohammed Isam [mohammed_isam1984@yahoo.com]
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: conditionals.c
  *    This file is part of the Layla Shell project.
@@ -78,6 +78,11 @@ int do_case_item(struct source_s *src, struct node_s *node, char *word, struct n
         struct word_s *w = word_expand_one_word(node->val.str, 0);
         if(w)
         {
+            /* remove quoting only if there was word expansion */
+            if(strcmp(w->data, pat_str))
+            {
+                remove_quotes(w);
+            }
             pat_str = wordlist_to_str(w, WORDLIST_NO_SPACES);
             free_all_words(w);
         
@@ -88,7 +93,7 @@ int do_case_item(struct source_s *src, struct node_s *node, char *word, struct n
             }
         }
         
-        if(match_filename(pat_str, word, 1, 1))
+        if(match_pattern(pat_str, word))
         {
             struct node_s *commands = node->next_sibling;
             while(commands && commands->type == NODE_VAR)
@@ -141,6 +146,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
 
     struct node_s *word_node = node->first_child;
     struct node_s *item = word_node->next_sibling;
+    int saved_fd[3] = { -1, -1, -1 };
 
     /* redirects specific to the loop should override global ones */
     struct node_s *local_redirects = word_node;
@@ -156,16 +162,20 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
     
     if(redirect_list)
     {
-        if(!redirect_prep_and_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list, saved_fd))
         {
             return 0;
         }
     }
 
-    /* perform word expansion (including pathname expansion and quote removal) on the word */
+    /*
+     * perform word expansion (including pathname expansion and quote removal,
+     * but not field splitting) on the word.
+     */
     char *word = word_node->val.str;
     int empty_word = 0;
     struct word_s *wordlist = word_expand_one_word(word_node->val.str, 0);
+
     if(wordlist)
     {
         wordlist = pathnames_expand(wordlist);
@@ -185,15 +195,23 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
 
     if(empty_word)
     {
-        BACKEND_RAISE_ERROR(EMPTY_CASE_WORD, NULL, NULL);
+        PRINT_ERROR("%s: empty case word\n", SHELL_NAME);
         if(local_redirects)
         {
-            restore_stds();
+            restore_stds(saved_fd);
         }
         /* POSIX says non-interactive shell should exit on syntax errors */
-        EXIT_IF_NONINTERACTIVE();
+        //EXIT_IF_NONINTERACTIVE();
         return 0;
     }
+
+    /*
+     * the DEBUG trap is executed (bash):
+     * - before each simple command
+     * - before each for, case, select, and arithmetic for commands
+     * - before the first command in a shell function
+     */
+    trap_handler(DEBUG_TRAP_NUM);    
 
     int match = 0;
     while(item)
@@ -202,7 +220,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
         {
             match = 1;
             /* check for case items ending in ';&' */
-            if(item->val_type == VAL_CHR && item->val.chr == '&')
+            while(item->val_type == VAL_CHR && item->val.chr == '&')
             {
                 /* do the next item */
                 item = item->next_sibling;
@@ -211,13 +229,13 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
                     break;
                 }
 
-                item = item->first_child;
-                if(!item || item->type != NODE_VAR)
+                node = item->first_child;
+                if(!node || node->type != NODE_VAR)
                 {
                     break;
                 }
                 
-                struct node_s *commands = item->next_sibling;
+                struct node_s *commands = node->next_sibling;
                 while(commands && commands->type == NODE_VAR)
                 {
                     commands = commands->next_sibling;
@@ -229,14 +247,12 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
                     ERR_TRAP_OR_EXIT();
                 }
             }
+
             /* check for case items ending in ';;&' (or ';|') */
-            else if(item->val_type == VAL_CHR && item->val.chr == ';')
+            if(!item || item->val_type != VAL_CHR || item->val.chr != ';')
             {
-                /* try to match the next item */
-                item = item->next_sibling;
-                continue;
+                break;
             }
-            break;
         }
         item = item->next_sibling;
     }
@@ -250,7 +266,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
     free(word);
     if(local_redirects)
     {
-        restore_stds();
+        restore_stds(saved_fd);
     }
     return 1;
 }
@@ -272,9 +288,11 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
     }
 
     int res = 0;
+    int saved_fd[3] = { -1, -1, -1 };
     struct node_s *clause = node->first_child;
     struct node_s *_then  = clause->next_sibling;
     struct node_s *_else  = NULL;
+
     if(_then)
     {
         _else = _then->next_sibling;
@@ -294,7 +312,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
     
     if(redirect_list)
     {
-        if(!redirect_prep_and_do(redirect_list))
+        if(!redirect_prep_and_do(redirect_list, saved_fd))
         {
             return 0;
         }
@@ -307,7 +325,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
         in_test_clause = 0;
         if(local_redirects)
         {
-            restore_stds();
+            restore_stds(saved_fd);
         }
         return 0;
     }
@@ -320,7 +338,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
         ERR_TRAP_OR_EXIT();
         if(local_redirects)
         {
-            restore_stds();
+            restore_stds(saved_fd);
         }
         return res;
     }
@@ -330,7 +348,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
     {
         if(local_redirects)
         {
-            restore_stds();
+            restore_stds(saved_fd);
         }
         return 1;
     }
@@ -341,7 +359,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
         ERR_TRAP_OR_EXIT();
         if(local_redirects)
         {
-            restore_stds();
+            restore_stds(saved_fd);
         }
         return res;
     }
@@ -351,7 +369,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
     
     if(local_redirects)
     {
-        restore_stds();
+        restore_stds(saved_fd);
     }
     return res;
 }

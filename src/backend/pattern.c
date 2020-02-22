@@ -1,6 +1,6 @@
 /* 
- *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2018, 2019 (c)
+ *    Programmed By: Mohammed Isam [mohammed_isam1984@yahoo.com]
+ *    Copyright 2018, 2019, 2020 (c)
  * 
  *    file: pattern.c
  *    This file is part of the Layla Shell project.
@@ -85,6 +85,7 @@ int match_prefix(char *pattern, char *str, int longest)
     {
         return 0;
     }
+
     char *s = str+1;
     char  c = *s;
     char *smatch = NULL;
@@ -92,7 +93,7 @@ int match_prefix(char *pattern, char *str, int longest)
     while(c)
     {
         *s = '\0';
-        if(match_filename(pattern, str, 0, 1))
+        if(match_pattern(pattern, str))
         {
             if(!smatch)
             {
@@ -108,11 +109,13 @@ int match_prefix(char *pattern, char *str, int longest)
         *s = c;
         c = *(++s);
     }
+    
     /* check the result of the comparison */
     if(lmatch)
     {
         return lmatch-str;
     }
+    
     if(smatch)
     {
         return smatch-str;
@@ -138,7 +141,7 @@ int match_suffix(char *pattern, char *str, int longest)
     char *lmatch = NULL;
     while(s > str)
     {
-        if(match_filename(pattern, s, 0, 1))
+        if(match_pattern(pattern, s))
         {
             if(!smatch)
             {
@@ -152,11 +155,13 @@ int match_suffix(char *pattern, char *str, int longest)
         }
         s--;
     }
+    
     /* check the result of the comparison */
     if(lmatch)
     {
         return lmatch-str;
     }
+    
     if(smatch)
     {
         return smatch-str;
@@ -211,10 +216,150 @@ int match_filename(char *pattern, char *str, int print_err, int ignore)
         default:
             if(print_err)
             {
-                fprintf(stderr, "%s: failed to match filename(s)\n", SHELL_NAME);
+                PRINT_ERROR("%s: failed to match filename(s)\n", SHELL_NAME);
             }
             return 0;
     }
+}
+
+
+/*
+ * similar to match_filename(), but matches strings for variable expansion
+ * and others.
+ *
+ * returns 1 if we have a match, 0 otherwise.
+ */
+int match_pattern(char *pattern, char *str)
+{
+    if(!pattern || !str)
+    {
+        return 0;
+    }
+
+    /* set up the flags */
+    int flags = FNM_LEADING_DIR;
+    if(optionx_set(OPTION_NOCASE_MATCH))
+    {
+        flags |= FNM_CASEFOLD;
+    }
+
+    if(optionx_set(OPTION_EXT_GLOB))
+    {
+        flags |= FNM_EXTMATCH;
+    }
+
+    /* perform the match */
+    if(optionx_set(OPTION_GLOB_ASCII_RANGES))
+    {
+        setlocale(LC_ALL, "C");
+    }
+    
+    int res = fnmatch(pattern, str, flags);
+    
+    if(optionx_set(OPTION_GLOB_ASCII_RANGES))
+    {
+        setlocale(LC_ALL, "");
+    }
+
+    return (res == 0) ? 1 : 0;
+}
+
+
+/*
+ * match a string to a pattern using POSIX extended regex syntax (used when
+ * the =~ operator is passed to the test builtin).
+ */
+int match_pattern_ext(char *pattern, char *str)
+{
+    /* set up the flags */
+    int flags = REG_EXTENDED;
+    if(optionx_set(OPTION_NOCASE_MATCH))
+    {
+        flags |= REG_ICASE;
+    }
+
+    regex_t regex;
+    int result = regcomp (&regex, pattern, flags);
+
+    /* Non-zero result means error. */
+    if(result)
+    {
+        fprintf(stderr, "%s: regex match failed: ", SHELL_NAME);
+        switch(result)
+        {
+            case REG_BADBR:
+                fprintf(stderr, "invalid ‘\\{…\\}’ construct\n");
+                break;
+                
+            case REG_BADPAT:
+                fprintf(stderr, "syntax error\n");
+                break;
+                
+            case REG_BADRPT:
+            fprintf(stderr, "repetition operator (‘?’ or ‘*’) in a bad position\n");
+                break;
+                
+            case REG_ECOLLATE:
+                fprintf(stderr, "invalid collating element\n");
+                break;
+                
+            case REG_ECTYPE:
+                fprintf(stderr, "invalid character class name\n");
+                break;
+                
+            case REG_EESCAPE:
+                fprintf(stderr, "regex ends with ‘\\’\n");
+                break;
+                
+            case REG_ESUBREG:
+                fprintf(stderr, "invalid number in the ‘\\digit’ construct\n");
+                break;
+                
+            case REG_EBRACK:
+                fprintf(stderr, "unbalanced square brackets\n");
+                break;
+                
+            case REG_EPAREN:
+                fprintf(stderr, "extended regex with unbalanced parentheses, "
+                                "or basic regex with unbalanced ‘\\(’ and ‘\\)’\n");
+                break;
+                
+            case REG_EBRACE:
+                fprintf(stderr, "unbalanced ‘\\{’ and ‘\\}’\n");
+                break;
+                
+            case REG_ERANGE:
+                fprintf(stderr, "range expression has invalid point(s)\n");
+                break;
+                
+            case REG_ESPACE:
+                fprintf(stderr, "%s\n", strerror(ENOMEM));
+                break;
+                
+            default:
+                fprintf(stderr, "unknown syntax error\n");
+        }
+        return 0;
+    }
+
+    int match = 0;
+    result = regexec(&regex, str, 0, NULL, 0);
+    if(!result)
+    {
+        match = 1;
+    }
+    else if(result != REG_NOMATCH)
+    {
+        /* function returned an error. get size of buffer required for error message. */
+        size_t length = regerror (result, &regex, NULL, 0);
+        char buffer[length];
+        (void) regerror (result, &regex, buffer, length);
+        fprintf(stderr, "%s: regex match failed: %s\r\n", SHELL_NAME, buffer);
+    }
+
+    /* Free the memory allocated from regcomp(). */
+    regfree (&regex);
+    return match;
 }
 
 
@@ -242,7 +387,8 @@ int scan_dir(char *path, int report_err)
     {
         if(report_err)
         {
-            BACKEND_RAISE_ERROR(FAILED_TO_OPEN_FILE, path, strerror(errno));
+            PRINT_ERROR("%s: failed to open `%s`: %s\n", 
+                        SHELL_NAME, path, strerror(errno));
         }
         return 0;
     }
@@ -365,31 +511,25 @@ char **get_filename_matches(char *pattern, glob_t *matches)
 
 
 /*
- * test filename against a colon-separated pattern field to determine if it matches one of the
- * patterns in the field. used when performing filename expansion to determine which file names
- * to ignore. the pattern is usually the value of $FIGNORE, $GLOBIGNORE or $EXECIGNORE.
+ * test filename against a colon-separated pattern field to determine if it 
+ * matches one of the patterns in the field. used when performing filename 
+ * expansion to determine which file names to ignore. the pattern is usually 
+ * the value of $FIGNORE, $GLOBIGNORE or $EXECIGNORE.
  */
 int match_ignore(char *pattern, char *filename)
 {
-    char *e1 = pattern;
     int ignore = 0;
-    while(*e1)
+    char *s;
+    while((s = next_colon_entry(&pattern)))
     {
-        char *e2 = e1+1;
-        while(*e2 && *e2 != ':')
-        {
-            e2++;
-        }
-        char c = *e2;
-        *e2 = '\0';
-        if(match_filename(e1, filename, 0, 0))
+        if(match_filename(s, filename, 0, 0))
         {
             ignore = 1;
-            *e2 = c;
+            free(s);
             break;
         }
-        *e2 = c;
-        e1 = e2;
+        free(s);
     }
+
     return ignore;
 }
