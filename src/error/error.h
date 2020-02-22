@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: error.h
  *    This file is part of the Layla Shell project.
@@ -32,32 +32,8 @@ enum error_code
     /* Parser errors */
     EXPECTED_TOKEN,
     UNEXPECTED_TOKEN,
-    MISSING_TOKEN,
     MISSING_FOR_NAME,
     MISSING_SELECT_NAME,
-    HEREDOC_MISSING_NEWLINE,
-    HEREDOC_MISSING_DELIM,
-    HEREDOC_EXPECTED_DELIM,
-    INVALID_FUNC_NAME,
-        
-    /* Backend (Interpreter) errors */
-    BREAK_OUTSIDE_LOOP,
-    CONTINUE_OUTSIDE_LOOP,
-    FAILED_TO_FORK,
-    FAILED_TO_ADD_JOB,
-    FAILED_TO_OPEN_FILE,
-    FAILED_TO_EXEC,
-    FAILED_TO_OPEN_PIPE,
-    FAILED_REDIRECT,
-    EMPTY_CASE_WORD,
-    INVALID_REDIRECT_FILENO,
-    INVALID_ARITHMETIC,
-    INVALID_SUBSTITUTION,
-    INVALID_ASSIGNMENT,
-    INSUFFICIENT_MEMORY,
-    UNSET_VARIABLE,
-    EXPANSION_ERROR,
-    ASSIGNMENT_TO_READONLY,
 };
 
 /* structure for error reporting */
@@ -67,7 +43,6 @@ struct error_s
     long lineno, charno, linestart; /* where was the error token encountered */
     struct source_s *src;           /* source input where error token appeared */
     char *desc;                     /* description of the error */
-    char *extra;                    /* extra description -- used by the backend */
 };
 
 /* functions to report errors */
@@ -114,20 +89,5 @@ do                                                    \
     __PARSER_RAISE_ERROR((code), (tok), (tdesc));     \
 } while(0)
 
-
-/*
- * marco to raise execution errors given the error code, the string description
- * of the error, and an optional extra string description that depends on the
- * type of error we are reporting.
- */
-#define BACKEND_RAISE_ERROR(code, edesc, xdesc)       \
-do {                                                  \
-    raise_error((struct error_s)                      \
-    {                                                 \
-        .errcode = (code),                            \
-        .desc    = (edesc),                           \
-        .extra   = (xdesc),                           \
-    });                                               \
-} while(0)
 
 #endif

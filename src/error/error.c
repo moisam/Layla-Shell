@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: error.c
  *    This file is part of the Layla Shell project.
@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "../cmd.h"
 #include "error.h"
 #include "../debug.h"
@@ -54,30 +55,47 @@ char err_format[] = "%s [%d, %d]: error: %s\n%s\n";
 char *get_line(struct source_s *src, long linestart, int *tabs)
 {
     /* start from the given position in the input string and find the next newline */
-    char *buffer = src->buffer;
-    long i = linestart;
-    *tabs = 0;
+    char *buf = src->buffer+linestart;
+    char *bufend = buf+src->bufsize;
+    char *bufstart = buf;
+    (*tabs) = 0;
+    
+    while(isspace(*buf))
+    {
+        buf++;
+    }
+    
+    if(!*buf)
+    {
+        return NULL;
+    }
+    
+    bufstart = buf;
+    
     do
     {
-        if(buffer[i] == '\n')     /* break at the first newline */
+        if(*buf == '\n')     /* break at the first newline */
         {
             break;
         }
-        else if(buffer[i] == '\t')   /* keep the count of tabs */
+        else if(*buf == '\t')   /* keep the count of tabs */
         {
             (*tabs)++;
         }
-    } while(++i < src->bufsize);
+    } while(++buf < bufend);
+
     /* allocate memory for the string */
-    size_t sz = (size_t)(i-linestart);
+    size_t sz = (size_t)(buf-bufstart);
     char *tmp = malloc(sz+1);
     if(!tmp)
     {
         return NULL;
     }
+
     /* copy the line */
-    strncpy(tmp, buffer+linestart, sz);
+    strncpy(tmp, bufstart, sz);
     tmp[sz] = '\0';
+
     /* return it */
     return tmp;
 }
@@ -92,24 +110,29 @@ void print_err(struct error_s *err, char *errstr)
 {
     long spaces = err->charno-1;
     int  tabs = 0;
+    
     /* get the line where the error occurred */
     char *line = get_line(err->src, err->linestart, &tabs);
     if(!line)
     {
         return;
     }
+    
     /* print the error message */
     fprintf(stderr, err_format, SHELL_NAME, err->lineno, err->charno, errstr, line);
+    
     /* print a caret pointer '^' that points at the error token */
     spaces -= tabs;
     while(tabs--)
     {
         fprintf(stderr, "\t");
     }
+    
     if(spaces)
     {
         fprintf(stderr, "%*s", (int)spaces, " ");
     }
+    
     fprintf(stderr, "^\n");
     free(line);
 }
@@ -128,146 +151,22 @@ void raise_error(struct error_s err)
         /* Parser Errors                      */
         /**************************************/
         case EXPECTED_TOKEN:
-            sprintf(err_str, "Expected token: %s", err.desc);
+            sprintf(err_str, "expected token: %s", err.desc);
             print_err(&err, err_str);
             break;
             
         case UNEXPECTED_TOKEN:
-            sprintf(err_str, "Unexpected token: %s", err.desc);
-            print_err(&err, err_str);
-            break;
-            
-        case MISSING_TOKEN:
-            sprintf(err_str, "Missing token: %s", err.desc);
+            sprintf(err_str, "unexpected token: %s", err.desc);
             print_err(&err, err_str);
             break;
             
         case MISSING_FOR_NAME:
-            print_err(&err, "Missing name after for");
+            print_err(&err, "missing name after `for`");
             break;
             
         case MISSING_SELECT_NAME:
-            print_err(&err, "Missing name after select");
+            print_err(&err, "missing name after `select`");
             break;
-                        
-        case HEREDOC_MISSING_NEWLINE:
-            fprintf(stderr,
-                        "%s: error: Missing newline at beginning of heredoc\n",
-                            SHELL_NAME);
-            break;
-            
-        case HEREDOC_MISSING_DELIM:
-            fprintf(stderr, "%s: error: Missing heredoc delimiter '%s'\n", 
-                        SHELL_NAME, err.desc);
-            break;
-            
-        case HEREDOC_EXPECTED_DELIM:
-            fprintf(stderr, "%s: error: Expected heredoc delimiter\n", SHELL_NAME);
-            break;
-            
-        case INVALID_FUNC_NAME:
-            fprintf(stderr, "%s: error: Invalid function name: %s\n", SHELL_NAME, err.desc);
-            break;
-                        
-        /**************************************/
-        /* Interpreter Errors                 */
-        /**************************************/
-        case BREAK_OUTSIDE_LOOP:
-            fprintf(stderr,
-                            "%s: error: break clause outside a loop\n", SHELL_NAME);
-            break;
-            
-        case CONTINUE_OUTSIDE_LOOP:
-            fprintf(stderr,
-                            "%s: error: continue clause outside a loop\n", SHELL_NAME);
-            break;
-            
-        case FAILED_TO_FORK:
-            fprintf(stderr,
-                            "%s: error: failed to fork: %s\n", SHELL_NAME, err.desc);
-            break;
-            
-        case FAILED_TO_ADD_JOB:
-            fprintf(stderr, "%s: error: failed to add job\n", SHELL_NAME);
-            break;
-            
-        case FAILED_TO_OPEN_FILE:
-            fprintf(stderr, "%s: error: failed to open %s: %s\n",
-                            SHELL_NAME, err.desc, err.extra);
-            break;
-            
-        case FAILED_TO_OPEN_PIPE:
-            fprintf(stderr, "%s: error: failed to open pipe: %s\n", SHELL_NAME, err.desc);
-            break;
-            
-        case FAILED_TO_EXEC:
-            fprintf(stderr, "%s: error: failed to exec %s: %s\n",
-                            SHELL_NAME, err.desc, err.extra);
-            break;
-            
-        case FAILED_REDIRECT:
-            if(err.desc && err.extra)
-            {
-                fprintf(stderr, "%s: error: %s: %s\n", SHELL_NAME, err.desc, err.extra);
-            }
-            else
-            {
-                fprintf(stderr, "%s: error: failed redirection: "
-                                "incorrect file permissions\n", SHELL_NAME);
-            }
-            break;
-            
-        case EMPTY_CASE_WORD:
-            fprintf(stderr, "%s: error: empty case word\n", SHELL_NAME);
-            break;
-            
-        case INVALID_REDIRECT_FILENO:
-            fprintf(stderr,
-                            "%s: error: invalid redirection file number: %s\n",
-                            SHELL_NAME, err.desc);
-            break;
-            
-        case INSUFFICIENT_MEMORY:
-            if(err.desc)
-                fprintf(stderr,
-                            "%s: error: insufficient memory for %s\n",
-                            SHELL_NAME, err.desc);
-            else
-                fprintf(stderr,
-                            "%s: error: insufficient memory\n", SHELL_NAME);
-            break;
-            
-        case INVALID_ARITHMETIC:
-            fprintf(stderr, "%s: error: invalid arithmetic substitution at: '%s'\n",
-                            SHELL_NAME, err.desc);
-            break;
-            
-        case INVALID_SUBSTITUTION:
-            fprintf(stderr, "%s: error: invalid substitution at: '%s'\n",
-                            SHELL_NAME, err.desc);
-            break;
-            
-        case UNSET_VARIABLE:
-            fprintf(stderr, "%s: %s: %s\n", SHELL_NAME, err.desc, err.extra);
-            break;
-            
-        case INVALID_ASSIGNMENT:
-            fprintf(stderr, "%s: error: invalid variable assignment: %s\n",
-                            SHELL_NAME, err.desc);
-            break;
-            
-        case EXPANSION_ERROR:
-            fprintf(stderr, "%s: Expansion error at: '%s'\n", SHELL_NAME, err.desc);
-            break;
-            
-        case ASSIGNMENT_TO_READONLY:
-            fprintf(stderr, "%s: error: assignment to readonly variable: %s\n",
-                            SHELL_NAME, err.desc);
-            break;
-            
-        default:
-            break;
-            
     }
     fflush(stderr);
 }
