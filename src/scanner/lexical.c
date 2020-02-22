@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: lexical.c
  *    This file is part of the Layla Shell project.
@@ -49,17 +49,6 @@ struct token_s eof_token =
     .text_len = 0,
 };
 
-/* special token to indicate error scanning input */
-struct token_s err_token = 
-{
-    .type     = TOKEN_ERROR,
-    .lineno   = 0,
-    .charno   = 0,
-    .text_len = 0,
-};
-
-// enum token_type_e prev_type = TOKEN_EMPTY;
-
 /*
  * return the token type that describes one of the shell's keywords.
  * the keywords are stored in an array (defined in keywords.h) and the
@@ -90,6 +79,7 @@ enum token_type_e get_keyword_toktype(int index)
         case 16: return TOKEN_KEYWORD_SELECT  ; break;
         case 17: return TOKEN_KEYWORD_FUNCTION; break;
         case 18: return TOKEN_KEYWORD_TIME    ; break;
+        case 19: return TOKEN_KEYWORD_COPROC  ; break;
     }
     return TOKEN_KEYWORD_NA;
 }
@@ -145,6 +135,7 @@ char *get_token_description(enum token_type_e type)
         case TOKEN_KEYWORD_SELECT  : return "'select'"       ;
         case TOKEN_KEYWORD_FUNCTION: return "'function'"     ;
         case TOKEN_KEYWORD_TIME    : return "'time'"         ;
+        case TOKEN_KEYWORD_COPROC  : return "'coproc'"       ;
         case TOKEN_SEMI_AND        : return "';&'"           ;
         case TOKEN_SEMI_SEMI_AND   : return "';;&'"          ;
         case TOKEN_SEMI_OR         : return "';|'"           ;
@@ -168,7 +159,6 @@ char *get_token_description(enum token_type_e type)
                                      return "'elif', 'else' or 'fi'";
         case TOKEN_DSEMI_ESAC_SEMIAND_SEMIOR:
                                      return "'esac', ';;', ';&', ';;&' or ';|'";
-        case TOKEN_ERROR           : return "'error'"        ;
     }
     return "unknown token";
 }
@@ -213,9 +203,9 @@ int is_separator_tok(enum token_type_e type)
     {
         case TOKEN_LEFT_PAREN     :
         case TOKEN_RIGHT_PAREN    :
-        case TOKEN_KEYWORD_LBRACE :
-        case TOKEN_KEYWORD_RBRACE :
-        case TOKEN_KEYWORD_BANG   :
+        //case TOKEN_KEYWORD_LBRACE :
+        //case TOKEN_KEYWORD_RBRACE :
+        //case TOKEN_KEYWORD_BANG   :
         case TOKEN_PIPE           :
         case TOKEN_PIPE_AND       :
         case TOKEN_AND            :
@@ -356,11 +346,17 @@ void set_token_type(struct token_s *tok)
                     t = TOKEN_INTEGER;
                     break;
                 }
+
                 /* check if its a two-letter keyword */
                 int index = -1;
                 if((index = is_keyword(tok->text)) >= 0)
                 {
                      t = get_keyword_toktype(index);
+                }
+                else if(isalpha(tok->text[0]) && tok->text[1] == '=')
+                {
+                    /* one-letter variable and '=' */
+                    t = TOKEN_ASSIGNMENT_WORD;
                 }
                 else
                 {
@@ -521,12 +517,35 @@ struct token_s *get_previous_token(void)
 
 
 /*
+ * return a pointer to the previous token.
+ */
+void set_current_token(struct token_s *tok)
+{
+    cur_tok = tok;
+}
+
+
+/*
+ * return a pointer to the previous token.
+ */
+void set_previous_token(struct token_s *tok)
+{
+    prev_tok = tok;
+}
+
+
+/*
  * duplicate a token struct.
  * 
  * returns the newly alloc'd token struct, or NULL in case of error.
  */
 struct token_s *dup_token(struct token_s *tok)
 {
+    if(!tok)
+    {
+        return NULL;
+    }
+
     /* alloc memory for the token struct */
     struct token_s *tok2 = malloc(sizeof(struct token_s));
     if(!tok2)
@@ -538,8 +557,11 @@ struct token_s *dup_token(struct token_s *tok)
     memcpy(tok2, tok, sizeof(struct token_s));
     
     /* copy the text string */
-    tok->text_len = strlen(tok->text);
-    tok2->text = get_malloced_str(tok->text);
+    if(tok->text)
+    {
+        tok->text_len = strlen(tok->text);
+        tok2->text = get_malloced_str(tok->text);
+    }
     tok2->text_len = tok->text_len;
     
     /* return the new token */
@@ -651,6 +673,7 @@ struct token_s *tokenize(struct source_s *src)
         errno = ENODATA;
         return &eof_token;
     }
+
     /* first time ever? */
     if(!tok_buf)
     {
@@ -659,12 +682,14 @@ struct token_s *tokenize(struct source_s *src)
         if(!tok_buf)
         {
             errno = ENOMEM;
+            eof_token.src = src;
             return &eof_token;
         }
     }
+    
     /* empty the buffer */
-    tok_bufindex     = 0;
-    tok_buf[0]       = '\0';
+    tok_bufindex = 0;
+    tok_buf[0]   = '\0';
     
     /* save the current token in the prev token pointer */
     if(cur_tok)
@@ -681,9 +706,17 @@ struct token_s *tokenize(struct source_s *src)
     long line, chr;
     char nc2, pc;
     size_t i;
-    int  endloop = 0;   /* flag to end the loop */
+    /* flag to end the loop */
+    int  endloop = 0;
+    /* 
+     * bash and zsh identify # comments in non-interactive shells, and in interactive
+     * shells with the interactive_comments option.
+     */
+    int skip_hashes = (interactive_shell && src->srctype == SOURCE_STDIN &&
+                       !optionx_set(OPTION_INTERACTIVE_COMMENTS));
 
     /* init position indexes */
+    src->curpos_old = src->curpos+1;
     if(src->curpos < 0)
     {
         line = 1;
@@ -694,6 +727,7 @@ struct token_s *tokenize(struct source_s *src)
         line = src->curline;
         chr  = src->curchar;
     }
+
     /* get next char */
     char nc = next_char(src);
     if(nc == ERRCHAR || nc == EOF)
@@ -701,9 +735,11 @@ struct token_s *tokenize(struct source_s *src)
         eof_token.lineno    = src->curline     ;
         eof_token.charno    = src->curchar     ;
         eof_token.linestart = src->curlinestart;
+        eof_token.src       = src;
         cur_tok = &eof_token;
         return &eof_token;
     }
+    
     /* loop to get the next token */
     do
     {
@@ -722,7 +758,22 @@ struct token_s *tokenize(struct source_s *src)
                                        (prev_char(src) == '$') ? 1 : 0);
                 while(i--)
                 {
-                    add_to_buf(next_char(src));
+                    /*
+                     * remove backslash quotes and discard \\n inside double and
+                     * back quotes.
+                     */
+                    pc = next_char(src);
+                    if(pc == '\\' && nc != '\'')
+                    {
+                        char pc2 = peek_char(src);
+                        if(pc2 == '\n')
+                        {
+                            i--;
+                            next_char(src);
+                            continue;
+                        }
+                    }
+                    add_to_buf(pc);
                 }
                 break;
 
@@ -764,7 +815,7 @@ struct token_s *tokenize(struct source_s *src)
                     if(i == 0)
                     {
                         /* closing brace not found */
-                        return &err_token;
+                        return &eof_token;
                     }
                     
                     while(i--)
@@ -871,41 +922,7 @@ struct token_s *tokenize(struct source_s *src)
                 }
                 endloop = 1;
                 break;
-
-            case '{':
-            case '}':
-                /*
-                 * if the '{' or '}' keyword delimits the current token, delimit it.
-                 * braces are recognized as keywords only when they occur after a semi-colon
-                 * or a newline character.
-                 */
-                pc = prev_char(src);
-                if(tok_bufindex > 0 && (isspace(pc) || pc == ';'))
-                {
-                    unget_char(src);
-                    endloop = 1;
-                    break;
-                }
-                add_to_buf(nc);
-
-                if(nc == '}')
-                {
-                    break;
-                }
-
-                /* add the opening brace and everything up to the closing brace to the buffer */
-                i = find_closing_brace(src->buffer+src->curpos, 0);
-                if(i == 0)
-                {
-                    /* closing brace not found */
-                    return &err_token;
-                }
-                while(i--)
-                {
-                    add_to_buf(next_char(src));
-                }
-                break;
-                
+            
             case '(':
             case ')':
                 /* if the brace delimits the current token, delimit it */
@@ -924,15 +941,27 @@ struct token_s *tokenize(struct source_s *src)
                      * all of these are non-POSIX extensions.
                      */
                     pc = prev_char(src);
+                    nc2 = peek_char(src);
 
                     /* check if we have '((', '<(' or '>(' */
-                    if(peek_char(src) == '(' || pc == '<' || pc == '>')
+                    if(nc2 == '(' || pc == '<' || pc == '>')
                     {
                         i = find_closing_brace(src->buffer+src->curpos, 0);
                         if(i == 0)
                         {
                             /* closing brace not found */
-                            return &err_token;
+                            return &eof_token;
+                        }
+                        add_to_buf(nc);
+                        
+                        /*
+                         * if '((' is not terminated by '))', we don't have an 
+                         * arithmetic evaluation of the type (( )).
+                         */
+                        if(nc == nc2 && (src->buffer[src->curpos+i-1] != ')'))
+                        {
+                            endloop = 1;
+                            break;
                         }
 
                         while(i--)
@@ -983,62 +1012,11 @@ struct token_s *tokenize(struct source_s *src)
                 break;
 
             case '#':
-                /* if the comment delimits the current token, delimit it */
-                if(tok_bufindex > 0)
-                {
-                    unget_char(src);
-                    endloop = 1;
-                    break;
-                }
-                
-                /*
-                 * >#((expr)) and <#((expr)) are non-POSIX extensions to move
-                 * I/O file pointers to the offset specified by expr.
-                 */
-                pc = prev_char(src);
-                if(pc == '>' || pc == '<')      /* '#>' and '#<' */
-                {
-                    nc2 = peek_char(src);
-                    if(nc2 == '(')              /* '#>(' and '#<(' */
-                    {
-                        nc2 = next_char(src);   /* skip the first '(' */
-                        nc2 = peek_char(src);   /* check the second '(' */
-                        if(nc2 == '(')
-                        {
-                            /* add both braces to buffer */
-                            add_to_buf(nc);
-                            add_to_buf(nc2);
-                            
-                            /*
-                             * loop to find the matching 2 braces, but no need to call the heavy guns,
-                             * aka brace_loop().
-                             */
-                            int cb = 0;
-                            while((nc = next_char(src)) != EOF)
-                            {
-                                add_to_buf(nc);
-                                /* keep the count of closing braces */
-                                if(nc == ')')
-                                {
-                                    cb++;
-                                }
-                                /* and break when we have two */
-                                if(cb == 2)
-                                {
-                                    break;
-                                }
-                            }
-                            endloop = 1;
-                            break;
-                        }
-                    }
-                }
-                
                 /* 
-                 * bash and zsh identify # comments in non-interactive shells, and in interactive
-                 * shells with the interactive_comments option.
+                 * if the hash is part of the current token, or if we're not
+                 * recognizing comments, add the hash char to the buffer.
                  */
-                if(interactive_shell && !optionx_set(OPTION_INTERACTIVE_COMMENTS))
+                if(tok_bufindex > 0 || skip_hashes)
                 {
                     add_to_buf(nc);
                     break;
@@ -1054,6 +1032,7 @@ struct token_s *tokenize(struct source_s *src)
                     {
                         add_to_buf(nc);
                         endloop = 1;
+                        break;
                     }
                 }
                 break;
@@ -1071,12 +1050,14 @@ struct token_s *tokenize(struct source_s *src)
         }
     } while((nc = next_char(src)) != EOF);      /* loop until we hit EOF */
         
+    eof_token.lineno    = src->curline;
+    eof_token.charno    = src->curchar;
+    eof_token.linestart = src->curlinestart;
+    eof_token.src       = src;
+    
     /* if we have no chars, we've reached EOF */
     if(tok_bufindex == 0)
     {
-        eof_token.lineno    = src->curline     ;
-        eof_token.charno    = src->curchar     ;
-        eof_token.linestart = src->curlinestart;
         cur_tok = &eof_token;
         return &eof_token;
     }
@@ -1088,12 +1069,13 @@ struct token_s *tokenize(struct source_s *src)
     tok = create_token(tok_buf);
     if(!tok)
     {
-        fprintf(stderr, "%s: failed to alloc buffer: %s\n", SHELL_NAME, strerror(errno));
+        PRINT_ERROR("%s: failed to alloc buffer: %s\n", SHELL_NAME, strerror(errno));
         return &eof_token;
     }
     
     /* give the token a numeric type, according to its contents */
     set_token_type(tok);
+
     /*
      * if the token consists solely of a number, we need to check the next
      * character.. if it's the beginning of a redirection operator ('>' or '<'),

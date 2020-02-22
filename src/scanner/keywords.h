@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: keywords.h
  *    This file is part of the Layla Shell project.
@@ -46,6 +46,7 @@ char *keywords[] =
     "select"  ,
     "function",
     "time"    ,
+    "coproc"  ,
 };
 /* keyword count */
 static int keyword_count = sizeof(keywords)/sizeof(char *);
@@ -65,6 +66,5 @@ char *operators[] =
     ">|" ,
     ">!" ,  /* zsh extension, equivalent to >| */
 };
-//static int operator_count = sizeof(operators)/sizeof(char *);
 
 #endif

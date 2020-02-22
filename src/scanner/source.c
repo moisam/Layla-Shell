@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: source.c
  *    This file is part of the Layla Shell project.
@@ -28,9 +28,13 @@
  */
 static inline char is_space(char c)
 {
-    if(c == ' ' || /* c == '\n' || */ c == '\t') return 1;
+    if(c == ' ' || /* c == '\n' || */ c == '\t')
+    {
+        return 1;
+    }
     return 0;
 }
+
 
 /*
  * return the last char read from input back to the input buffer.
@@ -42,21 +46,26 @@ void unget_char(struct source_s *src)
         return;
     }
     src->curpos--;          /* go back one char */
+
     if(--src->curchar == 0) /* first char in line */
     {
         src->curline--;     /* go back one line */
+        
         /* get length of prev line */
         char *p = src->buffer+src->curpos, *p2 = p;
         while(p > src->buffer && *p != '\n')
         {
             p--;
         }
+        
         /* new cur char is last char in prev line */
         src->curchar = p2-p;
+        
         /* store start pos of prev line */
         src->curlinestart = p-src->buffer;
     }
 }
+
 
 /*
  * get the previous char we read from input.
@@ -70,11 +79,13 @@ char prev_char(struct source_s *src)
         errno = ENODATA;
         return ERRCHAR;
     }
+
     /* never read from input before? so no previous char */
     if(src->curpos <= 0)
     {
         return ERRCHAR;
     }
+    
     return src->buffer[src->curpos-1];
 }
 
@@ -92,7 +103,10 @@ char next_char(struct source_s *src)
         errno = ENODATA;
         return ERRCHAR;
     }
+    
+#if 0
     char c1 = 0;
+#endif
     /* first time? adjust source pointers */
     if(src->curpos == INIT_SRC_POS)
     {
@@ -101,21 +115,26 @@ char next_char(struct source_s *src)
         src->curpos       = -1;
         src->curlinestart =  0;
     }
+#if 0
     else
     {
         /* save the current char */
         c1 = src->buffer[src->curpos];
     }
+#endif
+
     /* did we reach EOF? */
     if(++src->curpos >= src->bufsize)
     {
         src->curpos = src->bufsize;
         return EOF;
     }
+    
     /* get the next char */
     char c2 = src->buffer[src->curpos];
     /* if the current char is '\n', adjust line and char pointers */
-    if(c1 == '\n')
+    if(c2 == '\n')
+    //if(c1 == '\n')
     {
         src->curline++;
         src->curchar = 1;
@@ -126,6 +145,7 @@ char next_char(struct source_s *src)
         /* current char is not '\n', advance the char pointer */
         src->curchar++;
     }
+    
     /* return the next char */
     return c2;
 }
@@ -147,6 +167,7 @@ char peek_char(struct source_s *src)
         errno = ENODATA;
         return ERRCHAR;
     }
+
     long pos = src->curpos;
     /* first time? */
     if(pos == INIT_SRC_POS)
@@ -154,11 +175,13 @@ char peek_char(struct source_s *src)
         pos++;
     }
     pos++;
+    
     /* reached EOF? */
     if(pos >= src->bufsize)
     {
         return EOF;
     }
+    
     /* return the next char without adjusting pointers */
     return src->buffer[pos];
 }

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: scanner.h
  *    This file is part of the Layla Shell project.
@@ -33,7 +33,6 @@ enum token_type_e
         TOKEN_UNKNOWN,
         TOKEN_COMMENT,
         TOKEN_EOF,
-        TOKEN_ERROR,
         TOKEN_WORD,
         TOKEN_ASSIGNMENT_WORD,
         TOKEN_NAME,
@@ -71,6 +70,7 @@ enum token_type_e
         TOKEN_KEYWORD_SELECT,   /* the 'select' keyword */
         TOKEN_KEYWORD_FUNCTION, /* the 'function' keyword */
         TOKEN_KEYWORD_TIME,     /* the 'time' keyword */
+        TOKEN_KEYWORD_COPROC,   /* the 'coproc' keyword */
         TOKEN_SEMI_AND,         /* ';&'  */
         TOKEN_SEMI_SEMI_AND,    /* ';;&' */
         TOKEN_SEMI_OR,          /* ';|', equivalent in function to ';;&'  */
@@ -118,6 +118,8 @@ struct token_s *tokenize(struct source_s *src);
 struct token_s *get_current_token(void);
 struct token_s *get_previous_token(void);
 struct token_s *dup_token(struct token_s *tok);
+void   set_current_token(struct token_s *tok);
+void   set_previous_token(struct token_s *tok);
 void   free_token(struct token_s *tok);
 int    is_token_of_type(struct token_s *tok, enum token_type_e type);
 int    is_keyword(char *str);

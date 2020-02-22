@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: source.h
  *    This file is part of the Layla Shell project.
@@ -50,6 +50,7 @@ struct source_s
          curchar,       /* current char in source */
          curpos,        /* absolute char position in source */
          curlinestart;  /* absolute start of current line in source */
+    long curpos_old;    /* OLD absolute char position (used when reading simple cmds) */
     long wstart;        /* start of currently parsed commandline */
 };
 
