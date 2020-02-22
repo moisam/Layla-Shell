@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: dirstack.c
  *    This file is part of the Layla Shell project.
@@ -25,6 +25,7 @@
 #include <strings.h>
 #include <pwd.h>
 #include <errno.h>
+#include "builtins.h"
 #include "setx.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
@@ -156,7 +157,7 @@ int load_dirstack(char *__path)
                 p += 3;
                 while(*p && isspace(*p)) p++;   /* skip spaces after the 'cd' command word */
                 if(!p) continue;
-                cd_builtin(2, (char *[]){ "cd", p, NULL });
+                do_builtin_internal(cd_builtin, 2, (char *[]){ "cd", p, NULL });
                 continue;
             }
 #endif
@@ -180,12 +181,12 @@ int load_dirstack(char *__path)
              * this step is also important if the file contains pushd commands with
              * relative (vs absolute) directory paths.
              */
-            if(cd_builtin(2, (char *[]){ "cd", p, NULL }) != 0)
+            if(do_builtin_internal(cd_builtin, 2, (char *[]){ "cd", p, NULL }) != 0)
             {
                 /*
                 * TODO: do something better than just b*^%$ing about it.
                 */
-                fprintf(stderr, "%s: failed to cd to %s\n", SHELL_NAME, path);
+                PRINT_ERROR("%s: failed to cd to %s\n", SHELL_NAME, path);
                 goto err;
             }
             /* push the directory on the stack */
@@ -200,7 +201,7 @@ int load_dirstack(char *__path)
     else
     {
         /* error opening the dirs file */
-        fprintf(stderr, "%s: failed to load dirstack from %s: %s\n",
+        PRINT_ERROR("%s: failed to load dirstack from %s: %s\n",
                 SHELL_NAME, path, strerror(errno));
     }
     free(path);
@@ -222,7 +223,7 @@ int load_dirstack(char *__path)
     /* cd to the dir on top of the stack if its not the same as our cwd */
     if(!cwd || strcmp(dirstack->path, cwd) != 0)
     {
-        cd_builtin(2, (char *[]){ "cd", dirstack->path, NULL });
+        do_builtin_internal(cd_builtin, 2, (char *[]){ "cd", dirstack->path, NULL });
     }
     return 1;
     
@@ -288,12 +289,12 @@ int load_dirstackp(char *val)
             path[n] = '\0';
         }
         /* cd to the directory */
-        if(cd_builtin(2, (char *[]){ "cd", path, NULL }) != 0)
+        if(do_builtin_internal(cd_builtin, 2, (char *[]){ "cd", path, NULL }) != 0)
         {
             /*
              * TODO: do something better than just b*^%$ing about it.
              */
-            fprintf(stderr, "%s: failed to cd to %s\n", SHELL_NAME, path);
+            PRINT_ERROR("%s: failed to cd to %s\n", SHELL_NAME, path);
             free_malloced_str(path);
             goto err;
         }
@@ -343,7 +344,7 @@ int load_dirstackp(char *val)
     /* cd to the dir on top of the stack if its not the same as our cwd */
     if(!cwd || strcmp(dirstack->path, cwd) != 0)
     {
-        cd_builtin(2, (char *[]){ "cd", dirstack->path, NULL });
+        do_builtin_internal(cd_builtin, 2, (char *[]){ "cd", dirstack->path, NULL });
     }
     return 1;
     
@@ -364,6 +365,12 @@ err:
  */
 void save_dirstack(char *__path)
 {
+    /* we have no dirstack */
+    if(!dirstack)
+    {
+        return;
+    }
+    
     char *path = NULL;
     /* we have a path (i.e. 'dirs -S' was invoked with a path) */
     if(__path)
@@ -372,20 +379,27 @@ void save_dirstack(char *__path)
     }
     /*
      * we have no path (i.e. 'dirs -S' was invoked with no path, or we're being called
-     * on shell shutdwn).. in this case, we use $DIRSFILE or, if its NULL, the default
+     * on shell shutdown).. in this case, we use $DIRSFILE or, if its NULL, the default
      * path: ~/.lshdirs.
      */
     else
     {
-        path = get_shell_varp("DIRSFILE", DIRSTACK_FILE);
+        path = get_shell_varp("DIRSFILE", NULL);
+        if(!path)
+        {
+            path = __get_malloced_str(DIRSTACK_FILE);
+        }
     }
+
     /* perform word expansion on the path */
     path = word_expand_to_str(path);
+
     /* empty path */
     if(!path)
     {
         return;
     }
+
     /* open the file and write out the dirstack entries to it */
     FILE *f = fopen(path, "w");
     if(f)
@@ -399,6 +413,7 @@ void save_dirstack(char *__path)
         {
             ds = ds->next;
         }
+
         while(ds)
         {
             if(ds->path[0])
@@ -411,8 +426,9 @@ void save_dirstack(char *__path)
     else
     {
         /* error opening the file */
-        fprintf(stderr, "%s: failed to save dirstack to %s: %s\n", SHELL_NAME, path, strerror(errno));
+        PRINT_ERROR("%s: failed to save dirstack to %s: %s\n", SHELL_NAME, path, strerror(errno));
     }
+    
     free(path);
 }
 
@@ -659,7 +675,7 @@ int push_cwd(void)
  */
 int dirs_cd(void)
 {
-    if(cd_builtin(2, (char *[]){ "cd", dirstack->path, NULL }) != 0)
+    if(do_builtin_internal(cd_builtin, 2, (char *[]){ "cd", dirstack->path, NULL }) != 0)
     {
         return 0;
     }
@@ -687,8 +703,7 @@ int dirs_builtin(int argc, char **argv)
     int clear = 0, fullpaths = 0, print_separate = 0, print_index = 0, n = 0;
     int v = 1, c;
     int flags = 0, wrap = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+
     /****************************
      * process the options
      ****************************/
@@ -697,7 +712,7 @@ int dirs_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_DIRS, 1, 0);
+                print_help(argv[0], &DIRS_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -734,13 +749,13 @@ int dirs_builtin(int argc, char **argv)
              * no argument was given to -L.
              */
             case 'L':
-                if(!__optarg || __optarg == INVALID_OPTARG)
+                if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
                     n = load_dirstack(NULL    );
                 }
                 else
                 {
-                    n = load_dirstack(__optarg);
+                    n = load_dirstack(internal_optarg);
                 }
                 if(n)
                 {
@@ -753,13 +768,13 @@ int dirs_builtin(int argc, char **argv)
              * no argument was given to -S.
              */
             case 'S':
-                if(!__optarg || __optarg == INVALID_OPTARG)
+                if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
                     return save_dirstack(NULL    ), 0;
                 }
                 else
                 {
-                    return save_dirstack(__optarg), 0;
+                    return save_dirstack(internal_optarg), 0;
                 }
         }
     }
@@ -796,7 +811,7 @@ int dirs_builtin(int argc, char **argv)
             struct dirstack_ent_s *ds = get_dirstack_entry(arg, NULL);
             if(!ds)
             {
-                fprintf(stderr, "dirs: directory stack index out of range: %s\n", arg);
+                PRINT_ERROR("dirs: directory stack index out of range: %s\n", arg);
                 return 2;
             }
             /* wrap if needed */
@@ -824,7 +839,7 @@ int dirs_builtin(int argc, char **argv)
         }
         else
         {
-            fprintf(stderr, "dirs: unknown option: %s\n", arg);
+            PRINT_ERROR("dirs: unknown option: %s\n", arg);
             return 2;
         }
     }
@@ -849,8 +864,7 @@ int pushd_builtin(int argc, char **argv)
     int flags = 0, silent = 0;
     int docd = 1;
     int v = 1;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    
     /****************************
      * process the options
      ****************************/
@@ -877,7 +891,7 @@ int pushd_builtin(int argc, char **argv)
                 switch(*p)
                 {
                     case 'h':
-                        print_help(argv[0], REGULAR_BUILTIN_PUSHD, 1, 0);
+                        print_help(argv[0], &PUSHD_BUILTIN, 0);
                         return 0;
                         
                     case 'c':
@@ -914,7 +928,7 @@ int pushd_builtin(int argc, char **argv)
                         break;
                 
                     default:                        
-                        fprintf(stderr, "pushd: unknown option: %c\n", *p);
+                        PRINT_ERROR("pushd: unknown option: %c\n", *p);
                         return 2;
                 }
                 p++;
@@ -939,13 +953,13 @@ int pushd_builtin(int argc, char **argv)
             char *home = get_shell_varp("HOME", NULL);
             if(!home)
             {
-                fprintf(stderr, "pushd: invalid directory name: $HOME\n");
+                PRINT_ERROR("pushd: invalid directory name: $HOME\n");
                 return 2;
             }
             char *cwd2 = word_expand_to_str(home);
             if(!cwd2)
             {
-                fprintf(stderr, "pushd: invalid directory name: %s\n", cwd2);
+                PRINT_ERROR("pushd: invalid directory name: %s\n", cwd2);
                 return 2;
             }
             if(cwd)
@@ -991,7 +1005,7 @@ int pushd_builtin(int argc, char **argv)
             char *pwd = get_shell_varp("OLDPWD", NULL);
             if(!pwd)
             {
-                fprintf(stderr, "pushd: invalid directory name: %s\n", arg);
+                PRINT_ERROR("pushd: invalid directory name: %s\n", arg);
                 return 2;
             }
             if(cwd)
@@ -1007,7 +1021,7 @@ int pushd_builtin(int argc, char **argv)
             struct dirstack_ent_s *ds = get_dirstack_entry(arg, NULL);
             if(!ds)
             {
-                fprintf(stderr, "pushd: directory stack index out of range: %s\n", arg);
+                PRINT_ERROR("pushd: directory stack index out of range: %s\n", arg);
                 return 2;
             }
             /*
@@ -1057,7 +1071,7 @@ int pushd_builtin(int argc, char **argv)
             char *cwd2 = word_expand_to_str(arg);
             if(!cwd2)
             {
-                fprintf(stderr, "pushd: invalid directory name: %s\n", arg);
+                PRINT_ERROR("pushd: invalid directory name: %s\n", arg);
                 return 2;
             }
             /*
@@ -1129,8 +1143,7 @@ int popd_builtin(int argc, char **argv)
     int flags = 0, silent = 0;
     int docd = 1;
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+
     /****************************
      * process the options
      ****************************/
@@ -1139,7 +1152,7 @@ int popd_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_POPD, 1, 0);
+                print_help(argv[0], &POPD_BUILTIN, 0);
                 return 0;
                 
             case 'c':
@@ -1216,7 +1229,7 @@ int popd_builtin(int argc, char **argv)
             struct dirstack_ent_s *ds = get_dirstack_entry(arg, &prev);
             if(!ds)
             {
-                fprintf(stderr, "popd: directory stack index out of range: %s\n", arg);
+                PRINT_ERROR("popd: directory stack index out of range: %s\n", arg);
                 return 2;
             }
             /* now remove the item */
@@ -1241,7 +1254,7 @@ int popd_builtin(int argc, char **argv)
         }
         else
         {
-            fprintf(stderr, "popd: invalid directory stack index: %s\n", arg);
+            PRINT_ERROR("popd: invalid directory stack index: %s\n", arg);
             return 2;
         }
     }

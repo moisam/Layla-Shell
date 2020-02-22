@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: printenv.c
  *    This file is part of the Layla Shell project.
@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "setx.h"
 #include "../debug.h"
@@ -53,8 +54,6 @@ int printenv_builtin(int argc, char **argv)
 {
     int v = 1, c;
     char separator = '\n';
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     /****************************
      * process the options
      ****************************/
@@ -63,7 +62,7 @@ int printenv_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_PRINTENV, 1, 0);
+                print_help(argv[0], &PRINTENV_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -80,6 +79,9 @@ int printenv_builtin(int argc, char **argv)
     {
         return 2;
     }
+
+    /* make sure our environment is in sync with our exports list */
+    do_export_vars(EXPORT_VARS_EXPORTED_ONLY);
 
     /* no arguments. print all environment variables */
     if(v >= argc)
@@ -108,6 +110,7 @@ int printenv_builtin(int argc, char **argv)
             c = 1;
         }
     }
+    
     if(c)
     {
         putchar(separator);

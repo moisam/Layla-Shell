@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: umask.c
  *    This file is part of the Layla Shell project.
@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include "builtins.h"
 #include "../cmd.h"
 
 #define UTILITY         "umask"
@@ -109,7 +110,7 @@ int get_perm(char **str, int *perm)
 
     if(op != '+' && op != '-' && op != '=')
     {
-        fprintf(stderr, "%s: unknown operator -- %c\n", UTILITY, op);
+        PRINT_ERROR("%s: unknown operator -- %c\n", UTILITY, op);
         return ACTION_INVALID_ACTION;
     }
 
@@ -150,7 +151,7 @@ int get_perm(char **str, int *perm)
                         break;
                         
                     default:
-                        fprintf(stderr, "%s: unknown permission bit -- %c\n", UTILITY, *str2);
+                        PRINT_ERROR("%s: unknown permission bit -- %c\n", UTILITY, *str2);
                         return ACTION_INVALID_ACTION;
                 }
                 
@@ -162,7 +163,7 @@ int get_perm(char **str, int *perm)
             break;
 
         default:
-            fprintf(stderr, "%s: unknown permission bit -- %c\n", UTILITY, *str2);
+            PRINT_ERROR("%s: unknown permission bit -- %c\n", UTILITY, *str2);
             return ACTION_INVALID_ACTION;
     }
 
@@ -200,24 +201,27 @@ int umask_builtin(int argc, char **argv)
     int   who         = 0;
     int   action      = 0;
     int   new_perm    = 0;
-    //int   extra_perm = 0;
+    int   v = 1, c, format = 0;
+
     mode_t cur_umask = umask(0);
     umask(cur_umask);
     cur_perm = ~(cur_umask) & 0777;
     
-    int v = 1, c, format = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    /*
+     * recognize the options defined by POSIX if we are running in --posix mode,
+     * or all possible options if running in the regular mode.
+     */
+    char *opts = option_set('P') ? "S" : "hvpS";
 
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvSp", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
     {
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_UMASK, 1, 0);
+                print_help(argv[0], &UMASK_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -316,7 +320,7 @@ int umask_builtin(int argc, char **argv)
             }
             else
             {
-                fprintf(stderr, "%s: illegal octal mode: %s\n", UTILITY, permstr);
+                PRINT_ERROR("%s: illegal octal mode: %s\n", UTILITY, permstr);
                 return 1;
             }
         } while(*++permstr);
@@ -339,7 +343,7 @@ int umask_builtin(int argc, char **argv)
             }
             else
             {
-                fprintf(stderr, "%s: unknown who/action -- %c\n", UTILITY, *permstr);
+                PRINT_ERROR("%s: unknown who/action -- %c\n", UTILITY, *permstr);
                 return 1;
             }
         

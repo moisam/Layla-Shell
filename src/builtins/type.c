@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: type.c
  *    This file is part of the Layla Shell project.
@@ -22,214 +22,217 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../parser/parser.h"
+#include "../debug.h"
 
 #define UTILITY         "type"
 
-/* helper macros */
-#define stringify(str)      #str
 
-#define print_type(arg, type)                                   \
-do {                                                            \
-    if(print_word)                                              \
-    {                                                           \
-        printf(stringify(type) "\n");                           \
-    }                                                           \
-    else                                                        \
-    {                                                           \
-        printf("%s is a shell " stringify(type) "\n", (arg));   \
-    }                                                           \
-} while(0)
-
-
-/*
- * the type builtin utility (POSIX).. used to print the type of an argument.
- *
- * returns 0 on success, non-zero otherwise.
- *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help type` or `type -h` from lsh prompt to see a short
- * explanation on how to use this utility.
- */
-
-int type_builtin(int argc, char **argv)
+static inline void print_type(char *arg, char *type, int print_word, int print_path)
 {
-    int i;
-    int res = 0;
-    /* print the command's path without searching for builtins and functions first */
-    int print_path       = 0;
-    /* print all possible interpretations of each argument */
-    int print_all        = 0;
-    //int use_path         = 0;
-    /* print only one word to describe each argument */
-    int print_word       = 0;
-    /* look in the functions table */
-    int search_funcs     = 1;
+    if(print_word)
+    {
+        printf("%s\n", print_path ? arg : type);
+    }
+    else
+    {
+        printf("%s is a shell %s\n", arg, type);
+    }
+}
 
-    /****************************
-     * process the options
-     ****************************/
-    for(i = 1; i < argc; i++)
-    { 
-        if(argv[i][0] == '-')
+
+int print_command_type(char *cmd, char *who, char *PATH, int flags)
+{
+    int print_path = flag_set(flags, TYPE_FLAG_PRINT_PATH);
+    int print_word = flag_set(flags, TYPE_FLAG_PRINT_WORD);
+    int print_funcs = flag_set(flags, TYPE_FLAG_PRINT_FUNCS);
+    int print_builtins = flag_set(flags, TYPE_FLAG_PRINT_BUILTINS);
+    int print_all = flag_set(flags, TYPE_FLAG_PRINT_ALL);
+    int print_hashed = flag_set(flags, TYPE_FLAG_PRINT_HASHED);
+    
+    if(strchr(cmd, '/'))
+    {
+        /* argument contains slashes. treat as a pathname and print as-is */
+        if(/* *who == 'c' && */ print_path)
         {
-            char *p = argv[i];
-            /* the special '-' and '--' options */
-            if(strcmp(p, "-") == 0 || strcmp(p, "--") == 0)
+            printf("%s\n", cmd);
+        }
+        else
+        {
+            printf("%s is %s\n", cmd, cmd);
+        }
+    }
+    else
+    {
+        int matches = 0;
+        /* argument has no slashes. process it */
+        if(print_builtins)
+        {
+            /* check if it is a defined alias */
+            char *alias = get_alias_val(cmd);
+            if(alias && alias != cmd)
             {
-                i++;
-                break;
-            }
-            /* skip the '-' */
-            p++;
-            /* process the options string */
-            while(*p)
-            {
-                switch(*p)
+                /* 'type -p' prints nothing */
+                if(flag_set(flags, TYPE_FLAG_PATH_ONLY))
                 {
-                    case 'h':
-                        print_help(argv[0], REGULAR_BUILTIN_TYPE, 1, 0);
-                        return 0;
-                        
-                    case 'v':
-                        printf("%s", shell_ver);
-                        return 0;
-                        
-                    case 't':
-                        print_word = 1;
-                        break;
-                        
-                    case 'P':
-                        //use_path = 1;
-                        /* fall through */
-                        __attribute__((fallthrough));
-                        
-                    case 'p':
-                        print_path = 1;
-                        if(startup_finished && option_set('r'))
-                        {
-                            /* r-shells can't use this option */
-                            fprintf(stderr, "%s: restricted shells can't use the -%c option\n", SHELL_NAME, *p);
-                            return 3;
-                        }
-                        break;
-                        
-                    case 'a':
-                        print_all = 1;
-                        break;
-                        
-                    case 'f':
-                        search_funcs = 0;
-                        break;
-                        
-                    default:                        
-                        fprintf(stderr, "%s: unknown option: %s\n", UTILITY, argv[i]);
-                        return 2;
+                    return 0;
                 }
-                p++;
-            }
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    /* missing arguments */
-    if(i >= argc)
-    {
-        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
-        return 2;
-    }
-
-    /* parse the arguments */
-    for( ; i < argc; i++)
-    {
-        if(strchr (argv[i], '/'))
-        {
-            /* argument contains slashes. treat as a pathname and print as-is */
-            printf("%s is %s\n", argv[i], argv[i]);
-        }
-        else
-        {
-            /* argument has no slashes. process it */
-            if(!print_path)
-            {
-                /* check if it is a defined alias */
-                char *alias = get_alias_val(argv[i]);
-                if(alias && alias != argv[i])
+                
+                if(print_word)
                 {
-                    if(print_word)
+                    if(print_path)
                     {
-                        printf("alias\n");
+                        printf("%s\n", cmd);
                     }
                     else
                     {
-                        printf("%s is aliased to ", argv[i]);
-                        print_quoted_val(alias);
-                        printf("\n");
+                        printf("alias\n");
                     }
-
-                    if(!print_all)
+                }
+                else
+                {
+                    /* print a slightly different message for command with -p */
+                    if(print_path)
                     {
-                        continue;
+                        printf("alias %s=", cmd);
+                    }
+                    else
+                    {
+                        printf("%s is aliased to ", cmd);
+                    }
+                    
+                    char *val = quote_val(alias, 1, 0);
+                    if(val)
+                    {
+                        printf("%s\n", val);
+                        free(val);
+                    }
+                    else
+                    {
+                        printf("\"\"\n");
                     }
                 }
 
-                /* check if it is a keyword */
-                if(is_keyword (argv[i]) >= 0)
+                if(!print_all)
                 {
-                    print_type(argv[i], keyword);
-                    if(!print_all)
-                    {
-                        continue;
-                    }
+                    return 0;
                 }
-                /* check if it is a builtin utility */
-                if(is_builtin (argv[i]))
+                matches++;
+            }
+
+            /* check if it is a keyword */
+            if(is_keyword(cmd) >= 0)
+            {
+                /* 'type -p' prints nothing */
+                if(flag_set(flags, TYPE_FLAG_PATH_ONLY))
                 {
-                    print_type(argv[i], builtin);
-                    if(!print_all)
-                    {
-                        continue;
-                    }
+                    return 0;
                 }
                 
-                /* check if it is a defined shell function */
-                if(search_funcs && is_function(argv[i]))
+                print_type(cmd, "keyword", print_word, print_path);
+                if(!print_all)
                 {
-                    print_type(argv[i], function);
-                    if(!print_all)
-                    {
-                        continue;
-                    }
+                    return 0;
                 }
+                matches++;
             }
-            
-            /* now search for an external command with the given name */
-            char *path = get_hashed_path(argv[i]);
-            char *hpath = path;
-            
-            /* no hashed path found. search in $PATH */
+                
+            /* check if it is a defined shell function */
+            if(print_funcs && is_function(cmd))
+            {
+                /* 'type -p' prints nothing */
+                if(flag_set(flags, TYPE_FLAG_PATH_ONLY))
+                {
+                    return 0;
+                }
+                
+                print_type(cmd, "function", print_word, print_path);
+                if(!print_all)
+                {
+                    return 0;
+                }
+                matches++;
+            }
+
+            /* check if it is a builtin utility */
+            if(is_enabled_builtin(cmd))
+            //if(is_builtin(cmd))
+            {
+                /* 'type -p' prints nothing */
+                if(flag_set(flags, TYPE_FLAG_PATH_ONLY))
+                {
+                    return 0;
+                }
+                
+                print_type(cmd, "builtin", print_word, print_path);
+                if(!print_all)
+                {
+                    return 0;
+                }
+                matches++;
+            }
+        }
+        
+        /* force printing full message for the 'command' builtin */
+        if(*who == 'c')
+        {
+            print_word = 0;
+        }
+        
+        /* now search for an external command with the given name */
+        char *path = NULL;
+        int free_path = 0;
+        /* use the given path or, if null, use $PATH */
+        PATH = PATH ? : get_shell_varp("PATH", NULL);
+        
+        /* check for hashed pathnames (the type builtin) */
+        if(print_hashed)
+        {
+            if((path = get_hashed_path(cmd)))
+            {
+                matches++;
+            }
+        }
+        
+        do
+        {
             if(!path)
             {
-                path = search_path(argv[i], NULL, 1);
+                while((path = next_path_entry(&PATH, cmd, 0)))
+                {
+                    /* check if the file exists */
+                    struct stat st;
+                    if(stat(path, &st) == 0)
+                    {
+                        /* not a regular file */
+                        if(!S_ISREG(st.st_mode) || access(path, X_OK) != 0)
+                        {
+                            free(path);
+                            continue;
+                        }
+                        
+                        matches++;
+                        free_path = 1;
+                        break;
+                    }
+                }
             }
             
             /* nothing found */
             if(!path)
             {
-                if(print_word)
+                if(!print_all || matches == 0)
                 {
-                    printf("\n");
+                    if(!print_word)
+                    {
+                        printf("%s is unknown\n", cmd);
+                    }
+                    return 3;
                 }
-                else
-                {
-                    printf("%s is unknown\n", argv[i]);
-                }
-                res = 3;
-                continue;
+                break;
             }
             else
             {
@@ -247,14 +250,149 @@ int type_builtin(int argc, char **argv)
                 }
                 else
                 {
-                    printf("%s is %s\n", argv[i], path);
+                    printf("%s is %s\n", cmd, path);
                 }
+                
+                if(free_path)
+                {
+                    free(path);
+                }
+                path = NULL;
+            }
+        } while(print_all);
+    }
+    
+    return 0;
+}
+
+
+/*
+ * the type builtin utility (POSIX).. used to print the type of an argument.
+ *
+ * returns 0 on success, non-zero otherwise.
+ *
+ * see the manpage for the list of options and an explanation of what each option does.
+ * you can also run: `help type` or `type -h` from lsh prompt to see a short
+ * explanation on how to use this utility.
+ */
+
+int type_builtin(int argc, char **argv)
+{
+    int i;
+    int res = 0;
+    int flags = TYPE_FLAG_PRINT_FUNCS | TYPE_FLAG_PRINT_BUILTINS;
+
+    /****************************
+     * process the options
+     ****************************/
+    for(i = 1; i < argc; i++)
+    { 
+        if(argv[i][0] == '-')
+        {
+            char *p = argv[i];
+            /* the special '-' and '--' options */
+            if(strcmp(p, "-") == 0 || strcmp(p, "--") == 0)
+            {
+                i++;
+                break;
+            }
+            /* skip the '-' */
+            p++;
+            
+            /* 
+             * bash recognizes the obsolete -type, -path, and -all options, as
+             * well as their long-option equivalents --type, --path, and --all.
+             * here we recognize each option and convert it to it's short-option
+             * equivalent.
+             */
+            if(strcmp(p, "type") == 0 || strcmp(p, "-type") == 0)
+            {
+                p = "t";
+            }
+            else if(strcmp(p, "path") == 0 || strcmp(p, "-path") == 0)
+            {
+                p = "p";
+            }
+            else if(strcmp(p, "all") == 0 || strcmp(p, "-all") == 0)
+            {
+                p = "a";
             }
             
-            if(path != hpath)
+            /* process the options string */
+            while(*p)
             {
-                free_malloced_str(path);
+                switch(*p)
+                {
+                    case 'h':
+                        print_help(argv[0], &TYPE_BUILTIN, 0);
+                        return 0;
+                        
+                    case 'v':
+                        printf("%s", shell_ver);
+                        return 0;
+                    
+                    /* print only one word to describe each argument */
+                    case 't':
+                        flags |= TYPE_FLAG_PRINT_WORD;
+                        flags &= ~(TYPE_FLAG_PRINT_PATH | TYPE_FLAG_PRINT_HASHED);
+                        break;
+                        
+                    case 'P':
+                        /* force $PATH search */
+                        flags |= (TYPE_FLAG_PRINT_PATH | TYPE_FLAG_PRINT_WORD);
+                        flags &= ~(TYPE_FLAG_PRINT_HASHED | TYPE_FLAG_PRINT_BUILTINS);
+                        break;
+                    
+                    /* print the command's path without searching for builtins and functions first */
+                    case 'p':
+                        flags |= (TYPE_FLAG_PRINT_HASHED | TYPE_FLAG_PRINT_PATH | TYPE_FLAG_PATH_ONLY);
+                        flags |= TYPE_FLAG_PRINT_WORD;
+
+                        if(startup_finished && option_set('r'))
+                        {
+                            /* r-shells can't use this option */
+                            PRINT_ERROR("%s: restricted shells can't use the -%c option\n", SHELL_NAME, *p);
+                            return 3;
+                        }
+                        break;
+                    
+                    /* print all possible interpretations of each argument */
+                    case 'a':
+                        flags |= TYPE_FLAG_PRINT_ALL;
+                        break;
+                    
+                    /* don't look in the functions table */
+                    case 'f':
+                        flags &= ~TYPE_FLAG_PRINT_FUNCS;
+                        break;
+                        
+                    default:                        
+                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, argv[i]);
+                        return 2;
+                }
+                p++;
             }
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    /* missing arguments */
+    if(i >= argc)
+    {
+        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
+        return 2;
+    }
+
+    /* parse the arguments */
+    for( ; i < argc; i++)
+    {
+        int res2 = print_command_type(argv[i], "type", NULL, flags);
+        if(res2)
+        {
+            res = res2;
         }
     }
 

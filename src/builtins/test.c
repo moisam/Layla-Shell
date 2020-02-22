@@ -49,7 +49,9 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include "builtins.h"
 #include "../cmd.h"
+#include "../backend/backend.h"     /* match_pattern() */
 #include "../symtab/symtab.h"
 #include "../debug.h"
 
@@ -61,13 +63,15 @@
 #define ONE                 "1"
 
 /* the operators stack */
-struct test_op_s *test_opstack[MAXOPSTACK];
+struct test_op_s **test_opstack;
+// struct test_op_s *test_opstack[MAXOPSTACK];
 
 /* the count of operators pushed on the operators stack */
 int    test_nopstack  = 0;
 
 /* the operands stack */
-char  *teststack[MAXTESTSTACK];
+char  **teststack;
+// char  *teststack[MAXTESTSTACK];
 
 /* the count of operands pushed on the operands stack */
 int    nteststack     = 0;
@@ -75,11 +79,7 @@ int    nteststack     = 0;
 /* flag to set when there is an error pushing, popping or performing some other operation */
 int    test_err       = 0;
 
-/* empty string to push/pop from the stack when we don't have anything else to use */
-char  *test_empty_str = "";
-
-/* fnmatch() flags */
-static int flags = FNM_NOESCAPE | FNM_PATHNAME | FNM_PERIOD;
+// static int flags = FNM_NOESCAPE | FNM_PATHNAME | FNM_PERIOD;
 
 /* buffers we will use to stat files when comparing their status */
 struct stat statbuf ;
@@ -95,6 +95,33 @@ struct stat statbuf2;
  *       zero will indicate success and non-zero will indicate failure.
  */
 
+
+#if 0
+/*
+ * recursively call test_builtin() to perform the test on a a sub-expression.
+ */
+int test_recursive(char *str)
+{
+    /* save our pointers */
+    struct test_op_s **opstack2 = test_opstack;
+    char **numstack2 = teststack;
+    int nopstack2 = test_nopstack, nnumstack2 = nteststack, error2 = test_err;
+
+    /* perform arithmetic expansion on the sub-expression */
+    int res = test_builtin(2, (char *[]){ "test", str, NULL });
+
+    /* restore our pointers */
+    test_opstack = opstack2;
+    teststack = numstack2;
+    test_nopstack = nopstack2;
+    nteststack = nnumstack2;
+    test_err = error2;
+    
+    return res;
+}
+#endif
+
+
 /*
  * compare two files, f1 and f2, using the operator op, which can be the
  * newer-than operator (FILE_NEWER_THAN), the older-than operator
@@ -104,21 +131,23 @@ struct stat statbuf2;
  */
 char *compare_files(char *f1, char *f2, int op)
 {
-    /* stat the two files */
+    /* stat the two files (lstat returns 0 on success, -1 on error) */
     memset(&statbuf , 0, sizeof(struct stat));
     memset(&statbuf2, 0, sizeof(struct stat));
     int res1 = lstat(f1, &statbuf );
     int res2 = lstat(f2, &statbuf2);
+
     /* perform the comparison operator */
     switch(op)
     {
         /* check if f1 and f2 refer to the same file */
         case FILES_EQUAL:
             /* one file does not exist, so f1 != f2 */
-            if(!res1 || !res2)
+            if(res1 || res2)
             {
                 return ONE;
             }
+
             /* compare f1 and f2's inode, device and rdev numbers */
             if(statbuf.st_ino == statbuf2.st_ino && 
                statbuf.st_dev == statbuf2.st_dev &&
@@ -127,39 +156,45 @@ char *compare_files(char *f1, char *f2, int op)
                 /* f1 and f2 match */
                 return ZERO;
             }
+            
             /* f1 and f2 do not match */
             return ONE;
             
         /* check if f1 is newer than f2 */
         case FILE_NEWER_THAN:
             /* f1 does not exist, so the result is false */
-            if(!res1)
+            if(res1)
             {
                 return ONE;
             }
+            
             /* f2 does not exist, so the result is true */
-            if(!res2)
+            if(res2)
             {
                 return ZERO;
             }
+            
             /* both exist. compare their modification times */
             return (statbuf.st_mtime <= statbuf2.st_mtime) ? ONE : ZERO;
 
         /* check if f1 is older than f2 */
         case FILE_OLDER_THAN:
             /* f2 does not exist, so the result is false */
-            if(!res2)
+            if(res2)
             {
                 return ONE;
             }
+            
             /* f1 does not exist, so the result is true */
-            if(!res1)
+            if(res1)
             {
                 return ZERO;
             }
+            
             /* both exist. compare their modification times */
             return (statbuf.st_mtime >= statbuf2.st_mtime) ? ONE : ZERO;
     }
+    
     /* unknown operator. return false */
     return ONE;
 }
@@ -186,36 +221,45 @@ char *compare_exprs(char *__e1, char *__e2, int op)
      * NOTE: bash treats e1 and e2 as arithmetic expressions, which are evaluated
      *       as any other arithmetic expr enclosed in $(( )) or (( )).
      */
-    char *strend = NULL, *err = NULL;
-    char *e1 = arithm_expand(__e1);
-    char *e2 = NULL;
-    /* failed to perform arithmetic expansion on e1 */
+    static char *zero = "0";
+    char *strend = NULL;
+
+    /* perform arithmetic expansion on e1 */
+    char *e1 = (*__e1) ? arithm_expand(__e1) : zero;
     if(!e1)
     {
-        err = __e1;
-        goto bailout;
-    }
-    /* get the numeric value of e1 */
-    long res1 = strtol(e1, &strend, 10);
-    if(strend == e1)
-    {
-        err = __e1;
-        goto bailout;
+        e1 = zero;
     }
 
-    e2 = arithm_expand(__e2);
-    /* failed to perform arithmetic expansion on e2 */
+    /* get the numeric value of e1 */
+    long res1 = strtol(e1, &strend, 10);
+    if(*strend)
+    {
+        PRINT_ERROR("%s: invalid arithmetic expression: %s\n", UTILITY, __e1);
+        if(e1 && e1 != zero)
+        {
+            free(e1);
+        }
+        return ONE;
+    }
+
+    /* perform arithmetic expansion on e2 */
+    char *e2 = (*__e2) ? arithm_expand(__e2) : zero;
     if(!e2)
     {
-        err = __e2;
-        goto bailout;
+        e2 = zero;
     }
+    
     /* get the numeric value of e2 */
     long res2 = strtol(e2, &strend, 10);
-    if(strend == e2)
+    if(*strend)
     {
-        err = __e2;
-        goto bailout;
+        PRINT_ERROR("%s: invalid arithmetic expression: %s\n", UTILITY, __e2);
+        if(e2 && e2 != zero)
+        {
+            free(e2);
+        }
+        return ONE;
     }
 
     /* perform the comparison */
@@ -229,22 +273,18 @@ char *compare_exprs(char *__e1, char *__e2, int op)
         case ARITHM_LT  : res = !(res1  < res2); break;
         case ARITHM_NE  : res = !(res1 != res2); break;
     }
-    free(e1);
-    free(e2);
-    return res ? ONE : ZERO;
-    
-bailout:
-    fprintf(stderr, "%s: invalid arithmetic expression: %s\n", UTILITY, err);
-    if(e1)
+
+    if(e1 != zero)
     {
         free(e1);
     }
-    if(e2)
+    
+    if(e2 != zero)
     {
         free(e2);
     }
-    test_err = 1;
-    return NULL;
+    
+    return res ? ONE : ZERO;
 }
 
 /*
@@ -295,12 +335,109 @@ char *test_ne(char *a1, char *a2)
     return compare_exprs(a1, a2, ARITHM_NE);
 }
 
+
+/*
+ * String comparison operators.
+ */
+
+char *str_remove_quotes(char *str, int *was_quoted)
+{
+    struct word_s *w = make_word(str);
+    if(!w)
+    {
+        return str;
+    }
+    remove_quotes(w);
+    (*was_quoted) = flag_set(w->flags, FLAG_WORD_HAD_QUOTES);
+    
+    char *str2 = w->data;
+    free(w);
+    
+    return str2;
+}
+
+#define STR_EQ      1
+#define STR_NEQ     2
+#define STR_EQX     3
+
+/*
+ * test if string a1 is equal to a2 and return "0" if true, "1" if false.
+ */
+char *do_test_str(char *a1, char *a2, int op)
+{
+    int q1 = 0, q2 = 0;
+    char *a3 = str_remove_quotes(a1, &q1);
+    char *a4 = str_remove_quotes(a2, &q2);
+    debug ("a3 = '%s', a4 = '%s'\n", a3, a4);
+    //debug ("a3 = '%s', a2 = '%s'\n", a3, a2);
+    int i = 0;
+    char *res = NULL;
+    
+    /*
+    if(op == STR_EQX)
+    {
+        i = match_pattern_ext(a2, a3);
+    }
+    else
+    {
+        i = match_pattern(a2, a3);
+    }
+    */
+    
+    if(q2)
+    {
+        i = !strcmp(a4, a3);
+    }
+    else if(op == STR_EQX)
+    {
+        i = match_pattern_ext(a4, a3);
+    }
+    else
+    {
+        i = match_pattern(a4, a3);
+    }
+    
+    if(a3 != a1)
+    {
+        free(a3);
+    }
+    
+    if(a4 != a2)
+    {
+        free(a4);
+    }
+    
+    switch(op)
+    {
+        case STR_EQ :
+        case STR_EQX:
+            res = i ? ZERO : ONE;
+            break;
+            
+        case STR_NEQ:
+            res = i ? ONE : ZERO;
+            break;
+    }
+    
+    debug ("res = %s\n", res);
+    return res;
+}
+
 /*
  * test if string a1 is equal to a2 and return "0" if true, "1" if false.
  */
 char *test_str_eq(char *a1, char *a2)
 {
-    return fnmatch(a1, a2, flags) ? ONE : ZERO;
+    return do_test_str(a1, a2, STR_EQ);
+}
+
+/*
+ * test if string a1 is equal to a2 using POSIX extended regex syntax.
+ * returns "0" if we have a match, "1" if we don't have a match.
+ */
+char *test_str_eq_ext(char *a1, char *a2)
+{
+    return do_test_str(a1, a2, STR_EQX);
 }
 
 /*
@@ -308,7 +445,7 @@ char *test_str_eq(char *a1, char *a2)
  */
 char *test_str_ne(char *a1, char *a2)
 {
-    return fnmatch(a1, a2, flags) ? ZERO : ONE;
+    return do_test_str(a1, a2, STR_NEQ);
 }
 
 /*
@@ -326,6 +463,10 @@ char *test_str_gt(char *a1, char *a2)
 {
     return (strcmp(a1, a2) > 0) ? ZERO : ONE;
 }
+
+/*
+ * File comparison operators.
+ */
 
 /*
  * test if file a1 is the same as a2 and return "0" if true, "1" if false.
@@ -353,34 +494,41 @@ char *test_file_ot(char *a1, char *a2)
 
 /*
  * perform the logical NOT operation on a1 and return the result.
+ * remember that [[ ! x ]] is equivalent to [[ ! -n x ]].
  */
 char *test_not(char *a1, char *a2 __attribute__ ((unused)) )
 {
+    /* zero-length string, return 0 */
+    if(!*a1)
+    {
+        return ZERO;
+    }
+    
+    /* non-numeric, non-zero-length string, return 1 */
+    if(!is_num(a1))
+    {
+        return ONE;
+    }
+    
     return strcmp(a1, ZERO) == 0 ? ONE : ZERO;
 }
 
 /*
- * perform the logical AND operation on a1 and a2 and return the result.
+ * perform the logical AND operation on a1 and a2 and return the result
+ * (0 for true, 1 for false).
  */
 char *test_and(char *a1, char *a2)
 {
-    if(strcmp(a1, ZERO) != 0 || strcmp(a2, ZERO) != 0)
-    {
-        return ONE;
-    }
-    return ZERO;
+    return (strcmp(a1, ZERO) == 0 && strcmp(a2, ZERO) == 0) ? ZERO : ONE;
 }
 
 /*
- * perform the logical OR operation on a1 and a2 and return the result.
+ * perform the logical OR operation on a1 and a2 and return the result
+ * (0 for true, 1 for false).
  */
 char *test_or(char *a1, char *a2)
 {
-    if(strcmp(a1, ZERO) == 0 || strcmp(a2, ZERO) == 0)
-    {
-        return ZERO;
-    }
-    return ONE;
+    return (strcmp(a1, ZERO) == 0 || strcmp(a2, ZERO) == 0) ? ZERO : ONE;
 }
 
 /*
@@ -472,278 +620,139 @@ char *test_file(char *arg, int op)
     uid_t euid = geteuid();
     gid_t egid = getegid();
     memset(&statbuf, 0, sizeof(struct stat));
+
     /* stat the file */
     int res = lstat(arg, &statbuf);
-    /* perform the test */
-    switch(op)
+    
+    /* check for stat error */
+    if(res != 0 && (op != 'r' && op != 's' && op != 'w' && op != 'x' && op != 'X'))
     {
-        /* test if the file exists */
-        case 'a':
-        case 'e':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else
-            {
+        res = 1;
+    }
+    else
+    {
+        /* perform the test */
+        switch(op)
+        {
+            /* test if the file exists */
+            case 'a':
+            case 'e':
                 res = 0;
-            }
-            break;
+                break;
         
-        /* is it a block device */
-        case 'b':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(S_ISBLK(statbuf.st_mode))
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* is it a block device */
+            case 'b':
+                res = !(S_ISBLK(statbuf.st_mode));
+                break;
             
-        /* is it a char device */
-        case 'c':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(S_ISCHR(statbuf.st_mode))
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* is it a char device */
+            case 'c':
+                res = !(S_ISCHR(statbuf.st_mode));
+                break;
             
-        /* is it a directory */
-        case 'd':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(S_ISDIR(statbuf.st_mode))
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* is it a directory */
+            case 'd':
+                res = !(S_ISDIR(statbuf.st_mode));
+                break;
             
-        /* is it a regular file */
-        case 'f':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(S_ISREG(statbuf.st_mode))
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* is it a regular file */
+            case 'f':
+                res = !(S_ISREG(statbuf.st_mode));
+                break;
             
-        /* check if the setgid bit is set */
-        case 'g':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(statbuf.st_mode & S_ISGID)
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* check if the setgid bit is set */
+            case 'g':
+                res = !(statbuf.st_mode & S_ISGID);
+                break;
             
-        /* check if our egid == creator's gid */
-        case 'G':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(statbuf.st_gid == egid)
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* check if our egid == creator's gid */
+            case 'G':
+                res = !(statbuf.st_gid == egid);
+                break;
             
-        /* is it a soft link */
-        case 'h':
-        case 'L':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(S_ISLNK(statbuf.st_mode))
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* is it a soft link */
+            case 'h':
+            case 'L':
+                res = !(S_ISLNK(statbuf.st_mode));
+                break;
             
-        /* check if the sticky bit is set */
-        case 'k':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(statbuf.st_mode & S_ISVTX)
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* check if the sticky bit is set */
+            case 'k':
+                res = !(statbuf.st_mode & S_ISVTX);
+                break;
             
-        /* is f1 newer than f2 */
-        case 'N':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(statbuf.st_mtime > statbuf.st_atime)
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* is f1 newer than f2 */
+            case 'N':
+                res = !(statbuf.st_mtime > statbuf.st_atime);
+                break;
             
-        /* check if our euid == creator's uid */
-        case 'O':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(statbuf.st_uid == euid)
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* check if our euid == creator's uid */
+            case 'O':
+                res = !(statbuf.st_uid == euid);
+                break;
             
-        /* is it a FIFO/named-pipe */
-        case 'p':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(S_ISFIFO(statbuf.st_mode))
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* is it a FIFO/named-pipe */
+            case 'p':
+                res = !(S_ISFIFO(statbuf.st_mode));
+                break;
         
-        /* check if the file is readable */
-        case 'r':
-            res = test_file_permission(arg, &statbuf, 'r');
-            break;
+            /* check if the file is readable */
+            case 'r':
+                res = test_file_permission(arg, &statbuf, 'r');
+                break;
             
-        /* check if the file size > 0 */
-        case 's':
-            res = (statbuf.st_size) ? 0 : 1;
-            break;
+            /* check if the file size > 0 */
+            case 's':
+                res = (statbuf.st_size) ? 0 : 1;
+                break;
             
-        /* is it a socket */
-        case 'S':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(S_ISSOCK(statbuf.st_mode))
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* is it a socket */
+            case 'S':
+                res = !(S_ISSOCK(statbuf.st_mode));
+                break;
             
-        /* check if the setuid bit is set */
-        case 'u':
-            if(res != 0)
-            {
-                res = 1;
-            }
-            else if(statbuf.st_mode & S_ISUID)
-            {
-                res = 0;
-            }
-            else
-            {
-                res = 1;
-            }
-            break;
+            /* check if the setuid bit is set */
+            case 'u':
+                res = !(statbuf.st_mode & S_ISUID);
+                break;
                 
-        /* check if the file is writeable */
-        case 'w':
-            res = test_file_permission(arg, &statbuf, 'w');
-            break;
+            /* check if the file is writeable */
+            case 'w':
+                res = test_file_permission(arg, &statbuf, 'w');
+                break;
                 
-        /* check if the file is executable */
-        case 'x':
-            res = test_file_permission(arg, &statbuf, 'x');
-            break;
+            /* check if the file is executable */
+            case 'x':
+                res = test_file_permission(arg, &statbuf, 'x');
+                break;
             
-        /*
-         * csh uses this option to report executable files from $PATH and also builtin utilities.
-         * thus '-X ls' gives true (0) result, but '-X /bin/ls' gives false (1) result. bash and ksh
-         * don't have this option.
-         */
-        case 'X':
-            if(is_enabled_builtin(arg))
-            {
-                res = 0;
-            }
-            else
-            {
-                char *path = search_path(arg, NULL, 1);
-                if(path)
+            /*
+             * csh uses this option to report executable files from $PATH and also builtin utilities.
+             * thus '-X ls' gives true (0) result, but '-X /bin/ls' gives false (1) result. bash and ksh
+             * don't have this option.
+            */
+            case 'X':
+                if(is_enabled_builtin(arg))
                 {
-                    free_malloced_str(path);
                     res = 0;
                 }
                 else
                 {
-                    res = 1;
+                    char *path = search_path(arg, NULL, 1);
+                    if(path)
+                    {
+                        free_malloced_str(path);
+                        res = 0;
+                    }
+                    else
+                    {
+                        res = 1;
+                    }
                 }
-            }
-            break;
+                break;
+        }
     }
+    
     /* return the result */
     return res ? ONE : ZERO;
 }
@@ -753,9 +762,9 @@ char *test_file(char *arg, int op)
  */
 char *test_file_term(char *a1, char *a2 __attribute__((unused)))
 {
-    char *s = a1;
+    char *s;
     int res = strtol(a1, &s, 10);
-    if(s == a1)
+    if(*s)
     {
         res = 1;
     }
@@ -918,6 +927,7 @@ char *test_file_sock  (char *a1, char *a2 __attribute__ ((unused)) )
 char *test_opt_en(char *a1, char *a2 __attribute__ ((unused)) )
 {
     int res = 1;
+    exit_gracefully(0, 0);
     if(*a1 == '?')
     {
         a1++;
@@ -1023,6 +1033,7 @@ char *test_var_def(char *a1, char *a2 __attribute__ ((unused)) )
 #define TEST_FILE_BLK          42      /* file is a block dev */
 #define TEST_AND               43      /* logical AND */
 #define TEST_OR                44      /* logical OR */
+#define TEST_STR_EQ3           45      /* string equals '=~' */
 
 enum { ASSOC_NONE = 0, ASSOC_LEFT, ASSOC_RIGHT };
 
@@ -1042,54 +1053,55 @@ struct test_op_s
 	{ '!'               , 1, ASSOC_RIGHT, 1, 1, test_not           },
 	{ '('               , 0, ASSOC_NONE , 0, 1, NULL               },
 	{ ')'               , 0, ASSOC_NONE , 0, 1, NULL               },
-	{ TEST_AND          , 2, ASSOC_LEFT , 0, 2, test_and           },
 	{ TEST_OR           , 2, ASSOC_LEFT , 0, 2, test_or            },
-	{ TEST_GT           , 3, ASSOC_LEFT , 0, 3, test_gt            },
-	{ TEST_LT           , 3, ASSOC_LEFT , 0, 3, test_lt            },
-	{ TEST_GE           , 3, ASSOC_LEFT , 0, 3, test_ge            },
-	{ TEST_LE           , 3, ASSOC_LEFT , 0, 3, test_le            },
-	{ TEST_EQ           , 3, ASSOC_LEFT , 0, 3, test_eq            },
-	{ TEST_NE           , 3, ASSOC_LEFT , 0, 3, test_ne            },
-	{ TEST_STR_GT       , 3, ASSOC_LEFT , 0, 1, test_str_gt        },
-	{ TEST_STR_LT       , 3, ASSOC_LEFT , 0, 1, test_str_lt        },
-	{ TEST_STR_EQ1      , 3, ASSOC_LEFT , 0, 2, test_str_eq        },
-	{ TEST_STR_EQ2      , 3, ASSOC_LEFT , 0, 1, test_str_eq        },
-	{ TEST_STR_NE       , 3, ASSOC_LEFT , 0, 2, test_str_ne        },    
-	{ TEST_STR_NZ       , 3, ASSOC_RIGHT, 1, 2, test_str_nz        },
-	{ TEST_STR_ZERO     , 3, ASSOC_RIGHT, 1, 2, test_str_zero      },
-	//{ TEST_VAR_REF      , 3, ASSOC_RIGHT, 1, 2, test_var_ref       },
-	{ TEST_VAR_DEF      , 3, ASSOC_RIGHT, 1, 2, test_var_def       },
-	{ TEST_OPT_EN       , 3, ASSOC_RIGHT, 1, 2, test_opt_en        },
-	{ TEST_FILE_OT      , 3, ASSOC_LEFT , 0, 3, test_file_ot       },
-	{ TEST_FILE_NT      , 3, ASSOC_LEFT , 0, 3, test_file_nt       },
-	{ TEST_FILE_EF      , 3, ASSOC_LEFT , 0, 3, test_file_ef       },
-	{ TEST_FILE_SOCK    , 3, ASSOC_RIGHT, 1, 2, test_file_sock     },
-	{ TEST_FILE_UOWN    , 3, ASSOC_RIGHT, 1, 2, test_file_uown     },
-	{ TEST_FILE_NEW     , 3, ASSOC_RIGHT, 1, 2, test_file_new      },
-	{ TEST_FILE_LINK    , 3, ASSOC_RIGHT, 1, 2, test_file_link     },
-	{ TEST_FILE_GOWN    , 3, ASSOC_RIGHT, 1, 2, test_file_gown     },
-	{ TEST_FILE_EXE     , 3, ASSOC_RIGHT, 1, 2, test_file_x        },
-	{ TEST_FILE_W       , 3, ASSOC_RIGHT, 1, 2, test_file_w        },
-	{ TEST_FILE_SUID    , 3, ASSOC_RIGHT, 1, 2, test_file_suid     },
-	{ TEST_FILE_TERM    , 3, ASSOC_RIGHT, 1, 2, test_file_term     },
-	{ TEST_FILE_SIZE    , 3, ASSOC_RIGHT, 1, 2, test_file_size     },
-	{ TEST_FILE_R       , 3, ASSOC_RIGHT, 1, 2, test_file_r        },
-	{ TEST_FILE_PIPE    , 3, ASSOC_RIGHT, 1, 2, test_file_pipe     },
-	{ TEST_FILE_STICKY  , 3, ASSOC_RIGHT, 1, 2, test_file_sticky   },
-	{ TEST_FILE_SGID    , 3, ASSOC_RIGHT, 1, 2, test_file_sgid     },
-	{ TEST_FILE_REG     , 3, ASSOC_RIGHT, 1, 2, test_file_reg      },
-	{ TEST_FILE_EXIST   , 3, ASSOC_RIGHT, 1, 2, test_file_exist    },
-	{ TEST_FILE_DIR     , 3, ASSOC_RIGHT, 1, 2, test_file_dir      },
-	{ TEST_FILE_CHAR    , 3, ASSOC_RIGHT, 1, 2, test_file_char     },
-	{ TEST_FILE_BLK     , 3, ASSOC_RIGHT, 1, 2, test_file_blk      },
+	{ TEST_AND          , 3, ASSOC_LEFT , 0, 2, test_and           },
+	{ TEST_GT           , 4, ASSOC_LEFT , 0, 3, test_gt            },
+	{ TEST_LT           , 4, ASSOC_LEFT , 0, 3, test_lt            },
+	{ TEST_GE           , 4, ASSOC_LEFT , 0, 3, test_ge            },
+	{ TEST_LE           , 4, ASSOC_LEFT , 0, 3, test_le            },
+	{ TEST_EQ           , 4, ASSOC_LEFT , 0, 3, test_eq            },
+	{ TEST_NE           , 4, ASSOC_LEFT , 0, 3, test_ne            },
+	{ TEST_STR_GT       , 4, ASSOC_LEFT , 0, 1, test_str_gt        },
+	{ TEST_STR_LT       , 4, ASSOC_LEFT , 0, 1, test_str_lt        },
+	{ TEST_STR_EQ1      , 4, ASSOC_LEFT , 0, 2, test_str_eq        },
+	{ TEST_STR_EQ2      , 4, ASSOC_LEFT , 0, 1, test_str_eq        },
+	{ TEST_STR_NE       , 4, ASSOC_LEFT , 0, 2, test_str_ne        },    
+	{ TEST_STR_NZ       , 4, ASSOC_RIGHT, 1, 2, test_str_nz        },
+	{ TEST_STR_ZERO     , 4, ASSOC_RIGHT, 1, 2, test_str_zero      },
+	//{ TEST_VAR_REF      , 4, ASSOC_RIGHT, 1, 2, test_var_ref       },
+	{ TEST_VAR_DEF      , 4, ASSOC_RIGHT, 1, 2, test_var_def       },
+	{ TEST_OPT_EN       , 4, ASSOC_RIGHT, 1, 2, test_opt_en        },
+	{ TEST_FILE_OT      , 4, ASSOC_LEFT , 0, 3, test_file_ot       },
+	{ TEST_FILE_NT      , 4, ASSOC_LEFT , 0, 3, test_file_nt       },
+	{ TEST_FILE_EF      , 4, ASSOC_LEFT , 0, 3, test_file_ef       },
+	{ TEST_FILE_SOCK    , 4, ASSOC_RIGHT, 1, 2, test_file_sock     },
+	{ TEST_FILE_UOWN    , 4, ASSOC_RIGHT, 1, 2, test_file_uown     },
+	{ TEST_FILE_NEW     , 4, ASSOC_RIGHT, 1, 2, test_file_new      },
+	{ TEST_FILE_LINK    , 4, ASSOC_RIGHT, 1, 2, test_file_link     },
+	{ TEST_FILE_GOWN    , 4, ASSOC_RIGHT, 1, 2, test_file_gown     },
+	{ TEST_FILE_EXE     , 4, ASSOC_RIGHT, 1, 2, test_file_x        },
+	{ TEST_FILE_W       , 4, ASSOC_RIGHT, 1, 2, test_file_w        },
+	{ TEST_FILE_SUID    , 4, ASSOC_RIGHT, 1, 2, test_file_suid     },
+	{ TEST_FILE_TERM    , 4, ASSOC_RIGHT, 1, 2, test_file_term     },
+	{ TEST_FILE_SIZE    , 4, ASSOC_RIGHT, 1, 2, test_file_size     },
+	{ TEST_FILE_R       , 4, ASSOC_RIGHT, 1, 2, test_file_r        },
+	{ TEST_FILE_PIPE    , 4, ASSOC_RIGHT, 1, 2, test_file_pipe     },
+	{ TEST_FILE_STICKY  , 4, ASSOC_RIGHT, 1, 2, test_file_sticky   },
+	{ TEST_FILE_SGID    , 4, ASSOC_RIGHT, 1, 2, test_file_sgid     },
+	{ TEST_FILE_REG     , 4, ASSOC_RIGHT, 1, 2, test_file_reg      },
+	{ TEST_FILE_EXIST   , 4, ASSOC_RIGHT, 1, 2, test_file_exist    },
+	{ TEST_FILE_DIR     , 4, ASSOC_RIGHT, 1, 2, test_file_dir      },
+	{ TEST_FILE_CHAR    , 4, ASSOC_RIGHT, 1, 2, test_file_char     },
+	{ TEST_FILE_BLK     , 4, ASSOC_RIGHT, 1, 2, test_file_blk      },
+	{ TEST_STR_EQ3      , 4, ASSOC_LEFT , 0, 1, test_str_eq_ext    },
 };
 
 /* pointers to the operators' structs (see above) */
 struct test_op_s *TEST_OP_NOT         = &test_ops[0 ];
 struct test_op_s *TEST_OP_LBRACE      = &test_ops[1 ];
 struct test_op_s *TEST_OP_RBRACE      = &test_ops[2 ];
-struct test_op_s *TEST_OP_AND         = &test_ops[3 ];
-struct test_op_s *TEST_OP_OR          = &test_ops[4 ];
+struct test_op_s *TEST_OP_OR          = &test_ops[3 ];
+struct test_op_s *TEST_OP_AND         = &test_ops[4 ];
 struct test_op_s *TEST_OP_GT          = &test_ops[5 ];
 struct test_op_s *TEST_OP_LT          = &test_ops[6 ];
 struct test_op_s *TEST_OP_GE          = &test_ops[7 ];
@@ -1128,10 +1140,11 @@ struct test_op_s *TEST_OP_FILE_EXIST  = &test_ops[38];
 struct test_op_s *TEST_OP_FILE_DIR    = &test_ops[39];
 struct test_op_s *TEST_OP_FILE_CHAR   = &test_ops[40];
 struct test_op_s *TEST_OP_FILE_BLK    = &test_ops[41];
+struct test_op_s *TEST_OP_STR_EQ3     = &test_ops[42];
 
 
 /*
- * return 1 if the operator op is a string operator, i.e. >, <, =, == or !=.
+ * return 1 if the operator op is a string operator, i.e. >, <, =, ==, =~, or !=.
  */
 int is_str_op(struct test_op_s *op)
 {
@@ -1141,6 +1154,7 @@ int is_str_op(struct test_op_s *op)
         case TEST_STR_LT :
         case TEST_STR_EQ1:
         case TEST_STR_EQ2:
+        case TEST_STR_EQ3:
         case TEST_STR_NE :
             return 1;
     }
@@ -1315,6 +1329,10 @@ struct test_op_s *test_getop(char *expr, int oldtest)
             {
                 return TEST_OP_STR_EQ1;
             }
+            else if(expr[1] == '~')
+            {
+                return TEST_OP_STR_EQ3;
+            }
             return TEST_OP_STR_EQ2;
             
         case '&':
@@ -1332,10 +1350,18 @@ struct test_op_s *test_getop(char *expr, int oldtest)
             break;
         
         case '(':
-            return TEST_OP_LBRACE;
+            if(expr[1] == '\0')
+            {
+                return TEST_OP_LBRACE;
+            }
+            break;
 
         case ')':
-            return TEST_OP_RBRACE;
+            if(expr[1] == '\0')
+            {
+                return TEST_OP_RBRACE;
+            }
+            break;
     }
     return NULL;
 }
@@ -1347,7 +1373,7 @@ void test_push_opstack(struct test_op_s *op)
 {
     if(test_nopstack > MAXOPSTACK-1)
     {
-        fprintf(stderr, "%s: operator stack overflow\n", SHELL_NAME);
+        PRINT_ERROR("%s: operator stack overflow\n", UTILITY);
         test_err = 1;
         return;
     }
@@ -1362,7 +1388,7 @@ struct test_op_s *test_pop_opstack(void)
 {
     if(!test_nopstack)
     {
-        fprintf(stderr, "%s: operator stack empty\n", SHELL_NAME);
+        PRINT_ERROR("%s: operator stack empty\n", UTILITY);
         test_err = 1;
         return NULL;
     }
@@ -1383,24 +1409,24 @@ void test_push_stack(char *val)
 
     if(nteststack > MAXTESTSTACK-1)
     {
-        fprintf(stderr, "%s: Test stack overflow\n", SHELL_NAME);
+        PRINT_ERROR("%s: test stack overflow\n", UTILITY);
         test_err = 1;
         return;
     }
-    teststack[nteststack++] = val;
+    teststack[nteststack++] = get_malloced_str(val);
 }
 
 
 /*
- * pop the last operator off the operands stack.
+ * pop the last operand off the operands stack.
  */
 char *test_pop_stack(void)
 {
     if(!nteststack)
     {
-        fprintf(stderr, "%s: Test stack empty\n", SHELL_NAME);
+        PRINT_ERROR("%s: test stack empty\n", UTILITY);
         test_err = 1;
-        return test_empty_str;
+        return "";
     }
     return teststack[--nteststack];
 }
@@ -1414,6 +1440,7 @@ void test_shunt_op(struct test_op_s *op)
 {
     struct test_op_s *pop;
     test_err = 0;
+
     /* operator is an opening brace */
     if(op->op == '(')
     {
@@ -1430,11 +1457,13 @@ void test_shunt_op(struct test_op_s *op)
             {
                 return;
             }
+
             char *n1 = test_pop_stack();
             if(test_err)
             {
                 return;
             }
+            
             /* check if its unary or binary operator */
             if(pop->unary)
             {
@@ -1445,22 +1474,29 @@ void test_shunt_op(struct test_op_s *op)
                 char *n2 = test_pop_stack();
                 if(test_err)
                 {
+                    free_malloced_str(n1);
                     return;
                 }
+
                 test_push_stack(pop->test(n2, n1));
+                
                 if(test_err)
                 {
+                    free_malloced_str(n1);
+                    free_malloced_str(n2);
                     return;
                 }
             }
         }
+        
         if(!(pop = test_pop_opstack()) || pop->op != '(')
         {
-            fprintf(stderr, "%s: Stack test_err. No matching \'(\'\n", SHELL_NAME);
+            PRINT_ERROR("%s: test stack error: no matching \'(\'\n", UTILITY);
             test_err = 1;
         }
         return;
     }
+    
     /* check for operators with right-associativity */
     if(op->assoc == ASSOC_RIGHT)
     {
@@ -1471,11 +1507,13 @@ void test_shunt_op(struct test_op_s *op)
             {
                 return;
             }
+            
             char *n1 = test_pop_stack();
             if(test_err)
             {
                 return;
             }
+            
             /* check if its unary or binary operator */
             if(pop->unary)
             {
@@ -1486,10 +1524,15 @@ void test_shunt_op(struct test_op_s *op)
                 char *n2 = test_pop_stack();
                 if(test_err)
                 {
+                    free_malloced_str(n1);
                     return;
                 }
                 test_push_stack(pop->test(n2, n1));
+                free_malloced_str(n2);
             }
+                    
+            free_malloced_str(n1);
+            
             if(test_err)
             {
                 return;
@@ -1505,28 +1548,58 @@ void test_shunt_op(struct test_op_s *op)
             {
                 return;
             }
+            
             char *n1 = test_pop_stack();
             if(test_err)
             {
                 return;
             }
-            if(pop->unary) test_push_stack(pop->test(n1, 0));
+            
+            if(pop->unary)
+            {
+                test_push_stack(pop->test(n1, 0));
+            }
             else
             {
                 char *n2 = test_pop_stack();
                 if(test_err)
                 {
+                    free_malloced_str(n1);
                     return;
                 }
                 test_push_stack(pop->test(n2, n1));
+                free_malloced_str(n2);
             }
+
+            free_malloced_str(n1);
+            
             if(test_err)
             {
                 return;
             }
         }
     }
+    
     test_push_opstack(op);
+}
+
+
+#define TEST_ERR_RETURN(val)                \
+do                                          \
+{                                           \
+    int v;                                  \
+    for(v = 0; v < nteststack; v++)         \
+    {                                       \
+        free_malloced_str(teststack[v]);    \
+    }                                       \
+    return val;                             \
+} while(0)
+
+
+#define CHECK_ERR_FLAG()                    \
+if(test_err)                                \
+{                                           \
+    TEST_ERR_RETURN(2);                     \
 }
 
 
@@ -1542,8 +1615,14 @@ void test_shunt_op(struct test_op_s *op)
 
 int test_builtin(int argc, char **argv)
 {
+    /* our stacks */
+    struct test_op_s *__test_opstack[MAXOPSTACK];
+    char  *__teststack[MAXTESTSTACK];
+    test_opstack = __test_opstack;
+    teststack = __teststack;
+
     char   *expr;
-    char   *tstart       = NULL;
+    char   *tstart = NULL;
     int     i = 1;
     int     oldtest = 1;
     /* dummy operator to mark start */
@@ -1565,7 +1644,7 @@ int test_builtin(int argc, char **argv)
     {
         if(strcmp(argv[argc-1], "]"))
         {
-            fprintf(stderr, "%s: missing closing bracket: ']'\n", UTILITY);
+            PRINT_ERROR("%s: missing closing bracket: ']'\n", UTILITY);
             return 2;
         }
         argc--;
@@ -1574,7 +1653,7 @@ int test_builtin(int argc, char **argv)
     {
         if(strcmp(argv[argc-1], "]]"))
         {
-            fprintf(stderr, "%s: missing closing bracket: ']]'\n", UTILITY);
+            PRINT_ERROR("%s: missing closing bracket: ']]'\n", UTILITY);
             return 2;
         }
         argc--;
@@ -1585,11 +1664,35 @@ int test_builtin(int argc, char **argv)
     for( ; i < argc; i++)
     {
         expr = argv[i];
+        debug ("expr = '%s'\n", expr);
+
         /* skip leading whitespaces */
         while(*expr && isspace(*expr))
         {
             expr++;
         }
+        
+#if 0
+        /* special handling of braced operators */
+        size_t len = strlen(expr);
+        if(*expr == '(' && expr[len-1] == ')')
+        {
+            char *subexpr = get_malloced_strl(expr, 1, len-2);
+            int res = test_recursive(subexpr);
+            free_malloced_str(subexpr);
+            
+            char buf[16];
+            sprintf(buf, "%d", res);
+            debug ("buf = '%s'\n", buf);
+            test_push_stack(buf);
+            CHECK_ERR_FLAG();
+            tstart = NULL;
+            lastop = NULL;
+            continue;
+        }
+#endif
+
+        /* get the next operand or operator */
         if(!tstart)
         {
             if((op = test_getop(expr, oldtest)))
@@ -1600,21 +1703,18 @@ int test_builtin(int argc, char **argv)
                     {
                         if(is_str_op(op))
                         {
-                            test_push_stack(test_empty_str);
+                            test_push_stack("");
                         }
                         else
                         {
-                            fprintf(stderr, "%s: illegal use of binary operator (%c)\n", SHELL_NAME, op->op);
-                            return 2;
+                            PRINT_ERROR("%s: illegal use of binary operator (%c)\n", UTILITY, op->op);
+                            TEST_ERR_RETURN(2);
                         }
                     }
                 }
                 test_err = 0;
                 test_shunt_op(op);
-                if(test_err)
-                {
-                    return 2;
-                }
+                CHECK_ERR_FLAG();
                 lastop = op;
             }
             else
@@ -1628,26 +1728,17 @@ int test_builtin(int argc, char **argv)
             {
                 test_err = 0;
                 test_push_stack(tstart);
-                if(test_err)
-                {
-                    return 2;
-                }
+                CHECK_ERR_FLAG();
                 tstart = NULL;
                 test_shunt_op(op);
-                if(test_err)
-                {
-                    return 2;
-                }
+                CHECK_ERR_FLAG();
                 lastop = op;
             }
             else
             {
                 test_err = 0;
                 test_push_stack(tstart);
-                if(test_err)
-                {
-                    return 2;
-                }
+                CHECK_ERR_FLAG();
                 tstart = NULL;
                 lastop = NULL;
             }
@@ -1661,16 +1752,16 @@ int test_builtin(int argc, char **argv)
         if(i == 2)
         {
             test_shunt_op(TEST_OP_STR_NZ);
-            if(test_err)
-            {
-                return 2;
-            }
+            CHECK_ERR_FLAG();
         }
         test_push_stack(tstart);
-        if(test_err)
-        {
-            return 2;
-        }
+        CHECK_ERR_FLAG();
+    }
+    
+    /* treat an isolated operand 'x' as testing for '-n x' */
+    if(!test_nopstack && nteststack)
+    {
+        return atoi(test_str_nz(teststack[0], NULL));
     }
 
     /* now pop the operators off the stack and perform each one of them */
@@ -1678,15 +1769,11 @@ int test_builtin(int argc, char **argv)
     {
         test_err = 0;
         op = test_pop_opstack();
-        if(test_err)
-        {
-            return 2;
-        }
+        CHECK_ERR_FLAG();
+
         char *n1 = test_pop_stack();
-        if(test_err)
-        {
-            return 2;
-        }
+        CHECK_ERR_FLAG();
+
         if(op->unary)
         {
             test_push_stack(op->test(n1, 0));
@@ -1696,22 +1783,24 @@ int test_builtin(int argc, char **argv)
             char *n2 = test_pop_stack();
             if(test_err)
             {
-                return 2;
+                free_malloced_str(n1);
+                TEST_ERR_RETURN(2);
             }
             test_push_stack(op->test(n2, n1));
+            free_malloced_str(n2);
         }
-        if(test_err)
-        {
-            return 2;
-        }
+
+        free_malloced_str(n1);
+        CHECK_ERR_FLAG();
     }
 
     /* at the end, we should have only one value remaining on the operands stack */
     if(nteststack != 1)
     {
-        fprintf(stderr, "%s: test stack has %d elements after evaluation. Should be 1.\n", SHELL_NAME, nteststack);
+        PRINT_ERROR("%s: test stack has %d elements after evaluation (should be 1)\n", UTILITY, nteststack);
         return 2;
     }
 
-    return strcmp(teststack[0], "0") == 0 ? 0 : 1;
+    debug (" -- %s\n", teststack[0]);
+    return atoi(teststack[0]);
 }

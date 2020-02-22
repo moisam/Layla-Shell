@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: help.c
  *    This file is part of the Layla Shell project.
@@ -20,16 +20,22 @@
  */    
 
 #include <stdio.h>
+#include <fnmatch.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../debug.h"
 
 /* current version of the shell */
-char   shell_ver[] = "1.1-2";
+char   shell_ver[] = "1.1-3";
 
 /* useful macros for printing utilities help message */
 #define SYNOPSIS        (1 << 0)    /* print usage summary (one liner) */
 #define DESCRIPTION     (1 << 1)    /* print a short description */
 #define HELP_BODY       (1 << 2)    /* print a longer help message */
+#define MANPAGE_LIKE    (1 << 3)    /* print a manpage-like message */
+
+void print_synopsis(struct builtin_s *utility, char *invokation_name, char *indent);
+void print_help_body(struct builtin_s *utility, int indent);
 
 
 /*
@@ -46,41 +52,42 @@ char   shell_ver[] = "1.1-2";
 int help_builtin(int argc, char **argv)
 {
     int v = 1, c, res = 0;
-    int flags = HELP_BODY|SYNOPSIS|DESCRIPTION;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    int flags = HELP_BODY | SYNOPSIS | DESCRIPTION;
+
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvsd", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "dhmsv", &v, 1)) > 0)
     {
         switch(c)
         {
+            /* -d prints only the description */
+            case 'd':
+                flags = DESCRIPTION;
+                break;
+                
             /* -h prints help */
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_HELP, 1, 0);
+                print_help(argv[0], &HELP_BUILTIN, 0);
                 return 0;
+                
+            /* -m prints everything */
+            case 'm':
+                flags = MANPAGE_LIKE;
+                break;
+
+            /* -s prints only the synopsis */
+            case 's':
+                flags = SYNOPSIS;
+                break;
                 
             /* -v prints shell ver */
             case 'v':
                 printf("%s", shell_ver);
                 return 0;
-                
-            /* -s prints only the synopsis */
-            case 's':
-                flags |=  SYNOPSIS   ;
-                flags &= ~DESCRIPTION;
-                flags &= ~HELP_BODY  ;
-                break;
-                
-            /* -d prints only the description */
-            case 'd':
-                flags |=  DESCRIPTION;
-                flags &= ~SYNOPSIS   ;
-                flags &= ~HELP_BODY  ;
-                break;
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -93,95 +100,61 @@ int help_builtin(int argc, char **argv)
         printf("Layla shell v%s command line help.\n", shell_ver);
         printf("Type 'help command' or 'command -h' to view detailed help about a specific command.\n\n");
         printf("Available commands are:\n");
-        int x, y, z;
-        for(x = 0; x < special_builtin_count; x++)
+
+        struct builtin_s *u = shell_builtins;
+        for( ; u->name; u++)
         {
-            /* print the utility's name */
-            printf("  %s", special_builtins[x].name);
-            /* pad it to 8-char margin */
-            z = 8-strlen(special_builtins[x].name)%8;
-            for(y = 0; y < z; y++)
-            {
-                printf(" ");
-            }
-            /* and print the short explanation */
-            printf("%s\n", special_builtins[x].explanation);
-        }
-        for(x = 0; x < regular_builtin_count; x++)
-        {
-            /* print the utility's name */
-            printf("  %s", regular_builtins[x].name);
-            /* pad it to 8-char margin */
-            z = 8-strlen(regular_builtins[x].name)%8;
-            for(y = 0; y < z; y++)
-            {
-                printf(" ");
-            }
-            /* and print the short explanation */
-            printf("%s\n", regular_builtins[x].explanation);
+            /* print the utility's name and short explanation */
+            printf("  %-10s %s\n", u->name, u->explanation);
         }
         printf("\n");
+
         return 0;
     }
 
     /* process the arguments */
     for( ; v < argc; v++)
     {
-        int i;
-        char *arg = argv[v];
+        /* add '*' to the end of the name to make it a regex pattern */
+        size_t len = strlen(argv[v]);
+        char arg[len+2];
+        sprintf(arg, "%s%s", argv[v], argv[v][len-1] == '*' ? "" : "*");
+        
         /*
-         * for each argument, we check if the argument is the name of a regular
-         * builtin utility.. if so, we print the utility's help and move on to
-         * the next argument.. otherwise, we check if the argument is a special
-         * builtin utility and print the help if it is.. then we check the
-         * special names : and . which refer to the 'colon' and 'dot' utilities,
-         * respectively, and print the help if the argument is one of these..
-         * lastly, if none of the above matched, we print and error message and
-         * move on to the next argument.
+         * for each argument, we check if the argument is the name of a builtin 
+         * utility.. if so, we print the utility's help and move on to the next 
+         * argument.. then we check the special names : and . which refer to the 
+         * 'colon' and 'dot' utilities, respectively, and print the help if the 
+         * argument is one of these.. lastly, if none of the above matched, we 
+         * print and error message and move on to the next argument.
          */
-        /* check the regular builtins table */
-        for(i = 0; i < regular_builtin_count; i++)
+        struct builtin_s *utility = shell_builtins;
+        for( ; utility->name; utility++)
         {
-            if(strcmp(arg, regular_builtins[i].name) == 0)
+            if(fnmatch(arg, utility->name, 0) == 0)
             {
-                print_help(regular_builtins[i].name, i, 1, flags);
                 break;
             }
         }
-        /* check if the argument name was found in the regular builtins table */
-        if(i < regular_builtin_count)
+        
+        if(utility->name)
         {
-            continue;
-        }
-
-        /* check the special builtins table */
-        for(i = 0; i < special_builtin_count; i++)
-        {
-            if(strcmp(arg, special_builtins[i].name) == 0)
-            {
-                print_help(special_builtins[i].name, i, 0, flags);
-                break;
-            }
-        }
-        /* check if the argument name was found in the special builtins table */
-        if(i < special_builtin_count)
-        {
-            continue;
+            print_help(utility->name, utility, flags);
         }
         /* check for special utility colon or : */
-        if(strcmp(argv[v], "colon") == 0)
+        else if(fnmatch(arg, "colon", 0) == 0)
         {
-            print_help(":", SPECIAL_BUILTIN_COLON, 0, flags);
+            print_help(":", &COLON_BUILTIN, flags);
         }
         /* check for special utility dot or . */
-        if(strcmp(argv[v], "dot"  ) == 0)
+        else if(fnmatch(arg, "dot", 0) == 0)
         {
-            print_help(".", SPECIAL_BUILTIN_DOT  , 0, flags);
+            print_help(".", &DOT_BUILTIN, flags);
         }
         /* utility not found. print an error message and set the error return result */
         else
         {
-            fprintf(stderr, "%s: unknown builtin utility: %s\n", SHELL_NAME, arg);
+            PRINT_ERROR("%s: unknown builtin utility: %s\n", SHELL_NAME, argv[v]);
             res = 1;
         }
     }
@@ -205,22 +178,26 @@ int help_builtin(int argc, char **argv)
  * - a detailed explanation of the utility's options and arguments.
  */
 
-void print_help(char *invokation_name, int index, int isreg, int flags)
+void print_help(char *invokation_name, struct builtin_s *utility, int flags)
 {
+    /* if using the -m option, print a manpage-like help page */
+    if(flags == MANPAGE_LIKE)
+    {
+        printf("NAME\n    %s - %s\n\n", utility->name, utility->explanation);
+        printf("SYNOPSIS\n    ");
+        print_synopsis(utility, invokation_name, "    ");
+        printf("\n\nDESCRIPTION\n");
+        printf("    This utility is used to %s\n\n    ", utility->explanation);
+        print_help_body(utility, 1);
+        printf("\nSEE ALSO\n    info lsh, man lsh(1)\n\n");
+        printf("AUTHOR\n    Mohammed Isam <mohammed_isam1984@yahoo.com>\n\n");
+        return;
+    }
+    
+    /* not using -m, print our regular help */
     if(!flags)
     {
-        flags = SYNOPSIS|DESCRIPTION|HELP_BODY;
-    }
-
-    /* get the utility info */
-    struct builtin_s *utility;
-    if(isreg)
-    {
-        utility = &regular_builtins[index];
-    }
-    else
-    {
-        utility = &special_builtins[index];
+        flags = SYNOPSIS | DESCRIPTION | HELP_BODY;
     }
 
     /* print the description */
@@ -228,6 +205,7 @@ void print_help(char *invokation_name, int index, int isreg, int flags)
     {
         /* output the header */
         printf("%s utility for Layla shell, v%s\n", utility->name, shell_ver);
+
         /* then a line explaining what this utility does */
         printf("This utility is used to %s\n", utility->explanation);
     }
@@ -236,72 +214,84 @@ void print_help(char *invokation_name, int index, int isreg, int flags)
     if(flag_set(flags, SYNOPSIS))
     {
         /* then the synopsis (usage) line */
-        printf("\n");
-        /*
-         * call printf, passing it the correct number of arguments, depending on how
-         * many times the utility's name appears in the synopsis line.
-         */
-        switch(utility->synopsis_name_count)
-        {
-            case 0:
-                printf("%s", utility->synopsis);
-                break;
-            
-            case 1:
-                printf(utility->synopsis, invokation_name);
-                break;
-            
-            case 2:
-                printf(utility->synopsis, invokation_name, invokation_name);
-                break;
-            
-            case 3:
-                printf(utility->synopsis, invokation_name, invokation_name, 
-                                          invokation_name);
-                break;
-            
-            case 4:
-                printf(utility->synopsis, invokation_name, invokation_name, 
-                                          invokation_name, invokation_name);
-                break;
-            
-            case 5:
-                printf(utility->synopsis, invokation_name, invokation_name, 
-                                          invokation_name, invokation_name,
-                                          invokation_name);
-                break;
-            
-            case 6:
-                printf(utility->synopsis, invokation_name, invokation_name, 
-                                          invokation_name, invokation_name,
-                                          invokation_name, invokation_name);
-                break;
-            
-            /* only test (or [[) has this many mentions of its name in the synopsis */
-            case 9:
-                printf(utility->synopsis, invokation_name, invokation_name, 
-                                          invokation_name, invokation_name,
-                                          invokation_name, invokation_name,
-                                          invokation_name, invokation_name, 
-                                          invokation_name);
-                break;
-        }
+        printf("\nUsage: ");
+        print_synopsis(utility, invokation_name, "       ");
         printf("\n");
     }
 
     /* print the help message */
     if(flag_set(flags, HELP_BODY))
     {
-        /* then the rest of utility's help */
+        print_help_body(utility, 0);
+    }
+}
+
+
+/*
+ * print the given utility's synopsis by calling printf, passing it the 
+ * correct number of arguments, depending on how many times the utility's 
+ * name appears in the synopsis line.
+ */
+void print_synopsis(struct builtin_s *utility, char *invokation_name, char *indent)
+{
+    char *p = utility->synopsis;
+    while(*p)
+    {
+        if(*p == '%' && p[1] == '%')
+        {
+            printf("%s", invokation_name);
+            p++;
+        }
+        else
+        {
+            putchar(*p);
+            if(*p == '\n')
+            {
+                printf("%s", indent);
+            }
+        }
+        p++;
+    }
+}
+
+
+/*
+ * print the given utility's help body, preceding each line with 4 spaces
+ * if indent is non-zero.
+ */
+void print_help_body(struct builtin_s *utility, int indent)
+{
+    static char *hopt = "  -h        show utility help (this page)";
+    static char *vopt = "  -v        show shell version";
+
+    if(indent)
+    {
+        /* print the utility's help */
+        char *p = utility->help;
+        while(*p)
+        {
+            putchar(*p);
+            if(*p == '\n' && p[1])
+            {
+                printf("    ");
+            }
+            p++;
+        }
+    }
+    else
+    {
+        /* print the utility's help */
         printf("\n%s", utility->help);
-        /* print the standard -h and -v options */
-        if(utility->flags & BUILTIN_PRINT_HOPTION)
-        {
-            printf("  -h        show utility help (this page)\n");
-        }
-        if(utility->flags & BUILTIN_PRINT_VOPTION)
-        {
-            printf("  -v        show shell version\n");
-        }
+    }
+
+    /* print the standard -h and -v options */
+    if(utility->flags & BUILTIN_PRINT_HOPTION)
+    {
+        printf("%s%s\n", indent ? "    " : "", hopt);
+    }
+
+    if(utility->flags & BUILTIN_PRINT_VOPTION)
+    {
+        printf("%s%s\n", indent ? "    " : "", vopt);
     }
 }

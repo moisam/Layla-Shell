@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: shift.c
  *    This file is part of the Layla Shell project.
@@ -47,14 +47,12 @@ int shift_builtin(int argc, char **argv)
     /* extra arguments produce an error in --posix mode */
     if(option_set('P') && argc > 2)
     {
-        fprintf(stderr, "%s: too many arguments\n", UTILITY);
+        PRINT_ERROR("%s: too many arguments\n", UTILITY);
         return 1;
     }
     
-    struct symtab_entry_s *hash = get_symtab_entry("#");
-    int params = atoi(hash->val);
+    int params = get_shell_vari("#", 0);
     int shift = 1;
-    
     if(argc >= 2)
     {
         char *strend = NULL;
@@ -63,7 +61,7 @@ int shift_builtin(int argc, char **argv)
         {
             if(optionx_set(OPTION_SHIFT_VERBOSE))
             {
-                fprintf(stderr, "%s: invalid shift number: %s\n", UTILITY, argv[1]);
+                PRINT_ERROR("%s: invalid shift number: %s\n", UTILITY, argv[1]);
             }
             return 2;
         }
@@ -86,6 +84,7 @@ int shift_builtin(int argc, char **argv)
         {
             entry1 = add_to_symtab(buf);
         }
+
         sprintf(buf, "%d", j);
         entry2 = get_symtab_entry(buf);
         if(!entry2)
@@ -99,7 +98,6 @@ int shift_builtin(int argc, char **argv)
     }
     
     params -= shift;
-    sprintf(buf, "%d", params);
-    symtab_entry_setval(hash, buf);
+    set_shell_vari("#", params);
     return 0;
 }

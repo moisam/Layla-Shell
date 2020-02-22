@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: hup.c
  *    This file is part of the Layla Shell project.
@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/resource.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../backend/backend.h"
 #include "../debug.h"
@@ -69,7 +70,7 @@ int hup_builtin(int argc, char **argv)
                 switch(*p)
                 {
                     case 'h':
-                        print_help(argv[0], hup ? REGULAR_BUILTIN_HUP : REGULAR_BUILTIN_NOHUP, 1, 0);
+                        print_help(argv[0], hup ? &HUP_BUILTIN : &NOHUP_BUILTIN, 0);
                         return 0;
                         
                     case 'v':
@@ -77,7 +78,7 @@ int hup_builtin(int argc, char **argv)
                         return 0;
                         
                     default:
-                        fprintf(stderr, "%s: invalid option: -%c\n", UTILITY, *p);
+                        PRINT_ERROR("%s: invalid option: -%c\n", UTILITY, *p);
                         return 2;
                 }
                 p++;
@@ -93,7 +94,7 @@ int hup_builtin(int argc, char **argv)
     /* we should have at least one argument */
     if(i >= argc)
     {
-        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
+        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
         return 2;
     }
     

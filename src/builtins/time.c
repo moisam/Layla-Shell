@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: time.c
  *    This file is part of the Layla Shell project.
@@ -28,6 +28,7 @@
 #include <time.h>
 #include <sys/times.h>
 #include <sys/time.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
@@ -104,14 +105,14 @@ int time_builtin(struct source_s *src, struct node_s *cmd)
     /* if time is called with no arguments, we print the shell's times information (zsh) */
     if(!cmd)
     {
-        return times_builtin(1, NULL);
+        return do_builtin_internal(times_builtin, 1, NULL);
     }
     
     /* get start time */
     st_time = times(&st_cpu);
     if(st_time == -1)
     {
-        fprintf(stderr, "%s: failed to read time: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to read time: %s\n", UTILITY, strerror(errno));
         return 1;
     }
     rstart = get_cur_time();
@@ -123,7 +124,7 @@ int time_builtin(struct source_s *src, struct node_s *cmd)
     en_time = times(&en_cpu);
     if(en_time == -1)
     {
-        fprintf(stderr, "%s: failed to read time: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to read time: %s\n", UTILITY, strerror(errno));
         return 1;
     }
     rend = get_cur_time();

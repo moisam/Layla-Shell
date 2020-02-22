@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: cd.c
  *    This file is part of the Layla Shell project.
@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <pwd.h>
 #include <sys/stat.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/parser.h"
@@ -80,7 +81,7 @@ void do_cwdcmd(void)
                 }
             }
             /* run the parsed cwdcmd alias command(s) */
-            eval_builtin(2, (char *[]){ "eval", cmd, NULL });
+            do_builtin_internal(eval_builtin, 2, (char *[]){ "eval", cmd, NULL });
             free(cmd);
         }
     }
@@ -103,7 +104,7 @@ int cd_hyphen(void)
     struct symtab_entry_s *entry2 = get_symtab_entry("PWD");
     if(!entry || !entry->val)
     {
-        fprintf(stderr, "%s: failed to change directory: $OLDPWD is not set\n", UTILITY);
+        PRINT_ERROR("%s: failed to change directory: $OLDPWD is not set\n", UTILITY);
         return 3;
     }
     
@@ -111,14 +112,14 @@ int cd_hyphen(void)
     char *pwd = __get_malloced_str(entry->val);
     if(!pwd)
     {
-        fprintf(stderr, "%s: failed to change directory: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to change directory: %s\n", UTILITY, strerror(errno));
         return 3;
     }
     
     /* change directory to the $OLDPWD */
     if(chdir(pwd) != 0)
     {
-        fprintf(stderr, "%s: failed to change directory: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to change directory: %s\n", UTILITY, strerror(errno));
         return 3;
     }
     
@@ -180,7 +181,7 @@ char *get_home(void)
 char *search_cdpath(char *directory, int *print_cwd)
 {
     /* get the $CDPATH */
-    char   *cdpath = get_shell_varp("CDPATH", NULL);
+    char *cdpath = get_shell_varp("CDPATH", NULL);
 
     /* no directory argument. return NULL */
     if(!directory)
@@ -218,57 +219,22 @@ char *search_cdpath(char *directory, int *print_cwd)
         return __get_malloced_str(directory);
     }
             
-    char   *cp     = cdpath;
-    size_t  dirlen = strlen(directory);
-    struct  stat st;
-
     /* search for the directory in $CDPATH */
-    while(*cdpath)
+    struct stat st;
+    char *p;
+    while((p = next_path_entry(&cdpath, directory, 1)))
     {
-        /* skip the colon(s) in $CDPATH */
-        while(*cp && *cp != ':')
-        {
-            cp++;
-        }
-
-        /*
-         * get the next entry in $CDPATH.
-         * we add three for \0 terminator, possible /, and leading dot
-         * (in case the path is NULL and we need to append ./)
-         */
-        size_t pathlen = (cp-cdpath);
-        char path[pathlen+dirlen+3];
-
-        if(pathlen == 0)
-        {
-            strcpy(path, "./");
-        }
-        else
-        {
-            strncpy(path, cdpath, pathlen);
-            path[pathlen] = '\0';
-            if(path[pathlen-1] != '/')
-            {
-                strcat(path, "/");
-            }
-            (*print_cwd) = 1;
-        }
-
-        /* form the new path as the path segment from $CDPATH plus the directory name */
-        strcat(path, directory);
-        if(stat(path, &st) == 0)
+        if(stat(p, &st) == 0)
         {
             /* check if the new path is a directory */
             if(S_ISDIR(st.st_mode))
             {
-                return __get_malloced_str(path);
+                (*print_cwd) = 1;
+                return p;
             }
         }
-        
-        (*print_cwd) = 0;
-        /* move on to the next entry in $CDPATH */
-        cdpath = ++cp;
     }
+
     return __get_malloced_str(directory);
 }
 
@@ -340,7 +306,7 @@ int absolute_pathname(char *curpath)
                         prev[l] = '\0';
                         if(stat(prev, &st) != 0 || !S_ISDIR(st.st_mode))
                         {
-                            fprintf(stderr, "%s: not a directory: %s\n", UTILITY, prev);
+                            PRINT_ERROR("%s: not a directory: %s\n", UTILITY, prev);
                             return 0;
                         }
                         
@@ -472,7 +438,7 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
         int can_do = 0;
         if(!pwd || !*pwd)
         {
-            fprintf(stderr, "%s: $PWD environment variable is not set\n", UTILITY);
+            PRINT_ERROR("%s: $PWD environment variable is not set\n", UTILITY);
             return 0;
         }
         
@@ -537,7 +503,7 @@ int cd_builtin(int argc, char **argv)
     /* is this shell restricted? */
     if(startup_finished && option_set('r'))
     {
-        fprintf(stderr, "%s: can't change directory in a restricted shell", UTILITY);
+        PRINT_ERROR("%s: can't change directory in a restricted shell", UTILITY);
         return 3;
     }
     
@@ -568,7 +534,7 @@ int cd_builtin(int argc, char **argv)
                 switch(*p)
                 {
                     case 'h':
-                        print_help(argv[0], REGULAR_BUILTIN_CD, 1, 0);
+                        print_help(argv[0], &CD_BUILTIN, 0);
                         return 0;
                         
                     case 'L':
@@ -602,7 +568,7 @@ int cd_builtin(int argc, char **argv)
                         break;
                         
                     default:
-                        fprintf(stderr, "%s: unknown option: %s\n", UTILITY, argv[v]);
+                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, argv[v]);
                         return 2;
                 }
                 p++;
@@ -615,6 +581,7 @@ int cd_builtin(int argc, char **argv)
         }
     }
     
+    char *p = argv[v];
     if(v >= argc)
     {
         /* no dir argument. use $HOME */
@@ -624,23 +591,22 @@ int cd_builtin(int argc, char **argv)
             curpath = __get_malloced_str(directory);
         }
     }
-    else if(argv[v][0] == '-' && argv[v][1] == '\0')
+    else if(p[0] == '-' && p[1] == '\0')
     {
         /* the hyphen '-' argument */
         return cd_hyphen();
     }
-    else if(argv[v][0] == '/' ||
-            (argv[v][0] == '.' &&
-             (argv[v][1] == '\0' || argv[v][1] == '/' || argv[v][1] == '.')))
+    else if(p[0] == '/' ||
+            (p[0] == '.' && (p[1] == '\0' || p[1] == '/' || p[1] == '.')))
     {
         /* first component is '/', '.' or '..' */
-        directory = argv[v];
+        directory = p;
         curpath = __get_malloced_str(directory);
     }
     else
     {
         /* use the dir argument */
-        directory = argv[v];
+        directory = p;
 
         /* search the $CDPATH, if needed */
         curpath = search_cdpath(directory, &print_cwd);
@@ -710,17 +676,14 @@ start:
                 goto start;
             }
         }
-        fprintf(stderr, "%s: failed to change directory: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to change directory: %s\n", UTILITY, strerror(errno));
         return 3;
     }
 
     /* save the current working directory in $OLDPWD */
     setenv("OLDPWD", pwd, 1);
     entry = add_to_symtab("OLDPWD");
-    if(entry)
-    {
-        symtab_entry_setval(entry, pwd);
-    }
+    symtab_entry_setval(entry, pwd);
 
     /* POSIX says we must set PWD to the string that would be output by `pwd -P` */
     if(cwd)
@@ -734,10 +697,7 @@ start:
 
     /* save the new current working directory in $PWD */
     entry = add_to_symtab("PWD");
-    if(entry)
-    {
-        symtab_entry_setval(entry, cwd);
-    }
+    symtab_entry_setval(entry, cwd);
 
     if(print_dirstack)
     {

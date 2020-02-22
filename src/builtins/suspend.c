@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: suspend.c
  *    This file is part of the Layla Shell project.
@@ -20,6 +20,7 @@
  */    
 
 #include <signal.h>
+#include "builtins.h"
 #include "../cmd.h"
 
 #define UTILITY             "suspend"
@@ -41,8 +42,6 @@ int suspend_builtin(int argc, char **argv)
 {
     int v = 1, c;
     int force = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     /****************************
      * process the options
      ****************************/
@@ -51,7 +50,7 @@ int suspend_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], SPECIAL_BUILTIN_SUSPEND, 0, 0);
+                print_help(argv[0], &SUSPEND_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -79,7 +78,7 @@ int suspend_builtin(int argc, char **argv)
         /* login shells can't be suspended without the -f option (bash) */
         if(option_set('L'))
         {
-            fprintf(stderr, "%s: failed to suspend: login shell\n", UTILITY);
+            PRINT_ERROR("%s: failed to suspend: login shell\n", UTILITY);
             return 2;
         }
         raise(SIGSTOP);

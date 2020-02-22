@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: unlimit.c
  *    This file is part of the Layla Shell project.
@@ -25,6 +25,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/types.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../debug.h"
 
@@ -60,7 +61,7 @@ int unlimit_all(int ishard, int ignore_err)
     while(i-- >= 0)
     {
         argv[2] = all_rlim[i];
-        j = ulimit_builtin(4, argv);
+        j = do_builtin_internal(ulimit_builtin, 4, argv);
         if(j && !ignore_err)
         {
             break;
@@ -87,8 +88,6 @@ int unlimit_builtin(int argc, char **argv)
 {
     int v = 1, c;
     int ignore_err = 0, ishard = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     /****************************
      * process the options
      ****************************/
@@ -97,7 +96,7 @@ int unlimit_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_UNLIMIT, 1, 0);
+                print_help(argv[0], &UNLIMIT_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -129,7 +128,7 @@ int unlimit_builtin(int argc, char **argv)
     /* missing arguments */
     if(v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: resource name\n", UTILITY);
+        PRINT_ERROR("%s: missing argument: resource name\n", UTILITY);
         return 2;
     }
 
@@ -141,7 +140,7 @@ int unlimit_builtin(int argc, char **argv)
         char *op2 = rlim_option(argv[v]);
         if(!op2)
         {
-            fprintf(stderr, "%s: unknown resource name: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR("%s: unknown resource name: %s\n", UTILITY, argv[v]);
             if(ignore_err)
             {
                 continue;
@@ -159,7 +158,7 @@ int unlimit_builtin(int argc, char **argv)
         else
         {
             char *argv2[] = { "ulimit", op, op2, "unlimited", NULL };
-            c = ulimit_builtin(4, argv2);
+            c = do_builtin_internal(ulimit_builtin, 4, argv2);
         }
         if(c && !ignore_err)
         {

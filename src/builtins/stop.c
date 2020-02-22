@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: stop.c
  *    This file is part of the Layla Shell project.
@@ -25,6 +25,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/types.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../debug.h"
 
@@ -48,14 +49,12 @@ int stop_builtin(int argc, char **argv)
     /* job control must be on */
     if(!option_set('m'))
     {
-        fprintf(stderr, "%s: job control is not enabled\n", UTILITY);
+        PRINT_ERROR("%s: job control is not enabled\n", UTILITY);
         return 2;
     }
     
     struct job_s *job;
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     /****************************
      * process the options
      ****************************/
@@ -64,7 +63,7 @@ int stop_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_STOP, 1, 0);
+                print_help(argv[0], &STOP_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -81,7 +80,7 @@ int stop_builtin(int argc, char **argv)
     /* missing job argument */
     if(v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: job id\n", UTILITY);
+        PRINT_ERROR("%s: missing argument: job id\n", UTILITY);
         return 2;
     }
     
@@ -104,13 +103,13 @@ int stop_builtin(int argc, char **argv)
         /* still nothing? */
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
             return 3;
         }
         /* make sure it is a background job */
         if(flag_set(job->flags, JOB_FLAG_FORGROUND))
         {
-            fprintf(stderr, "%s: not a background job: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR("%s: not a background job: %s\n", UTILITY, argv[v]);
             c = 3;
             continue;
         }
@@ -123,7 +122,7 @@ int stop_builtin(int argc, char **argv)
         kill(pid, SIGCONT);
         if(kill(pid, SIGSTOP) != 0)
         {
-            fprintf(stderr, "%s: failed to send signal %s to process %d: %s\n",
+            PRINT_ERROR("%s: failed to send signal %s to process %d: %s\n",
                     UTILITY, "SIGSTOP", pid, strerror(errno));
             c = 3;
         }

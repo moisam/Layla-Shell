@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: return.c
  *    This file is part of the Layla Shell project.
@@ -46,7 +46,7 @@ int return_builtin(int argc, char **argv)
     
     if(option_set('P') && argc > 2)
     {
-        fprintf(stderr, "return: too many arguments\n");
+        PRINT_ERROR("return: too many arguments\n");
         return_set = 1;
         return 2;
     }
@@ -58,7 +58,7 @@ int return_builtin(int argc, char **argv)
         res = strtol(argv[1], &strend, 10);
         if(strend == argv[1])
         {
-            fprintf(stderr, "return: invalid return code: %s\n", argv[1]);
+            PRINT_ERROR("return: invalid return code: %s\n", argv[1]);
             res = 2;
         }
         else
@@ -70,7 +70,6 @@ int return_builtin(int argc, char **argv)
     {
         res = exit_status;
     }
-
     
     /* set the return flag so the other functions will know we've encountered return */
     return_set = 1;

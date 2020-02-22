@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: repeat.c
  *    This file is part of the Layla Shell project.
@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/resource.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../backend/backend.h"
 #include "../debug.h"
@@ -49,8 +50,6 @@ int repeat_builtin(int argc, char **argv)
 {
     int v = 1, c;
     int count = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     /****************************
      * process the options
      ****************************/
@@ -59,7 +58,7 @@ int repeat_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], SPECIAL_BUILTIN_REPEAT, 0, 0);
+                print_help(argv[0], &REPEAT_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -76,7 +75,7 @@ int repeat_builtin(int argc, char **argv)
     /* missing arguments */
     if(v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: count\n", UTILITY);
+        PRINT_ERROR("%s: missing argument: count\n", UTILITY);
         return 2;
     }
 
@@ -85,14 +84,14 @@ int repeat_builtin(int argc, char **argv)
     count = strtol(argv[v], &strend, 10);
     if(strend == argv[v] || count < 0)
     {
-        fprintf(stderr, "%s: missing argument: invalid count: %s\n", UTILITY, argv[v]);
+        PRINT_ERROR("%s: missing argument: invalid count: %s\n", UTILITY, argv[v]);
         return 2;
     }
 
     /* we should have at least one command to execute */
     if(++v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
+        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
         return 2;
     }
     

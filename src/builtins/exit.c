@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: exit.c
  *    This file is part of the Layla Shell project.
@@ -31,6 +31,7 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <linux/kd.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../kbdevent.h"
 #include "../symtab/symtab.h"
@@ -50,16 +51,6 @@ int tried_exit = 0;
 
 /* declared in kbdevent2.c */
 extern struct termios tty_attr_old;
-extern struct termios tty_attr;
-
-/* declared in main.c   */
-extern int read_stdin;
-
-/* declared in dirstack.c */
-extern struct dirstack_ent_s *dirstack;
-
-extern char *tok_buf;                   /* defined in lexical.c */
-extern struct hashtab_s *str_hashes;    /* defined in strbuf.c  */
 
 
 /*
@@ -75,10 +66,12 @@ extern struct hashtab_s *str_hashes;    /* defined in strbuf.c  */
 
 int exit_builtin(int argc, char **argv)
 {
+    int i;
+
     /* more than 2 args is an error */
     if(argc > 2)
     {
-        fprintf(stderr, "exit: too many arguments\n");
+        PRINT_ERROR("%s: too many arguments\n", argv[0]);
         return 1;
     }
 
@@ -90,11 +83,11 @@ int exit_builtin(int argc, char **argv)
     if(argc == 2)
     {
         char *strend = NULL;
-        int i = strtol(argv[1], &strend, 10);
+        i = strtol(argv[1], &strend, 10);
         if(*strend)
         {
-            fprintf(stderr, "exit: invalid exit status: %s\n", argv[1]);
-            exit_status = 2;
+            PRINT_ERROR("%s: invalid exit status: %s\n", argv[0], argv[1]);
+            return 2;
         }
         else
         {
@@ -105,19 +98,25 @@ int exit_builtin(int argc, char **argv)
     /*
      * similar to bash and ksh, alert the user for the presence of running/suspended
      * jobs. if the user insists on exiting, don't alert them the 2nd time.
+     * if we're running this utility as a foreground job in the shell's process,
+     * we pass the current job structure to pending_jobs(), so that it won't count
+     * this job in the returned tally number.
      */
-    if(interactive_shell && pending_jobs())
+    if(interactive_shell && !tried_exit /* && getpid() == shell_pid && 
+       tcgetpgrp(cur_tty_fd()) == shell_pid */ )
     {
-        /* list the pending jobs (bash extension) */
-        if(optionx_set(OPTION_CHECK_JOBS))
+        if((i = pending_jobs()))
         {
-            jobs_builtin(1, (char *[]){ "jobs" });
-        }
+            /* interactive login shell will kill all jobs in exit_gracefully() below */
+            char *noun = (i == 1) ? "job" : "jobs";
+            fprintf(stderr, "You have %d pending %s.\n", i, noun);
+            
+            /* list the pending jobs (bash extension) */
+            if(optionx_set(OPTION_CHECK_JOBS))
+            {
+                jobs_builtin(1, (char *[]){ "jobs" });
+            }
 
-        /* interactive login shell will kill all jobs in exit_gracefully() below */
-        if(!tried_exit)
-        {
-            fprintf(stderr, "You have suspended (running) jobs.\n");
             tried_exit = 1;
             return 1;
         }
@@ -125,72 +124,6 @@ int exit_builtin(int argc, char **argv)
 
     exit_gracefully(exit_status, NULL);
     __builtin_unreachable();
-}
-
-
-/*
- * free memory used by the internal buffers.
- */
-void free_buffers(void)
-{
-    int i;
-    /*
-     * free memory used by the symbol table and other buffers. not really needed, 
-     * as we are exiting, but its good practice to balance your malloc/free call ratio. 
-     * also helps us when profiling our memory usage with valgrind.
-     */
-    struct symtab_s *symtab;
-    while((symtab = symtab_stack_pop()))
-    {
-        free_symtab(symtab);
-    }
-
-    /* free the current working directory string */
-    if(cwd)
-    {
-        free(cwd);
-    }
-
-    /* free the directory stack */
-    struct dirstack_ent_s *ds = dirstack;
-    while(ds)
-    {
-        struct dirstack_ent_s *next = ds->next;
-        if(ds->path)
-        {
-            free_malloced_str(ds->path);
-        }
-        free(ds);
-        ds = next;
-    }
-
-    /* free the list of aliases */
-    unset_all_aliases();
-
-    /* free our special variables list (RANDOM, SECONDS, ...) */
-    for(i = 0; i < special_var_count; i++)
-    {
-        if(special_vars[i].val)
-        {
-            free(special_vars[i].val);
-        }
-    }
-    
-    /* free the hashed utilities table */
-    if(utility_hashtable)
-    {
-        free_hashtable(utility_hashtable);
-    }
-    
-    /* free the command input buffer */
-    if(tok_buf)
-    {
-        free(tok_buf);
-    }
-    if(cmdbuf)
-    {
-        free(cmdbuf);
-    }
 }
 
 
@@ -203,10 +136,7 @@ void free_buffers(void)
 void exit_gracefully(int stat, char *errmsg)
 {
     /* execute the EXIT trap (if any) */
-    if(!executing_trap)
-    {
-        trap_handler(0);
-    }
+    trap_handler(0);
     
     /*
      *  flush history list to the history file if the shell is interactive and
@@ -217,23 +147,22 @@ void exit_gracefully(int stat, char *errmsg)
         flush_history();
     }
     
-    /* 
-     * don't interrupt us while we perform logout actions. this is
-     * what tcsh does on logout.
-     */
-    sigset_t intmask;
-    sigemptyset(&intmask);
-    sigaddset(&intmask, SIGCHLD);
-    sigaddset(&intmask, SIGINT );
-    sigaddset(&intmask, SIGQUIT);
-    sigaddset(&intmask, SIGTERM);
-    sigprocmask(SIG_BLOCK, &intmask, NULL);
-    
-    struct source_s src;
-
     /* perform logout scripts on login shell's exit */
-    if(option_set('L'))
+    if(option_set('L') && !executing_subshell)
     {
+        /* 
+         * don't interrupt us while we perform logout actions. this is
+         * what tcsh does on logout.
+         */
+        struct source_s src;
+        sigset_t intmask;
+        sigemptyset(&intmask);
+        sigaddset(&intmask, SIGCHLD);
+        sigaddset(&intmask, SIGINT );
+        sigaddset(&intmask, SIGQUIT);
+        sigaddset(&intmask, SIGTERM);
+        sigprocmask(SIG_BLOCK, &intmask, NULL);
+    
         /* local logout scripts */
         if(read_file("~/.lshlogout", &src))
         {
@@ -245,6 +174,7 @@ void exit_gracefully(int stat, char *errmsg)
             parse_and_execute(&src);
             free(src.buffer);
         }
+
         /* global logout scripts */
         if(read_file("/etc/lshlogout", &src))
         {
@@ -257,25 +187,16 @@ void exit_gracefully(int stat, char *errmsg)
             free(src.buffer);
         }
 
-        /* save the dirstack if login shell */
-        /* OPTION_SAVE_DIRS must be set to save dirs */
+        sigprocmask(SIG_UNBLOCK, &intmask, NULL);
+
+        /*
+         * save the dirstack if login shell (OPTION_SAVE_DIRS must be set to 
+         * save the dirstack).
+         */
         if(optionx_set(OPTION_SAVE_DIRS))
         {
             save_dirstack(NULL);
         }
-    }
-    sigprocmask(SIG_UNBLOCK, &intmask, NULL);
-
-    /* restore the terminal's canonical mode (if we're reading from it) */
-    if(read_stdin)
-    {
-        tcsetattr(0, TCSAFLUSH, &tty_attr_old);
-    }
-
-    /* check if we have an error message and if so, print it. */
-    if(errmsg)
-    {
-        fprintf(stderr, "%s: %s\n", SHELL_NAME, errmsg);
     }
 
     /* interactive login shells send SIGHUP to jobs on exit (bash) */
@@ -283,13 +204,22 @@ void exit_gracefully(int stat, char *errmsg)
     {
         kill_all_jobs(SIGHUP, JOB_FLAG_DISOWNED);
     }
-    
-    /* free our internal buffers (make valgrind happy) */
-    free_buffers();
+
+    /* check if we have an error message and if so, print it. */
+    if(errmsg)
+    {
+        PRINT_ERROR("%s: %s\n", SHELL_NAME, errmsg);
+    }
     
     /* flush any hanging messages in the output streams */
     fflush(stdout);
     fflush(stderr);
+
+    /* restore the terminal's canonical mode (if we're reading from it) */
+    if(read_stdin)
+    {
+        set_tty_attr(cur_tty_fd(), &tty_attr_old);
+    }
     
     /* say bye bye! */
     exit(stat);

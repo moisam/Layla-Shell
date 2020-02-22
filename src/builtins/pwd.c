@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: pwd.c
  *    This file is part of the Layla Shell project.
@@ -24,11 +24,10 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 
-// #define L_OPTION    1   /* handle symbolic links logically */
-// #define P_OPTION    2   /* handle symbolic links physically */
 #define UTILITY         "pwd"
 
 
@@ -48,18 +47,22 @@ int pwd_builtin(int argc, char **argv)
     /* use the -L option by default */
     int l_option = 1;
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
 
+    /*
+     * recognize the options defined by POSIX if we are running in --posix mode,
+     * or all possible options if running in the regular mode.
+     */
+    char *opts = option_set('P') ? "LP" : "hvLP";
+    
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvLP", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
     {
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_PWD, 1, 0);
+                print_help(argv[0], &PWD_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -128,7 +131,7 @@ int pwd_builtin(int argc, char **argv)
     cwd = getcwd(NULL, 0);
     if(!cwd)
     {
-        fprintf(stderr, "%s: failed to read current working directory: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to read current working directory: %s\n", UTILITY, strerror(errno));
         return 1;
     }
     

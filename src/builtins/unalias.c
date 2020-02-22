@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: unalias.c
  *    This file is part of the Layla Shell project.
@@ -20,6 +20,7 @@
  */    
 
 #include <stdlib.h>
+#include "builtins.h"
 #include "../cmd.h"
 
 #define UTILITY         "unalias"
@@ -33,17 +34,17 @@ void unalias_all(void)
     int i = 0;
     for( ; i < MAX_ALIASES; i++)
     {
-        if(!aliases[i].name)
+        if(aliases[i].name)
         {
-            continue;
+            free(aliases[i].name);
+            aliases[i].name = NULL;
+        
+            if(aliases[i].val)
+            {
+                free(aliases[i].val);
+                aliases[i].val = NULL;
+            }
         }
-        free(aliases[i].name);
-        aliases[i].name = NULL;
-        if(aliases[i].val)
-        {
-            free(aliases[i].val);
-        }
-        aliases[i].val  = NULL;
     }
 }
 
@@ -63,28 +64,35 @@ int unalias_builtin(int argc, char **argv)
     int do_unalias_all = 0;
     int i;
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    int res = 0;
+
+    /*
+     * recognize the options defined by POSIX if we are running in --posix mode,
+     * or all possible options if running in the regular mode.
+     */
+    char *opts = option_set('P') ? "a" : "ahv";
+
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hva", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
     {
-        if(c == 'h')
+        switch(c)
         {
-            print_help(argv[0], REGULAR_BUILTIN_UNALIAS, 1, 0);
-            return 0;
-        }
-        else if(c == 'v')
-        {
-            printf("%s", shell_ver);
-            return 0;
-        }
-        else if(c == 'a')
-        {
-            do_unalias_all = 1;
+            case 'h':
+                print_help(argv[0], &UNALIAS_BUILTIN, 0);
+                return 0;
+                
+            case 'v':
+                printf("%s", shell_ver);
+                return 0;
+                
+            case 'a':
+                do_unalias_all = 1;
+                break;
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -99,32 +107,26 @@ int unalias_builtin(int argc, char **argv)
     }
 
     /* process the arguments */
-    int res = 0;
     for( ; v < argc; v++)
     {
-        for(i = 0; i < MAX_ALIASES; i++)
+        i = alias_list_index(argv[v]);
+        if(i >= 0)
         {
-            if(aliases[i].name)
+            free(aliases[i].name);
+            aliases[i].name = NULL;
+            
+            if(aliases[i].val)
             {
-                if(strcmp(aliases[i].name, argv[v]) == 0)
-                {
-                    free(aliases[i].name);
-                    aliases[i].name = NULL;
-                    if(aliases[i].val)
-                    {
-                        free(aliases[i].val);
-                    }
-                    aliases[i].val  = NULL;
-                    break;
-                }
+                free(aliases[i].val);
+                aliases[i].val  = NULL;
             }
         }
-        /* alias not found */
-        if(i == MAX_ALIASES)
+        else
         {
-            fprintf(stderr, "%s: unknown alias: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR("%s: unknown alias: %s\n", UTILITY, argv[v]);
             res = 2;
         }
     }
+
     return res;
 }

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: disown.c
  *    This file is part of the Layla Shell project.
@@ -21,6 +21,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../debug.h"
 
@@ -29,6 +30,7 @@
 /* defined in ../jobs.c */
 extern struct job_s jobs_table[];
 
+/* define below */
 void disown_job(struct job_s *job, int nohup);
 
 
@@ -50,8 +52,7 @@ int disown_builtin(int argc, char **argv)
     int running_only = 0;
     int stopped_only = 0;
     int nohup        = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    
     /****************************
      * process the options
      ****************************/
@@ -103,7 +104,7 @@ int disown_builtin(int argc, char **argv)
             job = get_job_by_jobid(get_jobid("%%"));
             if(!job)
             {
-                fprintf(stderr, "%s: unknown job: %%%%\n", UTILITY);
+                PRINT_ERROR("%s: unknown job: %%%%\n", UTILITY);
                 return 1;
             }
             disown_job(job, nohup);
@@ -147,7 +148,7 @@ int disown_builtin(int argc, char **argv)
         /* still nothing? */
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
             return 1;
         }
         /* disown only running jobs */
@@ -179,6 +180,6 @@ void disown_job(struct job_s *job, int nohup)
     else
     {
         /* disown this b&^%$ */
-        kill_job(job);
+        remove_job(job);
     }
 }

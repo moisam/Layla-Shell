@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: let.c
  *    This file is part of the Layla Shell project.
@@ -40,36 +40,41 @@
 
 int let_builtin(int argc, char **argv)
 {
-    /* no arguments */
-    if(argc == 1)
+    int i = 1, j = 0;
+    char *res;
+    
+    /* bash's let recognizes (and skips) leading '--' */
+    if(argv[1] && strcmp(argv[1], "--") == 0)
     {
+        i++;
+    }
+    
+    /* no arguments */
+    if(i >= argc)
+    {
+        PRINT_ERROR("%s: missing expression\n", UTILITY);
         return 1;
     }
-    char *endstr;    
-    char *res[argc-1];
-    int i = 1, j = 0;
+    
     /* parse the arguments */
-    for( ; i < argc; i++, j++)
+    for( ; i < argc; i++)
     {
-        res[j] = arithm_expand(argv[i]);
-        /* __do_arithmetic() should have printed an appropriate error msg */
-        if(!res[j])
+        res = arithm_expand(argv[i]);
+        
+        /* arithm_expand() should have printed an appropriate error msg */
+        if(!res)
         {
-            while(j--)
-            {
-                free(res[j]);
-            }
             return 1;
         }
+        free(res);
+
+        /*
+         * arithm_expand() inverts the result when it sets the exit status.
+         * we will just pass the result back to our caller as-is.
+         */
+        j = exit_status;
     }
-    i = strtol(res[j-1], &endstr, 10);
-    if(endstr == res[j-1])
-    {
-        i = 1;
-    }
-    while(j--)
-    {
-        free(res[j]);
-    }
-    return !i;
+    
+    /* return 1 if the last expr evaluated to 0, return 0 otherwise */
+    return j;
 }

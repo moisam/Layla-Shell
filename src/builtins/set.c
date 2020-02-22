@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: set.c
  *    This file is part of the Layla Shell project.
@@ -26,9 +26,11 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "../debug.h"
+#include "setx.h"
 
 #define UTILITY     "set"
 
@@ -77,6 +79,7 @@ int options_count = sizeof(shell_options)/sizeof(struct option_s);
 
 /* some important indices to the array above */
 #define OPTION_PRIVILEGED       18
+#define OPTION_POSIX            19
 #define OPTION_RESTRICTED       21
 
 
@@ -191,11 +194,8 @@ void symtab_save_options(void)
     *b = '\0';
 
     struct symtab_entry_s *entry = add_to_symtab("-");
-    if(entry)
-    {
-        entry->flags |= FLAG_READONLY;
-        symtab_entry_setval(entry, buf);
-    }
+    entry->flags |= FLAG_READONLY;
+    symtab_entry_setval(entry, buf);
 
     /* save options in a colon-separated list, similar to what bash does */
     /* make a buffer as large as can be. 11 if the length of the longest option name */
@@ -267,46 +267,47 @@ void print_options(char onoff)
 /*
  * reset uid and gid if the previliged mode is off (the +p option).
  */
-static inline void do_privileged(int onoff)
+void do_privileged(int on)
 {
     /* turning off privileged mode resets ids */
-    if(!onoff)
+    if(!on)
     {
         uid_t euid = geteuid(), ruid = getuid();
         gid_t egid = getegid(), rgid = getgid();
+
         if(euid != ruid)
         {
             seteuid(ruid);
         }
+
         if(egid != rgid)
         {
             setegid(rgid);
         }
     }
-    shell_options[OPTION_PRIVILEGED].is_set = onoff;
+    shell_options[OPTION_PRIVILEGED].is_set = on;
 }
 
 
 /*
  * turn the restricted mode on (the -r option) or off (the +r option).
  */
-static inline int do_restricted(int onoff)
+static inline int do_restricted(int on)
 {
     /* -r mode cannot be turned off */
-    if(!onoff && shell_options[OPTION_RESTRICTED].is_set)
+    if(!on && shell_options[OPTION_RESTRICTED].is_set)
     {
-        fprintf(stderr, 
-                "%s: restricted flag cannot be unset after being set\n",
-                UTILITY);
+        PRINT_ERROR("%s: restricted flag cannot be unset after being set\n",
+                    UTILITY);
         return 0;
     }
-    shell_options[OPTION_RESTRICTED].is_set = onoff;
+    shell_options[OPTION_RESTRICTED].is_set = on;
     return 1;
 }
 
 
 /*
- * if the shell is started in the --posix mode, clear all non-POSIX options.
+ * if the POSIX mode is on, switch off all the non-POSIX options.
  */
 void reset_non_posix_options(void)
 {
@@ -333,6 +334,23 @@ void reset_non_posix_options(void)
 
 
 /*
+ * if 'on' is non-zero, enable the strict POSIX mode (done using the --posix 
+ * or -p option).. otherwise disable the POSIX mode.
+ */
+void do_posix(int on)
+{
+    /* disable some builtin extensions in the posix '-P' mode */
+    if(on)
+    {
+        reset_non_posix_options();
+        disable_extended_options();
+        disable_nonposix_builtins();
+    }
+    shell_options[OPTION_POSIX].is_set = on;
+}
+
+
+/*
  * process the 'ops' string, which is an options string we got from the command
  * line (on shell startup) or from the set builtin utility.. we process the string,
  * char by char, set or unset the option represented by each char.. if the string is
@@ -352,12 +370,15 @@ int do_options(char *ops, char *extra)
         switch(*ops)
         {
             case 'L':
-            case 'P':
                 fprintf(stderr,
                         "%s: cannot change the --%s option when the shell is running\n",
                         UTILITY, long_option(*ops));
                 return -1;
                 
+            case 'P':
+                do_posix(onoff);
+                break;
+
             case 'p':
                 do_privileged(onoff);
                 break;
@@ -377,12 +398,16 @@ int do_options(char *ops, char *extra)
                 }
 
                 /* get the long option */
-                if(strcmp(extra, "login") == 0 || strcmp(extra, "posix") == 0)
+                if(strcmp(extra, "login") == 0)
                 {
                     fprintf(stderr,
                             "%s: cannot change the --%s option when the shell is running\n",
                             UTILITY, extra);
                     return -1;
+                }
+                else if(strcmp(extra, "posix") == 0)
+                {
+                    do_posix(onoff);
                 }
                 else if(strcmp(extra, "privileged") == 0)
                 {
@@ -409,7 +434,7 @@ int do_options(char *ops, char *extra)
                     /* unrecognized option */
                     if(i == options_count)
                     {
-                        fprintf(stderr, "%s: unknown option: %s\n", UTILITY, extra);
+                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, extra);
                         return -1;
                     }
                 }
@@ -429,7 +454,7 @@ int do_options(char *ops, char *extra)
                 /* unrecognized option */
                 if(i == options_count)
                 {
-                    fprintf(stderr, "%s: unknown option: %c\n", UTILITY, *ops);
+                    PRINT_ERROR("%s: unknown option: %c\n", UTILITY, *ops);
                     return -1;
                 }
                 break;
@@ -600,6 +625,12 @@ int set_builtin(int argc, char **argv)
         sprintf(buf, "%d", ++params);
         entry = add_to_symtab(buf);
         symtab_entry_setval(entry, argv[i]);
+        /*
+         * if a dot script calls set to change the values of one or more 
+         * special parameters, the results should propagate to the rest of
+         * the shell, which means we need to remove the local flag.
+         */
+        entry->flags &= ~FLAG_LOCAL;
     }
     
     /* set the rest of parameters to NULL */
@@ -612,6 +643,8 @@ int set_builtin(int argc, char **argv)
             if(entry)
             {
                 symtab_entry_setval(entry, NULL);
+                /* ditto */
+                entry->flags &= ~FLAG_LOCAL;
             }
         }
     }
@@ -622,6 +655,8 @@ int set_builtin(int argc, char **argv)
         entry = get_symtab_entry("#");
         sprintf(buf, "%d", params);
         symtab_entry_setval(entry, buf);
+        /* ditto */
+        entry->flags &= ~FLAG_LOCAL;
     }
     //__asm__("xchg %%bx, %%bx"::);
     symtab_save_options();
@@ -630,44 +665,73 @@ int set_builtin(int argc, char **argv)
 
 
 /*
- * set the value of shell variable 'name_buf' to the string 'val_buf.. if 'set_global' is
- * non-zero, 'name_buf' is set (or added if not already defined) to the global symbol table..
- * the 'set_flags' parameter contains the flags we need to set on 'name_buf' variable, the
- * 'unset_flags' contains the flags to unset.
+ * set the value of shell variable 'name_buf' to the string 'val_buf'..
+ * 'set_flags' contains the flags to be set in the variable's entry, while
+ * 'unset_flags' contains the flags to be turned off.. the 'flags' argument
+ * contains flags to control do_set(), which can be a combination of:
+ * 
+ *     SET_FLAG_GLOBAL:    'name_buf' is set (or added if not already defined)
+ *                         to the global symbol table.
+ *     SET_FLAG_APPEND:    append 'val_buf' to the current variable's value.
+ *     SET_FLAG_FORCE_NEW: don't search for an existing entry before adding 
+ *                         the variable to the local symbol table.
  *
- * returns 1 if the shell variable and its flags are set, -1 if the variable is readonly,
- * and 0 for all other errors.
+ * returns the shell variable if its found and its flags are set, or NULL for errors.
  */
-int do_set(char* name_buf, char* val_buf, int set_global, int set_flags, int unset_flags)
+struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags, int unset_flags, int flags)
 {
-    /* check the special variables first */
-    if(set_special_var(name_buf, val_buf))
+    /* the -a option automatically sets the export flag for all variables */
+    int export = option_set('a');
+    int set_global = flag_set(flags, SET_FLAG_GLOBAL);
+    int append = flag_set(flags, SET_FLAG_APPEND);
+    int force_new = flag_set(flags, SET_FLAG_FORCE_NEW);
+    struct symtab_entry_s *entry1 = NULL, *entry2;
+    
+    if(export)
     {
-        return 1;
+        set_global = 1;
     }
     
     /* is this shell restricted? */
     if(startup_finished && option_set('r') && is_restrict_var(name_buf))
     {
         /* r-shells can't set/unset SHELL, ENV, FPATH, or PATH */
-        fprintf(stderr, "%s: restricted shells can't set %s\n", SHELL_NAME, name_buf);
-        return 0;
+        PRINT_ERROR("%s: restricted shells can't set %s\n", SHELL_NAME, name_buf);
+        return NULL;
     }
     
-    /* now to normal variables */
-    struct symtab_s *globsymtab = get_global_symtab();
-    struct symtab_entry_s *entry1 = do_lookup(name_buf, globsymtab);
-    struct symtab_entry_s *entry2 = get_local_symtab_entry(name_buf);
-    
-    /* the -a option automatically sets the export flag for all variables */
-    if(option_set('a'))
+    /* positional and special parameters can't be set like this */
+    if(is_pos_param(name_buf))
     {
-        set_flags |= FLAG_EXPORT;
-        set_global = 1;
+        PRINT_ERROR("%s: cannot set `%s`: positional parameter\n", SHELL_NAME, name_buf);
+        return NULL;
+    }
+    else if(is_special_param(name_buf))
+    {
+        /*
+         * if we're declaring a local variable with the name '-', create a copy 
+         * of the options string and make it local to the calling function (bash).
+         */
+        if(name_buf[0] == '-' && name_buf[1] == '\0' && !set_global && !val_buf)
+        {
+            entry1 = get_symtab_entry("-");
+            entry2 = add_to_symtab("-");
+            entry2->flags = FLAG_LOCAL | FLAG_READONLY;
+            symtab_entry_setval(entry2, entry1 ? entry1->val : NULL);
+            return entry2;
+        }
+
+        PRINT_ERROR("%s: cannot set `%s`: special parameter\n", SHELL_NAME, name_buf);
+        return NULL;
     }
     
+    /* set the variable's value */
     if(set_global)
     {
+        struct symtab_s *globsymtab = get_global_symtab();
+        entry1 = do_lookup(name_buf, globsymtab);
+        entry2 = get_local_symtab_entry(name_buf);
+    
         /*
          * remove the variable from local symbol table (if any is set),
          * and add it to the global symbol table.
@@ -695,29 +759,88 @@ int do_set(char* name_buf, char* val_buf, int set_global, int set_flags, int uns
     }
     else
     {
-        entry1 = add_to_symtab(name_buf);
+        if(!force_new)
+        {
+            entry1 = get_symtab_entry(name_buf);
+        }
+        
         if(!entry1)
         {
-            return 0;
+            entry1 = add_to_symtab(name_buf);
         }
     }
 
-    /* can't set readonly variables */
+    /* can't set readonly variables (but return it so the caller can act on it) */
     if(flag_set(entry1->flags, FLAG_READONLY))
     {
-        return -1;
+        return entry1;
     }
+
+    /* set the flags */
+    entry1->flags |= set_flags;
+    entry1->flags &= ~unset_flags;
+    
+    if(export)
+    {
+        entry1->flags |= FLAG_EXPORT;
+    }
+    
     /* set the value */
     if(val_buf)
     {
-        symtab_entry_setval(entry1, val_buf);
+        if(append && entry1->val)
+        {
+            /* do we need to perform arithmetic addition? */
+            if(flag_set(entry1->flags, FLAG_INTVAL))
+            {
+                char *strend;
+                char *old_val_str = arithm_expand(entry1->val);
+                long old_val = 0, new_val;
+                
+                /* get the old value */
+                if(old_val_str)
+                {
+                    old_val = strtol(old_val_str, &strend, 10);
+                    if(*strend)
+                    {
+                        old_val = 0;
+                    }
+                }
+                
+                /* and the new value */
+                new_val = strtol(val_buf, &strend, 10);
+                if(*strend)
+                {
+                    new_val = 0;
+                }
+                
+                /* and add them together */
+                new_val += old_val;
+
+                /* and set the new value */
+                char buf[32];
+                sprintf(buf, "%ld", new_val);
+                symtab_entry_setval(entry1, buf);
+            }
+            else
+            {
+                char *s = alpha_list_make_str("%s%s", entry1->val, val_buf);
+                if(s)
+                {
+                    symtab_entry_setval(entry1, s);
+                    free(s);
+                }
+                else
+                {
+                    symtab_entry_setval(entry1, val_buf);
+                }
+            }
+        }
+        else
+        {
+            symtab_entry_setval(entry1, val_buf);
+        }
     }
-    /* set the flags */
-    entry1->flags |= set_flags;
-    /* unset the given flags, if any */
-    if(unset_flags)
-    {
-        entry1->flags &= ~unset_flags;
-    }
-    return 1;
+    
+    return entry1;
 }

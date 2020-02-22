@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: whence.c
  *    This file is part of the Layla Shell project.
@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../parser/parser.h"
 
@@ -42,9 +43,9 @@
 int whence_builtin(int argc, char **argv)
 {
     int v = 1, c;
-    int res = 0, /* verbose = 0, */ skipfunc = 0, print_path = 0, print_all = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    int res = 0;
+    int flags = TYPE_FLAG_PRINT_FUNCS | TYPE_FLAG_PRINT_BUILTINS;
+
     /****************************
      * process the options
      ****************************/
@@ -53,27 +54,28 @@ int whence_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_WHENCE, 1, 0);
+                print_help(argv[0], &WHENCE_BUILTIN, 0);
                 return 0;
                 
             case 'a':
-                print_all  = 1;
+                flags |= TYPE_FLAG_PRINT_ALL;
                 break;
                 
             case 'f':
-                skipfunc   = 1;
+                flags &= ~TYPE_FLAG_PRINT_FUNCS;
                 break;
                 
             case 'p':
-                print_path = 1;
+                flags |= TYPE_FLAG_PRINT_PATH;
+                flags &= ~TYPE_FLAG_PRINT_BUILTINS;
                 break;
                 
             case 'v':
                 /* ignored. we always print verbose output */
-                //verbose    = 1;
                 break;
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -83,64 +85,17 @@ int whence_builtin(int argc, char **argv)
     /* missing arguments */
     if(v >= argc)
     {
-        fprintf(stderr, "%s: missing argument: command name\n", UTILITY);
+        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
         return 2;
     }
     
     /* parse the arguments */
     for( ; v < argc; v++)
     {
-        char *arg = argv[v];
-        if(strchr (arg, '/'))
+        int res2 = print_command_type(argv[v], "whence", NULL, flags);
+        if(res2)
         {
-            /* argument contains slashes. treat as a pathname and print as-is */
-            printf("%s is %s\n", arg, arg);
-        }
-        else
-        {
-            /* argument has no slashes. process it */
-            if(!print_path)
-            {
-                /* check if it is a defined alias */
-                char *alias = get_alias_val(arg);
-                if(alias && alias != arg)
-                {
-                    printf("%s is aliased to ", arg);
-                    print_quoted_val(alias);
-                    printf("\n");
-                    if(!print_all) continue;
-                }
-                /* check if it is a keyword */
-                if(is_keyword (arg) >= 0)
-                {
-                    printf("%s is a shell keyword\n", arg);
-                    if(!print_all) continue;
-                }
-                /* check if it is a builtin utility */
-                if(is_builtin (arg))
-                {
-                    printf("%s is a shell builtin\n", arg);
-                    if(!print_all) continue;
-                }
-                /* check if it is a defined shell function */
-                if(!skipfunc && is_function(arg))
-                {
-                    printf("%s is a shell function\n", arg);
-                    if(!print_all) continue;
-                }
-            }
-            /* now search for an external command with the given name */
-            char *path = search_path(arg, NULL, 1);
-            if(!path)
-            {
-                /* path not found */
-                printf("%s is unknown\n", arg);
-                res = 3;
-                continue;
-            }
-            /* path found */
-            printf("%s is %s\n", arg, path);
-            free_malloced_str(path);
+            res = res2;
         }
     }
 

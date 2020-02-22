@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: fg.c
  *    This file is part of the Layla Shell project.
@@ -24,7 +24,11 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <linux/input.h>
+#include <linux/kd.h>
+#include "builtins.h"
 #include "../cmd.h"
+#include "../sig.h"
 #include "../backend/backend.h"
 #include "../debug.h"
 
@@ -38,8 +42,21 @@ extern int prev_job;
 /*
  * bring a job to the foreground.
  */
-void do_fg(struct job_s *job)
+int do_fg(struct job_s *job)
 {
+    /* fg only works if job control is enabled (the monitor '-m' option is set) */
+    if(!flag_set(job->flags, JOB_FLAG_JOB_CONTROL))
+    {
+        PRINT_ERROR("%s: job started without job control\n", UTILITY);
+        return 0;
+    }
+    
+    sigset_t sigset;
+    SIGNAL_BLOCK(SIGCHLD, sigset);
+
+    job->flags |= JOB_FLAG_FORGROUND;
+    job->flags &= ~JOB_FLAG_NOTIFIED;
+    
     /*
      * in tcsh, special alias jobcmd is run before running commands and when jobs
      * change state, or a job is brought to the foreground.
@@ -50,29 +67,36 @@ void do_fg(struct job_s *job)
      * no need to check for option_set('m') here because it must be set,
      * otherwise this function would have never been called.
      */
-    int   tty = isatty(0);
+    int tty = cur_tty_fd();
     printf("%s\n", job->commandstr);
-    if(tty)
+
+    /* save the terminal's attributes (bash, zsh) */
+    struct termios *attr = save_tty_attr();
+    
+    /* restore the terminal attributes to what it was when the job was suspended (zsh) */
+    if(job->tty_attr)
     {
-        tcsetpgrp(0, job->pgid);
-        /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(job->tty_attr)
+        if(!set_tty_attr(tty, job->tty_attr))
         {
-            if(tcsetattr(0, TCSAFLUSH, job->tty_attr) == -1)
-            {
-                fprintf(stderr, "%s: failed to restore terminal attributes\n", SHELL_NAME);
-            }
+            PRINT_ERROR("%s: failed to restore terminal attributes\n", SHELL_NAME);
         }
     }
+
+    /* tell the terminal about the new foreground pgid */
+    tcsetpgrp(tty, job->pgid);
+
     /* continue the job and wait for it */
     kill(-(job->pgid), SIGCONT);
-    job->flags |= JOB_FLAG_FORGROUND;
+    SIGNAL_UNBLOCK(sigset);
     wait_on_child(job->pgid, NULL, job);
+    
     /* restore our foreground pgid */
-    if(tty)
-    {
-        tcsetpgrp(0, tty_pid);
-    }
+    tcsetpgrp(tty, shell_pid);
+
+    /* restore the terminal's attributes */
+    set_tty_attr(tty, attr);
+    
+    return 1;
 }
 
 
@@ -90,13 +114,6 @@ void do_fg(struct job_s *job)
 
 int fg_builtin(int argc, char **argv)
 {
-    /* job control must be on */
-    if(!option_set('m'))
-    {
-        fprintf(stderr, "%s: job control is not enabled\n", UTILITY);
-        return 2;
-    }
-    
     struct job_s *job;
     /* we have no job argument.. use the current job */
     if(argc == 1)
@@ -104,25 +121,22 @@ int fg_builtin(int argc, char **argv)
         job = get_job_by_jobid(get_jobid("%%"));
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %%%%\n", UTILITY);
+            PRINT_ERROR("%s: unknown job: %%%%\n", UTILITY);
             return 3;
         }
-        do_fg(job);
-        return 0;
+        return !do_fg(job);
     }
 
     /****************************
      * process the options
      ****************************/
-    int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    int v = 1, res = 0, c;
     while((c = parse_args(argc, argv, "hv", &v, 0)) > 0)
     {
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_FG, 1, 0);
+                print_help(argv[0], &FG_BUILTIN, 0);
                 return 0;
 
             case 'v':
@@ -130,6 +144,7 @@ int fg_builtin(int argc, char **argv)
                 return 0;
         }
     }
+    
     /* unknown option */
     if(c == -1)
     {
@@ -148,10 +163,10 @@ int fg_builtin(int argc, char **argv)
         job = get_job_by_jobid(get_jobid(argv[v]));
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
             return 3;
         }
-        do_fg(job);
+        res = !do_fg(job);
     }
-    return 0;
+    return res;
 }

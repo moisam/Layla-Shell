@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: logout.c
  *    This file is part of the Layla Shell project.
@@ -20,6 +20,7 @@
  */    
 
 #include <stdlib.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../debug.h"
 
@@ -36,9 +37,15 @@
 
 int logout_builtin(int argc, char **argv)
 {
+    if(!option_set('L'))
+    {
+        PRINT_ERROR("logout: this is not a login shell: use `exit`\n");
+        return 1;
+    }
+    
     /*
      * NOTE: we perform proper logout in the exit_gracefully() function
      *       of exit.c.
      */
-    return exit_builtin(argc, argv);
+    return do_builtin_internal(exit_builtin, argc, argv);
 }

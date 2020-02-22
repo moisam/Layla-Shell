@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: true.c
  *    This file is part of the Layla Shell project.
@@ -38,7 +38,7 @@ int true_builtin(int argc __attribute__((unused)), char **argv __attribute__((un
 {
     /*
      * NOTE: ksh, bash and other major shells implement a true builtin
-     *       that accepts no options, especially the '--' option.
+     *       that accepts no options, not even the '--' option.
      */
     return 0;
 }

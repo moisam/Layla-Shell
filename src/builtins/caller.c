@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: caller.c
  *    This file is part of the Layla Shell project.
@@ -21,6 +21,7 @@
 
 #include <stdlib.h>
 #include "../cmd.h"
+#include "../builtins/setx.h"
 
 #define UTILITY         "caller"
 
@@ -31,8 +32,8 @@
  * to the previous function in the call stack (see the definition of 
  * 'struct callframe_s' in ../cmd.h). the stack itself is a simple linked list.
  * the top of the stack represents the last function call (the function that is
- * currently executing), while the bottom of the stack is always the 'main' function,
- * or the shell itself.
+ * currently executing), while the bottom of the stack is always the 'main'
+ * function, i.e. the shell itself.
  */
 
 struct callframe_s *cur_callframe  = NULL;      /* the current call frame */
@@ -42,6 +43,7 @@ struct callframe_s *zero_callframe = NULL;      /* the very first call frame */
 /*
  * create a new callframe for a function call, given the function's name,
  * source file name and line number where it was declared.
+ * 
  * returns a struct callframe_s pointer if the callframe is created successfully,
  * NULL otherwise.
  */
@@ -80,13 +82,16 @@ int callframe_push(struct callframe_s *cf)
     {
         return 0;
     }
+
     /* first callframe ever */
     if(!zero_callframe)
     {
         zero_callframe = cf;
     }
+    
     /* link to the previous callframe */
     cf->prev = cur_callframe;
+    
     /* make the new callframe the current one (i.e. push on top the stack) */
     cur_callframe = cf;
     return 1;
@@ -103,15 +108,19 @@ struct callframe_s *callframe_pop(void)
     {
         return NULL;
     }
+    
     /* get the current callframe (top of the stack) */
     struct callframe_s *cf = cur_callframe;
+    
     /* pop it off the stack */
     cur_callframe = cur_callframe->prev;
+    
     /* if last callframe on the stack, reset our zero_callframe pointer */
     if(!cur_callframe)
     {
         zero_callframe = NULL;
     }
+    
     /* return the popped callframe */
     return cf;
 }
@@ -127,21 +136,25 @@ void callframe_popf(void)
     {
         return;
     }
+    
     struct callframe_s *cf = cur_callframe;
     cur_callframe = cur_callframe->prev;
     if(!cur_callframe)
     {
         zero_callframe = NULL;
     }
+    
     /* free the memory used by the callframe */
     if(cf->funcname)
     {
         free_malloced_str(cf->funcname);
     }
+    
     if(cf->srcfile )
     {
         free_malloced_str(cf->srcfile );
     }
+    
     free(cf);
 }
 
@@ -156,7 +169,8 @@ int get_callframe_count(void)
     struct callframe_s *cf = cur_callframe;
     while(cf)
     {
-        count++, cf = cf->prev;
+        count++;
+        cf = cf->prev;
     }
     return count;
 }
@@ -178,10 +192,14 @@ int caller_builtin(int argc, char **argv)
         level = strtol(argv[1], &s, 10);
         if(s == argv[1])
         {
-            fprintf(stderr, "%s: invalid callframe number: %s\n", UTILITY, argv[1]);
+            if(optionx_set(OPTION_CALLER_VERBOSE))
+            {
+                PRINT_ERROR("%s: invalid callframe number: %s\n", UTILITY, argv[1]);
+            }
             return 2;
         }
     }
+
     /* empty stack, return error */
     if(!cur_callframe)
     {
@@ -204,12 +222,17 @@ int caller_builtin(int argc, char **argv)
         {
             cf = cf->prev;
         }
+
         /* the number requested is out of the stack bounds */
         if(cf == NULL)
         {
-            fprintf(stderr, "%s: invalid callframe number: %s\n", UTILITY, argv[1]);
+            if(optionx_set(OPTION_CALLER_VERBOSE))
+            {
+                PRINT_ERROR("%s: invalid callframe number: %s\n", UTILITY, argv[1]);
+            }
             return 2;
         }
+        
         printf("%d %s %s\n", cf->lineno, cf->funcname, cf->srcfile);
     }
     return 0;

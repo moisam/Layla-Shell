@@ -1,6 +1,6 @@
 /* 
- *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Programmed By: Mohammed Isam [mohammed_isam1984@yahoo.com]
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: alias.c
  *    This file is part of the Layla Shell project.
@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../scanner/scanner.h"     /* is_keyword() */
 #include "../parser/parser.h"       /* get_alias_val() */
@@ -31,7 +32,9 @@ struct  alias_s aliases[MAX_ALIASES];
 
 #define UTILITY     "alias"
 
+/* defined below */
 int set_alias(char *name, char *val);
+int alias_list_index(char *alias);
 
 
 /*
@@ -55,7 +58,7 @@ void init_aliases(void)
     set_alias("fgrep", "fgrep --color=auto");
     /* start the calcultator with math support */
     set_alias("bc", "bc -l");
-    /* vi */
+    /* vi editor */
     set_alias("vi", "vim");
     /* some ksh-like aliases */
     set_alias("command", "command ");
@@ -66,10 +69,8 @@ void init_aliases(void)
     set_alias("which", "(alias; declare -f) | /usr/bin/which --tty-only --read-alias --read-functions --show-tilde --show-dot");
     /* alias ksh's hist to our fc */
     set_alias("hist", "fc");
-    /* alias ksh's typeset to our bash-like declare */
-    set_alias("typeset", "declare");
-    /* alias bash's shopt to our setx */
-    set_alias("shopt", "setx");
+    /* alias bash's shopt to our setx (we're mostly compatible!) */
+    //set_alias("shopt", "setx");
     /* alias tcsh's builtins to our builtin */
     set_alias("builtins", "builtin");
     /* alias tcsh's where to our whence */
@@ -109,6 +110,7 @@ void unset_all_aliases(void)
             free(aliases[i].name);
             aliases[i].name = NULL;
         }
+
         if(aliases[i].val)
         {
             free(aliases[i].val);
@@ -123,44 +125,71 @@ void unset_all_aliases(void)
  * the same alias. if name is NULL, all defined aliases are printed.
  * returns 1 if the alias with the given name is not defined, otherwise 0.
  */
-int print_alias(char *name)
+void print_alias(char *name, char *val)
 {
-    int i;
-    /* search the alias list for the given name, or print all aliases if name is NULL */
-    for(i = 0; i < MAX_ALIASES; i++)
+    /*
+     * NOTE: POSIX says to use appropriate quoting, suitable for reinput 
+     *       to the shell.
+     */
+    printf("alias %s", name[0] == '-' ? "-- " : "");
+
+    if(val)
     {
-        if(!aliases[i].name)
+        char *val2 = quote_val(val, 1, 0);
+        if(val2)
         {
-            continue;
+            printf("%s=%s\n", name, val2);
+            free(val2);
         }
-        if(name)
+        else
         {
-            if(strcmp(aliases[i].name, name) != 0)
+            printf("%s=%s\n", name, val);
+        }
+    }
+    else
+    {
+        printf("%s\n", name);
+    }
+}
+
+
+/*
+ * print the list of aliases passed in args.. if args[0] is NULL, print all aliases.
+ */
+int print_alias_list(char **args)
+{
+    int  i, res = 0;
+    char **p;
+
+    if(*args)
+    {
+        for(p = args; *p; p++)
+        {
+            i = alias_list_index(*p);
+            if(i >= 0)
             {
-                continue;
+                print_alias(aliases[i].name, aliases[i].val);
+            }
+            else
+            {
+                PRINT_ERROR("%s: alias `%s` is not defined\n", UTILITY, *p);
+                res = 1;
             }
         }
-        printf("alias %s=", aliases[i].name);
-        /*
-         * NOTE: POSIX says to use appropriate quoting, suitable for reinput 
-         *       to the shell.
-         */
-        if(aliases[i].val)
-        {
-            print_quoted_val(aliases[i].val);
-        }
-        printf("\n");
-        if(name)
-        {
-            return 0;
-        }
     }
-    if(name)
+    else
     {
-        fprintf(stderr, "%s: alias '%s' is not defined\n", UTILITY, name);
-        return 1;
+        /* search the alias list for the given name, or print all aliases if name is NULL */
+        for(i = 0; i < MAX_ALIASES; i++)
+        {
+            if(aliases[i].name)
+            {
+                print_alias(aliases[i].name, aliases[i].val);
+            }
+        }
     }
-    return 0;
+
+    return res;
 }
 
 
@@ -203,7 +232,7 @@ int set_alias(char *name, char *val)
     {
         if(first_free == -1)
         {
-            fprintf(stderr, "%s: couldn't set alias '%s': full buffers\n", UTILITY, name);
+            PRINT_ERROR("%s: couldn't set alias `%s`: full buffers\n", UTILITY, name);
             return 1;
         }
         index = first_free;
@@ -234,7 +263,7 @@ int set_alias(char *name, char *val)
     return 0;
     
 memerr:
-    fprintf(stderr, "%s: couldn't set alias '%s': insufficient memory\n", UTILITY, name);
+    PRINT_ERROR("%s: couldn't set alias `%s`: insufficient memory\n", UTILITY, name);
     return 1;
 }
 
@@ -269,6 +298,25 @@ int valid_alias_name(char *name)
 
 
 /*
+ * get the index of the given alias in the aliases array.
+ * 
+ * returns the zero-based index, or -1 if the alias isn't found.
+ */
+int alias_list_index(char *alias)
+{
+    int i;
+    for(i = 0; i < MAX_ALIASES; i++)
+    {
+        if(aliases[i].name && strcmp(aliases[i].name, alias) == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+
+/*
  * parse an alias name by searching the alias definition and returning
  * the aliased value, NULL if the alias value is NULL, or the same alias
  * name if the alias is not defined.
@@ -279,19 +327,10 @@ char *get_alias_val(char *cmd)
     {
         return cmd;
     }
-    int i;
-    for(i = 0; i < MAX_ALIASES; i++)
-    {
-        if(aliases[i].name)
-        {
-            if(strcmp(aliases[i].name, cmd) == 0)
-            {
-                /* now get the alias value */
-                return aliases[i].val;
-            }
-        }
-    }
-    return cmd;
+
+    /* now get the alias value */
+    int i = alias_list_index(cmd);
+    return (i >= 0) ? aliases[i].val : cmd;
 }
 
 
@@ -311,7 +350,7 @@ void run_alias_cmd(char *alias)
         cmd = word_expand_to_str(cmd);
         if(cmd)
         {
-            eval_builtin(2, (char *[]){ "eval", cmd, NULL });
+            do_builtin_internal(eval_builtin, 2, (char *[]){ "eval", cmd, NULL });
             free(cmd);
         }
     }
@@ -329,24 +368,27 @@ void run_alias_cmd(char *alias)
 
 int alias_builtin(int argc, char **argv)
 {
-    int  index = 0;
-    char *str  = NULL;
+    char *str = NULL;
     char *eq;
-    int  res   = 0, res3;
-    int  i;
+    int  res = 0, res3;
+    int  i, print = 0;
+    int  v = 1, c;
 
+    /*
+     * don't recognize any options in --posix mode (POSIX defines no options),
+     * or recognize all possible options if running in the regular mode.
+     */
+    char *opts = option_set('P') ? "" : "hvp";
+    
     /****************************
      * process the options
      ****************************/
-    int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
-    while((c = parse_args(argc, argv, "hvp", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
     {
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_ALIAS, 1, 0);
+                print_help(argv[0], &ALIAS_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -354,10 +396,11 @@ int alias_builtin(int argc, char **argv)
                 return 0;
                 
             case 'p':
-                print_alias(NULL);
-                return 0;
+                print = 1;
+                break;
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -365,49 +408,60 @@ int alias_builtin(int argc, char **argv)
     }
 
     /* no arguments, print all aliases */
-    if(v >= argc)
+    if(print || v >= argc)
     {
-        print_alias(NULL);
+        print_alias_list(&argv[v]);
         return 0;
     }
 
     /* loop on arguments, printing or defining each one in turn */
-    for(index = v; index < argc; index++)
+    for( ; v < argc; v++)
     {
-        str = argv[index];
+        str = argv[v];
         eq = strchr(str, '=');
+        
         /* if the argument doesn't have =, print the alias definition */
         if(!eq)
         {
-            int res2 = print_alias(str);
-            /* if error return error */
-            if(res2)
+            int i = alias_list_index(str);
+            if(i >= 0)
             {
-                res = res2;
+                print_alias(aliases[i].name, aliases[i].val);
             }
-            continue;
+            else
+            {
+                PRINT_ERROR("%s: alias `%s` is not defined\n", UTILITY, str);
+                res = 1;
+            }
         }
-        /* if the argument has =, get the alias name, which is the part before the = */
-        i = eq-str;
-        char tmp[i+1];
-        strncpy(tmp, str, i);
-        tmp[i] = '\0';
-        /*
-         * don't allow aliasing for shell keywords. tcsh also doesn't allow aliasing
-         * for the words 'alias' and 'unalias' (bash doesn't seem to mind it).
-         */
-        if(is_keyword(tmp) >= 0 || strcmp(tmp, "alias") == 0 || strcmp(tmp, "unalias") == 0)
+        else
         {
-            fprintf(stderr, "%s: cannot alias shell keyword: %s\n", UTILITY, tmp);
-            res = 2;
-            continue;
-        }
-        /* set the alias value, which is the part after the = */
-        res3 = set_alias(tmp, eq+1);
-        /* if error, return an error result */
-        if(res3)
-        {
-            res = res3;
+            /* if the argument has =, get the alias name, which is the part before the = */
+            i = eq-str;
+            char tmp[i+1];
+            strncpy(tmp, str, i);
+            tmp[i] = '\0';
+
+            /*
+             * don't allow aliasing for shell keywords. tcsh also doesn't allow aliasing
+             * for the words 'alias' and 'unalias' (bash doesn't seem to mind it).
+             */
+            if(is_keyword(tmp) >= 0 || strcmp(tmp, "alias") == 0 || strcmp(tmp, "unalias") == 0)
+            {
+                PRINT_ERROR("%s: cannot alias shell keyword: %s\n", UTILITY, tmp);
+                res = 2;
+            }
+            else
+            {
+                /* set the alias value, which is the part after the = */
+                res3 = set_alias(tmp, eq+1);
+        
+                /* if error, return an error result */
+                if(res3)
+                {
+                    res = res3;
+                }
+            }
         }
     }
     return res;

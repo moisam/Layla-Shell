@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: dump.c
  *    This file is part of the Layla Shell project.
@@ -19,6 +19,7 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 
@@ -52,7 +53,7 @@ int dump_builtin(int argc, char **argv)
                 switch(*p)
                 {
                     case 'h':
-                        print_help(argv[0], REGULAR_BUILTIN_DUMP, 1, 0);
+                        print_help(argv[0], &DUMP_BUILTIN, 0);
                         return 0;
                         
                     case 'v':
@@ -60,7 +61,7 @@ int dump_builtin(int argc, char **argv)
                         return 0;
                         
                     default:
-                        fprintf(stderr, "%s: unknown option: %s\n", UTILITY, argv[v]);
+                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, argv[v]);
                         return 2;
                 }
             }
@@ -72,7 +73,7 @@ int dump_builtin(int argc, char **argv)
         }
         else if(strcmp(arg, "vars"  ) == 0)
         {
-            purge_vars(0);
+            purge_vars(NULL, "dump", 0, 0);
         }
     }
     return 0;

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: fc.c
  *    This file is part of the Layla Shell project.
@@ -28,6 +28,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <wait.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../backend/backend.h"
 #include "../debug.h"
@@ -92,14 +93,12 @@ int fc_builtin(int argc, char **argv)
      * process the options
      ****************************/
     int c, i;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     while((c = parse_args(argc, argv, "hvelnrs", &v, 0)) > 0)
     {
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_FC, 1, 0);
+                print_help(argv[0], &FC_BUILTIN, 0);
                 break;
                 
             case 'v':
@@ -211,7 +210,7 @@ int fc_builtin(int argc, char **argv)
         char *f = argv[v++];
         if(direct_exec)
         {
-            fprintf(stderr, "%s: too many arguments\n", UTILITY);
+            PRINT_ERROR("%s: too many arguments\n", UTILITY);
             if(editor)
             {
                 free_malloced_str(editor);
@@ -524,7 +523,7 @@ check_bounds:
     char *tmpname = get_tmp_filename();
     if(!tmpname)
     {
-        fprintf(stderr, "%s: error creating temp file: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: error creating temp file: %s\n", UTILITY, strerror(errno));
         if(editor)
         {
             /* free the editor name */
@@ -543,7 +542,7 @@ check_bounds:
     int tmp = mkstemp(tmpname);
     if(tmp < 0)
     {
-        fprintf(stderr, "%s: error creating temp file: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: error creating temp file: %s\n", UTILITY, strerror(errno));
         free(tmpname);
         if(editor)
         {

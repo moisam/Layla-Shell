@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: wait.c
  *    This file is part of the Layla Shell project.
@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../backend/backend.h"
 #include "../debug.h"
@@ -51,8 +52,8 @@ int wait_builtin(int argc, char **argv)
     int    force    = 0;
     struct job_s *job;
     int    v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    int    i, j;
+    int    tty = cur_tty_fd();
     
     /****************************
      * process the options
@@ -62,7 +63,7 @@ int wait_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_WAIT, 1, 0);
+                print_help(argv[0], &WAIT_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -85,7 +86,6 @@ int wait_builtin(int argc, char **argv)
         return 1;
     }
     
-    int i, j;
     /* no pid operands -- wait for all children */
     if(v >= argc)
     {
@@ -96,7 +96,7 @@ int wait_builtin(int argc, char **argv)
          */
         if(!option_set('m'))
         {
-            fprintf(stderr, "%s: can't wait on jobs: job control is not active\n", UTILITY);
+            PRINT_ERROR("%s: can't wait on jobs: job control is not active\n", UTILITY);
             return 2;
         }
         
@@ -110,9 +110,9 @@ int wait_builtin(int argc, char **argv)
                 }
                 
                 /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-                if(job->tty_attr && isatty(0))
+                if(job->tty_attr)
                 {
-                    tcsetattr(0, TCSANOW, job->tty_attr);
+                    set_tty_attr(tty, job->tty_attr);
                 }
                 
                 if(force)
@@ -158,7 +158,10 @@ int wait_builtin(int argc, char **argv)
                 
                 set_job_exit_status(job, job->pgid, job->status);
                 set_exit_status(res);
-                notice_termination(pid, res);
+                int saveb = option_set('b');
+                set_option('b', 1);
+                notice_termination(pid, res, 0);
+                set_option('b', saveb);
                 
                 if(wait_any)
                 {
@@ -169,11 +172,15 @@ int wait_builtin(int argc, char **argv)
         return 0;
     }    
     v--;
+
+    int saveb = option_set('b');
+    set_option('b', 1);
     
 read_next2:
     
     if(++v >= argc)
     {
+        set_option('b', saveb);
         return res;
     }
     arg = argv[v];
@@ -184,7 +191,7 @@ read_next2:
         /* bash says we can't wait on jobs if job control is not active, which makes sense */
         if(!option_set('m'))
         {
-            fprintf(stderr, "%s: can't kill job %s: job control is not active\n", UTILITY, arg);
+            PRINT_ERROR("%s: can't kill job %s: job control is not active\n", UTILITY, arg);
             return 2;
         }
 
@@ -192,7 +199,7 @@ read_next2:
         job = get_job_by_jobid(pid);
         if(pid == 0 || !job)
         {
-            fprintf(stderr, "%s: invalid job id: %s\n", UTILITY, arg);
+            PRINT_ERROR("%s: invalid job id: %s\n", UTILITY, arg);
             res = 127;
             goto read_next2;
         }
@@ -201,9 +208,9 @@ read_next2:
         j = 1;
         
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(job->tty_attr && isatty(0))
+        if(job->tty_attr)
         {
-            tcsetattr(0, TCSANOW, job->tty_attr);
+            set_tty_attr(tty, job->tty_attr);
         }
         
         if(force)
@@ -225,18 +232,7 @@ read_next2:
             {
                 if(errno == EINTR)
                 {
-                    /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
-                    if(interactive_shell)
-                    {
-                        jobs_builtin(1, (char *[]){ "jobs", NULL });
-                    }
-                    
-                    /* execute any pending traps */
-                    waiting_pid = 0;
-                    do_pending_traps();
-                    
-                    /* return 128 to indicate we were interrupted by a signal */
-                    return 128;
+                    goto interrupted;
                 }
                 res = rip_dead(pid);
             }
@@ -246,6 +242,8 @@ read_next2:
         }
         set_job_exit_status(job, job->pgid, job->status);
         res = job->status;
+
+        notice_termination(pid, res, 0);
     }
     /* (b) argument is a pid */
     else
@@ -256,15 +254,15 @@ read_next2:
         /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
         if(*strend || pid == 0)
         {
-            fprintf(stderr, "%s: invalid pid: %s\n", UTILITY, arg);
+            PRINT_ERROR("%s: invalid pid: %s\n", UTILITY, arg);
             res = 127;
             goto read_next2;
         }
         
         job = get_job_by_any_pid(pid);
-        if(job && job->tty_attr && isatty(0))
+        if(job && job->tty_attr)
         {
-            tcsetattr(0, TCSANOW, job->tty_attr);
+            set_tty_attr(tty, job->tty_attr);
         }
         
         if(force)
@@ -284,25 +282,15 @@ read_next2:
              */
             if(errno == EINTR)
             {
-                /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
-                if(interactive_shell)
-                {
-                    jobs_builtin(1, (char *[]){ "jobs", NULL });
-                }
-
-                /* execute any pending traps */
-                waiting_pid = 0;
-                do_pending_traps();
-
-                /* return 128 to indicate we were interrupted by a signal */
-                return 128;
+                goto interrupted;
             }
             res = rip_dead(pid);
         }
         waiting_pid = 0;
+        print_status_message(NULL, pid, res, 1, stderr);
     }
+
     set_exit_status(res);
-    notice_termination(pid, res);
     
     if(wait_any)
     {
@@ -310,4 +298,18 @@ read_next2:
     }
     
     goto read_next2;
+    
+interrupted:
+    /* in tcsh, an interactive shell interrupted by a signal prints the list of jobs */
+    if(interactive_shell)
+    {
+        jobs_builtin(1, (char *[]){ "jobs", NULL });
+    }
+    
+    /* execute any pending traps */
+    waiting_pid = 0;
+    do_pending_traps();
+    
+    /* return 128 to indicate we were interrupted by a signal */
+    return 128;
 }

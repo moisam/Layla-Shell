@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: times.c
  *    This file is part of the Layla Shell project.
@@ -25,13 +25,14 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/times.h>
+#include "builtins.h"
 #include "../cmd.h"
 
 #define UTILITY     "times"
 
 static   struct tms en_cpu;
 long int CLK_TCK = 60;
-double   st_time;
+double   shell_start_time;
 
 /*
  * start the shell internal clock.. called on shell startup.
@@ -47,7 +48,7 @@ void start_clock(void)
     /* can't do without the clock tick count */
     if(CLK_TCK <= 0)
     {
-        fprintf(stderr, "%s: failed to init internal clock\n", UTILITY);
+        PRINT_ERROR("%s: failed to init internal clock\n", UTILITY);
         exit(EXIT_FAILURE);
     }
 
@@ -61,7 +62,7 @@ void start_clock(void)
 
 #endif
 
-    st_time = get_cur_time();
+    shell_start_time = get_cur_time();
 }
 
 /*
@@ -80,14 +81,14 @@ int times_builtin(int argc, char **argv __attribute__((unused)))
     /* we accept no arguments */
     if(option_set('P') && argc > 1)
     {
-        fprintf(stderr, "%s: should be called with no arguments\n", UTILITY);
+        PRINT_ERROR("%s: should be called with no arguments\n", UTILITY);
         return 1;
     }
     
     /* get the usage times */
     if(times(&en_cpu) == -1)
     {
-        fprintf(stderr, "%s: failed to read time: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to read time: %s\n", UTILITY, strerror(errno));
         return 1;
     }
 
@@ -95,11 +96,13 @@ int times_builtin(int argc, char **argv __attribute__((unused)))
     time_t stime   = en_cpu.tms_stime /CLK_TCK;
     time_t cutime  = en_cpu.tms_cutime/CLK_TCK;
     time_t cstime  = en_cpu.tms_cstime/CLK_TCK;
+
     int    umins   = utime /60, usecs  = utime  % 60;
     int    smins   = stime /60, ssecs  = stime  % 60;
     int    cumins  = cutime/60, cusecs = cutime % 60;
     int    csmins  = cstime/60, cssecs = cstime % 60;
-    printf("%dm%ds %dm%ds\n%dm%ds %dm%ds\n",
+
+    printf("%dm%02ds %dm%02ds\n%dm%02ds %dm%02ds\n",
            umins , usecs , smins , ssecs,
            cumins, cusecs, csmins, cssecs);
     return 0;

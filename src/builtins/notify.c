@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: notify.c
  *    This file is part of the Layla Shell project.
@@ -23,6 +23,7 @@
 #include <wait.h>
 #include <signal.h>
 #include <sys/types.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../debug.h"
 
@@ -44,7 +45,7 @@ int notify_builtin(int argc, char **argv)
     /* job control must be on */
     if(!option_set('m'))
     {
-        fprintf(stderr, "%s: job control is not enabled\n", UTILITY);
+        PRINT_ERROR("%s: job control is not enabled\n", UTILITY);
         return 2;
     }
     
@@ -55,7 +56,7 @@ int notify_builtin(int argc, char **argv)
         job = get_job_by_jobid(get_jobid("%%"));
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %%%%\n", UTILITY);
+            PRINT_ERROR("%s: unknown job: %%%%\n", UTILITY);
             return 3;
         }
         /* mark the job as notified */
@@ -64,16 +65,14 @@ int notify_builtin(int argc, char **argv)
     }
 
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     /************************************
      * process the options and arguments
      ************************************/
     while((c = parse_args(argc, argv, "hv", &v, 0)) > 0)
     {
-        if     (c == 'h')
+        if(c == 'h')
         {
-            print_help(argv[0], REGULAR_BUILTIN_NOTIFY, 1, 0);
+            print_help(argv[0], &NOTIFY_BUILTIN, 0);
         }
         else if(c == 'v')
         {
@@ -97,7 +96,7 @@ int notify_builtin(int argc, char **argv)
         job = get_job_by_jobid(get_jobid(argv[v]));
         if(!job)
         {
-            fprintf(stderr, "%s: unknown job: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
             return 3;
         }
         /* mark the job as notified */

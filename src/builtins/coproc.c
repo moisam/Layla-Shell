@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: coproc.c
  *    This file is part of the Layla Shell project.
@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <signal.h>
 #include "../cmd.h"
 #include "setx.h"
 #include "../backend/backend.h"
@@ -39,6 +40,27 @@
  */
 int rfiledes[2] = { -1, -1 };
 int wfiledes[2] = { -1, -1 };
+pid_t coproc_pid = 0;
+
+
+/*
+ * close the coprocess's file descriptors we have opened in the parent shell.
+ */
+void coproc_close_fds(void)
+{
+    /*
+     * NOTE: it doesn't seem that closes the coproc files by itself.
+     * TODO: check if the following is the right behavior.
+     */
+#if 0
+    close(rfiledes[1]);
+    close(wfiledes[0]);
+    rfiledes[1] = -1;
+    wfiledes[0] = -1;
+    set_shell_vari("COPROC0", -1);
+    set_shell_vari("COPROC1", -1);
+#endif
+}
 
 
 /*
@@ -53,51 +75,71 @@ int wfiledes[2] = { -1, -1 };
  * explanation on how to use this utility.
  */
 
-int coproc_builtin(int argc, char **argv, struct io_file_s *io_files)
+int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *coproc_name)
 {
+#if 0
     /* should have at least one argument */
     if(argc == 1)
     {
-        fprintf(stderr, "%s: missing arguments\n", UTILITY);
+        PRINT_ERROR("%s: missing arguments\n", UTILITY);
         return 2;
     }
+#endif
     
-    char *pname = "COPROC";
+    char *pname = (coproc_name && coproc_name->val_type == VAL_STR) ?
+                  coproc_name->val.str : "COPROC";
     char  buf[16];
-    pid_t pid;
 
+#if 0
     /* close old pipes */
     if(rfiledes[1] != -1)
     {
         close(rfiledes[1]);
         rfiledes[1] = -1;
     }
+
     if(wfiledes[0] != -1)
     {
         close(wfiledes[0]);
         wfiledes[0] = -1;
     }
+#endif
     
     /* create two pipes */
     pipe(rfiledes);
     pipe(wfiledes);
     
+#if 0
+    /* if there was a coproc running, kill it before starting a new one */
+    if(coproc_pid)
+    {
+        kill(coproc_pid, SIGCONT);
+        kill(coproc_pid, SIGKILL);
+    }
+#endif
+    
     /* then start the coprocess */
-    if((pid = fork_child()) == 0)     /* child process */
+    if((coproc_pid = fork_child()) == 0)     /* child process */
     {
         init_subshell();
         close(0);   /* stdin */
         dup  (rfiledes[0]);     /* read from the reading pipe */
         close(1);   /* stdout */
         dup  (wfiledes[1]);     /* write to the writing pipe */
+        
         /* close unused file descriptors */
         close(rfiledes[0]);
         close(rfiledes[1]);
         close(wfiledes[0]);
         close(wfiledes[1]);
+        
+#if 0
         /* perform any I/O redirections */
-        redirect_do(io_files, 0);
+        int saved_fd[3] = { -1, -1, -1 };
+        redirect_do(io_files, 0, saved_fd);
         errno = 0;
+#endif
+        
         /*
          * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
          * if -o errtrace (-E) is not set. traced functions inherit both traps
@@ -108,10 +150,12 @@ int coproc_builtin(int argc, char **argv, struct io_file_s *io_files)
             save_trap("DEBUG" );
             save_trap("RETURN");
         }
+        
         if(!option_set('E'))
         {
             save_trap("ERR");
         }
+        
         /*
          * the -e (errexit) option is reset in subshells if inherit_errexit
          * is not set (bash).
@@ -120,15 +164,22 @@ int coproc_builtin(int argc, char **argv, struct io_file_s *io_files)
         {
             set_option('e', 0);
         }
+        
         /* increment the $SUBSHELL variable so we know we're in a subshell */
         inc_subshell_var();
+        
         /* execute the command */
+        exit(!do_list(src, cmd, NULL));
+        
+#if 0
         int res = search_and_exec(NULL, argc-1, &argv[1], NULL, SEARCH_AND_EXEC_DOFUNC);
+        
         /* if we returned, the command was not executed */
         if(errno)
         {
-            fprintf(stderr, "%s: failed to exec '%s': %s\n", UTILITY, argv[1], strerror(errno));
+            PRINT_ERROR("%s: failed to exec '%s': %s\n", UTILITY, argv[1], strerror(errno));
         }
+        
         /* exit with an appropriate exit code */
         if(errno == ENOEXEC)
         {
@@ -142,10 +193,12 @@ int coproc_builtin(int argc, char **argv, struct io_file_s *io_files)
         {
             exit(res);
         }
+#endif
+
     }
-    else if(pid < 0)            /* error */
+    else if(coproc_pid < 0)            /* error */
     {
-        fprintf(stderr, "%s: failed to fork: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to fork: %s\n", UTILITY, strerror(errno));
         return 1;
     }
     else                        /* parent process */
@@ -160,6 +213,7 @@ int coproc_builtin(int argc, char **argv, struct io_file_s *io_files)
         sprintf(buf, "%d", rfiledes[1]);
         symtab_entry_setval(entry, buf);
         close(rfiledes[0]);                 /* close the other end, we will not use it */
+        
         /*
          * set the close-on-exec flag. we could've used pipe2() to set this flag when we
          * created the pipe, but this would have caused the coprocess to fail after fork,
@@ -174,20 +228,25 @@ int coproc_builtin(int argc, char **argv, struct io_file_s *io_files)
         sprintf(buf, "%d", wfiledes[0]);
         symtab_entry_setval(entry, buf);
         close(wfiledes[1]);                 /* close the other end, we will not use it */
+        
         /* same as above */
         fcntl(wfiledes[0], F_SETFD, FD_CLOEXEC);
 
         /* set the $COPROC_PID variable */
         sprintf(buf, "%s_PID", pname);
         entry = add_to_symtab(buf);
-        sprintf(buf, "%d", pid);
+        sprintf(buf, "%d", coproc_pid);
         symtab_entry_setval(entry, buf);
 
-        /* add as background job */
-        char *cmdstr = list_to_str(&argv[1]);
-        /* $! will be set in add_job() */
-        struct job_s *job = add_job(pid, (pid_t[]){ pid }, 1, cmdstr, 1);
-        set_cur_job(job);
+        /* 
+         * add as background job.. $! and cur_job will be set in add_job().
+         */
+        char *cmdstr = get_cmdstr(cmd);
+        //char *cmdstr = list_to_str(&argv[1]);
+        struct job_s *job = new_job(cmdstr, 1);
+        add_pid_to_job(job, coproc_pid);
+        add_job(job);
+        free(job);
         if(cmdstr)
         {
             free(cmdstr);

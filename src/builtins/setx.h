@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: setx.h
  *    This file is part of the Layla Shell project.
@@ -75,6 +75,9 @@ extern __int64_t optionsx;
 #define OPTION_SAVE_HIST                0x400000000000l /* (1 << 46) -- tcsh-like extension */
 #define OPTION_PROMPT_BANG              0x800000000000l /* (1 << 47) -- zsh-like extension */
 #define OPTION_PROMPT_PERCENT           0x1000000000000l/* (1 << 48) -- zsh-like extension */
+#define OPTION_CALLER_VERBOSE           0x2000000000000l/* (1 << 49) */
+#define OPTION_IGNORE_DOT_RES           0x4000000000000l/* (1 << 50) */
+#define OPTION_IGNORE_TEST_RES          0x8000000000000l/* (1 << 51) */
 
 #define optionx_set(o)                  ((((optionsx) & (o)) == (o)) ? 1 : 0)
 
@@ -82,5 +85,9 @@ int       set_optionx(__int64_t op, int onoff);
 __int64_t optionx_index(char *opname);
 int       setx_builtin(int argc, char **argv);
 void      purge_xoptions(char which, int formal);
+void      disable_extended_options(void);
+
+/* for compatibility with bash */
+int       shopt_builtin(int argc, char **argv);
 
 #endif

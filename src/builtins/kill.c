@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: kill.c
  *    This file is part of the Layla Shell project.
@@ -26,6 +26,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <wait.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../sig.h"
 #include "../debug.h"
@@ -83,7 +84,7 @@ int kill_builtin(int argc, char **argv)
     /* we should have at least one option/argument */
     if(argc == 1)
     {
-        fprintf(stderr, "%s: missing operand(s)\n", UTILITY);
+        PRINT_ERROR("%s: missing operand(s)\n", UTILITY);
         return 1;
     }
 
@@ -102,7 +103,7 @@ int kill_builtin(int argc, char **argv)
         {
             if(strcmp(arg, "-h") == 0)
             {
-                print_help(argv[0], REGULAR_BUILTIN_KILL, 1, 0);
+                print_help(argv[0], &KILL_BUILTIN, 0);
                 return 0;
             }
             else if(strcmp(arg, "-v") == 0)
@@ -119,7 +120,7 @@ int kill_builtin(int argc, char **argv)
             {
                 if(++index >= argc)
                 {
-                    fprintf(stderr, "%s: missing argument: signal number\n", UTILITY);
+                    PRINT_ERROR("%s: missing argument: signal number\n", UTILITY);
                     return 1;
                 }
                 
@@ -143,7 +144,7 @@ int kill_builtin(int argc, char **argv)
             {
                 if(++index >= argc)
                 {
-                    fprintf(stderr, "%s: missing argument: signal name\n", UTILITY);
+                    PRINT_ERROR("%s: missing argument: signal name\n", UTILITY);
                     return 1;
                 }
                 
@@ -168,43 +169,59 @@ int kill_builtin(int argc, char **argv)
             else if(strcmp(arg, "-l") == 0 || strcmp(arg, "-L") == 0)
             {
                 /* no option-argument. list all signals */
-                if(++index >= argc)
+                arg = argv[++index];
+                if(index >= argc || !arg || *arg == '\0')
                 {
                     /* list all signal names */
                     for(i = 0; i < SIGNAL_COUNT; i++)
                     {
-                        printf("%2d) %.10s ", i, signames[i]);
+                        printf("%2d) %s%*s", i, signames[i], (int)(10-strlen(signames[i])), " ");
                         if((i % 4) == 0)
                         {
                             printf("\n");
                         }
                     }
                     
-                    if(SIGNAL_COUNT % 4)
+                    if((i-1) % 4)
                     {
                         printf("\n");
                     }
                     return 0;
                 }
                 
-                /* we have an option-argument, which is a signal number */
-                arg = argv[index];
-                int j = strtol(arg, &strend, 10);
-                if(*strend)
+                /* we have an option-argument, which is a signal number (or name) */
+                int j;
+                
+                if(isalpha(*arg))
                 {
-                    fprintf(stderr, "%s: invalid signal specification: %s\n", UTILITY, arg);
-                    return 4;
+                    j = get_signum(arg);
+                    if(j == -1)
+                    {
+                        PRINT_ERROR("%s: invalid signal specification: %s\n", UTILITY, arg);
+                        return 2;
+                    }
+                }
+                else
+                {
+                    j = strtol(arg, &strend, 10);
+                    if(*strend)
+                    {
+                        PRINT_ERROR("%s: invalid signal specification: %s\n", UTILITY, arg);
+                        return 2;
+                    }
                 }
                 
-                if(isdigit(*arg) && j >= 0 && j < SIGNAL_COUNT)
+                if(j >= 0 && j < SIGNAL_COUNT)
                 {
-                    if(j == 0)
+                    if(isalpha(*arg))
                     {
-                        printf("NULL\n");
+                        /* print signal number */
+                        printf("%d\n", j);
                     }
                     else
                     {
-                        printf("%s\n", &signames[j][3]);   /* without SIG prefix */
+                        /* print without the SIG prefix */
+                        printf("%s\n", j ? &signames[j][3] : "NULL");
                     }
                     return 0;
                 }
@@ -223,8 +240,8 @@ int kill_builtin(int argc, char **argv)
                     }
                     return 0;
                 }
-                fprintf(stderr, "%s: invalid signal specification: %s\n", UTILITY, arg);
-                return 4;
+                PRINT_ERROR("%s: invalid signal specification: %s\n", UTILITY, arg);
+                return 2;
             }
             
             /* try parsing as a -signal_name or -signal_number option */
@@ -257,8 +274,8 @@ int kill_builtin(int argc, char **argv)
                 continue;
             }
 
-            fprintf(stderr, "%s: unknown option: %s\n", UTILITY, arg);
-            return 3;
+            PRINT_ERROR("%s: unknown option: %s\n", UTILITY, arg);
+            return 2;
         }
         break;
     }
@@ -280,7 +297,7 @@ int kill_builtin(int argc, char **argv)
             /* bash says we can't kill jobs if job control is not active, which makes sense */
             if(!option_set('m'))
             {
-                fprintf(stderr, "%s: can't kill job %s: job control is not active\n", UTILITY, arg);
+                PRINT_ERROR("%s: can't kill job %s: job control is not active\n", UTILITY, arg);
                 return 2;
             }
             
@@ -289,8 +306,8 @@ int kill_builtin(int argc, char **argv)
             
             if(pid == 0 || !job)
             {
-                fprintf(stderr, "%s: invalid job id: %s\n", UTILITY, arg);
-                res = 3;
+                PRINT_ERROR("%s: invalid job id: %s\n", UTILITY, arg);
+                res = 2;
                 continue;
             }
             pid = -(job->pgid);
@@ -301,8 +318,8 @@ int kill_builtin(int argc, char **argv)
             pid = strtol(arg, &strend, 10);
             if(*strend)
             {
-                fprintf(stderr, "%s: invalid job id: %s\n", UTILITY, arg);
-                res = 3;
+                PRINT_ERROR("%s: invalid job id: %s\n", UTILITY, arg);
+                res = 2;
                 continue;
             }
         }
@@ -321,21 +338,21 @@ int kill_builtin(int argc, char **argv)
         {
             if(signum < 0 || signum >= SIGNAL_COUNT)
             {
-                fprintf(stderr, "%s: failed to send signal %d to process %d: %s\n",
+                PRINT_ERROR("%s: failed to send signal %d to process %d: %s\n",
                         UTILITY, signum, pid, strerror(errno));
             }
             else
             {
-                fprintf(stderr, "%s: failed to send signal %s to process %d: %s\n", 
+                PRINT_ERROR("%s: failed to send signal %s to process %d: %s\n", 
                         UTILITY, signames[signum], pid, strerror(errno));
             }
-            res = 3;
+            res = 2;
         }
         else if(job)
         {
             if(signum == SIGTERM || signum == SIGKILL || signum == SIGHUP)
             {
-                kill_job(job);
+                remove_job(job);
                 job = NULL;
             }
         }
@@ -343,6 +360,6 @@ int kill_builtin(int argc, char **argv)
     return res;
     
 invalid_signame:
-    fprintf(stderr, "%s: invalid signal name: %s\n", UTILITY, arg);
+    PRINT_ERROR("%s: invalid signal name: %s\n", UTILITY, arg);
     return 2;
 }

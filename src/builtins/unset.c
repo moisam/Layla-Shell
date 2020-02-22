@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: unset.c
  *    This file is part of the Layla Shell project.
@@ -27,12 +27,16 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "setx.h"
 #include "../debug.h"
 
 #define UTILITY     "unset"
+
+#define UNSET_PRINT_ERROR(arg, msg) \
+    PRINT_ERROR("%s: unable to unset '%s': %s\n", UTILITY, arg, msg);
 
 
 /*
@@ -47,21 +51,15 @@
 
 int unset_builtin(int argc, char **argv)
 {
-    /* no arguments. bail out */
-    if(argc == 1)
-    {
-        return 0;
-    }
-    int is_var = 1;
-    int res    = 0;
-    int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    int vars = 0, funcs = 0, both = 1;
+    int c, res = 0, v = 1;
+
     /*
      * recognize the options defined by POSIX if we are running in --posix mode,
      * or all possible options if running in the regular mode.
      */
     char *opts = option_set('P') ? "fv" : "fhv";
+
     /****************************
      * process the options
      ****************************/
@@ -70,18 +68,21 @@ int unset_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], SPECIAL_BUILTIN_UNSET, 0, 0);
+                print_help(argv[0], &UNSET_BUILTIN, 0);
                 return 0;
 
             case 'f':
-                is_var = 0;
+                funcs = 1;
+                both = 0;
                 break;
 
             case 'v':
-                is_var = 1;
+                vars = 1;
+                both = 0;
                 break;
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -98,6 +99,7 @@ int unset_builtin(int argc, char **argv)
     for( ; v < argc; v++)
     {
         char *arg = argv[v];
+
         /* ignore empty arguments */
         if(!arg || !*arg)
         {
@@ -105,21 +107,23 @@ int unset_builtin(int argc, char **argv)
         }
 
         /* remove the shell variable with the given name */
-        if(is_var)
+        if(vars || both)
         {
             struct symtab_entry_s *entry;
             if(is_special_param(arg))
             {
-                fprintf(stderr, "%s: unable to unset '%s': special parameter\n", UTILITY, arg);
+                UNSET_PRINT_ERROR(arg, "special parameter");
                 res = 1;
                 continue;
             }
+
             if(is_pos_param(arg))
             {
-                fprintf(stderr, "%s: unable to unset '%s': positional parameter\n", UTILITY, arg);
+                UNSET_PRINT_ERROR(arg, "positional parameter");
                 res = 1;
                 continue;
             }
+            
             /*
              * 'localvar_unset' causes variables defined in previous scopes to be unset for the duration
              * of the current function call.. after the call finishes, variables are unmasked, they
@@ -134,16 +138,16 @@ int unset_builtin(int argc, char **argv)
                 {
                     entry = add_to_symtab(arg);
                 }
-                if(entry)
+
+                if(entry->flags & FLAG_READONLY)
                 {
-                    if(entry->flags & FLAG_READONLY)
-                    {
-                        fprintf(stderr, "%s: unable to unset '%s': readonly variable\n", UTILITY, arg);
-                        res = 1;
-                        continue;
-                    }
-                    symtab_entry_setval(entry, NULL);
+                    READONLY_ASSIGN_ERROR(UTILITY, arg);
+                    //UNSET_PRINT_ERROR(arg, "readonly variable");
+                    res = 1;
+                    continue;
                 }
+                symtab_entry_setval(entry, NULL);
+                continue;
             }
             else
             {
@@ -151,30 +155,31 @@ int unset_builtin(int argc, char **argv)
                 {
                     if(flag_set(entry->flags, FLAG_READONLY))
                     {
-                        fprintf(stderr, "%s: unable to unset '%s': readonly variable\n", UTILITY, arg);
+                        READONLY_ASSIGN_ERROR(UTILITY, arg);
+                        //UNSET_PRINT_ERROR(arg, "readonly variable");
                         res = 1;
                         continue;
                     }
                     rem_from_any_symtab(entry);
-                }
-                /* now remove the variable/function definition from the environment */
-                if(unsetenv(arg) != 0)
-                {
-                    fprintf(stderr, "%s: unable to unset '%s': %s\n", UTILITY, arg, strerror(errno));
-                    res = 1;
+                
+                    /* now remove the variable/function definition from the environment */
+                    unsetenv(arg);
+                    continue;
                 }
             }
         }
+
         /* remove the shell function with the given name */
-        else
+        if(funcs || both)
         {
-            unset_func(arg);
-            /* now remove the variable/function definition from the environment */
-            if(unsetenv(arg) != 0)
+            if(!unset_func(arg))
             {
-                fprintf(stderr, "%s: unable to unset '%s': %s\n", UTILITY, arg, strerror(errno));
-                res = 1;
+                //UNSET_PRINT_ERROR(arg, "unknown function");
+                //res = 1;
+                continue;
             }
+            /* now remove the variable/function definition from the environment */
+            unsetenv(arg);
         }
     }
     /*

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: getopts.c
  *    This file is part of the Layla Shell project.
@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "../debug.h"
@@ -45,8 +46,8 @@ int getopts_builtin(int argc, char **argv)
     /* we need at least 3 args */
     if(argc < 3)
     {
-        fprintf(stderr, "%s: missing argument(s)\n", UTILITY);
-        print_help(argv[0], REGULAR_BUILTIN_GETOPTS, 1, 0);
+        PRINT_ERROR("%s: missing argument(s)\n", UTILITY);
+        print_help(argv[0], &GETOPTS_BUILTIN, 0);
         return 1;
     }
     char  *optstring     = argv[1];
@@ -57,26 +58,35 @@ int getopts_builtin(int argc, char **argv)
     char  *invoking_prog = NULL;
     char   buf[12];
 
+    /* get the value of $OPTERR */
+    int opterr = (strcmp(get_shell_varp("OPTERR", "1"), "0") == 0) ? 0 : 1;
+    
+    /*
+     * use the 'silent' mode if we have ':' as the first char, or after 
+     * a leading '+', or if $OPTERR is set to zero (bash).
+     */
+    int silent = (opterr == 0) || (*optstring == ':' ||
+                     ((*optstring == '+' || *optstring == '-') && optstring[1] == ':'));
+
     /* get the current value of $OPTIND and initialize it to 1 if its unset */
-    argi = 0;
     struct symtab_entry_s *OPTIND = get_symtab_entry("OPTIND");
     if(!OPTIND)
     {
         OPTIND = add_to_symtab("OPTIND");
         symtab_entry_setval(OPTIND, "1");
     }
+
     /* get the value of $OPTIND */
     if(OPTIND->val)
     {
         char *strend = NULL;
-        argi = strtol(OPTIND->val, &strend, 10);
-        if(*strend || argi <= 0)
+        internal_argi = strtol(OPTIND->val, &strend, 10);
+        if(*strend || internal_argi <= 0)
         {
-            argi = 0;
+            internal_argi = 0;
         }
     }
-    /* get the value of $OPTERR */
-    int opterr = (strcmp(get_shell_varp("OPTERR", "0"), "1") == 0) ? 1 : 0;
+    
     /* store the name of our index variable, initialize $OPTARG, and get argv[0] value */
     struct symtab_entry_s *NAME   = add_to_symtab(name    );
     struct symtab_entry_s *OPTARG = add_to_symtab("OPTARG");
@@ -94,6 +104,7 @@ int getopts_builtin(int argc, char **argv)
             symtab_entry_setval(NAME  , "?");
             return 2;
         }
+        
         /*
          *  get a copy of all positional parameters in addition to special param $0.
          *  effectively, we will be working on an array similar to a C program's argv.
@@ -101,12 +112,14 @@ int getopts_builtin(int argc, char **argv)
         args = malloc((count+2) * sizeof(char *));
         if(!args)
         {
-            fprintf(stderr, "%s: insufficient memory to load args\n", UTILITY);
+            PRINT_ERROR("%s: insufficient memory to load args\n", UTILITY);
             return 5;
         }
+        
         free_args = 1;
         memset(args, 0, (count+2) * sizeof(char *));
         args[0] = param0->val;
+        
         if(count)
         {
             int i = 1;
@@ -115,6 +128,7 @@ int getopts_builtin(int argc, char **argv)
                 sprintf(buf, "%d", i);
                 args[i] = get_shell_varp(buf, "");
             }
+            
             /* NULL-terminate the array */
             args[i] = NULL;
         }
@@ -140,20 +154,23 @@ int getopts_builtin(int argc, char **argv)
         {
             sprintf(cstr,  "%c", c);
         }
+
         symtab_entry_setval(NAME  , cstr);
+        
         /* set $OPTIND to the index of this argument */
         sprintf(buf, "%d", v);
         symtab_entry_setval(OPTIND, buf );
+        
         /* check if we have an option argument */
-        if(__optarg)
+        if(internal_optarg)
         {
             /* invalid arg. set $OPTARG and the index variable appropriately */
-            if(__optarg == INVALID_OPTARG)
+            if(internal_optarg == INVALID_OPTARG)
             {
                 /* we have ':' as the first char, or after a leading '+' */
-                if(*optstring == ':' || optstring[1] == ':')
+                if(silent)
                 {
-                    char estr[] = { __opterr, '\0' };
+                    char estr[] = { internal_opterr, '\0' };
                     symtab_entry_setval(OPTARG, estr);
                     symtab_entry_setval(NAME  , ":" );
                 }
@@ -161,19 +178,21 @@ int getopts_builtin(int argc, char **argv)
                 {
                     symtab_entry_setval(OPTARG, NULL);
                     symtab_entry_setval(NAME  , "?" );
+                    
                     /* print an error message */
                     if(opterr)
                     {
-                        fprintf(stderr, "%s: option requires an argument -- %c\n", invoking_prog, __opterr);
+                        PRINT_ERROR("%s: option requires an argument -- %c\n", invoking_prog, internal_opterr);
                     }
                 }
             }
             /* valid argument. save it in $OPTARG */
             else
             {
-                symtab_entry_setval(OPTARG, __optarg);
+                symtab_entry_setval(OPTARG, internal_optarg);
             }
         }
+        
         /* free temp memory */
         if(free_args)
         {
@@ -181,26 +200,30 @@ int getopts_builtin(int argc, char **argv)
         }
         return 0;
     }
+
+    sprintf(buf, "%d", v);
+    symtab_entry_setval(OPTIND, buf);
+    symtab_entry_setval(NAME  , "?");
+    
     /* unknown option */
     if(c == -1)
     {
         /* set the index variable to "?" */
         symtab_entry_setval(NAME, "?");
+        
         /* set $OPTARG appropriately, and print an error msg if needed */
-        if(*optstring == ':')
+        if(silent)
         {
-            char estr[] = { __opterr, '\0' };
+            char estr[] = { internal_opterr, '\0' };
             symtab_entry_setval(OPTARG, estr);
         }
         else
         {
             /* print the error-causing option */
-            if(opterr)
-            {
-                fprintf(stderr, "%s: unknown option -- %c\n", invoking_prog, __opterr);
-            }
+            PRINT_ERROR("%s: unknown option -- %c\n", invoking_prog, internal_opterr);
             symtab_entry_setval(OPTARG, NULL);
         }
+
         /* free temp memory */
         if(free_args)
         {
@@ -212,13 +235,12 @@ int getopts_builtin(int argc, char **argv)
     /********************/
     /* end of arguments */
     /********************/
-    sprintf(buf, "%d", v);
-    symtab_entry_setval(OPTIND, buf);
-    symtab_entry_setval(NAME  , "?");
+
     /* free temp memory */
     if(free_args)
     {
         free(args);
     }
+
     return 2;
 }

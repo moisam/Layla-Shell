@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: hash.c
  *    This file is part of the Layla Shell project.
@@ -20,6 +20,7 @@
  */    
 
 #include <stdlib.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/string_hash.h"
 #include "../debug.h"
@@ -125,22 +126,38 @@ do {                                                    \
 
 int hash_builtin(int argc, char **argv)
 {
+    /* hashing must be enabled */
+    if(!option_set('h'))
+    {
+        PRINT_ERROR("%s: command hashing is disabled\n", UTILITY);
+        return 1;
+    }
+    
     /* no arguments or options. print the hashed utilities and return */
     if(argc == 1)
     {
         dump_hashtable(utility_hashtable, NULL);
         return 0;
     }
-    int res = 0;
-    int   v = 1, c, unhash = 0, usepath = 0;
-    char *path = NULL;
-    int   pathlen = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+
+    int   res = 0;
+    int   v = 1, c, unhash = 0, list_only = 0;
+    char *usepath = NULL;
+    int   is_restirected = (startup_finished && option_set('r'));
+
+    /* use our default format if -t isn't specified */
+    char *format = "%s=%s\n";
+
+    /*
+     * recognize the options defined by POSIX if we are running in --posix mode,
+     * or all possible options if running in the regular mode.
+     */
+    char *opts = option_set('P') ? "r" : "adhlp:rtv";
+    
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "ahvrp:dl", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
     {
         switch(c)
         {
@@ -156,7 +173,7 @@ int hash_builtin(int argc, char **argv)
                 
             /* -h prints help */
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_HASH, 1, 0);
+                print_help(argv[0], &HASH_BUILTIN, 0);
                 return 0;
                 
             /* -v prints shell ver */
@@ -181,87 +198,125 @@ int hash_builtin(int argc, char **argv)
                 
             /* -p provides a path to use instead of $PATH */
             case 'p':
-                usepath = 1;
-                path = __optarg;
-                if(!path || path == INVALID_OPTARG)
+                usepath = internal_optarg;
+                if(!usepath || usepath == INVALID_OPTARG)
                 {
-                    fprintf(stderr, "%s: missing argument to option -%c\n", UTILITY, c);
+                    PRINT_ERROR("%s: missing argument to option -%c\n", UTILITY, c);
                     return 2;
                 }
+
                 /*
                  * is this shell restricted?
                  * bash says r-shells can't specify commands with '/' in their names.
                  * zsh doesn't allow r-shells to use hash, period.
                  */
-                RESTRICTED_SHELL_NOHASH("can't hash command containing '/': restricted shell");
-                pathlen = strlen(path);
+                if(is_restirected && strchr(usepath, '/'))
+                {
+                    PRINT_ERROR("%s: cannot hash command containing '/': "
+                                "restricted shell\n", UTILITY);
+                    return 2;
+                }
                 break;                
+                
+            /* -t lists the commands along with their pathnames (bash) */
+            case 't':
+                list_only = 1;
+                format = "%s\t%s\n";
+                break;
         }
     }
+    
     /* unknown option */
     if(c == -1)
     {
         return 2;
     }
     
-    /* no arguments. print the hashed utilities */
+    /* no arguments */
     if(v >= argc)
     {
-        dump_hashtable(utility_hashtable, NULL);
-        return 0;
+        if(list_only)
+        {
+            /* -t was specified, which needs at least one argument */
+            PRINT_ERROR("%s: option needs argument: -%c\n", UTILITY, 't');
+            return 2;
+        }
+        else
+        {
+            /* print the hashed utilities */
+            dump_hashtable(utility_hashtable, NULL);
+            return 0;
+        }
     }
-
+    
+    /* check for a restricted shell (can't hash in r-shells) */
+    if(is_restirected)
+    {
+        PRINT_ERROR("%s: cannot use the hash utility: restricted shell\n", UTILITY);
+        return 2;
+    }
+    
     /* process the arguments */
     for( ; v < argc; v++)
     { 
         char *arg = argv[v];
+        /* list commands with the -t option */
+        if(list_only)
+        {
+            struct hashitem_s *entry = get_hash_item(utility_hashtable, arg);
+            if(entry)
+            {
+                printf(format, entry->name, entry->val);
+            }
+            else
+            {
+                PRINT_ERROR("%s: cannot find hashed utility: %s\n", UTILITY, arg);
+                res = 1;
+            }
+        }
         /* unhash utility */
-        if(unhash)
+        else if(unhash)
         {
             unhash_utility(arg);
         }
         /* hash utility using the given path */
         else if(usepath)
         {
-            char cmd[pathlen+strlen(arg)+2];    /* 2 for '\0' and possible '/' */
-            if(path[pathlen-1] == '/')
+            if(file_exists(usepath))
             {
-                sprintf(cmd, "%s%s" , path, arg);
+                if(!hash_utility(arg, usepath))
+                {
+                    PRINT_ERROR("%s: failed to hash utility: %s\n", UTILITY, arg);
+                    res = 1;
+                }
             }
             else
             {
-                sprintf(cmd, "%s/%s", path, arg);
-            }
-            /* check for a restricted shell (can't hash in r-shells) */
-            RESTRICTED_SHELL_NOHASH("can't use the hash command: restricted shell");
-            if(!hash_utility(arg, cmd))
-            {
-                fprintf(stderr, "%s: failed to hash utility '%s'\n", SHELL_NAME, arg);
+                PRINT_ERROR("%s: file doesn't exist or is not a regular file: "
+                            "%s\n", UTILITY, usepath);
                 res = 1;
             }
         }
         else
         {
+            /* silently ignore shell builtins and functions */
+            if(is_builtin(arg) || is_function(arg))
+            {
+                continue;
+            }
+            
             /* search for the requested utility using $PATH */
             char *p = search_path(arg, NULL, 1);
             if(!p)
             {
-                fprintf(stderr, "%s: failed to locate utility '%s'\n", SHELL_NAME, arg);
+                PRINT_ERROR("%s: failed to locate utility: %s\n", UTILITY, arg);
                 res = 1;
             }
             else
             {
-                /* check for a restricted shell (can't hash in r-shells) */
-                if(startup_finished && option_set('r'))
-                {
-                    fprintf(stderr, "%s: can't use the hash command: restricted shell\n", UTILITY);
-                    free_malloced_str(p);
-                    return 2;
-                }
-                //RESTRICTED_SHELL_NOHASH("can't use the hash command: restricted shell");
                 if(!hash_utility(arg, p))
                 {
-                    fprintf(stderr, "%s: failed to hash utility '%s'\n", SHELL_NAME, arg);
+                    PRINT_ERROR("%s: failed to hash utility: %s\n", UTILITY, arg);
                     res = 1;
                 }
                 free_malloced_str(p);
@@ -293,7 +348,7 @@ int rehash_all(void)
                 char *p = search_path(entry->name, NULL, 1);
                 if(!p)
                 {
-                    fprintf(stderr, "%s: failed to locate utility '%s'\n", SHELL_NAME, entry->name);
+                    PRINT_ERROR("%s: failed to locate utility '%s'\n", UTILITY, entry->name);
                     res = 1;
                 }
                 else

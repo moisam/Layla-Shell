@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: eval.c
  *    This file is part of the Layla Shell project.
@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../backend/backend.h"
 
@@ -47,46 +48,23 @@ int eval_builtin(int argc, char **argv)
      * copy the list of arguments into a buffer, which we'll pass to do_cmd() so that
      * it will parse and execute it as if it was a script file.
      */
-    char   *cmd = NULL;
-    int     i;
-    size_t  len = 0;
-
-    /* calculate the memory required */
-    for(i = 1; i < argc; i++)
+    char *cmd = list_to_str(&argv[1]);
+    if(!cmd)
     {
-        len += strlen(argv[i])+1;
+        PRINT_ERROR("eval: insufficient memory\n");
+        return 1;
     }
 
     /* POSIX says we shall return 0 if we have NULL arguments */
-    if(len == (size_t)argc)
+    if(!*cmd)
     {
         return 0;
     }
-    
-    /* account for the null terminator */
-    len++;
-    
-    /* alloc the buffer */
-    cmd = malloc(len);
-    if(!cmd)
-    {
-        fprintf(stderr, "eval: insufficient memory\n");
-        return 1;
-    }
-    cmd[0] = '\0';
-
-    /* copy the args to buffer */
-    for(i = 1; i < argc; i++)
-    {
-        strcat(cmd, argv[i]);
-        strcat(cmd, " "    );
-    }
-    cmd[len-2] = '\0';
 
     /* parse and execute the buffer */
     struct source_s src;
     src.buffer   = cmd;
-    src.bufsize  = len-1;
+    src.bufsize  = strlen(cmd);
     src.srctype  = SOURCE_EVAL;
     src.curpos   = INIT_SRC_POS;
     src.srcname  = NULL;

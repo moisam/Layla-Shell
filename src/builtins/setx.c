@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: setx.c
  *    This file is part of the Layla Shell project.
@@ -20,6 +20,7 @@
  */
 
 #include <strings.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "setx.h"
 #include "../debug.h"
@@ -50,6 +51,9 @@ optionx_list[] =
 {
     { "addsuffix"                   , OPTION_ADD_SUFFIX           },    /* similar to setting tcsh addsuffix variable */
     { "autocd"                      , OPTION_AUTO_CD              },
+    { "caller_verbose"              , OPTION_CALLER_VERBOSE       },    /* similar to bash's shift-verbose option, except
+                                                                           that it affects the 'caller' builtin */
+    { "caller-verbose"              , OPTION_CALLER_VERBOSE       },
     { "cdable_vars"                 , OPTION_CDABLE_VARS          },
     { "cdable-vars"                 , OPTION_CDABLE_VARS          },
     { "checkhash"                   , OPTION_CHECK_HASH           },
@@ -75,6 +79,10 @@ optionx_list[] =
     { "histverify"                  , OPTION_HIST_VERIFY          },
     { "hostcomplete"                , OPTION_HOST_COMPLETE        },    
     { "huponexit"                   , OPTION_HUP_ON_EXIT          },
+    { "ignore_dot_res"              , OPTION_IGNORE_DOT_RES       },    /* our extension to ignore non-zero dot result */
+    { "ignore-dot-res"              , OPTION_IGNORE_DOT_RES       },
+    { "ignore_test_res"             , OPTION_IGNORE_TEST_RES      },    /* our extension to ignore non-zero test result */
+    { "ignore-test-res"             , OPTION_IGNORE_TEST_RES      },
     { "inherit_errexit"             , OPTION_INHERIT_ERREXIT      },
     { "inherit-errexit"             , OPTION_INHERIT_ERREXIT      },
     { "interactive_comments"        , OPTION_INTERACTIVE_COMMENTS },
@@ -166,6 +174,15 @@ __int64_t optionx_index(char *opname)
 
 
 /*
+ * if the POSIX mode is on, switch off all the extended options.
+ */
+void disable_extended_options(void)
+{
+    optionsx = 0;
+}
+
+
+/*
  * print the on/off state of the extended shell options.
  * if 'which' is 's', print only the set options.
  * if 'which' is 'u', print only the unset options.
@@ -217,8 +234,6 @@ int setx_builtin(int argc, char **argv)
     int enable = 0, disable = 0, quiet = 0, setonly = 0, formal = 0;
     int v = 1, c;
     int res = 0;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     /****************************
      * process the options
      ****************************/
@@ -227,7 +242,7 @@ int setx_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], SPECIAL_BUILTIN_SETX, 0, 0);
+                print_help(argv[0], &SETX_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -255,6 +270,7 @@ int setx_builtin(int argc, char **argv)
                 break;
         }
     }
+
     /* unknown option */
     if(c == -1)
     {
@@ -326,7 +342,7 @@ int setx_builtin(int argc, char **argv)
                     }
                     else
                     {
-                        fprintf(stderr, "%s: invalid option: %s\n", UTILITY, arg);
+                        PRINT_ERROR("%s: invalid option: %s\n", UTILITY, arg);
                         res = 2;
                     }
                 }
@@ -358,7 +374,7 @@ int setx_builtin(int argc, char **argv)
                 res++;
                 continue;
             }
-            fprintf(stderr, "%s: invalid option: %s\n", UTILITY, arg);
+            PRINT_ERROR("%s: invalid option: %s\n", UTILITY, arg);
             return 2;
         }
         
@@ -366,13 +382,13 @@ int setx_builtin(int argc, char **argv)
         {
             if(c2 == OPTION_LOGIN_SHELL || c2 == OPTION_RESTRICTED_SHELL)
             {
-                fprintf(stderr, "%s: error setting %s: readonly option\n", UTILITY, arg);
+                PRINT_ERROR("%s: error setting %s: readonly option\n", UTILITY, arg);
                 return 2;
             }
 
             if(!set_optionx(c2, enable ? 1 : 0))
             {
-                fprintf(stderr, "%s: error setting: %s\n", UTILITY, arg);
+                PRINT_ERROR("%s: error setting: %s\n", UTILITY, arg);
                 return 2;
             }
             continue;
@@ -399,4 +415,15 @@ int setx_builtin(int argc, char **argv)
         }
     }  
     return res;
+}
+
+/*
+ * this builtin is provided for compatibility with bash, as many scripts
+ * expect bash nowadays.. we could've implemented this as an alias, but
+ * we have aliases turned off by default on non-interactive shells, so scripts
+ * might fail to execute if they needed bash's shopt.
+ */
+int shopt_builtin(int argc, char **argv)
+{
+    return setx_builtin(argc, argv);
 }

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: bugreport.c
  *    This file is part of the Layla Shell project.
@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/utsname.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../cpu.h"
 #include "../ostype.h"
@@ -103,7 +104,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
     /* get the email subject */
     printf("Please enter the subject of your email message (an empty line will cancel this bugreport)\n\n");
     /* abort if error reading input */
-    if(read_builtin(2, read_argv) != 0)
+    if(do_builtin_internal(read_builtin, 2, read_argv) != 0)
     {
         printf("\n\nAborted\n\n");
         return 2;
@@ -124,7 +125,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
     /* get the user's email address */
     printf("Please enter your email address (an empty line will cancel this bugreport)\n\n");
     /* abort if error reading input */
-    if(read_builtin(2, read_argv) != 0)
+    if(do_builtin_internal(read_builtin, 2, read_argv) != 0)
     {
         printf("\n\nAborted\n\n");
         /* discard saved subject */
@@ -155,7 +156,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
     {
         symtab_entry_setval(REPLY, NULL);
         /* stop if error reading input */
-        if(read_builtin(2, read_argv) != 0)
+        if(do_builtin_internal(read_builtin, 2, read_argv) != 0)
         {
             break;
         } 

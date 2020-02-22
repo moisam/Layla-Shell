@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: glob.c
  *    This file is part of the Layla Shell project.
@@ -27,11 +27,15 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "setx.h"
 #include "../debug.h"
 
 #define UTILITY             "glob"
+
+/* defined in echo.c */
+int process_echo_options(int argc, char **argv, char *opts, int *allow_escaped, int *supp_nl);
 
 
 /*
@@ -52,57 +56,17 @@ int glob_builtin(int argc, char **argv)
      * sequences are enabled by echo by default.. this behavior can be overriden
      * by use of the -e and -E options (see below).
      */
-    int v, allow_escaped = optionx_set(OPTION_XPG_ECHO);
-    char *p;
-    /* process options and arguments */
-    for( ; v < argc; v++)
-    { 
-        /* options start with '-' */
-        if(argv[v][0] == '-')
-        {
-            p = argv[v]+1;
-            int op = 1;
-            /*
-             * check the validity of the options string.. we only accept
-             * three options: e, n and E.. if the string contains any other
-             * letter, we treat it as an argument to be printed, not an option.
-             */
-            while(*p)
-            {
-                if(*p != 'e' && *p != 'n' && *p != 'E')
-                {
-                    op = 0;
-                    break;
-                }
-                p++;
-            }
-            if(!op)
-            {
-                break;
-            }
-            /* now process the options */
-            p = argv[v]+1;
-            while(*p)
-            {
-                switch(*p)
-                {
-                    /* -e: allow escape characters (see the manpage for the details) */
-                    case 'e':
-                        allow_escaped = 1;
-                        break;
-                        
-                    /* -E: don't allow escape characters (see the manpage for the details) */
-                    case 'E':
-                        allow_escaped = 0;
-                        break;
-                }
-                p++;
-            }
-        }
-        else break;
-    }
+    int allow_escaped = optionx_set(OPTION_XPG_ECHO);
+    int supp_nl;    /* not used here (used in echo) */
+
+    /* process the options */
+    int v = process_echo_options(argc, argv, "eE", &allow_escaped, &supp_nl);
+
+    /* print the arguments */
     int flags = allow_escaped ? FLAG_ECHO_ALLOW_ESCAPED : 0;
     flags |= FLAG_ECHO_NULL_TERM;
+
     do_echo(v, argc, argv, flags);
+
     return 0;
 }

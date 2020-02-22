@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: history.c
  *    This file is part of the Layla Shell project.
@@ -27,6 +27,7 @@
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "../backend/backend.h"
+#include "builtins.h"
 #include "setx.h"
 #include "../debug.h"
 
@@ -46,10 +47,10 @@ int       cmd_history_index   = 0;
 int       cmd_history_end     = 0;
 
 /* pointer to the history file struct */
-FILE     *__hist              = NULL;
+FILE     *hist_file           = NULL;
 
 /* the name of the history file */
-char     *__hist_filename     = NULL;
+char     *hist_filename       = NULL;
 
 /*
  * number of command lines in the history file (helps when we want to
@@ -66,7 +67,7 @@ char     *saved_hist_filename = NULL;
 char     *saved_HISTFILE      = NULL;
 
 /* default history filename */
-char      hist_file[]         = ".lsh_history";
+char      default_hist_filename[]         = ".lsh_history";
 
 /* the values we will give to the $HISTSIZE and $HISTCMD shell variables */
 int       HISTSIZE            = 0;
@@ -81,12 +82,8 @@ int       HISTCMD             = 0;
 void set_HISTCMD(int val)
 {
     HISTCMD = val;
-    //struct symtab_entry_s *entry = add_to_symtab("HISTCMD");
-    //if(!entry) return;
     char buf[16];
     sprintf(buf, "%d", val);
-    //symtab_entry_setval(entry, buf);
-    //entry->flags |= FLAG_EXPORT;
     set_shell_varp("HISTCMD", buf);
 }
 
@@ -259,19 +256,19 @@ void init_history(void)
     char   *hist = entry ? entry->val : NULL;
     if(!hist || !*hist)
     {
-        fprintf(stderr, "%s: can't load history: $HISTFILE is null or empty\n", SHELL_NAME);
+        PRINT_ERROR("%s: can't load history: $HISTFILE is null or empty\n", SHELL_NAME);
         /* no history file. no commands to load */
         return;
     }
     else
     {
         /* open the history file */
-        __hist_filename = get_malloced_str(hist);
-        __hist = fopen(hist, "r");
+        hist_filename = get_malloced_str(hist);
+        hist_file = fopen(hist, "r");
     }
     
     /* failed to open the file */
-    if(!__hist)
+    if(!hist_file)
     {
         return;
     }
@@ -287,9 +284,9 @@ void init_history(void)
     char *line;
     int count = 0;
     int is_timestamp;
-    while(!feof(__hist))
+    while(!feof(hist_file))
     {
-        read_line(__hist, 0, &is_timestamp);
+        read_line(hist_file, 0, &is_timestamp);
         /* history entry timestamps which start with a hash followed by a digit */
         if(is_timestamp)
         {
@@ -302,12 +299,12 @@ void init_history(void)
     /* history file is empty */
     if(!count)
     {
-        fclose(__hist);
+        fclose(hist_file);
         return;
     }
     
     /* rewind the file to read the commands */
-    rewind(__hist);
+    rewind(hist_file);
     
     /*
      * we want to get HISTSIZE entries from the file. if we have more, get only those.
@@ -315,11 +312,11 @@ void init_history(void)
      */
     while(count > HISTSIZE)
     {
-        if(feof(__hist))
+        if(feof(hist_file))
         {
             break;
         }
-        read_line(__hist, 0, &is_timestamp);
+        read_line(hist_file, 0, &is_timestamp);
         /* history entry timestamps which start with a hash followed by a digit */
         if(is_timestamp)
         {
@@ -329,7 +326,7 @@ void init_history(void)
     }
     
     /* now read the entries in */
-    while((line = read_line(__hist, 1, &is_timestamp)))
+    while((line = read_line(hist_file, 1, &is_timestamp)))
     {
         time_t t = time(NULL);
         /* history entry timestamps start with a hash followed by a digit */
@@ -348,7 +345,7 @@ void init_history(void)
         cmd_history[cmd_history_index  ].time = t   ;
         cmd_history[cmd_history_index++].cmd  = line;
     }
-    fclose(__hist);
+    fclose(hist_file);
     cmd_history_end = cmd_history_index;
     set_HISTCMD(cmd_history_end);
     return;    
@@ -368,7 +365,7 @@ void flush_history(void)
     }
 
     /* no valid history file */
-    if(!__hist_filename)
+    if(!hist_filename)
     {
         return;
     }
@@ -386,16 +383,16 @@ void flush_history(void)
         /* open the history file in append or write mode, as required */
         if(optionx_set(OPTION_HIST_APPEND))
         {
-             __hist = fopen(__hist_filename, "a");
+             hist_file = fopen(hist_filename, "a");
         }
         else
         {
-            __hist = fopen(__hist_filename, "w");
+            hist_file = fopen(hist_filename, "w");
         }
     }
     else if(hfsize == 0)    /* trunc history file to zero length */
     {
-        __hist = fopen(__hist_filename, "w");
+        hist_file = fopen(hist_filename, "w");
     }
     else                    /* trunc history file to some other size */
     {
@@ -415,17 +412,17 @@ void flush_history(void)
             j = total-hfsize;
             if(hist_file_count <= j)
             {
-                __hist = fopen(__hist_filename, "w");
+                hist_file = fopen(hist_filename, "w");
                 j -= hist_file_count;
             }
             else
             {
-                __hist = fopen(__hist_filename, "r");
+                hist_file = fopen(hist_filename, "r");
                 int is_timestamp;
                 /* skip the entries we want to discard */
-                while(!feof(__hist))
+                while(!feof(hist_file))
                 {
-                    read_line(__hist, 0, &is_timestamp);
+                    read_line(hist_file, 0, &is_timestamp);
                     /* history entry timestamps which start with a hash followed by a digit */
                     if(is_timestamp)
                     {
@@ -434,23 +431,23 @@ void flush_history(void)
                     j--;
                 }
                 /* temporarily save the rest of the file */
-                long curpos = ftell(__hist);
-                fseek(__hist, 0, SEEK_END);
-                long size = ftell(__hist);
-                fseek(__hist, curpos, SEEK_SET);
+                long curpos = ftell(hist_file);
+                fseek(hist_file, 0, SEEK_END);
+                long size = ftell(hist_file);
+                fseek(hist_file, curpos, SEEK_SET);
                 long bytes = size-curpos;
                 char *tmp = malloc(bytes);
                 if(tmp)
                 {
-                    bytes = fread(tmp, 1, bytes, __hist);
+                    bytes = fread(tmp, 1, bytes, hist_file);
                 }
-                fflush(__hist);
-                fclose(__hist);
+                fflush(hist_file);
+                fclose(hist_file);
                 /* trunc the file to zero and then write our entries */
-                __hist = fopen(__hist_filename, "w");
+                hist_file = fopen(hist_filename, "w");
                 if(tmp)
                 {
-                    fwrite(tmp, 1, bytes, __hist);
+                    fwrite(tmp, 1, bytes, hist_file);
                     free(tmp);
                 }
             }
@@ -465,17 +462,17 @@ void flush_history(void)
             /* open the history file in append or write mode, as required */
             if(optionx_set(OPTION_HIST_APPEND))
             {
-                 __hist = fopen(__hist_filename, "a");
+                 hist_file = fopen(hist_filename, "a");
             }
             else
             {
-                __hist = fopen(__hist_filename, "w");
+                hist_file = fopen(hist_filename, "w");
             }
         }
     }
 
     /* error opening the history file */
-    if(!__hist)
+    if(!hist_file)
     {
         return;
     }
@@ -491,18 +488,18 @@ void flush_history(void)
         /* save the timestamp */
         if(fmt)
         {
-            fprintf(__hist, "#%ld\n", cmd_history[i].time);
+            fprintf(hist_file, "#%ld\n", cmd_history[i].time);
         }
         /* save the command */
         char *cmd = cmd_history[i].cmd;
-        fprintf(__hist, "%s", cmd);
+        fprintf(hist_file, "%s", cmd);
         /* add trailing newline if needed */
         if(cmd[strlen(cmd)-1] != '\n')
         {
-            fprintf(__hist, "\n");
+            fprintf(hist_file, "\n");
         }
     }
-    fclose(__hist);
+    fclose(hist_file);
     /*
      * free memory used by the command string. not really needed, as we are exiting,
      * but its good practice to balance your malloc/free call ratio. also helps
@@ -515,9 +512,9 @@ void flush_history(void)
             free(cmd_history[i].cmd);
         }
     }
-    if(__hist_filename)
+    if(hist_filename)
     {
-        free_malloced_str(__hist_filename);
+        free_malloced_str(hist_filename);
     }
 }
 
@@ -614,34 +611,28 @@ char *save_to_history(char *cmd_buf)
      */
     int ign_sp = 0, ign_dup = 0, erase_dup = 0;
     char *e1 = get_shell_varp("HISTCONTROL", "");
-    while(*e1)
+    char *s;
+    
+    while((s = next_colon_entry(&e1)))
     {
-        char *e2 = e1+1;
-        while(*e2 && *e2 != ':')
+        if(strcmp(s, "ignorespace") == 0)
         {
-            e2++;
+            ign_sp = 1;
         }
-        char c = *e2;
-        *e2 = '\0';
-        if     (strcmp(e1, "ignorespace") == 0)
+        else if(strcmp(s, "ignoredups") == 0)
         {
-            ign_sp    = 1;
+            ign_dup = 1;
         }
-        else if(strcmp(e1, "ignoredups" ) == 0)
+        else if(strcmp(s, "ignoreboth") == 0)
         {
-            ign_dup   = 1;
+            ign_sp = 1;
+            ign_dup = 1;
         }
-        else if(strcmp(e1, "ignoreboth" ) == 0)
-        {
-            ign_sp    = 1;
-            ign_dup   = 1;
-        }
-        else if(strcmp(e1, "erasedups"  ) == 0)
+        else if(strcmp(s, "erasedups") == 0)
         {
             erase_dup = 1;
         }
-        *e2 = c;
-        e1 = e2;
+        free(s);
     }
 
     /* don't save commands that start with a space char */
@@ -694,31 +685,23 @@ char *save_to_history(char *cmd_buf)
      * history entry.
      */
     e1 = get_shell_varp("HISTIGNORE", "");
-    while(*e1)
+    while((s = next_colon_entry(&e1)))
     {
-        char *e2 = e1+1;
-        while(*e2 && *e2 != ':')
-        {
-            e2++;
-        }
-        char c = *e2;
-        *e2 = '\0';
-        if(strcmp(e1, "&") == 0 || strcmp(e1, "\\&") == 0)
+        if(strcmp(s, "&") == 0 || strcmp(s, "\\&") == 0)
         {
             /* don't repeat last cmd saved */
             if(strcmp(cmd_history[cmd_history_end-1].cmd, cmd_buf) == 0)
             {
-                *e2 = c;
+                free(s);
                 return cmd_history[cmd_history_end-1].cmd;
             }
         }
-        else if(match_filename(e1, cmd_buf, 0, 0))
+        else if(match_filename(s, cmd_buf, 0, 0))
         {
-            *e2 = c;
+            free(s);
             return NULL;
         }
-        *e2 = c;
-        e1 = e2;
+        free(s);
     }
     
     /*
@@ -854,8 +837,8 @@ void use_hist_file(char *path)
     {
         return;
     }
-    saved_hist_filename = __hist_filename;
-    __hist_filename = get_malloced_str(path);
+    saved_hist_filename = hist_filename;
+    hist_filename = get_malloced_str(path);
 
     struct symtab_entry_s *entry = get_symtab_entry("HISTFILE");
     if(entry && entry->val)
@@ -877,11 +860,11 @@ void restore_hist_file(void)
 {
     if(saved_hist_filename)
     {
-        if(__hist_filename)
+        if(hist_filename)
         {
-            free_malloced_str(__hist_filename);
+            free_malloced_str(hist_filename);
         }
-        __hist_filename = saved_hist_filename;
+        hist_filename = saved_hist_filename;
     }
 
     struct symtab_entry_s *entry = get_symtab_entry("HISTFILE");
@@ -958,8 +941,7 @@ int history_builtin(int argc, char **argv)
     int v = 1, c;
     int i;
     char *p, *pend;
-    set_shell_varp("OPTIND", NULL);
-    argi = 0;   /* args.c */
+    
     /****************************
      * process the options
      ****************************/
@@ -990,7 +972,7 @@ int history_builtin(int argc, char **argv)
             case 'a':
                 i = optionx_set(OPTION_HIST_APPEND);
                 set_optionx(OPTION_HIST_APPEND, 1);
-                use_hist_file(__optarg);
+                use_hist_file(internal_optarg);
                 flush_history();
                 restore_hist_file();
                 set_optionx(OPTION_HIST_APPEND, i);
@@ -1003,25 +985,25 @@ int history_builtin(int argc, char **argv)
                 
             /* delete some commands from the history list */
             case 'd':
-                if(!__optarg || __optarg == INVALID_OPTARG)
+                if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
-                    fprintf(stderr, "%s: -d option is missing argument: offset\n", UTILITY);
+                    PRINT_ERROR("%s: -d option is missing argument: offset\n", UTILITY);
                     return 2;
                 }
-                p  = strchr(__optarg, '-');
+                p  = strchr(internal_optarg, '-');
                 pend = NULL;
                 if(p)
                 {
                     /* '-' is the first char in arg */
-                    if(p == __optarg)
+                    if(p == internal_optarg)
                     {
                         char *p2 = strchr(p+1, '-');
                         if(p2)
                         {
                             /* start-end range given, start is negative */
-                            i = p2-__optarg;
+                            i = p2-internal_optarg;
                             char buf[i+1];
-                            strncpy(buf, __optarg, i);
+                            strncpy(buf, internal_optarg, i);
                             buf[i] = '\0';
                             start = strtol(buf, &pend, 10);
                             if(pend == buf || start < -cmd_history_end)
@@ -1053,8 +1035,8 @@ int history_builtin(int argc, char **argv)
                         else
                         {
                             /* negative offset given */
-                            start = strtol(__optarg, &pend, 10);
-                            if(pend == __optarg || start < -cmd_history_end)
+                            start = strtol(internal_optarg, &pend, 10);
+                            if(pend == internal_optarg || start < -cmd_history_end)
                             {
                                 goto invalid_off;
                             }
@@ -1070,9 +1052,9 @@ int history_builtin(int argc, char **argv)
                     else
                     {
                         /* start-end range given, start is positive */
-                        i = p-__optarg;
+                        i = p-internal_optarg;
                         char buf[i+1];
-                        strncpy(buf, __optarg, i);
+                        strncpy(buf, internal_optarg, i);
                         buf[i] = '\0';
                         start = strtol(buf, &pend, 10);
                         if(pend == buf || start > cmd_history_end)
@@ -1105,8 +1087,8 @@ int history_builtin(int argc, char **argv)
                 else
                 {
                     /* positive offet given */
-                    start = strtol(__optarg, &pend, 10);
-                    if(pend == __optarg || start > cmd_history_end)
+                    start = strtol(internal_optarg, &pend, 10);
+                    if(pend == internal_optarg || start > cmd_history_end)
                     {
                         goto invalid_off;
                     }
@@ -1135,7 +1117,7 @@ int history_builtin(int argc, char **argv)
             /* tcsh uses -L instead of -r, which is used by bash */
             case 'L':
             case 'r':
-                use_hist_file(__optarg);
+                use_hist_file(internal_optarg);
                 clear_history(0, cmd_history_end);
                 init_history();
                 restore_hist_file();
@@ -1143,9 +1125,9 @@ int history_builtin(int argc, char **argv)
                 
             /* load history entry in the command buffer */
             case 'p':
-                if(!__optarg || __optarg == INVALID_OPTARG)
+                if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
-                    fprintf(stderr, "%s: -%c option is missing arguments\n", UTILITY, 'p');
+                    PRINT_ERROR("%s: -%c option is missing arguments\n", UTILITY, 'p');
                     return 2;
                 }
                 p = list_to_str(&argv[v]);
@@ -1171,9 +1153,9 @@ int history_builtin(int argc, char **argv)
                 
             /* save the history list to the given history file */
             case 's':
-                if(!__optarg || __optarg == INVALID_OPTARG)
+                if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
-                    fprintf(stderr, "%s: -%c option is missing arguments\n", UTILITY, 's');
+                    PRINT_ERROR("%s: -%c option is missing arguments\n", UTILITY, 's');
                     return 2;
                 }
                 p = list_to_str(&argv[v]);
@@ -1192,7 +1174,7 @@ int history_builtin(int argc, char **argv)
             case 'w':
                 i = optionx_set(OPTION_HIST_APPEND);
                 set_optionx(OPTION_HIST_APPEND, 0);
-                use_hist_file(__optarg);
+                use_hist_file(internal_optarg);
                 flush_history();
                 restore_hist_file();
                 set_optionx(OPTION_HIST_APPEND, i);
@@ -1243,6 +1225,6 @@ int history_builtin(int argc, char **argv)
     return 0;
     
 invalid_off:
-    fprintf(stderr, "%s: invalid offset passed to -d option: %s\n", UTILITY, __optarg);
+    PRINT_ERROR("%s: invalid offset passed to -d option: %s\n", UTILITY, internal_optarg);
     return 2;
 }

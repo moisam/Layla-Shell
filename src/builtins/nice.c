@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: nice.c
  *    This file is part of the Layla Shell project.
@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/resource.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../backend/backend.h"
 #include "../debug.h"
@@ -53,7 +54,7 @@ int get_niceval(char *str)
     int i = strtol(str, &strend, 10);
     if(strend == str)
     {
-        fprintf(stderr, "%s: invalid nice value: %s\n", UTILITY, str);
+        PRINT_ERROR("%s: invalid nice value: %s\n", UTILITY, str);
         errno = EINVAL;
         return DEFAULT_NICEVAL;
     }
@@ -103,7 +104,7 @@ int nice_builtin(int argc, char **argv)
                 switch(*p)
                 {
                     case 'h':
-                        print_help(argv[0], REGULAR_BUILTIN_NICE, 1, 0);
+                        print_help(argv[0], &NICE_BUILTIN, 0);
                         return 0;
                         
                     case 'v':
@@ -162,7 +163,7 @@ int nice_builtin(int argc, char **argv)
             niceval = getpriority(PRIO_PROCESS, 0);
             if(niceval == -1 && errno)
             {
-                fprintf(stderr, "%s: failed to get nice value: %s\n", UTILITY, strerror(errno));
+                PRINT_ERROR("%s: failed to get nice value: %s\n", UTILITY, strerror(errno));
                 return 3;
             }
             printf("%d\n", niceval);
@@ -172,7 +173,7 @@ int nice_builtin(int argc, char **argv)
         {
             if(setpriority(PRIO_PROCESS, 0, niceval) == -1)
             {
-                fprintf(stderr, "%s: failed to set nice value to %d: %s\n", UTILITY, niceval, strerror(errno));
+                PRINT_ERROR("%s: failed to set nice value to %d: %s\n", UTILITY, niceval, strerror(errno));
                 return 2;
             }
             return 0;

@@ -1,6 +1,6 @@
 /*
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  *
  *    file: echo.c
  *    This file is part of the Layla Shell project.
@@ -27,11 +27,102 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "setx.h"
 #include "../debug.h"
 
 #define UTILITY             "echo"
+
+
+/*
+ * process the options supplied to echo and glob.. the 'opts' argument contains 
+ * the recognized options ('eEn' for echo and 'eE' for glob).. if -e is supplied,
+ * 'allow_escaped' is set to 1, if -E is supplied, it is set to 0.. if -n is
+ * supplied (for echo, not glob), 'supp_nl' is set to 1.
+ * 
+ * returns the index of the first non-option argument to be printed by the
+ * calling utility.
+ */
+int process_echo_options(int argc, char **argv, char *opts, int *allow_escaped, int *supp_nl)
+{
+    char *p, *p2;
+    int v = 1;
+    int recognize_n = (strchr(opts, 'n')) ? 1 : 0;
+    
+    /* process options and arguments */
+    for( ; v < argc; v++)
+    {
+        /* options start with '-' */
+        if(argv[v][0] == '-')
+        {
+            p = argv[v]+1;
+            int op = (*p != '\0');  /* so that `echo -` prints '-' */
+
+            /*
+             * check the validity of the options string.. we only accept
+             * three options: e, n and E (for echo), or two options: e and E
+             * (for glob).. if the string contains any other letter, we treat 
+             * it as an argument to be printed, not as an option.
+             */
+            while(*p)
+            {
+                for(p2 = opts; *p2; p2++)
+                {
+                    if(*p2 == *p)
+                    {
+                        break;
+                    }
+                }
+                
+                if(!*p2)
+                {
+                    op = 0;
+                    break;
+                }
+                p++;
+            }
+
+            if(!op)
+            {
+                break;
+            }
+            
+            /* now process the options */
+            p = argv[v]+1;
+            while(*p)
+            {
+                switch(*p)
+                {
+                    /* -e: allow escape characters (see the manpage for the details) */
+                    case 'e':
+                        (*allow_escaped) = 1;
+                        break;
+
+                    /* -E: don't allow escape characters (see the manpage for the details) */
+                    case 'E':
+                        (*allow_escaped) = 0;
+                        break;
+
+                    /* -n: don't print a newline after the arguments */
+                    case 'n':
+                        if(recognize_n)
+                        {
+                            (*supp_nl) = 1;
+                        }
+                        break;
+                }
+                p++;
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+    
+    return v;
+}
 
 
 /*
@@ -51,68 +142,26 @@ int echo_builtin(int argc, char **argv)
      * in bash, shopt option 'xpg_echo' is used to indicate whether escape
      * sequences are enabled by echo by default.. this behavior can be overriden
      * by use of the -e and -E options (see below).
+     * we enable escape sequences in --posix mode and if xpg-echo is set.
      */
-    int v = 1, supp_nl = 0, allow_escaped = optionx_set(OPTION_XPG_ECHO);
-    char *p;
-    /* process options and arguments */
-    for( ; v < argc; v++)
-    {
-        /* options start with '-' */
-        if(argv[v][0] == '-')
-        {
-            p = argv[v]+1;
-            int op = 1;
-            /*
-             * check the validity of the options string.. we only accept
-             * three options: e, n and E.. if the string contains any other
-             * letter, we treat it as an argument to be printed, not as an option.
-             */
-            while(*p)
-            {
-                if(*p != 'e' && *p != 'n' && *p != 'E')
-                {
-                    op = 0;
-                    break;
-                }
-                p++;
-            }
-            if(!op)
-            {
-                break;
-            }
-            /* now process the options */
-            p = argv[v]+1;
-            while(*p)
-            {
-                switch(*p)
-                {
-                    /* -e: allow escape characters (see the manpage for the details) */
-                    case 'e':
-                        allow_escaped = 1;
-                        break;
+    int supp_nl = 0;
+    int allow_escaped = option_set('P') || optionx_set(OPTION_XPG_ECHO);
 
-                    /* -E: don't allow escape characters (see the manpage for the details) */
-                    case 'E':
-                        allow_escaped = 0;
-                        break;
-
-                    /* -n: don't print a newline after the arguments */
-                    case 'n':
-                        supp_nl = 1;
-                        break;
-                }
-                p++;
-            }
-        }
-        else break;
-    }
-    do_echo(v, argc, argv, allow_escaped ? FLAG_ECHO_ALLOW_ESCAPED : 0);
+    /* process the options */
+    int v = process_echo_options(argc, argv, "eEn", &allow_escaped, &supp_nl);
+    
+    /* print the arguments */
+    int flags = allow_escaped ? FLAG_ECHO_ALLOW_ESCAPED : 0;
     if(!supp_nl)
     {
-        putchar('\n');
+        flags |= FLAG_ECHO_PRINT_NL;
     }
+
+    do_echo(v, argc, argv, flags);
+
     return 0;
 }
+
 
 /*
  * argv is processed and printed, starting from arg number v..
@@ -123,8 +172,11 @@ void do_echo(int v, int argc, char **argv, int flags)
 {
     int  allow_escaped = flag_set(flags, FLAG_ECHO_ALLOW_ESCAPED);
     char separator = flag_set(flags, FLAG_ECHO_NULL_TERM) ? '\0' : ' ';
-    int  endme = 0, i, first = 1;
-    char *p, *p2;
+    int  print_nl = flag_set(flags, FLAG_ECHO_PRINT_NL);
+    int  endme = 0, first = 1;
+
+    clearerr(stdout);
+    
     /* process the arguments */
     for( ; v < argc; v++)
     {
@@ -140,179 +192,29 @@ void do_echo(int v, int argc, char **argv, int flags)
         {
             printf("%c", separator);
         }
+
         /* are escape sequences allowed? */
         if(allow_escaped)
         {
-            int k;
-            wchar_t j;
-            p = argv[v];
-
-            /* process the argument char by char */
-            while(*p)
+            char *str = ansic_expand(argv[v]);
+            if(str)
             {
-                /* the backslash introduces an escaped char */
-                if(*p == '\\')
+                printf("%s", str);
+                free(str);
+                /*
+                 * we have no way of knowing if ansic_expand() encountered the \c
+                 * sequence or not, so we use this dirty hack to check if the
+                 * original string contains it, because we need to stop parsing the
+                 * rest of the arguments if \c is encountered.
+                 */
+                if(strstr(argv[v], "\\c"))
                 {
-                    p++;
-                    /* process the escaped char */
-                    switch(*p)
-                    {
-                        case 'a':       /* \a - alert or beep */
-                            beep();
-                            break;
-
-                        case 'b':       /* \b - backspace */
-                            putchar('\b');
-                            break;
-
-                        case 'c':       /* \c - end of processing */
-                            endme = 1;
-                            break;
-
-                        case 'e':       /* \e - ESC */
-                        case 'E':       /* the same */
-                            putchar('\e');
-                            break;
-
-                        case 'f':       /* \f - form feed */
-                            putchar('\f');
-                            break;
-
-                        case 'n':       /* \n - newline */
-                            putchar('\n');
-                            break;
-
-                        case 'r':       /* \r - carriage return */
-                            putchar('\r');
-                            break;
-
-                        case 't':       /* \t - TAB */
-                            putchar('\t');
-                            break;
-
-                        case 'v':       /* \v - vertical tab */
-                            putchar('\v');
-                            break;
-
-                        case '\\':       /* \\ - backslash */
-                            putchar('\\');
-                            break;
-
-                        case '0':       /* \0nnn - octal ASCI char code */
-                            p++;
-                            if(isdigit(*p))
-                            {
-                                /* get 1st digit */
-                                i = (*p)-'0';
-                                p2 = p+1;
-                                if(isdigit(*p2))
-                                {
-                                    /* get 2nd digit */
-                                    i = i*8 + (*p2)-'0';
-                                    p2++;
-                                }
-                                if(isdigit(*p2))
-                                {
-                                    /* get 3rd digit */
-                                    i = i*8 + (*p2)-'0';
-                                    p2++;
-                                }
-                                p = p2-1;
-                                printf("%d", i);
-                            }
-                            else
-                            {
-                                /* no octal digits. bail out */
-                                p--;
-                                printf("\\0");
-                            }
-                            break;
-
-                        case 'x':       /* \xNN - hexadecimal ASCII char code */
-                            i = 0;
-                            p2 = p+1;
-                            /* get 1st digit */
-                            if(get_ndigit(*p2, 16, &i))
-                            {
-                                p2++;
-                                if(get_ndigit(*p2, 16, &k))
-                                {
-                                    /* get 2nd digit */
-                                    i = i*16 + k;
-                                    p2++;
-                                }
-                            }
-                            /* print the char */
-                            if(p2 == p+1)
-                            {
-                                printf("\\x");
-                            }
-                            else
-                            {
-                                /* no hex digits. bail out */
-                                p = p2-1;
-                                printf("%u", i);
-                            }
-                            break;
-
-                        /*
-                         * we use UTF-8. see https://en.wikipedia.org/wiki/UTF-8
-                         */
-                        case 'U':           /* unicode char \UHHHHHHHH */
-                        case 'u':           /* unicode char \uHHHH */
-                            /* \U accepts upto 8 digits, while \u accepts upto 4 */
-                            if(*p == 'u')
-                            {
-                                k = 4;
-                            }
-                            else
-                            {
-                                k = 8;
-                            }
-                            j = 0;
-                            /* get the Unicode code point */
-                            for(i = 1; i <= k; i++)
-                            {
-                                int l = 0;
-                                if(get_ndigit(p[i], 16, &l))
-                                {
-                                    j = j*16 + l;
-                                }
-                                else
-                                {
-                                    break;
-                                }
-                            }
-                            /* if we didn't move forward, means we didn't find any digits */
-                            if(i == 1)
-                            {
-                                printf("\\u");
-                                break;
-                            }
-                            /* print the Unicode char */
-                            printf("%lc", j);
-                            /* move forward */
-                            p += (i-1);
-                            break;
-
-                        default:
-                            /* escaped char that is none of the above */
-                            putchar('\\');
-                            putchar(*p);
-                            break;
-                    }
+                    endme = 1;
                 }
-                else
-                {
-                    /* print all other chars */
-                    putchar(*p);
-                }
-                /* the '\c' escape sequence terminates processing */
-                if(endme)
-                {
-                    break;
-                }
-                p++;
+            }
+            else
+            {
+                printf("%s", argv[v]);
             }
         }
         /* print the arg as-is, without processing for possible escape sequences */
@@ -320,12 +222,21 @@ void do_echo(int v, int argc, char **argv, int flags)
         {
             printf("%s", argv[v]);
         }
+
         /* the '\c' escape sequence terminates processing */
         if(endme)
         {
+            /* no more output, not even '\n' */
+            print_nl = 0;
             break;
         }
     }
+    
+    if(print_nl)
+    {
+        putchar('\n');
+    }
+    
     /*
      * glob utility works similar to echo, except that it outputs its arguments
      * separated by null chars '\0' instead of spaces.. we make sure we terminate
@@ -335,4 +246,6 @@ void do_echo(int v, int argc, char **argv, int flags)
     {
         putchar(separator);
     }
+    
+    fflush(stdout);
 }

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: unsetenv.c
  *    This file is part of the Layla Shell project.
@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "../debug.h"
@@ -66,8 +67,6 @@ static inline void unset_entry(char *name)
 int unsetenv_builtin(int argc, char **argv)
 {
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
     /****************************
      * process the options
      ****************************/
@@ -76,7 +75,7 @@ int unsetenv_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_UNSETENV, 1, 0);
+                print_help(argv[0], &UNSETENV_BUILTIN, 0);
                 return 0;
                 
             case 'v':

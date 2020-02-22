@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: newgrp.c
  *    This file is part of the Layla Shell project.
@@ -28,6 +28,7 @@
 #include <grp.h>
 #include <errno.h>
 #include <termios.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../backend/backend.h"
 #include "../debug.h"
@@ -138,8 +139,7 @@ int newgrp_builtin(int argc, char **argv)
     }
     gid_t *supp_groups = NULL;
     int v = 1, c;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+    
     /****************************
      * process the options
      ****************************/
@@ -148,7 +148,7 @@ int newgrp_builtin(int argc, char **argv)
         switch(c)
         {
             case 'h':
-                print_help(argv[0], REGULAR_BUILTIN_NEWGRP, 1, 0);
+                print_help(argv[0], &NEWGRP_BUILTIN, 0);
                 return 0;
                 
             case 'v':
@@ -210,7 +210,7 @@ int newgrp_builtin(int argc, char **argv)
         new_gid = strtol(group, &strend, 10);
         if(*strend)
         {
-            fprintf(stderr, "%s: invalid group id: %s\n", UTILITY, group);
+            PRINT_ERROR("%s: invalid group id: %s\n", UTILITY, group);
             goto fin;
         }
         
@@ -255,8 +255,8 @@ int newgrp_builtin(int argc, char **argv)
                 char *pass = ...;
             }
             */
-            fprintf(stderr, "%s: user %s is not a member of group %s",
-                    UTILITY, pw->pw_name, grp->gr_name);
+            PRINT_ERROR("%s: user %s is not a member of group %s",
+                        UTILITY, pw->pw_name, grp->gr_name);
             goto fin;
         }
     }
@@ -371,13 +371,13 @@ fin:
         char *arg = malloc(strlen(shell_path)+2);
         if(!arg)
         {
-            fprintf(stderr, "%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
+            PRINT_ERROR("%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
             return 3;
         }
         sprintf(arg, "-%s", shell_path);
         shell_argv[0] = arg;
         execvp(shell_path, shell_argv);
-        fprintf(stderr, "%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
         shell_argv[0] = old_arg0;
         return 3;
     }
@@ -385,7 +385,7 @@ fin:
     {
         shell_argv[0] = shell_path;
         execvp(shell_path, shell_argv);
-        fprintf(stderr, "%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
         shell_argv[0] = old_arg0;
         return 3;
     }

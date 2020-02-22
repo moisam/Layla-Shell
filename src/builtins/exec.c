@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: exec.c
  *    This file is part of the Layla Shell project.
@@ -25,11 +25,17 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/stat.h>
+#include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
+#include "../sig.h"
 #include "setx.h"
 
 #define UTILITY             "exec"
+
+/* defined in kbdevent2.c */
+struct termios tty_attr_old;
 
 
 /*
@@ -48,8 +54,7 @@ int exec_builtin(int argc, char **argv)
     int  v = 1, c;
     int  cenv = 0, login = 0;
     char *arg0 = NULL;
-    set_shell_varp("OPTIND", NULL);     /* reset $OPTIND */
-    argi = 0;   /* defined in args.c */
+
     /*
      * process the options.
      *
@@ -64,7 +69,7 @@ int exec_builtin(int argc, char **argv)
             {
                 /* print help */
                 case 'h':
-                    print_help(argv[0], SPECIAL_BUILTIN_EXEC, 0, 0);
+                    print_help(argv[0], &EXEC_BUILTIN, 0);
                     return 0;
 
                     /* print shell version */
@@ -87,65 +92,61 @@ int exec_builtin(int argc, char **argv)
 
                     /* specify the argument to pass as arg[0] to the command */
                 case 'a':
-                    arg0 = __optarg;
-                    if(!arg0 || arg0 == INVALID_OPTARG)
+                    if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                     {
-                        fprintf(stderr, "%s: missing argument to option -%c\n", UTILITY, c);
+                        PRINT_ERROR("%s: missing argument to option -%c\n", UTILITY, c);
                         return 2;
                     }
+                    arg0 = internal_optarg;
                     break;
             }
         }
+
         /* unknown option */
         if(c == -1)
         {
             return 2;
         }
     }
+    
     /* no arguments */
     if(v >= argc)
     {
         return 0;
     }
+    
     /* is this shell restricted? */
     if(startup_finished && option_set('r'))
     {
         /* bash & zsh say r-shells can't use exec to replace the shell */
-        fprintf(stderr, "%s: can't execute command: restricted shell\n", UTILITY);
+        PRINT_ERROR("%s: can't execute command: restricted shell\n", UTILITY);
         return 2;
     }
-    /*
-     * with the -c option, we clear the environment before applying variable assignments
-     * for this command.. local variable assignments can be found in the local symbol
-     * table that the backend pushed on the stack before it called us.
-     */
-    if(cenv)
-    {
-        clearenv();
-        struct symtab_s *symtab = get_local_symtab();
-        do_export_table(symtab, EXPORT_VARS_EXPORTED_ONLY);
-    }
+    
     /* get the command name */
     char *cmd = get_malloced_str(argv[v]);
+
     /* replace arg[0] with the argument we were given with the -a option */
     if(arg0)
     {
         free_malloced_str(argv[v]);
         argv[v] = get_malloced_str(arg0);
     }
+
     /* place a dash in front of argv[0] */
     if(login)
     {
         char *l = malloc(strlen(argv[v])+2);
         if(!l)
         {
-            fprintf(stderr, "%s: failed to exec '%s': insufficient memory\n", SHELL_NAME, argv[v]);
+            PRINT_ERROR("%s: failed to exec `%s`: insufficient memory\n", UTILITY, argv[v]);
             if(cmd)
             {
                 free_malloced_str(cmd);
             }
             return 1;
         }
+        
         sprintf(l, "-%s", argv[v]);
         free_malloced_str(argv[v]);
         argv[v] = get_malloced_str(l);
@@ -153,35 +154,121 @@ int exec_builtin(int argc, char **argv)
     }
 
     /* now exec the command */
-    execvp(cmd, &argv[v]);
+    char *path = cmd;
+    if(!strchr(cmd, '/'))
+    {
+        /* no slashes. search $PATH */
+        path = search_path(cmd, NULL, 1);
+    }
+
+    int tried_exec = 0;
+    if(path)
+    {
+        struct stat st;
+        if(stat(path, &st) == 0)
+        {
+            if(S_ISREG(st.st_mode))
+            {
+                /* restore signals to their inherited values */
+                restore_signals();
+                
+                /* stop job control and kill stopped jobs (bash) */
+                if(option_set('m'))
+                {
+                    kill_all_jobs(SIGHUP, 0);
+                }
+                
+                /* retore the terminal attributes */
+                if(orig_tty_pgid)
+                {
+                    int tty = cur_tty_fd();
+                    tcsetpgrp(tty, orig_tty_pgid);
+                    setpgid(0, orig_tty_pgid);
+                    tcsetattr(tty, TCSAFLUSH, &tty_attr_old);
+                }
+
+                /*
+                 * with the -c option, we clear the environment before applying variable assignments
+                 * for this command.. local variable assignments can be found in the local symbol
+                 * table that the backend pushed on the stack before it called us.
+                 */
+                if(cenv)
+                {
+                    clearenv();
+                    /*
+                     * NOTE: bash doesn't export anything after clearing the environment,
+                     *       (neither does zsh - according to the manpage).
+                     * TODO: should we export variables defined as part of the commandline,
+                     *       such as x in the command `x=abc exec sh`?
+                     */
+                }
+                else
+                {
+                    /*
+                     * decrement $SHLVL so if the exec'ed command is another shell, it 
+                     * will start with a correct value of $SHLVL (bash).
+                     */
+                    inc_shlvl_var(-1);
+
+                    /* export the variables marked for export */
+                    do_export_vars(EXPORT_VARS_FORCE_ALL);
+                }
+
+                /* execute the command */
+                tried_exec = 1;
+                execvp(path, &argv[v]);
+            }
+        }
+
+        if(path != cmd)
+        {
+            free(path);
+        }
+    }
 
     /* NOTE: we should NEVER come back here, unless there is an error, of course! */
     int err = errno;
-    fprintf(stderr, "%s: failed to exec '%s': %s\n", SHELL_NAME, argv[v], strerror(errno));
-    if(cmd)
-    {
-        free_malloced_str(cmd);
-    }
-    
-    /* in bash, subshells exit unconditionally on exec() failure */
-    if(getpid() != tty_pid)
-    {
-        exit_gracefully(EXIT_FAILURE, NULL);
-    }
-    
-    /* in bash, a non-interactive shell exits here if the execfail shopt option is not set */
-    if(!interactive_shell && !optionx_set(OPTION_EXEC_FAIL))
-    {
-        exit_gracefully(EXIT_FAILURE, NULL);
-    }
+    PRINT_ERROR("%s: failed to exec `%s`: %s\n", UTILITY,
+                cmd ? cmd : argv[v], strerror(errno));
     
     /*
-     * if the environment was cleared, try to restore it by re-exporting all the
-     * export variables.
+     * in bash, subshells exit unconditionally, and non-interactive shells exit
+     * on exec() failure if the execfail shopt option is not set.
      */
-    if(cenv)
+    if(executing_subshell || (!interactive_shell && !optionx_set(OPTION_EXEC_FAIL)))
     {
-        do_export_vars(EXPORT_VARS_EXPORTED_ONLY);
+        exit_gracefully(EXIT_FAILURE, NULL);
+    }
+    
+    if(tried_exec)
+    {
+        if(cmd)
+        {
+            free_malloced_str(cmd);
+        }
+
+        /* initialize the terminal */
+        if(read_stdin)
+        {
+            init_tty();
+        }
+
+        /* restart signals */
+        init_signals();
+    
+        /*
+         * if the environment was cleared, try to restore it by re-exporting all the
+         * export variables.
+         */
+        if(cenv)
+        {
+            do_export_vars(EXPORT_VARS_EXPORTED_ONLY);
+        }
+        else
+        {
+            /* environment wasn't cleared. just reset $SHLVL */
+            inc_shlvl_var(1);
+        }
     }
     
     /* return appropriate failure result */
