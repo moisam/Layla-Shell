@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: debug.h
  *    This file is part of the Layla Shell project.
@@ -22,12 +22,13 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-/* if you don't want to define the debu function, command the following line */
+/* if you don't want to define the debug function, comment the following line */
 #define DEBUG_MODE
 
 /*
  * depending on whether you commented the line above or not, the debug function
- * will either be defined as a null macro, or as a function to output debug info.
+ * will either be defined as a null macro, or as a function that outputs debug 
+ * messages.
  */
 #ifndef DEBUG_MODE
 
@@ -36,7 +37,9 @@
 #else
 
 void __debug(const char *file, const char *function, char *format, ...);
+
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+
 #define debug(...)  __debug(__FILENAME__, __FUNCTION__, __VA_ARGS__)
 
 #endif  /* DEBUG_MODE */

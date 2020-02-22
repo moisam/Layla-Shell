@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: args.c
  *    This file is part of the Layla Shell project.
@@ -126,10 +126,9 @@ int same_argv(char **argv1, char **argv2)
  *   alpha      : the letter representing the selected option
  *   0          : options finished. index of the first operand stored in *__argi
  */
-char *__optarg = 0;
-char  __opterr = 0;
-int   argi     = 0;
-// #define INVALID_OPTARG      ((char *)-1)
+char *internal_optarg = 0;
+char  internal_opterr = 0;
+int   internal_argi   = 0;
 
 int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit)
 {
@@ -137,22 +136,12 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit)
     static char **argv = NULL;
     static int    argc = 0;
     static char  *p    = NULL;
+
     /* call from a new utility? */
     int new = 0;
-    if(!argi || !argv)
+    if(!internal_argi || !argv || argc != __argc || !same_argv(argv, __argv))
     {
         new = 1;
-    }
-    else
-    {
-        if(argc != __argc)
-        {
-            new = 1;
-        }
-        else if(!same_argv(argv, __argv))
-        {
-            new = 1;
-        }
     }
     
     if(new)
@@ -163,36 +152,49 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit)
          */
         if(__argc == 1)
         {
-            free_argv(&argv);
             return *__argi = 1, 0;
         }
+#if 0
         struct symtab_entry_s *OPTIND = get_symtab_entry("OPTIND");
         if(!OPTIND || !OPTIND->val)
         {
-            argi = 1;
+            internal_argi = 1;
         }
         else
         {
             char *strend = NULL;
-            argi = strtol(OPTIND->val, &strend, 10);
-            if(*strend || !argi)
+            internal_argi = strtol(OPTIND->val, &strend, 10);
+            if(*strend || !internal_argi)
             {
-                argi = 1;
+                internal_argi = 1;
             }
-            else if(argi > __argc)
+            else if(internal_argi > __argc)
             {
-                argi = __argc;
+                internal_argi = __argc;
             }
         }
+#endif
+        internal_argi = get_shell_vari("OPTIND", 1);
+        if(internal_argi < 1)
+        {
+            internal_argi = 1;
+        }
+        else if(internal_argi > __argc)
+        {
+            internal_argi = __argc;
+        }
+
         if(argv)
         {
             free_argv(&argv);   /* forget the old saved argv */
         }
+
         ops  = __ops;
         argv = dup_argv(__argc, __argv);
+        
         if(!argv)
         {
-            fprintf(stderr, "%s: failed to process argv: %s\n", argv[0], strerror(errno));
+            PRINT_ERROR("%s: failed to process argv: %s\n", argv[0], strerror(errno));
             free_argv(&argv);
             /* POSIX says non-interactive shell should exit on Utility syntax errors */
             if(!interactive_shell)
@@ -201,39 +203,38 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit)
             }
             return -1;
         }
+        
         argc = __argc;
-        p    = argv[argi];
+        p    = argv[internal_argi];
     }
+    
     if(ops != __ops && *ops == ':')
     {
-        argi++;
+        internal_argi++;
     }
     
 loop:
-    if(p == argv[argi])
+    if(p == argv[internal_argi])
     {
         if(!p)
         {
-            free_argv(&argv);
-            return *__argi = argi, 0;
+            return *__argi = internal_argi, 0;
         }
         if(*p != '-')
         {
             /* only accept '+' options when option string begins with '+' */
             if(*p != '+' || *__ops != '+')
             {
-                free_argv(&argv);
-                return *__argi = argi, 0;
+                return *__argi = internal_argi, 0;
             }
         }
         if(strcmp(p, "--") == 0)
         {
-            free_argv(&argv);
-            return *__argi = argi+1, 0;
+            return *__argi = internal_argi+1, 0;
         }
     }
     ops      = __ops;
-    __optarg = NULL;
+    internal_optarg = NULL;
     while(*++p)
     {
         while(*ops)
@@ -251,58 +252,59 @@ loop:
                     /* take the rest of this option string as the argument */
                     if(p[1])
                     {
-                        __optarg = p+1;
-                        p = argv[++argi];
+                        internal_optarg = p+1;
+                        p = argv[++internal_argi];
                     }
                     /* take the next argument as the option argument */
                     else
                     {
-                        if(++argi >= argc)
+                        if(++internal_argi >= argc)
                         {
-                            __optarg = INVALID_OPTARG;
-                            __opterr = *p;
+                            internal_optarg = INVALID_OPTARG;
+                            internal_opterr = *p;
                         }
                         else
                         {
                             /* argument starts with '-'? this is an option, not an argument */
-                            if(argv[argi][0] == '-')
+                            if(argv[internal_argi][0] == '-')
                             {
-                                __optarg = INVALID_OPTARG;
-                                __opterr = *p;
+                                internal_optarg = INVALID_OPTARG;
+                                internal_opterr = *p;
                             }
                             else
                             {
-                                __optarg = argv[argi++];
+                                internal_optarg = argv[internal_argi++];
                             }
-                            p = argv[argi];
+                            p = argv[internal_argi];
                         }
                     }
                 }
-                return *__argi = argi, (int)c;
+                return *__argi = internal_argi, (int)c;
             }
             ops++;
         }
-        __opterr = *p;
+        internal_opterr = *p;
+
         if(!errexit)
         {
-            free_argv(&argv);
-            return *__argi = argi, -1;
+            return *__argi = internal_argi, -1;
         }
-        fprintf(stderr, "%s: unknown option: %c\n", argv[0], *p);
-        free_argv(&argv);
+        PRINT_ERROR("%s: unknown option: %c\n", argv[0], *p);
+
         /* POSIX says non-interactive shell should exit on Utility syntax errors */
         if(!interactive_shell)
         {
             exit_gracefully(EXIT_FAILURE, NULL);
         }
+
         return -1;
     }
     
-    if(++argi < argc)
+    if(++internal_argi < argc)
     {
-        p   = argv[argi];
+        p = argv[internal_argi];
         goto loop;
     }
-    free_argv(&argv);
-    return *__argi = argi, 0;
+
+    return *__argi = internal_argi, 0;
 }

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: cmdline.c
  *    This file is part of the Layla Shell project.
@@ -28,13 +28,14 @@
 #include <sys/types.h>
 #include "cmd.h"
 #include "vi.h"
-// #include "getkey.h"
 #include "kbdevent.h"
+#include "utf.h"
 #include "scanner/scanner.h"
 #include "scanner/source.h"
 #include "parser/parser.h"
 #include "parser/node.h"
 #include "backend/backend.h"
+#include "builtins/builtins.h"
 #include "builtins/setx.h"
 #include "debug.h"
 
@@ -80,9 +81,9 @@ timer_t   timerid        = 0;          /* id of the timer used to send SIGALRM *
 #define MAX_EOFS        10
 
 /* variables used by is_incomplete_cmd() function */
-static int open_cb = 0, close_cb = 0;      /* count curly braces */
-static int open_rb = 0, close_rb = 0;      /* count round brackets */
-static int quotes  = 0;                    /* count quotes */
+static int open_cb    = 0, close_cb = 0;   /* count curly braces */
+static int open_rb    = 0, close_rb = 0;   /* count round brackets */
+static int quotes     = 0;                 /* count quotes */
 static int __heredocs = 0;                 /* count heredocs */
 
 
@@ -165,7 +166,7 @@ void cmdline(void)
         /* check for mail */
         if(check_for_mail())
         {
-            mailcheck_builtin(2, (char *[]){"mail", "-q", NULL});
+            do_builtin_internal(mailcheck_builtin, 2, (char *[]){"mail", "-q", NULL});
         }
 
         /* in tcsh, special alias periodic is run every tperiod minutes */
@@ -182,7 +183,10 @@ void cmdline(void)
         print_prompt();
 
         /* check if we're ready to read from the terminal */
-        if(!ready_to_read(0))
+        int tty = cur_tty_fd();
+        struct timeval timeout = { 0, 0 };
+        if(get_secs_usecs(get_shell_varp("TMOUT", NULL), &timeout) && 
+           !ready_to_read(tty, &timeout))
         {
             break;
         }
@@ -209,7 +213,7 @@ void cmdline(void)
             }
 
             /* try to exit (this will execute any EXIT traps) */
-            exit_builtin(1, (char *[]){ "exit", NULL });
+            do_builtin_internal(exit_builtin, 1, (char *[]){ "exit", NULL });
             
             /* if we return from exit_builtin(), it means we have pending jobs */
             continue;
@@ -258,8 +262,13 @@ int ext_cmdbuf(size_t howmuch)
  */
 char *read_cmd(void)
 {
+    char *p;
+    int c;
+    int tty = cur_tty_fd();
+
     cmdbuf_index = 0;
     cmdbuf_end   = 0;
+
     /* first call. init buffer */
     if(!cmdbuf)
     {
@@ -268,28 +277,32 @@ char *read_cmd(void)
         {
             CMD_BUF_SIZE = DEFAULT_LINE_MAX;
         }
+
         cmdbuf = malloc(CMD_BUF_SIZE);
         if(!cmdbuf)
         {
             exit_gracefully(EXIT_FAILURE, "FATAL ERROR: Insufficient memory for command buffer");
         }
+
         cmdbuf_size  = CMD_BUF_SIZE;
     }
+
     /* empty the buffer */
     cmdbuf[0] = '\0';
+    
     /* update cursor position */
     update_row_col();
-    /* sometimes we don't get the correct cursor position from the first call */
-    if(get_terminal_row() == 0 || get_terminal_col() == 0)
-    {
-        update_row_col();
-    }
+    
     start_row = get_terminal_row();
     start_col = get_terminal_col();
-    int c;
-    int tabs = 0;
-    char *p;    
-    /* get the number of consecutive EOFs to force exit. default is 10 (bash) or 1 (tcsh) */
+
+    /*
+     * get the number of consecutive EOFs to force exit. default is 10 (bash)
+     * or 1 (tcsh).. we obtain the value manually, instead of calling 
+     * get_shell_vari(), because if the variable is defined, but its value is
+     * invalid, we'll use our default MAX_EOFS value.. if the variable isn't
+     * defined, we'll use 0.
+     */
     struct symtab_entry_s *entry = get_symtab_entry("IGNOREEOF");
     int eofs = 0, max_eofs = 0;
     if(entry)
@@ -298,7 +311,7 @@ char *read_cmd(void)
         {
             char *strend = NULL;
             max_eofs = strtol(entry->val, &strend, 10);
-            if(strend == entry->val)
+            if(max_eofs < 0 || *strend)
             {
                 max_eofs = MAX_EOFS;
             }
@@ -347,7 +360,7 @@ char *read_cmd(void)
         /***********************
          * get next key stroke
          ***********************/
-        c = get_next_key();
+        c = get_next_key(tty);
 
         /* EOF key */
         if(c == EOF_KEY)
@@ -382,15 +395,6 @@ char *read_cmd(void)
             continue;
         }
         
-        /* count tabs */
-        if(c != '\t')
-        {
-            tabs = 0;
-        }
-        else
-        {
-            tabs++;
-        }
         eofs = 0;
 
         switch(c)
@@ -409,8 +413,17 @@ char *read_cmd(void)
                 }
                 else if(c == VLNEXT_KEY)
                 {
-                    c = get_next_key();
+                    c = get_next_key(tty);
                     do_insert(c);
+                }
+                else if(is_utf8(c))
+                {
+                    do_insert(c);
+                    int i = trailing_utf8_bytes[(unsigned int)(unsigned char)c];
+                    while(i--)
+                    {
+                        do_insert(get_next_key(tty));
+                    }
                 }
                 else if((c >= ' ' && c <= '~'))
                 {
@@ -427,6 +440,7 @@ char *read_cmd(void)
                 break;
                 
             case LEFT_KEY:
+                //update_row_col();
                 if(CTRL_MASK && cmdbuf_index)
                 {
                     int i = cmdbuf_index;
@@ -470,12 +484,15 @@ char *read_cmd(void)
                         }
                     }
                     do_left_key(cmdbuf_index-i);
-                    break;
                 }
-                do_left_key(1);
+                else
+                {
+                    do_left_key(1);
+                }
                 break;
 
             case RIGHT_KEY:
+                //update_row_col();
                 if(CTRL_MASK && cmdbuf_index < cmdbuf_end)
                 {
                     int i = cmdbuf_index;
@@ -499,9 +516,11 @@ char *read_cmd(void)
                         }
                     }
                     do_right_key(i-cmdbuf_index);
-                    break;
                 }
-                do_right_key(1);
+                else
+                {
+                    do_right_key(1);
+                }
                 break;
 
             case HOME_KEY:
@@ -528,15 +547,8 @@ char *read_cmd(void)
              * tab
              ***********************************/
             case '\t':
-                if(tabs == 1)       /* first time, ring a bell */
-                {
-                    //beep();
-                }
-                else
-                {
-                    /* this procedure will do command auto-completion */
-                    do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end);
-                }
+                /* this procedure will do command auto-completion */
+                do_tab(cmdbuf, &cmdbuf_index, &cmdbuf_end);
                 break;
 
             case CTRLW_KEY:
@@ -907,6 +919,7 @@ int is_incomplete_cmd(int first_time)
                 if(cmd[i] != '\'')
                 {
                     endme = 1;
+                    quotes = '\'';
                 }
                 break;
                 
@@ -925,7 +938,7 @@ int is_incomplete_cmd(int first_time)
                 {
                     break;
                 }
-                /* end of a partially started single-quoted string */
+                /* end of a partially started quoted string */
                 else if(quotes == cmd[i])
                 {
                     quotes = 0;
@@ -943,7 +956,12 @@ int is_incomplete_cmd(int first_time)
                 }
                 break;
 
-            case '<':                
+            case '<':
+                if(quotes)
+                {
+                    break;
+                }
+
                 if(cmd[i+1] == '<')
                 {
                     i += 2;
@@ -977,7 +995,7 @@ int is_incomplete_cmd(int first_time)
                     
                     if(cmd[i] == '\0')
                     {
-                        fprintf(stderr, "%s: missing here-document delimiter word after << or <<-\n", SHELL_NAME);
+                        PRINT_ERROR("%s: missing here-document delimiter word after << or <<-\n", SHELL_NAME);
                         return -1;
                     }
                     
@@ -992,7 +1010,7 @@ int is_incomplete_cmd(int first_time)
                         
                         if(!heredoc_mark[__heredocs])
                         {
-                            fprintf(stderr, "%s: insufficient memory to save here-document delimiter word\n", SHELL_NAME);
+                            PRINT_ERROR("%s: insufficient memory to save here-document delimiter word\n", SHELL_NAME);
                             return -1;
                         }
                         
@@ -1051,6 +1069,9 @@ check:
         {
             case ' ':
             case '\t':
+                p++;
+                break;
+
             case '\r':
             case '\n':
             case '&':
@@ -1081,7 +1102,7 @@ check:
 
             default:
                 /* check for keywords */
-                if(isalpha(*p))
+                if(isalpha(*p) && op)
                 {
                     if(strncmp(p, "done", 4) == 0)
                     {

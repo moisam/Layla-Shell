@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: popen.c
  *    This file is part of the Layla Shell project.
@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #include <errno.h>
 #include "cmd.h"
+#include "sig.h"
+#include "builtins/builtins.h"
 #include "builtins/setx.h"
 #include "backend/backend.h"
 #include "debug.h"
@@ -39,16 +41,7 @@
 void init_subshell(void)
 {
     /* make sure we have the shell's PGID */
-    setpgid(0, tty_pid);
-
-    /* reset the -dumpast option if set */
-    set_option('d', 0);
-
-    /* turn off job control */
-    set_option('m', 0);
-
-    /* turn off the interactive mode */
-    interactive_shell = 0;
+    setpgid(0, shell_pid);
 
 
     if(!option_set('m'))
@@ -58,6 +51,15 @@ void init_subshell(void)
         close(0);
         open("/dev/null", O_RDONLY);
     }
+
+    /* reset the -dumpast option if set */
+    set_option('d', 0);
+
+    /* turn off job control */
+    set_option('m', 0);
+
+    /* turn off the interactive mode */
+    interactive_shell = 0;
 
     /* forget about all aliases (they are an interactive feature, anyway) */
     unset_all_aliases();
@@ -78,10 +80,12 @@ void init_subshell(void)
         save_trap("DEBUG" );
         save_trap("RETURN");
     }
+
     if(!option_set('E'))
     {
         save_trap("ERR");
     }
+    
     /*
      * the -e (errexit) option is reset in subshells if inherit_errexit
      * is not set (bash).
@@ -98,24 +102,26 @@ void init_subshell(void)
  */
 void inc_subshell_var(void)
 {
-    subshell_level++;
-    char buf[8];
-    //sprintf(buf, "%d", subshell);
-    sprintf(buf, "%d", subshell_level);
     struct symtab_entry_s *entry = get_symtab_entry("SUBSHELL");
     if(!entry)
     {
         entry = add_to_symtab("SUBSHELL");
     }
-    entry->flags |= FLAG_EXPORT;
+
+    char buf[8];
+    sprintf(buf, "%d", ++executing_subshell);
     symtab_entry_setval(entry, buf);
+
+    /* bash doesn't mark $BASH_SUBSHELL as readonly. but better safe than sorry, right? */
+    entry->flags |= (FLAG_READONLY | FLAG_EXPORT);
 }
 
 
 /*
- * set the value of $SHLVL to that of $SUBSHELL.
+ * increment the value of $SHLVL by the given amount, typically 1 if the shell
+ * is starting anew, or -1 if we're executing an exec command.
  */
-void set_shlvl_var(void)
+void inc_shlvl_var(int amount)
 {
     /*
      * increment the shell nesting level (bash and tcsh).
@@ -126,18 +132,14 @@ void set_shlvl_var(void)
     {
         entry = add_to_symtab("SHLVL");
     }
-    if(!entry)
-    {
-        return;
-    }
 
     char buf[8];
-    sprintf(buf, "%d", subshell_level);
+    shell_level += amount;
+    sprintf(buf, "%d", shell_level);
     symtab_entry_setval(entry, buf);
 
-    /* bash doesn't mark $SHLVL as readonly. but better safe than sorry */
-    entry->flags |= FLAG_READONLY;
-    entry->flags |= FLAG_EXPORT;
+    /* bash doesn't mark $SHLVL as readonly. but better safe than sorry, right? */
+    entry->flags |= (FLAG_READONLY | FLAG_EXPORT);
 }
 
 
@@ -180,9 +182,18 @@ FILE *popenr(char *cmd)
          *      execl(shell path, "sh", "-c", command, (char *)0);
          * 
          * see this link: https://pubs.opengroup.org/onlinepubs/009695399/functions/popen.html
-         * 
-         * we first try executing our shell, using our argv[0]. if failed, we try /bin/sh.
          */
+        struct source_s src;
+        src.buffer   = cmd;
+        src.bufsize  = strlen(src.buffer);
+        src.srctype  = SOURCE_CMDSTR;
+        src.srcname  = NULL;
+        src.curpos   = INIT_SRC_POS;
+
+        parse_and_execute(&src);
+        exit(exit_status);
+
+#if 0
         errno = 0;
         execl(shell_argv[0], "sh", "-c", cmd, NULL);
 
@@ -192,8 +203,9 @@ FILE *popenr(char *cmd)
         /* returning from execl means error */
         if(errno)
         {
-            fprintf(stderr, "%s: failed to exec '%s': %s\n", SHELL_NAME, "/bin/sh", strerror(errno));
+            PRINT_ERROR("%s: failed to exec `%s`: %s\n", SHELL_NAME, "/bin/sh", strerror(errno));
         }
+
         /* exit in error */
         if(errno == ENOEXEC)
         {
@@ -207,10 +219,11 @@ FILE *popenr(char *cmd)
         {
             exit(EXIT_FAILURE);
         }
+#endif
     }
     else if(pid < 0)            /* error */
     {
-        fprintf(stderr, "%s: failed to fork subshell: %s\n", SHELL_NAME, strerror(errno));
+        PRINT_ERROR("%s: failed to fork subshell: %s\n", SHELL_NAME, strerror(errno));
         return NULL;
     }
     else

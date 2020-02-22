@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: tab.c
  *    This file is part of the Layla Shell project.
@@ -26,7 +26,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include "cmd.h"
-#include "getkey.h"
+#include "builtins/builtins.h"
 #include "builtins/setx.h"
 #include "symtab/symtab.h"
 #include "backend/backend.h"
@@ -614,22 +614,16 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
     else if(is_cmd)
     {
         /* search for compatible builtin commands */
-        for(k = 0; k < special_builtin_count; k++)
+        struct builtin_s *u = shell_builtins;
+        for( ; u->name; u++)
         {
-            char *cmd = special_builtins[k].name;
+            char *cmd = u->name;
             if(strstr(cmd, tmp) == cmd)
             {
                 cmds[res++] = cmd;
             }
         }
-        for(k = 0; k < regular_builtin_count; k++)
-        {
-            char *cmd = regular_builtins[k].name;
-            if(strstr(cmd, tmp) == cmd)
-            {
-                cmds[res++] = cmd;
-            }
-        }
+
         /* search for aliases */
         extern struct  alias_s aliases[MAX_ALIASES];  /* builtins/alias.c */
         for(i = 0; i < MAX_ALIASES; i++)

@@ -1,6 +1,6 @@
 /*
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  *
  *    file: terminal.c
  *    This file is part of the Layla Shell project.
@@ -22,9 +22,12 @@
 #include <unistd.h>
 #include <signal.h>
 #include <termios.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/kd.h>
 #include "cmd.h"
+#include "sig.h"
 #include "backend/backend.h"
 #include "debug.h"
 #include "kbdevent.h"
@@ -41,81 +44,126 @@ extern struct termios tty_attr;
 
 
 /*
+ * return a new file descriptor to the current terminal device.
+ */
+int cur_tty_fd(void)
+{
+    char *dev;
+    static int i, fd = -1;
+    
+    if(fd >= 0 && isatty(fd))
+    {
+        return fd;
+    }
+
+    for(i = 0; i <= 2; i++)
+    {
+        if((dev = ttyname(i)))
+        {
+            break;
+        }
+    }
+    
+    if(!dev)
+    {
+        errno = ENOTTY;
+        return -1;
+    }
+
+    do
+    {
+        fd = open(dev, O_RDWR | O_NOCTTY);
+    } while (fd == -1 && errno == EINTR);
+
+    if (fd == -1)
+    {
+        return -1;
+    }
+
+    return fd;
+}
+
+
+/*
+ * read one char from the terminal.
+ */
+int read_char(int tty)
+{
+    int nread;
+    unsigned char c[4];
+    
+    while((nread = read(tty, c, 1)) != 1)
+    {
+        if(nread == -1 && errno != EAGAIN)
+        {
+            return 0;
+        }
+    }
+    return c[0];
+}
+
+
+/*
  * turn the terminal canonical mode on or off.
  */
 void term_canon(int on)
 {
-    if(!isatty(0))
+    int tty = cur_tty_fd();
+    if(!isatty(tty))
     {
         return;
     }
+
     if(on)
     {
-        tcsetattr(0, TCSANOW, &tty_attr_old);
+        tcsetattr(tty, TCSANOW, &tty_attr_old);
     }
     else
     {
-        tcsetattr(0, TCSANOW, &tty_attr);
+        tcsetattr(tty, TCSANOW, &tty_attr);
     }
 }
 
-/* special struct termios for turning echo on/off */
-struct termios echo_tty_attr;
+
+/* current terminal attributes (we need this when resuming jobs and turning echo on/off) */
+struct termios cur_tty_attr;
 
 
 /*
- * turn echo on for the given file descriptor.
- *
- * returns 1 on success, 0 on failure.
+ * save the current termios structure from the given file descriptor.
+ * 
+ * returns 1 the current tty atributes on success, NULL on failure.
  */
-int echoon(int fd)
+struct termios *save_tty_attr(void)
 {
-    /* check fd is a terminal */
-    if(!isatty(fd))
-    {
-        return 0;
-    }
+    int tty = cur_tty_fd();
+    
     /* get the terminal attributes */
-    if(tcgetattr(fd, &echo_tty_attr) == -1)
+    if(tcgetattr(tty, &cur_tty_attr) == -1)
     {
-        return 0;
+        return NULL;
     }
-    /* turn echo on */
-    echo_tty_attr.c_lflag |= ECHO;
-    /* set the new terminal attributes */
-    if((tcsetattr(fd, TCSAFLUSH, &echo_tty_attr) == -1))
-    {
-        return 0;
-    }
-    return 1;
+    
+    return &cur_tty_attr;
 }
 
 
 /*
- * turn echo off for the given file descriptor.
- *
+ * set the termios structure on the given file descriptor.
+ * 
  * returns 1 on success, 0 on failure.
  */
-int echooff(int fd)
+int set_tty_attr(int tty, struct termios *attr)
 {
-    /* check fd is a terminal */
-    if(!isatty(fd))
-    {
-        return 0;
-    }
-    /* get the terminal attributes */
-    if(tcgetattr(fd, &echo_tty_attr) == -1)
-    {
-        return 0;
-    }
-    /* turn echo off */
-    echo_tty_attr.c_lflag &= ~ECHO;
+    int res = 0;
+    
     /* set the new terminal attributes */
-    if((tcsetattr(fd, TCSAFLUSH, &echo_tty_attr) == -1))
+    do
     {
-        return 0;
-    }
-    return 1;
+        res = tcsetattr(tty, TCSAFLUSH, attr);
+    } while (res == -1 && errno == EINTR);
+    
+    return !(res == -1);
 }
 
 
@@ -129,39 +177,47 @@ int get_screen_size(void)
 {
     struct winsize w;
     /* find the size of the terminal window */
-    int fd = isatty(0) ? 0 : isatty(2) ? 2 : -1;
-    if(fd == -1)
+    int tty = cur_tty_fd();
+    if(tty == -1)
     {
         return 0;
     }
-    int res = ioctl(fd, TIOCGWINSZ, &w);
+
+    int res = ioctl(tty, TIOCGWINSZ, &w);
     if(res != 0)
     {
         return 0;
     }
     VGA_HEIGHT = w.ws_row;
     VGA_WIDTH  = w.ws_col;
+    
     /* update the value of terminal columns in environ and in the symbol table */
     char buf[32];
     struct symtab_entry_s *e = get_symtab_entry("COLUMNS");
+    
     if(!e)
     {
         e = add_to_symtab("COLUMNS");
     }
-    if(e && sprintf(buf, "%d", VGA_WIDTH))
+    
+    if(sprintf(buf, "%d", VGA_WIDTH))
     {
         symtab_entry_setval(e, buf);
     }
+    
     /* update the value of terminal rows in environ and in the symbol table */
     e = get_symtab_entry("LINES");
+
     if(!e)
     {
         e = add_to_symtab("LINES");
     }
-    if(e && sprintf(buf, "%d", VGA_HEIGHT))
+    
+    if(sprintf(buf, "%d", VGA_HEIGHT))
     {
         symtab_entry_setval(e, buf);
     }
+    
     return 1;
 }
 
@@ -172,8 +228,11 @@ int get_screen_size(void)
  */
 void move_cur(int row, int col)
 {
-    fprintf(stdout, "\e[%d;%dH", row, col);
-    fflush(stdout);
+    if(isatty(stdout->_fileno))
+    {
+        fprintf(stdout, "\e[%d;%dH", row, col);
+        fflush(stdout);
+    }
 }
 
 
@@ -182,9 +241,12 @@ void move_cur(int row, int col)
  */
 void clear_screen(void)
 {
-    fprintf(stdout, "\e[2J");
-    fprintf(stdout, "\e[0m");
-    fprintf(stdout, "\e[3J\e[1;1H");
+    if(isatty(stdout->_fileno))
+    {
+        fprintf(stdout, "\e[2J");
+        fprintf(stdout, "\e[0m");
+        fprintf(stdout, "\e[3J\e[1;1H");
+    }
 }
 
 
@@ -193,8 +255,31 @@ void clear_screen(void)
  */
 void set_terminal_color(int FG, int BG)
 {
-    /*control sequence to set screen color */
-    fprintf(stdout, "\x1b[%d;%dm", FG, BG);
+    if(isatty(stdout->_fileno))
+    {
+        /*control sequence to set screen color */
+        fprintf(stdout, "\x1b[%d;%dm", FG, BG);
+    }
+}
+
+
+/*
+ * read the row or column number from the terminal.
+ */
+int term_get_num(int *delim, int tty)
+{
+    int c, in = 0;
+    (*delim) = 0;
+    while((c = read_char(tty)))
+    {
+        if(c < '0' || c > '9')
+        {
+            (*delim) = c;
+            break;
+        }
+        in = ((in) * 10) + (c-'0');
+    }
+    return in;
 }
 
 
@@ -214,56 +299,67 @@ void update_row_col(void)
     {
         clearerr(stdin);
     }
+
+    int tty = cur_tty_fd();
+    if(tty < 0)
+    {
+        return;
+    }
+    
     /*
      * we will temporarily block SIGCHLD so it won't disturb us between our cursor
      * position request and the terminal's response.
      */
     sigset_t intmask;
-    sigemptyset(&intmask);
-    sigaddset(&intmask, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &intmask, NULL);
+    SIGNAL_BLOCK(SIGCHLD, intmask);
+    
     /* request terminal cursor position report (CPR) */
-    fprintf(stdout, "\x1b[6n");
-    /* read the result. it will be reported as:
+    //fprintf(stdout, "\x1b[6n");
+    if(write(tty, "\x1b[6n", 4) != 4)
+    {
+        SIGNAL_UNBLOCK(intmask);
+        return;
+    }
+    
+    /*
+     * read the result. it will be reported as:
      *     ESC [ y; x R
      */
-    terminal_col = 0;
-    terminal_row = 0;
-    int c;
-    int *in = &terminal_row;
-    int delim = ';';
-    term_canon(0);
-    while((c = getchar()) != EOF)
+    
+    /* skip the ^[[ sequence */
+    int i, delim = 0;
+    do
     {
-        if(c == 27 )
+        if(read_char(tty) != '\e')
         {
-            continue;
+            break;
         }
-        if(c == '[')
+    
+        if(read_char(tty) != '[')
         {
-            continue;
+            break;
         }
-        *in = c-'0';
-        while((c = getchar()) != delim)
-        {
-            *in = ((*in) * 10) + (c-'0');
-        }
+    
+        /* get the row */
+        i = term_get_num(&delim, tty);
         if(delim == ';')
         {
-            in = &terminal_col;
-            delim = 'R';
+            terminal_row = i;
         }
         else
         {
             break;
         }
-    }
-    /* get the trailing 'R' if its still there */
-    while(c != EOF && c != 'R')
-    {
-        c = getchar();
-    }
-    sigprocmask(SIG_UNBLOCK, &intmask, NULL);
+    
+        /* get the row */
+        i = term_get_num(&delim, tty);
+        if(delim == 'R')
+        {
+            terminal_col = i;
+        }
+    } while(0);
+
+    SIGNAL_UNBLOCK(intmask);
 }
 
 

@@ -47,10 +47,13 @@
 #include "symtab/symtab.h"
 #include "debug.h"
 
-/* define some limits */
+/* max stack capacities */
 #define MAXOPSTACK          64
 #define MAXNUMSTACK         64
-#define MAXBASE             36
+
+/* min and max bases for numeric operands */
+#define MINBASE             2
+#define MAXBASE             64
 
 /* values for the type field of struct stack_item_s */
 #define ITEM_LONG_INT       1
@@ -67,17 +70,56 @@ struct stack_item_s
     };
 };
 
-struct op_s *opstack[MAXOPSTACK];
-int    nopstack  = 0;
+// struct op_s *opstack[MAXOPSTACK];
+// struct stack_item_s numstack[MAXNUMSTACK];
+struct op_s **opstack;
+struct stack_item_s *numstack;
 
-//int numstack[MAXNUMSTACK];
-struct stack_item_s numstack[MAXNUMSTACK];
+int    nopstack  = 0;
 int    nnumstack = 0;
+
 int    error     = 0;
 
+// struct symtab_entry_s dummy_var = { .name = "", .val_type = SYM_STR, .val = "0" };
+
+/*
+ * recursively call arithm_expand() to perform the expansion on a variable
+ * or a sub-expression.
+ */
+char *arithm_expand_recursive(char *str)
+{
+    /* save our pointers */
+    struct op_s **opstack2 = opstack;
+    struct stack_item_s *numstack2 = numstack;
+    int nopstack2 = nopstack, nnumstack2 = nnumstack, error2 = error;
+
+    /* perform arithmetic expansion on the sub-expression */
+    char *res = arithm_expand(str);
+
+    /* restore our pointers */
+    opstack = opstack2;
+    numstack = numstack2;
+    nopstack = nopstack2;
+    nnumstack = nnumstack2;
+    error = error2;
+    
+    return res;
+}
+
+
+/*
+ * the following functions perform different operations on their operands,
+ * such as bitwise AND and OR, addition, subtraction, etc.
+ */
 
 long long_value(struct stack_item_s *a)
 {
+    /* for binary operators, bail out the 2nd operand if the first raised error */
+    if(error)
+    {
+        return 0;
+    }
+    
     if(a->type == ITEM_LONG_INT)
     {
         return a->val;
@@ -86,7 +128,27 @@ long long_value(struct stack_item_s *a)
     {
         if(a->ptr->val)
         {
-            return atol(a->ptr->val);
+            /*
+             * try to get a numeric value from the variable.. if that doesn't
+             * work, try to arithmetically evaluate the string.
+             */
+            char *strend;
+            long val = strtol(a->ptr->val, &strend, 10);
+            if(!*strend)
+            {
+                return val;
+            }
+            
+            char *s = arithm_expand_recursive(a->ptr->val);
+            if(!s)
+            {
+                error = 1;
+                return 0;
+            }
+            
+            val = strtol(s, NULL, 10);
+            free(s);
+            return val;
         }
     }
     return 0;
@@ -127,6 +189,11 @@ long eval_sub(struct stack_item_s *a1, struct stack_item_s *a2)
     return long_value(a1) - long_value(a2);
 }
 
+
+/*
+ * functions to perform left and right bit shift.
+ */
+
 long eval_lsh(struct stack_item_s *a1, struct stack_item_s *a2)
 {
     return long_value(a1) << long_value(a2);
@@ -136,6 +203,11 @@ long eval_rsh(struct stack_item_s *a1, struct stack_item_s *a2)
 {
     return long_value(a1) >> long_value(a2);
 }
+
+
+/*
+ * functions to perform numeric comparisons: <, <=, >, >=, ==, !=.
+ */
 
 long eval_lt(struct stack_item_s *a1, struct stack_item_s *a2)
 {
@@ -167,6 +239,11 @@ long eval_ne(struct stack_item_s *a1, struct stack_item_s *a2)
     return long_value(a1) != long_value(a2);
 }
 
+
+/*
+ * functions to perform bitwise operations: &, ^, |.
+ */
+
 long eval_bitand(struct stack_item_s *a1, struct stack_item_s *a2)
 {
     return long_value(a1) & long_value(a2);
@@ -182,6 +259,11 @@ long eval_bitor(struct stack_item_s *a1, struct stack_item_s *a2)
     return long_value(a1) | long_value(a2);
 }
 
+
+/*
+ * functions to perform logical operations: &&, ||.
+ */
+
 long eval_logand(struct stack_item_s *a1, struct stack_item_s *a2)
 {
     return long_value(a1) && long_value(a2);
@@ -191,6 +273,11 @@ long eval_logor(struct stack_item_s *a1, struct stack_item_s *a2)
 {
     return long_value(a1) || long_value(a2);
 }
+
+
+/*
+ * functions to perform arithmetic operators: exp, /, %.
+ */
 
 long do_eval_exp(long a1, long a2)
 {
@@ -208,7 +295,7 @@ long eval_div(struct stack_item_s *a1, struct stack_item_s *a2)
     long n2 = long_value(a2);
     if(!n2)
     {
-        fprintf(stderr, "%s: Division by zero\n", SHELL_NAME);
+        PRINT_ERROR("%s: division by zero\n", SHELL_NAME);
         error = 1;
         return 0;
     }
@@ -221,117 +308,165 @@ long eval_mod(struct stack_item_s *a1, struct stack_item_s *a2)
     long n2 = long_value(a2);
     if(!n2)
     {
-        fprintf(stderr, "%s: Division by zero\n", SHELL_NAME);
+        PRINT_ERROR("%s: division by zero\n", SHELL_NAME);
         error = 1;
         return 0;
     }
     return long_value(a1) % n2;
 }
 
-long eval_assign(struct stack_item_s *a1, struct stack_item_s *a2)
+long eval_assign_val(struct stack_item_s *a1, long val)
 {
-    long val = long_value(a2);
     if(a1->type == ITEM_VAR_PTR)
     {
+        /* can't assign to read-only variables */
+        if(flag_set(a1->ptr->flags, FLAG_READONLY))
+        {
+            READONLY_ASSIGN_ERROR(SHELL_NAME, a1->ptr->name);
+            error = 1;
+            return 0;
+        }
+        
+        /*
+         * if we added this variable, remove the local flag, so the variable 
+         * will be visible from the outer scope.
+         */
+        if(flag_set(a1->ptr->flags, FLAG_TEMP_VAR))
+        {
+            a1->ptr->flags &= ~(FLAG_LOCAL | FLAG_TEMP_VAR);
+        }
+        
+        /*
+         * we will set the value manually, instead of calling symtab_entry_setval(),
+         * as the latter might end up calling arithm_expand() if the variable
+         * has the -i attribute set.
+         */
+        char *old_val = a1->ptr->val;
         char buf[16];
         sprintf(buf, "%ld", val);
-        symtab_entry_setval(a1->ptr, buf);
+        //symtab_entry_setval(a1->ptr, buf);
+    
+        /* if special var, do whatever needs to be done in response to its new value */
+        if(flag_set(a1->ptr->flags, FLAG_SPECIAL_VAR))
+        {
+            set_special_var(a1->ptr->name, buf);
+        }
+        a1->ptr->val = get_malloced_str(buf);
+
+        /* free old value */
+        if(old_val)
+        {
+            free_malloced_str(old_val);
+        }
+    }
+    else
+    {
+        /* assignment to non-variable */
+        PRINT_ERROR("%s: assignment to non-variable: %ld\n", SHELL_NAME, long_value(a1));
+        error = 1;
+        val = 0;
     }
     return val;
 }
 
-long do_eval_assign_ext(long (*f)(struct stack_item_s *a1, struct stack_item_s *a2),
+long eval_assign(struct stack_item_s *a1, struct stack_item_s *a2)
+{
+    return eval_assign_val(a1, long_value(a2));
+}
+
+long eval_assign_ext(long (*f)(struct stack_item_s *a1, struct stack_item_s *a2),
             struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    long val = f(a1, a2);
-    if(a1->type == ITEM_VAR_PTR)
-    {
-        char buf[16];
-        sprintf(buf, "%ld", val);
-        symtab_entry_setval(a1->ptr, buf);
-    }
-    return val;
+    return eval_assign_val(a1, f(a1, a2));
 }
 
 long eval_assign_add(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_add, a1, a2);
+    return eval_assign_ext(eval_add, a1, a2);
 }
 
 long eval_assign_sub(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_sub, a1, a2);
+    return eval_assign_ext(eval_sub, a1, a2);
 }
 
 long eval_assign_mult(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_mult, a1, a2);
+    return eval_assign_ext(eval_mult, a1, a2);
 }
 
 long eval_assign_div(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_div, a1, a2);
+    return eval_assign_ext(eval_div, a1, a2);
 }
 
 long eval_assign_mod(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_mod, a1, a2);
+    return eval_assign_ext(eval_mod, a1, a2);
 }
 
 long eval_assign_lsh(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_lsh, a1, a2);
+    return eval_assign_ext(eval_lsh, a1, a2);
 }
 
 long eval_assign_rsh(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_rsh, a1, a2);
+    return eval_assign_ext(eval_rsh, a1, a2);
 }
 
 long eval_assign_and(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_bitand, a1, a2);
+    return eval_assign_ext(eval_bitand, a1, a2);
 }
 
 long eval_assign_xor(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_bitxor, a1, a2);
+    return eval_assign_ext(eval_bitxor, a1, a2);
 }
 
 long eval_assign_or(struct stack_item_s *a1, struct stack_item_s *a2)
 {
-    return do_eval_assign_ext(eval_bitor, a1, a2);
+    return eval_assign_ext(eval_bitor, a1, a2);
 }
+
+
+/*
+ * functions to perform pre- and post- increment and decrement operators.
+ */
 
 long do_eval_inc_dec(int pre, int add, struct stack_item_s *a1)
 {
     long val = long_value(a1);
     char buf[16];
+    int diff = add ? 1 : -1;
+    
+    if(a1->type != ITEM_VAR_PTR)
+    {
+        /* assignment to non-variable */
+        PRINT_ERROR("%s: expected operand for operator: %s\n", SHELL_NAME, add ? "++" : "--");
+        error = 1;
+        return 0;
+    }
+
+    /* can't assign to read-only variables */
+    if(flag_set(a1->ptr->flags, FLAG_READONLY))
+    {
+        READONLY_ASSIGN_ERROR(SHELL_NAME, a1->ptr->name);
+        error = 1;
+        return 0;
+    }
+
     if(pre)
     {
-        if(add)
-        {
-            val++;
-        }
-        else
-        {
-            val--;
-        }
-        
-        if(a1->type == ITEM_VAR_PTR)
-        {
-            sprintf(buf, "%ld", val);
-            symtab_entry_setval(a1->ptr, buf);
-        }
+        val += diff;
+        sprintf(buf, "%ld", val);
+        symtab_entry_setval(a1->ptr, buf);
     }
     else
     {
-        int diff = add ? 1 : -1;
-        if(a1->type == ITEM_VAR_PTR)
-        {
-            sprintf(buf, "%ld", val+diff);
-            symtab_entry_setval(a1->ptr, buf);
-        }
+        sprintf(buf, "%ld", val+diff);
+        symtab_entry_setval(a1->ptr, buf);
     }
     return val;
 }
@@ -411,8 +546,8 @@ struct op_s
 {
     { CH_POST_INC     , 20, ASSOC_LEFT , 1, 2, eval_postinc       },
     { CH_POST_DEC     , 20, ASSOC_LEFT , 1, 2, eval_postdec       },
-    { CH_PRE_INC      , 19, ASSOC_RIGHT, 1, 2, eval_postinc       },
-    { CH_PRE_DEC      , 19, ASSOC_RIGHT, 1, 2, eval_postdec       },
+    { CH_PRE_INC      , 19, ASSOC_RIGHT, 1, 2, eval_preinc        },
+    { CH_PRE_DEC      , 19, ASSOC_RIGHT, 1, 2, eval_predec        },
     { CH_MINUS        , 19, ASSOC_RIGHT, 1, 1, eval_uminus        },
     { CH_PLUS         , 19, ASSOC_RIGHT, 1, 1, eval_uplus         },
     { '!'             , 19, ASSOC_RIGHT, 1, 1, eval_lognot        },
@@ -449,11 +584,12 @@ struct op_s
     { CH_ASSIGN_OR    , 7 , ASSOC_RIGHT, 0, 2, eval_assign_or     },
 
     /*
-     * TODO: add the comma ',' and ternary '?:' operators.
+     * TODO: add the ternary '?:' operator.
      */
 
     { '('             , 0 , ASSOC_NONE , 0, 1, NULL               },
-    { ')'             , 0 , ASSOC_NONE , 0, 1, NULL               }
+    { ')'             , 0 , ASSOC_NONE , 0, 1, NULL               },
+    { ','             , 0 , ASSOC_NONE , 0, 1, NULL               }
 };
 
 struct op_s *OP_POST_INC     = &arithm_ops[0 ];
@@ -496,6 +632,7 @@ struct op_s *OP_ASSIGN_XOR   = &arithm_ops[36];
 struct op_s *OP_ASSIGN_OR    = &arithm_ops[37];
 struct op_s *OP_LBRACE       = &arithm_ops[38];
 struct op_s *OP_RBRACE       = &arithm_ops[39];
+struct op_s *OP_COMMA        = &arithm_ops[40];
 
 
 /*
@@ -527,13 +664,13 @@ int valid_name_char(char c)
  */
 void push_opstack(struct op_s *op)
 {
-    if(nopstack>MAXOPSTACK-1)
+    if(nopstack > MAXOPSTACK-1)
     {
-        fprintf(stderr, "%s: Operator stack overflow\n", SHELL_NAME);
+        PRINT_ERROR("%s: operator stack overflow\n", SHELL_NAME);
         error = 1;
         return;
     }
-    opstack[nopstack++]=op;
+    opstack[nopstack++] = op;
 }
 
 
@@ -544,7 +681,7 @@ struct op_s *pop_opstack(void)
 {
     if(!nopstack)
     {
-        fprintf(stderr, "%s: Operator stack empty\n", SHELL_NAME);
+        PRINT_ERROR("%s: operator stack is empty: operator expected\n", SHELL_NAME);
         error = 1;
         return NULL;
     }
@@ -559,7 +696,7 @@ void push_numstackl(long val)
 {
     if(nnumstack > MAXNUMSTACK-1)
     {
-        fprintf(stderr, "%s: Number stack overflow\n", SHELL_NAME);
+        PRINT_ERROR("%s: number stack overflow\n", SHELL_NAME);
         error = 1;
         return;
     }
@@ -576,7 +713,7 @@ void push_numstackv(struct symtab_entry_s *val)
 {
     if(nnumstack > MAXNUMSTACK-1)
     {
-        fprintf(stderr, "%s: Number stack overflow\n", SHELL_NAME);
+        PRINT_ERROR("%s: number stack overflow\n", SHELL_NAME);
         error = 1;
         return;
     }
@@ -593,7 +730,7 @@ struct stack_item_s pop_numstack(void)
 {
     if(!nnumstack)
     {
-        fprintf(stderr, "%s: Number stack empty\n", SHELL_NAME);
+        PRINT_ERROR("%s: number stack is empty: operand expected\n", SHELL_NAME);
         error = 1;
         return (struct stack_item_s) { };
     }
@@ -605,12 +742,17 @@ struct stack_item_s pop_numstack(void)
  * perform operator shunting when we have a new operator by popping the operator
  * at the top of the stack and applying it to the operands on the operand stack.
  * we do this if the operator on top of the stack is not a '(' operator and:
+ * 
  *   - has greater precedence than the new operator, or
  *   - has equal precedence to the new operator, but the top-of-stack one is
  *     left-associative
+ * 
  * after popping the operator, we push the new operator on the operator stack,
  * and we push the previous top-of-stack operator's result on the operand stack.
  */
+
+#define ERR_RETURN()    if(error) { return; }
+
 void shunt_op(struct op_s *op)
 {
     struct op_s *pop;
@@ -620,20 +762,21 @@ void shunt_op(struct op_s *op)
         push_opstack(op);
         return;
     }
-    else if(op->op == ')')
+    else if(op->op == ')' || op->op == ',')
     {
-        while(nopstack > 0 && opstack[nopstack-1]->op != '(')
+        while(nopstack > 0)
         {
+            if(opstack[nopstack-1]->op == '(')
+            {
+                break;
+            }
+            
             pop = pop_opstack();
-            if(error)
-            {
-                return;
-            }
+            ERR_RETURN();
+
             struct stack_item_s n1 = pop_numstack();
-            if(error)
-            {
-                return;
-            }
+            ERR_RETURN();
+
             if(pop->unary)
             {
                 push_numstackl(pop->eval(&n1, 0));
@@ -641,21 +784,19 @@ void shunt_op(struct op_s *op)
             else
             {
                 struct stack_item_s n2 = pop_numstack();
-                if(error)
-                {
-                    return;
-                }
+                ERR_RETURN();
                 push_numstackl(pop->eval(&n2, &n1));
-                if(error)
-                {
-                    return;
-                }
+                ERR_RETURN();
             }
         }
-        if(!(pop = pop_opstack()) || pop->op != '(')
+
+        if(op->op == ')')
         {
-            fprintf(stderr, "%s: Stack error. No matching \'(\'\n", SHELL_NAME);
-            error = 1;
+            if(!(pop = pop_opstack()) || pop->op != '(')
+            {
+                PRINT_ERROR("%s: stack error: no matching \'(\'\n", SHELL_NAME);
+                error = 1;
+            }
         }
         return;
     }
@@ -665,10 +806,8 @@ void shunt_op(struct op_s *op)
         while(nopstack && op->prec < opstack[nopstack-1]->prec)
         {
             pop = pop_opstack();
-            if(error)
-            {
-                return;
-            }
+            ERR_RETURN();
+
             struct stack_item_s n1 = pop_numstack();
             if(pop->unary)
             {
@@ -677,16 +816,10 @@ void shunt_op(struct op_s *op)
             else
             {
                 struct stack_item_s n2 = pop_numstack();
-                if(error)
-                {
-                    return;
-                }
+                ERR_RETURN();
                 push_numstackl(pop->eval(&n2, &n1));
             }
-            if(error)
-            {
-                return;
-            }
+            ERR_RETURN();
         }
     }
     else
@@ -694,10 +827,8 @@ void shunt_op(struct op_s *op)
         while(nopstack && op->prec <= opstack[nopstack-1]->prec)
         {
             pop = pop_opstack();
-            if(error)
-            {
-                return;
-            }
+            ERR_RETURN();
+
             struct stack_item_s n1 = pop_numstack();
             if(pop->unary)
             {
@@ -706,16 +837,10 @@ void shunt_op(struct op_s *op)
             else
             {
                 struct stack_item_s n2 = pop_numstack();
-                if(error)
-                {
-                    return;
-                }
+                ERR_RETURN();
                 push_numstackl(pop->eval(&n2, &n1));
             }
-            if(error)
-            {
-                return;
-            }
+            ERR_RETURN();
         }
     }
     push_opstack(op);
@@ -783,7 +908,7 @@ int get_ndigit(char c, int base, int *result)
      *     @   => 62
      *     _   => 63
      */
-    else if(base <= 62)
+    else if(base <= 64)
     {
         /* check the small letters first */
         if(c >= 'a' && c <= 'z')
@@ -798,12 +923,14 @@ int get_ndigit(char c, int base, int *result)
             return 1;
         }
     }
-    else if(c == '@')
+    
+    if(c == '@' && (base == 63 || base == 64))
     {
         (*result) = 62;
         return 1;
     }
-    else if(c == '_' && base == 64)
+    
+    if(c == '_' && base == 64)
     {
         (*result) = 63;
         return 1;
@@ -811,7 +938,7 @@ int get_ndigit(char c, int base, int *result)
 
 invalid:
     /* invalid digit */
-    fprintf(stderr, "%s: digit %c exceeds the value of the base %d\n", SHELL_NAME, c, base);
+    PRINT_ERROR("%s: digit (%c) exceeds the value of the base (%d)\n", SHELL_NAME, c, base);
     error = 1;
     return 0;
 }
@@ -947,10 +1074,13 @@ struct op_s *get_op(char *expr)
             return OP_BIT_NOT;
 
         case '(':
-            return OP_LBRACE ;
+            return OP_LBRACE;
 
         case ')':
-            return OP_RBRACE ;
+            return OP_RBRACE;
+
+        case ',':
+            return OP_COMMA;
     }
     return NULL;
 }
@@ -972,23 +1102,44 @@ long get_num(char *s, int *char_count)
     /* check if we have a predefined base */
     if(*s2 == '0')
     {
-        switch(s2[1])
+        char c = s2[1];
+        switch(c)
         {
             case 'x':
             case 'X':
+                /* hex number */
                 base = 16;
                 s2 += 2;
                 break;
 
             case 'b':
             case 'B':
+                /* binary number */
                 base = 2;
                 s2 += 2;
                 break;
                 
             default:
-                base = 8;
-                s2++;
+                if(isdigit(c))
+                {
+                    /* octal number */
+                    base = 8;
+                    s2++;
+                }
+                else if(isspace(c) || c == '\0' || c == '+' || c == '-' ||
+                        c == '*' || c == '/' || c == '%' || c == '!' ||
+                       c == '^' || c == ',')
+                {
+                    /* zero followed by space or \0 or an operator char */
+                    (*char_count) = 1;
+                    return 0;
+                }
+                else
+                {
+                    PRINT_ERROR("%s: invalid number near: %s\n", SHELL_NAME, s);
+                    error = 1;
+                    return 0;
+                }
                 break;
         }
     }
@@ -1021,17 +1172,35 @@ long get_num(char *s, int *char_count)
      */
     if(*s2 == '#')
     {
+        if(num < MINBASE || num > MAXBASE)
+        {
+            /* invalid base */
+            PRINT_ERROR("%s: invalid arithmetic base: %ld\n", SHELL_NAME, num);
+            error = 1;
+            return 0;
+        }
+        
         base = num;
         num  = 0;
         s2++;
+
         while(get_ndigit(*s2, base, &num2))
         {
             num = (num*base) + num2;
             s2++;
         }
+
         /* check we didn't encounter an invalid digit */
         if(error)
         {
+            return 0;
+        }
+        
+        /* check the number is not attached to non-digit chars */
+        if(*s2 && !isspace(*s2))
+        {
+            PRINT_ERROR("%s: invalid number near: %s\n", SHELL_NAME, s);
+            error = 1;
             return 0;
         }
     }
@@ -1046,35 +1215,85 @@ long get_num(char *s, int *char_count)
 struct symtab_entry_s *get_var(char *s, int *char_count)
 {
     char *ss = s;
+    int has_braces = 0;
+    
+    /* var names can begin with '$'. skip it */
     if(*ss == '$')
     {
-        ss++;        /* var names can begin with '$'. skip it */
+        ss++;
+    
+        /* and can be enclosed in { } */
+        has_braces = (*ss == '{');
+        if(has_braces)
+        {
+            ss++;
+        }
     }
+
+    /* find the end of the name */
     char *s2 = ss;
     while(*s2 && valid_name_char(*s2))
     {
         s2++;
     }
+    
     int len = s2-ss;
+
+    /* check for a missing '}' */
+    if(has_braces)
+    {
+        if(*s2 != '}')
+        {
+            return NULL;
+        }
+        s2++;
+    }
+    
     /* empty var name */
     if(len == 0)
     {
         (*char_count) = s2-s;
         return NULL;
     }
+    
     /* copy the name */
     char name[len+1];
     strncpy(name, ss, len);
     name[len] = '\0';
+    
     /* get the symbol table entry for that var */
     struct symtab_entry_s *e = get_symtab_entry(name);
     if(!e)
     {
         e = add_to_symtab(name);
+        e->flags = FLAG_LOCAL | FLAG_TEMP_VAR;
     }
     /* get the real length, including leading '$' if present */
     (*char_count) = s2-s;
     return e;
+}
+
+
+/*
+ * determine whether an increment '++' or decrement '--' operator works as a
+ * pre- or post-operator by examining the characters preceding the operator.
+ * if the operator is preceded by an alphanumeric character, its a post-op,
+ * otherwise its a pre-op (post-ops have higher precedence than pre-ops).
+ */
+int is_post_op(char *baseexp, char *expr)
+{
+    if(expr < baseexp+2)
+    {
+        return 0;
+    }
+    
+    expr--;
+    while(expr > baseexp && isspace(*expr))
+    {
+        expr--;
+    }
+    
+    return valid_name_char(*expr);
 }
 
 
@@ -1103,14 +1322,24 @@ struct symtab_entry_s *get_var(char *s, int *char_count)
  *       - the comma operator (expr, expr)
  */
 
+#define CHECK_ERR_FLAG()    if(error) { goto err; }
+#define DISCARD_COMMA()     if(lastop && lastop->op == ',') { pop_numstack(); }
+
 char *arithm_expand(char *orig_expr)
 {
+    /* our stacks */
+    struct op_s *__opstack[MAXOPSTACK];
+    struct stack_item_s __numstack[MAXNUMSTACK];
+    opstack = __opstack;
+    numstack = __numstack;
+
     char   *expr;
     char   *tstart       = NULL;
-    struct  op_s startop = { 'X', 0, ASSOC_NONE, 0, 0, NULL };    /* Dummy operator to mark start */
+    struct  op_s startop = { 'X', 0, ASSOC_NONE, 0, 0, NULL };    /* dummy operator to mark start */
     struct  op_s *op     = NULL;
     int     n1, n2;
     struct  op_s *lastop = &startop;
+    
     /*
      * get a copy of orig_expr without the $(( and )), or the $[ and ]
      * if we're given the obsolete arithmetic expansion operator.
@@ -1119,9 +1348,10 @@ char *arithm_expand(char *orig_expr)
     char *baseexp = malloc(baseexp_len+1);
     if(!baseexp)
     {
-        fprintf(stderr, "%s: insufficient memory for arithmetic expansion\n", SHELL_NAME);
+        PRINT_ERROR("%s: insufficient memory for arithmetic expansion\n", SHELL_NAME);
         return NULL;
     }
+
     /* lose the $(( */
     if(orig_expr[0] == '$' && orig_expr[1] == '(')
     {
@@ -1148,10 +1378,28 @@ char *arithm_expand(char *orig_expr)
     {
         strcpy(baseexp, orig_expr);
     }
+    
+    /* perhaps we need to perform word-expansion? */
+    if(strchr_any(baseexp, "'`\"") || strstr(baseexp, "$("))
+    {
+        struct word_s *word = word_expand(baseexp, FLAG_REMOVE_QUOTES);
+        if(word)
+        {
+            char *newstr = wordlist_to_str(word, WORDLIST_ADD_SPACES);
+            free_all_words(word);
+            if(newstr)
+            {
+                free(baseexp);
+                baseexp = newstr;
+                baseexp_len = strlen(baseexp);
+            }
+        }
+    }
 
     /* init our stacks */
     nopstack = 0;
     nnumstack = 0;
+
     /* clear the error flag */
     error = 0;
     expr = baseexp;
@@ -1163,28 +1411,39 @@ char *arithm_expand(char *orig_expr)
         {
             if((op = get_op(expr)))
             {
-                if(lastop && (lastop == &startop || lastop->op != ')'))
+                if(lastop)
                 {
-                    /* take care of unary plus and minus */
-                    if(op->op == '-')
+                    if(lastop == &startop || lastop->op != ')')
                     {
-                        op = OP_UMINUS;
+                        if(lastop->op != CH_POST_INC && lastop->op != CH_POST_DEC)
+                        {
+                            /* take care of unary plus and minus */
+                            if(op->op == '-')
+                            {
+                                op = OP_UMINUS;
+                            }
+                            else if(op->op == '+')
+                            {
+                                op = OP_UPLUS;
+                            }
+                            else if(op->op != '(' && !op->unary)
+                            {
+                                PRINT_ERROR("%s: illegal use of binary operator near: %s\n", SHELL_NAME, expr);
+                                goto err;
+                            }
+                        }
                     }
-                    else if(op->op == '+')
+                    else
                     {
-                        op = OP_UPLUS;
-                    }
-                    else if(op->op != '(' && !op->unary)
-                    {
-                        fprintf(stderr, "%s: illegal use of binary operator (%c)\n", SHELL_NAME, op->op);
-                        goto err;
+                        DISCARD_COMMA();
                     }
                 }
+
                 /* fix the pre-post ++/-- dilemma */
                 if(op->op == CH_POST_INC || op->op == CH_POST_DEC)
                 {
                     /* post ++/-- has higher precedence over pre ++/-- */
-                    if(expr < baseexp+2 || !valid_name_char(expr[-2]))
+                    if(!is_post_op(baseexp, expr))
                     {
                         if(op == OP_POST_INC)
                         {
@@ -1196,12 +1455,10 @@ char *arithm_expand(char *orig_expr)
                         }
                     }
                 }
+
                 error = 0;
                 shunt_op(op);
-                if(error)
-                {
-                    goto err;
-                }
+                CHECK_ERR_FLAG();
                 lastop = op;
                 expr += op->chars;
             }
@@ -1215,71 +1472,106 @@ char *arithm_expand(char *orig_expr)
             }
             else
             {
-                fprintf(stderr, "%s: Syntax error near: %s\n", SHELL_NAME, expr);
-                goto err;
+                /* unknown token - try to parse as a command substitution */
+                free(baseexp);
+                return command_substitute(orig_expr);
             }
         }
         else
         {
             if(isspace(*expr))
             {
+                /* skip over whitespace chars */
                 expr++;
             }
             else if(isdigit(*expr))
             {
+                /* numeric argument */
                 error = 0;
                 n1 = get_num(tstart, &n2);
-                if(error)
-                {
-                    goto err;
-                }
+                CHECK_ERR_FLAG();
+                DISCARD_COMMA();
                 push_numstackl(n1);
-                if(error)
-                {
-                    goto err;
-                }
+                CHECK_ERR_FLAG();
                 tstart = NULL;
                 lastop = NULL;
                 expr += n2;
             }
+            else if(*expr == '$' && expr[1] == '(' && expr[2] == '(')
+            {
+                /* nested arithmetic expression */
+                size_t i = find_closing_brace(expr+1, 0);
+                if(i == 0)
+                {
+                    /* closing brace not found */
+                    PRINT_ERROR("%s: syntax error near: %s\n", SHELL_NAME, expr);
+                    goto err;
+                }
+                
+                /* we add 2 for the $ at the beginning and the ) at the end */
+                char *sub_expr = get_malloced_strl(expr, 0, i+2);
+                char *sub_res, *strend;
+                
+                if(!sub_expr)
+                {
+                    PRINT_ERROR("%s: insufficient memory to parse arithmetic expression\n", SHELL_NAME);
+                    goto err;
+                }
+
+                /* perform arithmetic expansion on the sub-expression */
+                sub_res = arithm_expand_recursive(sub_expr);
+                free_malloced_str(sub_expr);
+
+                if(!sub_res)
+                {
+                    goto err;
+                }
+                
+                /* get the expansion's numeric result */
+                n1 = strtol(sub_res, &strend, 10);
+                free(sub_res);
+                
+                /* push it on the stack and move on */
+                DISCARD_COMMA();
+                push_numstackl(n1);
+                CHECK_ERR_FLAG();
+                tstart = NULL;
+                lastop = NULL;
+                expr += i+2;
+            }
             else if(valid_name_char(*expr))
             {
+                /* variable name */
                 struct symtab_entry_s *n1 = get_var(tstart, &n2);
                 if(!n1)
                 {
-                    fprintf(stderr, "%s: Failed to add symbol near: %s\n", SHELL_NAME, tstart);
+                    PRINT_ERROR("%s: failed to add symbol near: %s\n", SHELL_NAME, tstart);
                     goto err;
                 }
+                DISCARD_COMMA();
                 error = 0;
                 push_numstackv(n1);
-                if(error)
-                {
-                    goto err;
-                }
+                CHECK_ERR_FLAG();
                 tstart = NULL;
                 lastop = NULL;
                 expr += n2;
             }
             else if((op = get_op(expr)))
             {
+                /* operator token */
                 error = 0;
                 n1 = get_num(tstart, &n2);
-                if(error)
-                {
-                    goto err;
-                }
+                CHECK_ERR_FLAG();
+                DISCARD_COMMA();
                 push_numstackl(n1);
-                if(error)
-                {
-                    goto err;
-                }
+                CHECK_ERR_FLAG();
                 tstart = NULL;
 
                 /* fix the pre-post ++/-- dilemma */
                 if(op->op == CH_POST_INC || op->op == CH_POST_DEC)
                 {
                     /* post ++/-- has higher precedence over pre ++/-- */
-                    if(expr < baseexp+2 || !valid_name_char(expr[-2]))
+                    if(!is_post_op(baseexp, expr))
                     {
                         if(op == OP_POST_INC)
                         {
@@ -1293,17 +1585,15 @@ char *arithm_expand(char *orig_expr)
                 }
 
                 shunt_op(op);
-                if(error)
-                {
-                    goto err;
-                }
+                CHECK_ERR_FLAG();
                 lastop = op;
                 expr += op->chars;
             }
             else
             {
-                fprintf(stderr, "%s: Syntax error near: %s\n", SHELL_NAME, expr);
-                goto err;
+                /* unknown token - try to parse as a command substitution */
+                free(baseexp);
+                return command_substitute(orig_expr);
             }
         }
     }
@@ -1314,35 +1604,35 @@ char *arithm_expand(char *orig_expr)
         if(isdigit(*tstart))
         {
             n1 = get_num(tstart, &n2);
-            if(error)
-            {
-                goto err;
-            }
+            CHECK_ERR_FLAG();
             push_numstackl(n1);
         }
         else if(valid_name_char(*tstart))
         {
             push_numstackv(get_var(tstart, &n2));
         }
-        if(error)
-        {
-            goto err;
-        }
+        CHECK_ERR_FLAG();
     }
 
     while(nopstack)
     {
         error = 0;
         op = pop_opstack();
-        if(error)
+        CHECK_ERR_FLAG();
+        
+        /*
+         * we shouldn't have a '(', as shunt_op() should have popped it when
+         * we got ')'.. if we still find a '(' in the operator stack, it means
+         * we have a '(' with no matchin ')'.
+         */
+        if(op->op == '(')
         {
+            PRINT_ERROR("%s: error: missing \')\'\n", SHELL_NAME);
             goto err;
         }
+        
         struct stack_item_s n1 = pop_numstack();
-        if(error)
-        {
-            goto err;
-        }
+        CHECK_ERR_FLAG();
         if(op->unary)
         {
             push_numstackl(op->eval(&n1, 0));
@@ -1350,47 +1640,65 @@ char *arithm_expand(char *orig_expr)
         else
         {
             struct stack_item_s n2 = pop_numstack();
-            if(error)
-            {
-                goto err;
-            }
+            CHECK_ERR_FLAG();
             push_numstackl(op->eval(&n2, &n1));
         }
-        if(error)
-        {
-            goto err;
-        }
+        CHECK_ERR_FLAG();
     }
 
     /* empty arithmetic expression result */
     if(!nnumstack)
     {
-        /*return false as the result */
-        set_internal_exit_status(1);
+        /*return true as the result */
+        set_internal_exit_status(2);
         free(baseexp);
-        return NULL;
+        return __get_malloced_str("");
     }
 
     /* we must have only 1 item on the stack now */
     if(nnumstack != 1)
     {
-        fprintf(stderr, "%s: Number stack has %d elements after evaluation. Should be 1.\n", SHELL_NAME, nnumstack);
+        PRINT_ERROR("%s: number stack has %d elements after evaluation (should be 1)\n", SHELL_NAME, nnumstack);
         goto err;
     }
 
     char res[64];
-    sprintf(res, "%ld", numstack[0].val);
+    if(numstack[0].type == ITEM_LONG_INT)
+    {
+        sprintf(res, "%ld", numstack[0].val);
+    }
+    else
+    {
+        struct symtab_entry_s *e = numstack[0].ptr;
+        if(e->val && e->val_type == SYM_STR)
+        {
+            strcpy(res, e->val);
+        }
+        else
+        {
+            sprintf(res, "0");
+        }
+    }
+    
     char *res2 = __get_malloced_str(res);
+
     /*
      * invert the exit status for callers who use our value to test for true/false exit status,
      * which is inverted, i.e. non-zero result is true (or zero exit status) and vice versa.
      * this is what bash does with the (( expr )) compound command.
      */
-    set_internal_exit_status(!numstack[0].val);
+    n1 = strtol(res, &expr, 10);
+    if(*expr)
+    {
+        n1 = 0;
+    }
+    set_internal_exit_status(!n1);
+
     free(baseexp);
     return res2;
 
 err:
     free(baseexp);
+    set_internal_exit_status(2);
     return NULL;
 }

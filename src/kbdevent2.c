@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: kbdevent2.c
  *    This file is part of the Layla Shell project.
@@ -26,6 +26,7 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <string.h>
+#include "cmd.h"
 #include "kbdevent.h"
 #include "debug.h"
 
@@ -63,37 +64,46 @@ int rawon(void)
     INTR_KEY   = tty_attr_old.c_cc[VINTR ];
     EOF_KEY    = tty_attr_old.c_cc[VEOF  ];
     VLNEXT_KEY = tty_attr_old.c_cc[VLNEXT];
+    
     /* if any of the special control keys is not defined, use our default value */
     if(!ERASE_KEY)
     {
         ERASE_KEY = DEF_ERASE_KEY;
     }
+    
     if(!KILL_KEY)
     {
         KILL_KEY = DEF_KILL_KEY;
     }
+    
     if(!INTR_KEY)
     {
         INTR_KEY = DEF_INTR_KEY;
     }
+    
     if(!EOF_KEY)
     {
         EOF_KEY = DEF_EOF_KEY;
     }
+    
     if(!VLNEXT_KEY)
     {
         VLNEXT_KEY = CTRLV_KEY;
     }
+    
     /* now modify the terminal's attributes */
-    tty_attr            = tty_attr_old;
+    tty_attr = tty_attr_old;
+    
     /* turn off buffering, echo and key processing */
     tty_attr.c_lflag    &= ~(ICANON | ECHO | /* ISIG | */ IEXTEN);
     tty_attr.c_iflag    &= ~(ISTRIP | INLCR | ICRNL | IGNCR | IXON | IXOFF | INPCK | BRKINT);
+    tty_attr.c_cflag    &= ~CREAD;
     //tty_attr.c_oflag    &= ~(OPOST);
-    tty_attr.c_cc[VMIN]  = 0;          /* wait until at least one keystroke available */
+    tty_attr.c_cc[VMIN ] = 0;         /* wait until at least one keystroke is available */
     tty_attr.c_cc[VTIME] = 1;         /* no timeout */
+    
     /* set the new terminal attributes */
-    if((tcsetattr(0, TCSAFLUSH, &tty_attr) == -1))
+    if((tcsetattr(cur_tty_fd(), TCSAFLUSH, &tty_attr) == -1))
     {
         return 0;
     }
@@ -104,12 +114,12 @@ int rawon(void)
 /*
  * return the next key press from the terminal.
  */
-int get_next_key(void)
+int get_next_key(int tty)
 {
     CTRL_MASK = 0;
     int nread;
     char c;
-    while((nread = read(0, &c, 1)) != 1)
+    while((nread = read(tty, &c, 1)) != 1)
     {
         if(nread == -1 && errno != EAGAIN)
         {
@@ -120,11 +130,11 @@ int get_next_key(void)
     if(c == '\x1b')
     {
         char seq[3];        
-        if(read(0, &seq[0], 1) != 1)
+        if(read(tty, &seq[0], 1) != 1)
         {
             return '\x1b';
         }
-        if(read(0, &seq[1], 1) != 1)
+        if(read(tty, &seq[1], 1) != 1)
         {
             return '\x1b';
         }
@@ -133,7 +143,7 @@ int get_next_key(void)
         {
             if(seq[1] >= '0' && seq[1] <= '9')
             {
-                if(read(0, &seq[2], 1) != 1)
+                if(read(tty, &seq[2], 1) != 1)
                 {
                     return '\x1b';
                 }
@@ -169,11 +179,11 @@ int get_next_key(void)
                 }
                 else if(seq[2] == ';')
                 {
-                    if(read(0, &seq[1], 1) != 1)
+                    if(read(tty, &seq[1], 1) != 1)
                     {
                         return '\x1b';
                     }
-                    if(read(0, &seq[1], 1) != 1)
+                    if(read(tty, &seq[1], 1) != 1)
                     {
                         return '\x1b';
                     }
@@ -214,13 +224,13 @@ int get_next_key(void)
                 }                
                 else if(seq[1] == '1' || seq[1] == '2')
                 {
-                    if(read(0, &seq[1], 1) != 1)
+                    if(read(tty, &seq[1], 1) != 1)
                     {
                         return '\x1b';
                     }
                     if(seq[1] == ';')
                     {
-                        if(read(0, &seq[1], 1) != 1)
+                        if(read(tty, &seq[1], 1) != 1)
                         {
                             return '\x1b';
                         }
@@ -229,7 +239,7 @@ int get_next_key(void)
                     
                     if(seq[1] != '~')
                     {
-                        if(read(0, &seq[1], 1) != 1)
+                        if(read(tty, &seq[1], 1) != 1)
                         {
                             return '\x1b';
                         }

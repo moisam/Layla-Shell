@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: functab.c
  *    This file is part of the Layla Shell project.
@@ -85,26 +85,31 @@ struct symtab_entry_s *add_func(char *name)
 
 /*
  * unset a function definition, removing the function from the functions table.
+ * 
+ * returns 1 on success, 0 on failure.
  */
-void unset_func(char *name)
+int unset_func(char *name)
 {
     struct symtab_entry_s *func = get_func(name);
     if(!func)
     {
-        return;
+        return 0;
     }
-    rem_from_symtab(func, func_table);
+    return rem_from_symtab(func, func_table);
 }
 
 
 /*
- * print all the exported functions.
+ * print the functions with the given flag (readonly or export).
  */
-void purge_exported_funcs(void)
+void print_func_attribs(unsigned int flag)
 {
     /* use an alpha list to sort variables alphabetically */
     struct alpha_list_s list;
     init_alpha_list(&list);
+    
+    /* the flag char we'll print */
+    char fchar = (flag == FLAG_EXPORT) ? 'x' : 'r';
 
 #ifdef USE_HASH_TABLES
 
@@ -124,27 +129,26 @@ void purge_exported_funcs(void)
 
             while(entry)
             {
-                if(flag_set(entry->flags, FLAG_EXPORT))
+                if(flag_set(entry->flags, flag))
                 {
                     char *str = NULL;
                     if(!entry->val)
                     {
                         /* no val, print only the name */
-                        str = alpha_list_make_str("declare -x -f %s", entry->name);
+                        str = alpha_list_make_str("declare -%c -f %s", fchar, entry->name);
                     }
                     else
                     {
                         /* print the name=val string */
                         char *val = quote_val(entry->val, 1, 0);
-                        printf("export %s=%s\n", entry->name, val);
                         if(val)
                         {
-                            str = alpha_list_make_str("declare -x -f %s=%s", entry->name, val);
+                            str = alpha_list_make_str("declare -%c -f %s=%s", fchar, entry->name, val);
                             free(val);
                         }
                         else
                         {
-                            str = alpha_list_make_str("declare -x -f %s=", entry->name);
+                            str = alpha_list_make_str("declare -%c -f %s=", fchar, entry->name);
                         }
                     }
                     add_to_alpha_list(&list, str);

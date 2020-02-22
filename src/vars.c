@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: vars.c
  *    This file is part of the Layla Shell project.
@@ -30,53 +30,40 @@
 #include <errno.h>
 #include "cmd.h"
 #include "debug.h"
+#include "builtins/builtins.h"
 
 /*
  * in this file we deal with some shell variables whose values change dynamically
  * when they are accessed by the user, such as $RANDOM and $SECONDS.
+ *
+ * these 'special' variables are non-POSIX extensions and include:
+ * 
+ * RANDOM        - generate a random integer, uniformly distributed between 0 
+ *                 and 32767
+ * SECONDS       - number of seconds since shell startup or last SECONDS assignment
+ * EPOCHREALTIME - number of seconds since Unix epoch, floating point
+ * EPOCHSECONDS  - number of seconds since Unix epoch, integer
+ * DIRSTACK      - dirstack entries. bash's version is an array, while tcsh's 
+ *                 version is similar to ours, except the variable name is 
+ *                 lowercase instead of uppercase.
+ * TPERIOD       - in tcsh, special alias 'periodic' is run every 'tperiod' minutes
  */
+char *special_var_names[] =
+{
+    "RANDOM", "SECONDS", "EPOCHREALTIME", "EPOCHSECONDS", "DIRSTACK", "TPERIOD"
+};
+
+int special_var_count = 6;
 
 /* maximum length of a variable's value (most are numeric, so we don't need a large space) */
 #define MAX_VAL_LEN            15
-
-struct var_s special_vars[] =
-{
-    /*
-     * non-POSIX extensions.
-     */
-    
-    /* generate a random integer, uniformly distributed between 0 and 32767 */
-    { "RANDOM" , NULL },
-
-    /* number of seconds since shell startup or last SECONDS assignment */
-    { "SECONDS", NULL },
-    
-    /* number of seconds since Unix epoch, floating point */
-    { "EPOCHREALTIME", NULL },
-    
-    /* number of seconds since Unix epoch, integer */
-    { "EPOCHSECONDS", NULL },
-    
-    /* 
-     * dirstack entries. bash's version is an array, while tcsh's version is similar to ours,
-     * except the variable name is lowercase instead of uppercase.
-     */
-    { "DIRSTACK", NULL },
-    
-    /* in tcsh, special alias 'periodic' is run every 'tperiod' minutes */
-    { "TPERIOD", NULL },
-};
-int    special_var_count = sizeof(special_vars)/sizeof(struct var_s);
 
 /* last time $SECONDS was assigned to */
 // int    last_sec    = 0;
 double last_sec_at = 0;
 
-/* defined in builtins/time.c */
-extern double st_time;
-
-/* defined in main.c */
-void SIGALRM_handler(int signum);
+/* defined in builtins/times.c */
+extern double shell_start_time;
 
 
 /*
@@ -86,91 +73,84 @@ void SIGALRM_handler(int signum);
 void init_rand(void)
 {
     srand(time(NULL));
-    int i;
-    for(i = 0; i < special_var_count; i++)
-    {
-        special_vars[i].val = malloc(MAX_VAL_LEN+1);
-    }
 }
 
 
 /*
  * return the value of the special variable whose name is given.
- * returns NULL if the given name does not refer to one of the special variables.
+ * old_val contains the current value of the variable, which is used to 
+ * calculate the new value of some variables, such as $SECONDS.
+ * 
+ * returns the malloc'd var value, or NULL if the given name does not refer 
+ * to one of the special variables.
  */
-char *get_special_var(char *name)
+char *get_special_var(char *name, char *old_val)
 {
     if(!name)
     {
         return NULL;
     }
-    int i, j;
+
+    int j;
     double t;
-    /* search for the variable name */
-    for(i = 0; i < special_var_count; i++)
+    char buf[MAX_VAL_LEN+1];
+    buf[0] = '\0';
+    
+    if(strcmp(name, "RANDOM") == 0)
     {
-        if(strcmp(special_vars[i].name, name) == 0)
-        {
-            break;
-        }
+        j = rand() % 32768;
+        sprintf(buf, "%d", j);
     }
-    /* variable name not found */
-    if(i == special_var_count)
+    else if(strcmp(name, "SECONDS") == 0)
+    {
+        t = get_cur_time();
+        if(!last_sec_at)
+        {
+            /* secs since shell started */
+            t -= shell_start_time;
+        }
+        else
+        {
+            /* secs since last SECONDS assignment */
+            t -= last_sec_at;
+            char *endstr;
+            long last_sec = strtol(old_val, &endstr, 10);
+            if(*endstr)
+            {
+                last_sec = 0;
+            }
+            t += last_sec;
+        }
+        sprintf(buf, "%.0f", t);
+    }
+    else if(strcmp(name, "EPOCHREALTIME") == 0)
+    {
+        t = get_cur_time();
+        sprintf(buf, "%.0f", t);
+    }
+    else if(strcmp(name, "EPOCHSECONDS") == 0)
+    {
+        t = get_cur_time();
+        sprintf(buf, "%ld", (long)t);
+    }
+    else if(strcmp(name, "DIRSTACK") == 0)
+    {
+        return purge_dirstackp();
+    }
+    /* NOTE: ignore $TPERIOD, so caller will use the value it already has */
+    /*
+    else if(strcmp(name, "TPERIOD") == 0)
+    {
+        ;
+    }
+    */
+    
+    if(buf[0] == '\0')
     {
         return NULL;
     }
-
-    /* get the special variable's value */
-    switch(i)
-    {
-        case 0:             /* RANDOM */
-            j = rand() % 32768;
-            sprintf(special_vars[i].val, "%d", j);
-            return special_vars[i].val;
-
-        case 1:             /* SECONDS */
-            t = get_cur_time();
-            if(!last_sec_at)
-            {
-                /* secs since shell started */
-                t -= st_time;
-            }
-            else
-            {
-                /* secs since last SECONDS assignment */
-                t -= last_sec_at;
-                char *endstr;
-                long last_sec = strtol(special_vars[i].val, &endstr, 10);
-                t += last_sec;
-            }
-            sprintf(special_vars[i].val, "%.0f", t);
-            return special_vars[i].val;
-
-        case 2:             /* EPOCHREALTIME and EPOCHSECONDS */
-        case 3:
-            t = get_cur_time();
-            if(i == 2)
-            {
-                sprintf(special_vars[i].val, "%.0f", t);
-            }
-            else
-            {
-                sprintf(special_vars[i].val, "%ld", (long)t);
-            }
-            return special_vars[i].val;
-            
-        case 4:             /* DIRSTACK */
-            if(special_vars[i].val)
-            {
-                free(special_vars[i].val);
-            }
-            special_vars[i].val = purge_dirstackp();
-            return special_vars[i].val;
-            
-        case 5:             /* TPERIOD */
-            return special_vars[i].val;
-    }
-    return NULL;
+    
+    return __get_malloced_str(buf);
 }
 
 
@@ -181,96 +161,73 @@ char *get_special_var(char *name)
  */
 int set_special_var(char *name, char *val)
 {
+    int j;
+    unsigned int u;
+    char *strend = NULL;
+
     if(!name)
     {
         return 0;
     }
-    int i, j;
-    unsigned int u;
-    char *strend = NULL;
 
-    /* search for the variable name */
-    for(i = 0; i < special_var_count; i++)
+    if(!val || !*val)       /* empty string */
     {
-        if(strcmp(special_vars[i].name, name) == 0)
-        {
-            break;
-        }
-    }
-    /* variable name not found */
-    if(i == special_var_count)
-    {
-        return 0;
+        return 1;
     }
     
-    if(!val || !*val)       /* set the value to an empty string */
+    if(strcmp(name, "RANDOM") == 0)
     {
-        special_vars[i].val[0] = '\0';
-    }
-    else
-    {
-        switch(i)
+        /* assignment to $RANDOM seeds the random number generator (bash, ksh) */
+        u = strtoul(val, &strend, 10);
+        if(!*strend)
         {
-            case 0:
-                /* assignment to $RANDOM seeds the random number generator (bash, ksh) */
-                u = strtoul(val, &strend, 10);
-                if(strend != val)
-                {
-                    srand(u);
-                }
-                break;
-                
-            case 2:
-            case 3:
-                /* ignore assignments to $EPOCHREALTIME and $EPOCHSECONDS */
-                break;
-                
-            case 4:
-                /* pass DIRSTACK assignments to the proper functions */
-                load_dirstackp(val);
-                break;
-            
-            case 5:             /* TPERIOD */
-                j = strtol(val, &strend, 10);
-                /* Start the timer ($TPERIOD is in minutes) */
-                struct itimerspec its;
-                if(strend != val && j > 0)
-                {
-                     its.it_value.tv_sec = j*60;
-                }
-                else
-                {
-                    its.it_value.tv_sec = 0;
-                }
-                its.it_value.tv_nsec    = 0;
-                its.it_interval.tv_sec  = its.it_value.tv_sec;
-                its.it_interval.tv_nsec = its.it_value.tv_nsec;
-                if(timer_settime(timerid, 0, &its, NULL) == -1)
-                {
-                    fprintf(stderr, "%s: failed to start timer: %s\n", SHELL_NAME, strerror(errno));
-                    return 1;
-                }
-                /* fall through to save the value in buffer */
-                __attribute__((fallthrough));
-                
-            default:
-                if(strlen(val) > MAX_VAL_LEN)
-                {
-                    /* snprintf count includes the NULL-terminating byte */
-                    snprintf(special_vars[i].val, MAX_VAL_LEN+1, "%s", val);
-                }
-                else
-                {
-                    sprintf(special_vars[i].val, "%s", val);
-                }
-                break;
+            srand(u);
         }
     }
-    /* if assigning to SECONDS, record the time */
-    if(i == 1)
+    else if(strcmp(name, "SECONDS") == 0)
     {
+        /* if assigning to SECONDS, record the time */
         last_sec_at = get_cur_time();
     }
+    /* NOTE: ignore assignments to $EPOCHREALTIME and $EPOCHSECONDS */
+    /*
+    else if(strcmp(name, "EPOCHREALTIME") == 0)
+    {
+        ;
+    }
+    else if(strcmp(name, "EPOCHSECONDS") == 0)
+    {
+        ;
+    }
+    */
+    else if(strcmp(name, "DIRSTACK") == 0)
+    {
+        /* pass DIRSTACK assignments to the proper functions */
+        load_dirstackp(val);
+    }
+    else if(strcmp(name, "TPERIOD") == 0)
+    {
+        j = strtol(val, &strend, 10);
+        /* Start the timer ($TPERIOD is in minutes) */
+        struct itimerspec its;
+        if(!*strend && j > 0)
+        {
+        its.it_value.tv_sec = j*60;
+        }
+        else
+        {
+            its.it_value.tv_sec = 0;
+        }
+        its.it_value.tv_nsec    = 0;
+        its.it_interval.tv_sec  = its.it_value.tv_sec;
+        its.it_interval.tv_nsec = its.it_value.tv_nsec;
+        
+        if(timer_settime(timerid, 0, &its, NULL) == -1)
+        {
+            PRINT_ERROR("%s: failed to start timer: %s\n", SHELL_NAME, strerror(errno));
+        }
+    }
+    
     return 1;
 }
 
@@ -308,7 +265,7 @@ long get_shell_varl(char *name, int def_val)
     {
         char *strend = NULL;
         long i = strtol(entry->val, &strend, 10);
-        if(strend == entry->val)
+        if(strend == entry->val || *strend)
         {
             return def_val;
         }
@@ -331,8 +288,80 @@ void set_shell_varp(char *name, char *val)
         entry = add_to_symtab(name);
     }
     /* set the entry's value */
-    if(entry)
+    symtab_entry_setval(entry, val);
+}
+
+
+void set_shell_vari(char *name, int val)
+{
+    char buf[32];
+    sprintf(buf, "%d", val);
+    set_shell_varp(name, buf);
+}
+
+
+/*
+ * set the value of the underscore '$_' special parameter .
+ */
+void set_underscore_val(char *val, int set_env)
+{
+    struct symtab_entry_s *entry = add_to_symtab("_");
+    symtab_entry_setval(entry, val);
+    if(set_env)
     {
-        symtab_entry_setval(entry, val);
+        setenv("_", val, 1);
     }
+}
+
+
+/*
+ * save the value of $OPTIND and reset it to NULL, so that builtin utilities can
+ * call getopts() to parse their options.. when a utility finishes execution, it
+ * should call reset_OPTIND() to restore the variable to its previous value.
+ */
+static char *saved_OPTIND_val = NULL;
+static int   saved_argi       = 0;
+
+void save_OPTIND(void)
+{
+    /* get $OPTIND's entry */
+    struct symtab_entry_s *entry = get_symtab_entry("OPTIND");
+    
+    /* add to the local symbol table, if not available in the global symtab */
+    if(!entry)
+    {
+        entry = add_to_symtab("OPTIND");
+    }
+    
+    /* set $OPTIND's value to NULL */
+    saved_OPTIND_val = entry->val ? get_malloced_str(entry->val) : NULL;
+    symtab_entry_setval(entry, NULL);
+    
+    /* reset argi (see args.c), which is used by getopts() */
+    saved_argi = internal_argi;
+    internal_argi = 0;
+}
+
+
+void reset_OPTIND(void)
+{
+    /* get $OPTIND's entry */
+    struct symtab_entry_s *entry = get_symtab_entry("OPTIND");
+    
+    /* add to the local symbol table, if not available in the global symtab */
+    if(!entry)
+    {
+        entry = add_to_symtab("OPTIND");
+    }
+    
+    /* set $OPTIND's value to NULL */
+    symtab_entry_setval(entry, saved_OPTIND_val);
+    if(saved_OPTIND_val)
+    {
+        free_malloced_str(saved_OPTIND_val);
+        saved_OPTIND_val = NULL;
+    }
+    
+    /* reset argi (see args.c), which is used by getopts() */
+    internal_argi = saved_argi;
 }

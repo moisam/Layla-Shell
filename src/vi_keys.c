@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: vi_keys.c
  *    This file is part of the Layla Shell project.
@@ -84,13 +84,16 @@ void output_cmd(void)
             {
                 start_row--;
             }
+            /*
             else
             {
                 terminal_row++;
             }
+            */
         }
         putchar(*p++);
     }
+    update_row_col();
 }
 
 
@@ -108,6 +111,7 @@ void do_insert(char c)
         }
     }
     printf("%c" , c);
+    
     /* overwrite cur char if we are in the INSERT mode */
     if(insert)
     {
@@ -123,6 +127,7 @@ void do_insert(char c)
         update_row_col();
         return;
     }
+    
     /* normal addition (not in the INSERT mode) */
     if(cmdbuf_index < cmdbuf_end)
     {
@@ -148,6 +153,7 @@ void do_insert(char c)
         cmdbuf[cmdbuf_index  ] = c;
         cmdbuf[cmdbuf_index+1] = '\0';
     }
+    
     /* update the buffer pointers */
     cmdbuf_index++;
     cmdbuf_end++;
@@ -367,12 +373,13 @@ void do_right_key(int count)
     {
         return;
     }
+    
     /* invalid (zero) count */
     if(!count)
     {
         return;
     }
-    update_row_col();
+
     /* calculate the new column index and adjust the row index accordingly */
     int newcol = terminal_col+count;
     if(newcol > VGA_WIDTH)
@@ -386,6 +393,7 @@ void do_right_key(int count)
         terminal_col += count;
         cmdbuf_index += count;
     }
+    
     /* move the cursor to the new location */
     move_cur(terminal_row, terminal_col);
 }
@@ -403,12 +411,13 @@ void do_left_key(int count)
     {
         return;
     }
+    
     /* invalid (zero) count */
     if(!count)
     {
         return;
     }
-    update_row_col();
+
     /* calculate the new column index and adjust the row index accordingly */
     int newcol = terminal_col-count;
     if(newcol < 1)
@@ -504,7 +513,7 @@ void yank(int start, int end)
         savebuf = malloc(savebuf_size);
         if(!savebuf)
         {
-            fprintf(stderr, "FATAL ERROR: Insufficient memory for the yank buffer");
+            PRINT_ERROR("FATAL ERROR: Insufficient memory for the yank buffer");
             return;
         }
         savebuf[0] = '\0';

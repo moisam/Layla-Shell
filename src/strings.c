@@ -1,6 +1,6 @@
 /*
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  *
  *    file: strings.c
  *    This file is part of the Layla Shell project.
@@ -22,6 +22,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include "cmd.h"
 #include "debug.h"
 
@@ -243,20 +244,23 @@ char *quote_val(char *val, int add_quotes, int escape_sq)
  */
 char *list_to_str(char **list)
 {
-    if(!list)
-    {
-        return NULL;
-    }
     int i;
     int len = 0;
     int count = 0;
     char *p, *p2;
+    
+    if(!list)
+    {
+        return NULL;
+    }
+
     /* get the count */
     for(i = 0; list[i]; i++)
     {
         ;
     }
     count = i;
+    
     int lens[count];
     /* get total length and each item's length */
     for(i = 0; i < count; i++)
@@ -265,6 +269,7 @@ char *list_to_str(char **list)
         lens[i] = strlen(list[i])+1;
         len += lens[i];
     }
+    
     p = malloc(len+1);
     if(!p)
     {
@@ -272,6 +277,7 @@ char *list_to_str(char **list)
     }
     *p = 0;
     p2 = p;
+    
     /* now copy the items */
     for(i = 0; i < count; i++)
     {
@@ -279,6 +285,7 @@ char *list_to_str(char **list)
         p += lens[i];
     }
     p[-1]= '\0';
+    
     return p2;
 }
 
@@ -300,6 +307,137 @@ int get_linemax(void)
     }
 #endif
     return line_max;
+}
+
+
+/*
+ * get the next entry in a colon-separated string, such as the ones we use in
+ * shell variables $SHELLOPTS, $MAILPATH and $HISTCONTROL.
+ * the 'colon_list' argument contains a pointer to the colon-separated string, 
+ * in which we'll store a pointer to our current position in the string, so 
+ * that each call to this function, using the same argument, will keep 
+ * processing the list until it's finished.. the caller should initialize 
+ * 'colon_list', and shouldn't modify it once we're called.
+ * 
+ * returns the malloc'd next entry, or NULL if we reached the end of the string,
+ * or an error occurrs.
+ */
+char *next_colon_entry(char **colon_list)
+{
+    char *s1 = *colon_list;
+    char *res = NULL;
+    
+    while(*s1 && *s1 == ':')
+    {
+        s1++;
+    }
+    
+    if(!*s1)
+    {
+        return NULL;
+    }
+    
+    char *s2 = s1+1;
+    while(*s2 && *s2 != ':')
+    {
+        s2++;
+    }
+    
+    int len = s2-s1;
+    res = malloc(len+1);
+    if(!res)
+    {
+        return NULL;
+    }
+    
+    memcpy(res, s1, len);
+    res[len] = '\0';
+
+    (*colon_list) = s2;
+    return res;
+}
+
+
+/*
+ * similar to next_colon_entry(), except that it creates a pathname by
+ * concatenating the next colon entry and the given filename.. used by
+ * cd when it searches $CDPATH to find a directory, by search_path() in
+ * helpfunc.c when it searches $PATH to find a file, etc.
+ * if 'use_dot' is non-zero, we prepend './' to the pathname if the next 
+ * colon entry is an empty string.
+ * 
+ * returns the malloc'd pathname, or NULL if we reached the end of the string,
+ * or an error occurrs.
+ */
+char *next_path_entry(char **colon_list, char *filename, int use_dot)
+{
+    char *s1 = colon_list ? *colon_list : NULL;
+    char *s2 = s1;
+    
+    if(!s2 || !*s2)
+    {
+        return NULL;
+    }
+    
+    /* skip to the next colon */
+    while(*s2 && *s2 != ':')
+    {
+        s2++;
+    }
+    
+    /* get path lengths */
+    size_t flen = strlen(filename);
+    size_t plen = s2-s1;
+    /*
+     * we add three for \0 terminator, possible /, and leading dot
+     * (in case the path is NULL and we need to append ./)
+     */
+    int tlen = plen+flen+3;
+    char *path = malloc(tlen);
+    if(!path)
+    {
+        return NULL;
+    }
+
+    /* empty colon entry */
+    if(!plen)
+    {
+        if(use_dot)
+        {
+            strcpy(path, "./");
+        }
+        else
+        {
+            path[0] = '\0';
+        }
+    }
+    /* non-empty colon entry */
+    else
+    {
+        strncpy(path, s1, plen);
+        if(path[plen-1] != '/')
+        {
+            path[plen  ] = '/';
+            path[plen+1] = '\0';
+        }
+        else
+        {
+            path[plen  ] = '\0';
+        }
+    }
+
+    /* form the new path as the path segment plus the filename */
+    strcat(path, filename);
+    
+    /* skip the colons */
+    while(*s2 && *s2 == ':')
+    {
+        s2++;
+    }
+    (*colon_list) = s2;
+    
+    /* return the result */
+    return path;
 }
 
 
@@ -339,5 +477,89 @@ int check_buffer_bounds(int *count, int *len, char ***buf)
             *len = newlen;
         }
     }
+    return 1;
+}
+
+
+/*
+ * convert a time value of the format [secs[.usecs]] to two separate parts.
+ * 
+ * returns 1 if the conversion is successful, 0 otherwise.
+ */
+int get_secs_usecs(char *str, struct timeval *res)
+{
+    char *strend;
+    long i, j;
+    
+    if(!str || !*str)
+    {
+        return 0;
+    }
+
+    i = strtol(str, &strend, 10);
+
+    if(*strend)
+    {
+        if(*strend == '.')
+        {
+            str = strend+1;
+            j = strtol(str, &strend, 10);
+            if(*strend)
+            {
+                return 0;
+            }
+            res->tv_usec = j;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    
+    res->tv_sec = i;
+    return 1;
+}
+
+
+/*
+ * alloc 'size' bytes and return the pointer.. also, make the string 'ready for reading'
+ * by putting null at the first byte.
+ */
+char *alloc_string_buf(int size)
+{
+    char *s = malloc(size);
+    if(!s)
+    {
+        return NULL;
+    }
+    s[0] = '\0';
+    return s;
+}
+
+
+/*
+ * check the string buffer's and extend it if needed, adjusting the pointers if
+ * the buffer is realloced.
+ * 
+ * returns 1 on success, 0 on failure.
+ */
+int may_extend_string_buf(char **buf, char **buf_end, char **buf_ptr, int *buf_size)
+{
+    /* if buffer is full, extend it */
+    if(buf_ptr == buf_end)
+    {
+        (*buf_size) *= 2;
+        
+        char *buf2 = realloc(buf, (*buf_size));
+        if(!buf2)
+        {
+            return 0;
+        }
+
+        (*buf_ptr) = buf2 + ((*buf_end) - (*buf));
+        (*buf) = buf2;
+        (*buf_end) = (*buf) + (*buf_size) - 1;
+    }
+
     return 1;
 }

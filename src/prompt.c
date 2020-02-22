@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: prompt.c
  *    This file is part of the Layla Shell project.
@@ -36,6 +36,7 @@
 #include "cmd.h"
 #include "symtab/symtab.h"
 #include "backend/backend.h"
+#include "builtins/builtins.h"
 #include "builtins/setx.h"
 #include "debug.h"
 
@@ -73,8 +74,7 @@ static inline int is_octal(char c)
  */
 int get_ttyname(int rem_prefix)
 {
-    /* check if stdin or stderr is a terminal device */
-    int k = isatty(0) ? 0 : isatty(2) ? 2 : -1;
+    int k = cur_tty_fd();
     if(k >= 0)
     {
         char *s = ttyname(k);
@@ -194,7 +194,7 @@ int get_date(char *fmt, struct tm *now)
     }
     else
     {
-        fprintf(stderr, "%s: strftime failed\n", SHELL_NAME);
+        PRINT_ERROR("%s: strftime failed\n", SHELL_NAME);
         return 0;
     }
 }

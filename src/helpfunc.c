@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: helpfunc.c
  *    This file is part of the Layla Shell project.
@@ -35,9 +35,11 @@
 #include <sys/stat.h>
 #include <sys/resource.h>
 #include "cmd.h"
-#include "backend/backend.h"
+#include "sig.h"
 #include "debug.h"
 #include "kbdevent.h"
+#include "backend/backend.h"
+#include "builtins/builtins.h"
 
 /********************************************************************
  * 
@@ -134,89 +136,47 @@ char *search_path(char *file, char *use_path, int exe_only)
     char *EXECIGNORE = get_shell_varp("EXECIGNORE", NULL);
     /* use the given path or, if null, use $PATH */
     char *PATH = use_path ? use_path : get_shell_varp("PATH", NULL);
-    char *p = PATH, *p2;
+    char *p;
     
-    while(p && *p)
+    while((p = next_path_entry(&PATH, file, 0)))
     {
-        p2 = p;
-        /* get the end of the next entry */
-        while(*p2 && *p2 != ':')
-        {
-            p2++;
-        }
-        int  plen = p2-p;
-        if(!plen)
-        {
-            plen = 1;
-        }
-        /* copy the next entry */
-        int  alen = strlen(file);
-        char path[plen+1+alen+1];
-        strncpy(path, p, p2-p);
-        path[p2-p] = '\0';
-        if(p2[-1] != '/')
-        {
-            strcat(path, "/");
-        }
-        /* and concat the file name */
-        strcat(path, file);
         /* check if the file exists */
         struct stat st;
-        if(stat(path, &st) == 0)
+        if(stat(p, &st) == 0)
         {
             /* not a regular file */
             if(!S_ISREG(st.st_mode))
             {
-                errno = ENOENT;
-                /* check the next path entry */
-                p = p2;
-                if(*p2 == ':')
-                {
-                    p++;
-                }
+                errno = ENOEXEC;
+                free(p);
                 continue;
             }
+
             /* requested exe files only */
             if(exe_only)
             {
-                if(access(path, X_OK) != 0)
+                if(access(p, X_OK) != 0)
                 {
                     errno = ENOEXEC;
-                    /* check the next path entry */
-                    p = p2;
-                    if(*p2 == ':')
-                    {
-                        p++;
-                    }
+                    free(p);
                     continue;
                 }
             }
+
             /* check its not one of the files we should ignore */
-            if(EXECIGNORE)
+            if(!EXECIGNORE || !match_ignore(EXECIGNORE, p))
             {
-                if(!match_ignore(EXECIGNORE, path))
-                {
-                    return get_malloced_str(path);
-                }
-            }
-            else
-            {
-                return get_malloced_str(path);
+                char *p2 = get_malloced_str(p);
+                free(p);
+                return p2;
             }
         }
-        else    /* file not found */
-        {
-            /* check the next path entry */
-            p = p2;
-            if(*p2 == ':')
-            {
-                p++;
-            }
-        }
+        
+        free(p);
     }
 
-    errno = ENOEXEC;
-    return 0;
+    errno = ENOENT;
+    return NULL;
 }
 
 
@@ -247,7 +207,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         {
             if(setpriority(PRIO_PROCESS, 0, flagarg) == -1)
             {
-                fprintf(stderr, "%s: failed to set nice value to %d: %s\n", UTILITY, flagarg, strerror(errno));
+                PRINT_ERROR("%s: failed to set nice value to %d: %s\n", UTILITY, flagarg, strerror(errno));
             }
         }
         /* request to ignore SIGHUP (by the nohup builtin) */
@@ -256,7 +216,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
             /* tcsh ignores the HUP signal here */
             if(set_signal_handler(SIGHUP, SIG_IGN) != 0)
             {
-                fprintf(stderr, "%s: failed to ignore SIGHUP: %s\n", UTILITY, strerror(errno));
+                PRINT_ERROR("%s: failed to ignore SIGHUP: %s\n", UTILITY, strerror(errno));
             }
             /*
              * ... and GNU coreutils nohup modifies the standard streams if they are
@@ -296,7 +256,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         do_exec_cmd(argc, argv, use_path, NULL);
 
         /* NOTE: we should NEVER come back here, unless there is error of course!! */
-        fprintf(stderr, "%s: failed to exec '%s': %s\n", UTILITY, argv[0], strerror(errno));
+        PRINT_ERROR("%s: failed to exec `%s`: %s\n", UTILITY, argv[0], strerror(errno));
         if(errno == ENOEXEC)
         {
             exit(EXIT_ERROR_NOEXEC);
@@ -322,9 +282,16 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
     int status = wait_on_child(child_pid, NULL, NULL);
     if(WIFSTOPPED(status) && option_set('m'))
     {
-        struct job_s *job = add_job(child_pid, (pid_t[]){child_pid}, 1, argv[0], 0);
-        set_cur_job(job);
-        notice_termination(child_pid, status);
+        struct job_s *job = new_job(argv[0], 0);
+        if(job)
+        {
+            add_pid_to_job(job, child_pid);
+            add_job(job);
+            /* add_job() only sets the current job if it's in the background */
+            set_cur_job(job);
+            free(job);
+        }
+        notice_termination(child_pid, status, 1);
     }
     else
     {
@@ -339,7 +306,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
     /* reset the terminal's foreground pgid */
     if(option_set('m'))
     {
-        tcsetpgrp(0, tty_pid);
+        tcsetpgrp(0, shell_pid);
     }
     return status;
 }

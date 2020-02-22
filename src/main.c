@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: main.c
  *    This file is part of the Layla Shell project.
@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
-#include <time.h>
 #include <errno.h>
 #include <locale.h>
 #include <sys/wait.h>
@@ -35,134 +34,30 @@
 #include "debug.h"
 #include "backend/backend.h"
 #include "symtab/symtab.h"
+#include "builtins/builtins.h"
 #include "builtins/setx.h"
 
-/* process group id of the command line interpreter */
-pid_t  tty_pid;
+/* pgid of the shell */
+pid_t  shell_pid = 0;
+
+/* foreground pgid of the terminal at shell startup */
+pid_t  orig_tty_pgid = 0;
 
 /* flag to indicate if we are reading from stdin */
-int    read_stdin        = 0;
+int    read_stdin = 0;
 
 /* flag to indicate whether the shell is interactive or not */
 int    interactive_shell = 0;
 
-/* flag to indicate a signal was received and handled by trap_handler() */
-int    signal_received   = 0;
-
-#define CLOCKID CLOCK_REALTIME
-
-/* defined in cmdline.c */
-void kill_input();
-extern int do_periodic;
+/* flag to indicate whether the shell is restricted or not */
+int    restricted_shell = 0;
 
 /* defined in initsh.c */
 extern int   noprofile;        /* if set, do not load login scripts */
-extern int   norc     ;        /* if set, do not load rc scripts */
+extern int   norc;             /* if set, do not load rc scripts */
 
-/* defined in backend/backend.c */
-extern int cur_loop_level;
-extern int req_break     ;
-
-
-/*
- * signal handler for SIGALRM (alarm signal). we use this signal to inform us
- * when a period of $TPERIOD minutes has elapsed so that we can execute the 'periodic'
- * special alias.
- */
-static void SIGALRM_handler(int sig __attribute__((unused)),
-                            siginfo_t *si __attribute__((unused)),
-                            void *uc __attribute__((unused)))
-{
-    do_periodic = 1;
-}
-
-
-/*
- * signal handler for SIGINT (interrupt signal).
- */
-void SIGINT_handler(int signum)
-{
-    signal_received = signum;
-    /* force break from any running loop */
-    req_break = cur_loop_level;
-}
-
-
-/*
- * signal handler for SIGQUIT (quit signal).
- */
-void SIGQUIT_handler(int signum)
-{
-    fprintf(stderr, "%s: received signal %d\n", SHELL_NAME, signum);
-    signal_received = signum;
-}
-
-
-/*
- * signal handler for SIGWINCH (window size change signal).
- */
-void SIGWINCH_handler(int signum)
-{
-    fprintf(stderr, "%s: received signal %d\n", SHELL_NAME, signum);
-    get_screen_size();
-}
-
-
-/*
- * signal handler for SIGCHLD (child status change signal).
- */
-void SIGCHLD_handler(int signum)
-{
-    int pid, status, save_errno = errno;
-    status = 0;
-    while(1)
-    {
-        status = 0;
-        pid = waitpid(-1, &status, WUNTRACED|WCONTINUED|WNOHANG);
-        //if(WIFEXITED(status)) status = WEXITSTATUS(status);
-        if(pid <= 0)
-        {
-            break;
-        }
-        notice_termination(pid, status);
-        /* tcsh extensions */
-        if(optionx_set(OPTION_LIST_JOBS_LONG))
-        {
-            jobs_builtin(2, (char *[]){ "jobs", "-l" });
-        }
-        else if(optionx_set(OPTION_LIST_JOBS))
-        {
-            jobs_builtin(1, (char *[]){ "jobs"       });
-        }
-        /* in tcsh, special alias jobcmd is run before running commands and when jobs change state */
-        run_alias_cmd("jobcmd");
-    }
-    errno = save_errno;
-    signal_received = signum;
-}
-
-
-/*
- * signal handler for SIGHUP (hangup signal).
- */
-void SIGHUP_handler(int signum)
-{
-    kill_all_jobs(SIGHUP, JOB_FLAG_DISOWNED);
-    exit_gracefully(signum+128, NULL);
-}
-
-
-/*
- * set the signal handler function for signal number signum to sa_handler().
- */
-int set_signal_handler(int signum, void (handler)(int))
-{
-    struct sigaction sigact;
-    sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = 0;
-    sigact.sa_handler = handler;
-    return sigaction(signum, &sigact, NULL);
-}
+/* defined below */
+long read_pipe(FILE *f, char **str);
 
 
 /*
@@ -170,14 +65,6 @@ int set_signal_handler(int signum, void (handler)(int))
  */
 int main(int argc, char **argv)
 {
-    /*************************************
-     *************************************
-     * Shell initialization begins here
-     *************************************
-     *************************************/
-    shell_argc = argc;
-    shell_argv = argv;
-    tty_pid    = getpid();
     setlocale(LC_ALL, "");
 
     /* init global symbol table */
@@ -197,6 +84,13 @@ int main(int argc, char **argv)
     
     /* init aliases */
     memset(aliases, 0, sizeof(aliases));
+
+    shell_argc = argc;
+    shell_argv = argv;
+    shell_pid  = getpid();
+    
+    /* init shell variables from the environment */
+    initsh(argv);
 
     /*
      * if we have a script file name or a command string passed to us, initsh() will
@@ -231,23 +125,11 @@ int main(int argc, char **argv)
     char *s = getenv("SHELLOPTS");
     if(s && !option_set('r'))
     {
-        char *s1 = s;
-        while(*s1)
+        char *s2;
+        while((s2 = next_colon_entry(&s)))
         {
-            while(*s1 && *s1 == ':')
-            {
-                s1++;
-            }
-            char *s2 = s1+1;
-            while(*s2 && *s2 != ':')
-            {
-                s2++;
-            }
-            char c = *s2;
-            *s2 = '\0';
-            do_options("-o", s1);
-            *s2 = c;
-            s1 = s2;
+            do_options("-o", s2);
+            free(s2);
         }
         symtab_save_options();
     }
@@ -257,14 +139,17 @@ int main(int argc, char **argv)
     {
         uid_t euid = geteuid(), ruid = getuid();
         gid_t egid = getegid(), rgid = getgid();
+
         if(euid != ruid)
         {
             seteuid(ruid);
         }
+
         if(egid != rgid)
         {
             setegid(rgid);
         }
+        
         /* bash doesn't read startup files in this case */
         noprofile = 1;
         norc      = 1;
@@ -290,75 +175,45 @@ int main(int argc, char **argv)
     }
     
     /*
-     * the restricted mode '-r' is enabled in initsh() below, after $ENV and .profile
+     * the restricted mode '-r' is enabled below, after $ENV and .profile
      * scripts have been read and executed (above). this is in conformance
      * to ksh behaviour.
      */
 
-    /* init environ and finish initialization */
-    initsh(argv, read_stdin);
+    if(restricted_shell)
+    {
+        set_option('r', 1);
+        set_optionx(OPTION_RESTRICTED_SHELL, 1);
+        
+        struct symtab_entry_s *entry = get_symtab_entry("PATH");
+        if(entry)
+        {
+            entry->flags |= FLAG_READONLY;
+        }
+    }
+    
+    /* initialize the terminal */
+    if(read_stdin)
+    {
+        init_tty();
+    }
 
-    /* if interactive shell ... */
+    /* 
+     * save the signals we got from our parent, so that we can reset 
+     * them in our children later on.
+     */
+    save_signals();
+    
+    /* set our own signal handlers */
+    init_signals();
+    
+    /*
+     * speed up the startup of subshells by omitting some features that are used
+     * for interactive shells, like command history, aliases and dirstacks. in this
+     * case, we only init these features if this is NOT a subshell.
+     */
     if(interactive_shell)
     {
-        set_signal_handler(SIGQUIT , SIG_IGN);
-        set_signal_handler(SIGTERM , SIG_IGN);
-        if(option_set('m'))
-        {
-            set_signal_handler(SIGTSTP , SIG_IGN);
-            set_signal_handler(SIGTTIN , SIG_IGN);
-            set_signal_handler(SIGTTOU , SIG_IGN);
-        }
-        set_signal_handler(SIGINT  , SIGINT_handler  );
-        set_signal_handler(SIGWINCH, SIGWINCH_handler);
-        set_optionx(OPTION_INTERACTIVE_COMMENTS, 1);
-        
-        /*
-         * set a special timer for handling the $TPERIOD variable, which causes
-         * the 'periodic' alias to be executed at certain intervals (tcsh extension).
-         */
-        struct sigevent sev;
-        struct itimerspec its;
-        int freq = get_shell_vari("TPERIOD", 0);
-        struct sigaction sa;
-
-        /* Establish handler for timer signal */
-        sa.sa_flags = SA_SIGINFO;
-        sa.sa_sigaction = SIGALRM_handler;
-        sigemptyset(&sa.sa_mask);
-        if(sigaction(SIGALRM, &sa, NULL) == -1)
-        {
-            fprintf(stderr, "%s: failed to catch SIGALRM: %s\n", SHELL_NAME, strerror(errno));
-        }
-
-        /* Create the timer */
-        sev.sigev_notify = SIGEV_SIGNAL;
-        sev.sigev_signo = SIGALRM;
-        sev.sigev_value.sival_ptr = &timerid;
-        if(timer_create(CLOCKID, &sev, &timerid) == -1)
-        {
-            fprintf(stderr, "%s: failed to create timer: %s\n", SHELL_NAME, strerror(errno));
-        }
-        
-        /* Start the timer ($TPERIOD is in minutes) */
-        if(freq > 0)
-        {
-            its.it_value.tv_sec = freq*60;
-            its.it_value.tv_nsec = 0;
-            its.it_interval.tv_sec = its.it_value.tv_sec;
-            its.it_interval.tv_nsec = its.it_value.tv_nsec;
-            if(timer_settime(timerid, 0, &its, NULL) == -1)
-            {
-               fprintf(stderr, "%s: failed to start timer: %s\n", SHELL_NAME, strerror(errno));
-            }
-        }
-
-        /*
-         * speed up the startup of subshells by omitting some features that are used
-         * for interactive shells, like command history, aliases and dirstacks. in this
-         * case, we only init these features if this is NOT a subshell.
-         */
-
         /* init history */
         init_history();
 
@@ -371,35 +226,9 @@ int main(int argc, char **argv)
     else
     {
         /* turn off options we don't need in a (non-interactive) subshell */
-        set_optionx(OPTION_EXPAND_ALIASES      , 0);
-        set_optionx(OPTION_SAVE_HIST           , 0);
+        set_optionx(OPTION_EXPAND_ALIASES, 0);
+        set_optionx(OPTION_SAVE_HIST     , 0);
     }
-    
-    set_signal_handler(SIGCHLD, SIGCHLD_handler);
-    set_signal_handler(SIGHUP , SIGHUP_handler );
-
-    /*
-     * tcsh accepts -q, which causes SIGQUIT to be caught and job control to be
-     * disabled.
-     */
-    if(option_set('q'))
-    {
-        set_signal_handler(SIGQUIT, SIGQUIT_handler);
-        set_option('m', 0);
-        
-        /* update the options string */
-        symtab_save_options();
-    }
-    
-    /* 
-     * save the signals we got from our parent, so that we can reset 
-     * them in our children later on.
-     * NOTE: if you changed any of the signal actions below, make sure to mirror
-     *       those changes in trap.c in the case switch where we reset signal actions
-     *       to their default values. don't also forget the processing of the -q option
-     *       down below, which affects SIGQUIT.
-     */
-    save_signals();    
     
     /* init our internal clock */
     start_clock();
@@ -408,68 +237,15 @@ int main(int argc, char **argv)
     init_rand();
     
     /* only set $PPID if this is not a subshell */
-    if(subshell_level == 0)
+    if(!executing_subshell)
     {
         pid_t ppid = getppid();
         char ppid_str[10];
         sprintf(ppid_str, "%u", ppid);
         setenv("PPID", ppid_str, 1);
         struct symtab_entry_s *entry = add_to_symtab("PPID");
-        if(entry)
-        {
-            symtab_entry_setval(entry, ppid_str);
-            entry->flags |= FLAG_READONLY;
-        }
-    }
-
-    /* disable some builtin extensions in the posix '-P' mode */
-    if(option_set('P'))
-    {
-        /* special builtins */
-        special_builtins[SPECIAL_BUILTIN_LOCAL    ].flags &= ~BUILTIN_ENABLED;
-        special_builtins[SPECIAL_BUILTIN_LOGOUT   ].flags &= ~BUILTIN_ENABLED;
-        special_builtins[SPECIAL_BUILTIN_REPEAT   ].flags &= ~BUILTIN_ENABLED;
-        special_builtins[SPECIAL_BUILTIN_SETX     ].flags &= ~BUILTIN_ENABLED;
-        special_builtins[SPECIAL_BUILTIN_SUSPEND  ].flags &= ~BUILTIN_ENABLED;
-        /* regular builtins */
-        regular_builtins[REGULAR_BUILTIN_BUGREPORT].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_BUILTIN  ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_CALLER   ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_COPROC   ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_DECLARE  ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_DIRS     ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_DISOWN   ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_DUMP     ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_ECHO     ].flags &= ~BUILTIN_ENABLED;
-        /*
-         * we won't disable the 'enable' builtin so the user can selectively enable builtins
-         * when they're in the POSIX mode. if you insist on disabling ALL non-POSIX builtins,
-         * uncomment the next line.
-         */
-        //regular_builtins[REGULAR_BUILTIN_ENABLE   ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_GLOB     ].flags &= ~BUILTIN_ENABLED;
-        /*
-         * the 'help' builtin should also be available, even in POSIX mode. if you want to
-         * disable it in POSIX mode, uncomment the next line.
-         */
-        //regular_builtins[REGULAR_BUILTIN_HELP     ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_HISTORY  ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_HUP      ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_LET      ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_MAIL     ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_MEMUSAGE ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_NICE     ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_NOHUP    ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_NOTIFY   ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_POPD     ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_PRINTENV ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_PUSHD    ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_SETENV   ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_STOP     ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_UNLIMIT  ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_UNSETENV ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_VER      ].flags &= ~BUILTIN_ENABLED;
-        regular_builtins[REGULAR_BUILTIN_WHENCE   ].flags &= ~BUILTIN_ENABLED;
+        symtab_entry_setval(entry, ppid_str);
+        entry->flags |= FLAG_READONLY;
     }
 
     /* set the exit status to 0 */
@@ -488,10 +264,8 @@ int main(int argc, char **argv)
         parse_and_execute(&src);
     }
 
-    /* execute any EXIT trap */
-    trap_handler(0);
-    //exit_gracefully(exit_status, NULL);
-    exit_builtin(1, (char *[]){ "exit", NULL });
+    /* the exit builtin will execute any EXIT traps */
+    do_builtin_internal(exit_builtin, 1, (char *[]){ "exit", NULL });
 }
 
 
@@ -515,7 +289,9 @@ do {                                            \
  */
 int parse_and_execute(struct source_s *src)
 {
-    eof_token.src = src;
+    /* prologue */
+    struct token_s *old_current_token = dup_token(get_current_token());
+    struct token_s *old_previous_token = dup_token(get_previous_token());
 
     /*
      * parse and execute the translation unit, one command at a time.
@@ -539,12 +315,21 @@ int parse_and_execute(struct source_s *src)
      * syntax errors.
      */
     int noexec = (option_set('n') && !interactive_shell);
-    int i      = src->curpos;
-    int res    = 1;             /* the result of parsing/executing */
-    struct token_s  *tok  = tokenize(src);
+
+    /*
+     * determine if we're going to save commands to the history list.
+     * we save history commands when the shell is interactive and we're reading
+     * from stdin.
+     */
+    int save_hist = interactive_shell && src->srctype == SOURCE_STDIN;
+
+    int i = src->curpos;
+    int res = 1;             /* the result of parsing/executing */
+    char *p;
+    struct token_s *tok = tokenize(src);
 
     /* skip any leading comments/newlines */
-    while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
+    while(tok->type != TOKEN_EOF)
     {
         /* skip comments and newlines */
         if(tok->type == TOKEN_COMMENT || tok->type == TOKEN_NEWLINE)
@@ -561,8 +346,14 @@ int parse_and_execute(struct source_s *src)
     }
 
     /* reached EOF or error getting next token */
-    if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
+    if(tok->type == TOKEN_EOF)
     {
+        /* don't leave any hanging token structs */
+        free_token(get_current_token());
+        free_token(get_previous_token());
+        /* restore token pointers */
+        set_current_token(old_current_token);
+        set_previous_token(old_previous_token);
         return 0;
     }
 
@@ -571,13 +362,6 @@ int parse_and_execute(struct source_s *src)
     {
         i = 0;
     }
-
-    /*
-     * determine if we're going to save commands to the history list.
-     * we save history commands when the shell is interactive and we're reading
-     * from stdin.
-     */
-    int save_hist = interactive_shell && src->srctype == SOURCE_STDIN;
 
     /* clear the parser's error flag */
     parser_err = 0;
@@ -589,11 +373,13 @@ int parse_and_execute(struct source_s *src)
     }
 
     /* loop parsing and executing commands */
-    while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
+    while(tok->type != TOKEN_EOF)
     {
+        i = (src->curpos < 0) ? 0 : src->curpos;
+
         /* parse the next command */
         struct node_s *cmd = parse_list(tok);
-        tok = get_current_token();
+        struct node_s *cmd2 = cmd;
 
         /* parser encountered an error */
         if(parser_err)
@@ -618,13 +404,14 @@ int parse_and_execute(struct source_s *src)
         }
 
         /* add command to the history list and echo it (if -v option is set) */
-        switch(cmd->type)
+        switch(cmd2->type)
         {
+            case NODE_COPROC:
             case NODE_TIME:
                 /* the real command is the first child of the 'time' node */
-                if(cmd->first_child)
+                if(cmd2->first_child)
                 {
-                    cmd = cmd->first_child;
+                    cmd2 = cmd2->first_child;
                     /* fall through to the next case */
                 }
                 else
@@ -638,15 +425,27 @@ int parse_and_execute(struct source_s *src)
 
             case NODE_COMMAND:
             case NODE_LIST:
-                if(cmd->val.str)
+                if(cmd2->val_type == VAL_STR && cmd2->val.str)
                 {
-                    SAVE_TO_HISTORY_AND_PRINT(cmd->val.str);
+                    SAVE_TO_HISTORY_AND_PRINT(cmd2->val.str);
                     break;
                 }
                 /* fall through to the next case */
                 __attribute__((fallthrough));
 
             default:
+                if(i >= src->curpos)
+                {
+                    break;
+                }
+
+                p = get_malloced_strl(src->buffer, i, src->curpos-i);
+                if(p)
+                {
+                    SAVE_TO_HISTORY_AND_PRINT(p);
+                    free_malloced_str(p);
+                }
+#if 0
                 ;
                 int j = src->curpos-(tok->text_len);
                 while(src->buffer[j] == '\n')
@@ -662,6 +461,7 @@ int parse_and_execute(struct source_s *src)
                 } while(i < j);
                 buf[k] = '\0';
                 SAVE_TO_HISTORY_AND_PRINT(buf);
+#endif
                 break;
         }
         
@@ -679,17 +479,22 @@ int parse_and_execute(struct source_s *src)
         if(noexec)
         {
             free_node_tree(cmd);
+            tok = get_current_token();
             continue;
         }
 
         /* now execute the command */
         if(!do_list(src, cmd, NULL))
         {
-            /* failed to execute command. bail out */
-            res = 0;
-            free_node_tree(cmd);
-            break;
+            /* failed to execute command. bail out if we're interactive */
+            if(interactive_shell)
+            {
+                res = 0;
+                free_node_tree(cmd);
+                break;
+            }
         }
+        tok = get_current_token();
         
 
         /* free the nodetree */
@@ -729,7 +534,7 @@ int parse_and_execute(struct source_s *src)
          * prepare for parsing the next command.
          * skip optional newline and comment tokens.
          */
-        while(tok->type != TOKEN_EOF && tok->type != TOKEN_ERROR)
+        while(tok->type != TOKEN_EOF)
         {
             if(tok->type == TOKEN_COMMENT || tok->type == TOKEN_NEWLINE)
             {
@@ -741,8 +546,9 @@ int parse_and_execute(struct source_s *src)
             }
         }
 
+#if 0
         /* reached EOF or error getting next token */
-        if(tok->type == TOKEN_EOF || tok->type == TOKEN_ERROR)
+        if(tok->type == TOKEN_EOF)
         {
             break;
         }
@@ -753,6 +559,8 @@ int parse_and_execute(struct source_s *src)
         {
             i++;
         }
+#endif
+
         /* save the start of this line */
         src->wstart = src->curpos-(tok->text_len);
     }
@@ -774,6 +582,10 @@ int parse_and_execute(struct source_s *src)
         term_canon(0);
         update_row_col();
     }
+
+    /* epilogue */
+    set_current_token(old_current_token);
+    set_previous_token(old_previous_token);
 
     return res;
 }
@@ -804,7 +616,9 @@ int read_file(char *filename, struct source_s *src)
     }
     
     char *tmpbuf = NULL;
-    FILE *f      = NULL;
+    FILE *f = NULL;
+    long i;
+
     if(strchr(filename2, '/'))
     {
         /* pathname with '/', try opening it */
@@ -855,31 +669,46 @@ read:
     /* seek to the end of the file */
     if(fseek(f, 0, SEEK_END) != 0)
     {
-        goto error;
+        /*
+         * handle the special files (e.g. pipes), where we can't seek.. we might
+         * arrive here (reading from a pipe) if we're executing a command, which
+         * was passed a redirected file using process substitution.
+         */
+        if(errno != ESPIPE)
+        {
+            goto error;
+        }
+        
+        if(!(i = read_pipe(f, &tmpbuf)))
+        {
+            goto error;
+        }
     }
-    
-    /* get the file length */
-    long i;
-    if((i = ftell(f)) == -1)
+    else
     {
-        goto error;
+        /* get the file length */
+        if((i = ftell(f)) == -1)
+        {
+            goto error;
+        }
+        rewind(f);
+        
+        /* alloc buffer */
+        tmpbuf = malloc(i+1);
+        if(!tmpbuf)
+        {
+            goto error;
+        }
+        
+        /* read the file */
+        long j = fread(tmpbuf, 1, i, f);
+        if(j != i)
+        {
+            goto error;
+        }
+        tmpbuf[i] = '\0';
     }
-    rewind(f);
-    
-    /* alloc buffer */
-    tmpbuf = malloc(i+1);
-    if(!tmpbuf)
-    {
-        goto error;
-    }
-    
-    /* read the file */
-    long j = fread(tmpbuf, 1, i, f);
-    if(j != i)
-    {
-        goto error;
-    }
-    tmpbuf[i]     = '\0';
+
     fclose(f);
     src->buffer   = tmpbuf;
     src->bufsize  = i;
@@ -902,4 +731,48 @@ error:
     
     free(filename2);
     return 0;
+}
+
+
+/*
+ * similar to read_file(), except it reads from a pipe.
+ * 
+ * returns the count of bytes read, and stores the read string in str.
+ */
+long read_pipe(FILE *f, char **str)
+{
+    int buf_size = 32;
+    char *buf = alloc_string_buf(buf_size);
+    long i = 0;
+    
+    if(!buf)
+    {
+        PRINT_ERROR("%s: failed to allocate buffer: %s\n", SHELL_NAME,
+                    strerror(errno));
+        return 0;
+    }
+
+    char *b = buf;
+    char *buf_end = b+buf_size-1;
+
+    while(!feof(f))
+    {
+        if(fread(b, 1, 1, f) != 1)
+        {
+            continue;
+        }
+        
+        if(!may_extend_string_buf(&buf, &buf_end, &b, &buf_size))
+        {
+            PRINT_ERROR("%s: failed to allocate buffer: %s\n", SHELL_NAME,
+                        strerror(errno));
+            return 0;
+        }
+        
+        b++;
+        i++;
+    }
+    
+    (*str) = buf;
+    return i;
 }

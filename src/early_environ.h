@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: early_environ.h
  *    This file is part of the Layla Shell project.
@@ -140,6 +140,8 @@ struct early_env_item_s early_environ[] =
   { "OSTYPE"      , OS_TYPE                 },
   { "COMPILERTYPE", COMPILER_TYPE           },
   { "COMPILERBUILD", COMPILER_BUILD         },
+  { "THIS_SH", "/home/mima/projects/shell/build/lsh" },
+  { "TMPDIR"     , "/tmp"                      },
 };
 
 size_t early_environ_length = sizeof(early_environ)/sizeof(struct early_env_item_s);

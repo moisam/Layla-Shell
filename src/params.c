@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: params.c
  *    This file is part of the Layla Shell project.
@@ -27,10 +27,19 @@
 #include "debug.h"
 
 /* the exit status of the last command executed */
-int exit_status    = 0;
+int exit_status = 0;
 
-/* the current subshell level (how many subshells have we started in tandem) */
-int subshell_level = 0;
+/*
+ * the current subshell level (how many subshells have we started in tandem).
+ * incremented every time the shell forks a subshell.
+ */
+int executing_subshell = 0;
+
+/*
+ * the current shell level (how many times has lsh been invoked).
+ * incremented on shell startup.
+ */
+int shell_level = 0;;
 
 /* defined in builtins/newgrp.c */
 int get_supp_groups(char *name, gid_t gid, gid_t **_supp_groups, int *_n);
@@ -342,103 +351,67 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
 
 
 /*
- * save the positional parameter list.. return array is NULL-terminated,
- * just like an **argv array.
+ * set the values of positional parameters $1 to $count.. if the new paramer
+ * count is less than the old parameter count, positional parameters $count+1
+ * to $oldcount are set to NULL.. we set all of these parameters in the local
+ * symbol table, so that when a dot script or shell function returns, we pop
+ * the local symbol table off the stack, and those parameters resume the values
+ * they had before we entered the script/function.
  */
-char **get_pos_paramsp(void)
+void set_local_pos_params(int count, char **params)
 {
-    struct symtab_entry_s *entry = get_symtab_entry("#");
-    if(!entry || !entry->val)
+    int  i;
+    char buf[32];
+    struct symtab_entry_s *entry;
+    struct symtab_s *st = get_local_symtab();
+
+    /* sanity check */
+    if(!count || !params || !*params)
     {
-        return NULL;
+        return;
     }
-    int     count = atoi(entry->val)+1;
-    size_t  len = (count)*sizeof(char *);
-    int     i, j;
-    char   **p = malloc(len);
-    if(!p)
-    {
-        return NULL;
-    }
-    memset(p, 0, len);
-    /* get each positional parameter and add it to the list */
-    for(i = 1, j = 0; i <= count; i++, j++)
+
+    /* set arguments $1...$count */
+    for(i = 1; i <= count; i++)
     {
         sprintf(buf, "%d", i);
-        entry = get_symtab_entry(buf);
-        if(entry && entry->val)
+        entry = add_to_any_symtab(buf, st);
+        if(entry)
         {
-            p[j] = malloc(strlen(entry->val)+1);
-            if(p[j])
+            symtab_entry_setval(entry, params[i-1]);
+            entry->flags = FLAG_LOCAL | FLAG_READONLY;
+        }
+    }
+    
+    /*
+     * overshadow the rest of the parameters, if any, so that the user cannot
+     * access them behind our back.
+     */
+    entry = get_symtab_entry("#");
+    if(entry && entry->val)
+    {
+        int old_count = atoi(entry->val);
+        if(old_count > 0)
+        {
+            for( ; i <= old_count; i++)
             {
-                strcpy(p[j], entry->val);
+                sprintf(buf, "%d", i);
+                entry = add_to_any_symtab(buf, st);
+                if(entry)
+                {
+                    entry->flags = FLAG_LOCAL | FLAG_READONLY;
+                }
             }
         }
     }
-    return p;
-}
-
-/*
- * restore positional parameters from a saved array that is 
- * NULL-terminated.
- */
-void set_pos_paramsp(char **p)
-{
-    if(!p)
+    
+    /* set our new param $# */
+    entry = add_to_any_symtab("#", st);
+    if(entry)
     {
-        return;
-    }
-    int     count, oldcount = 0;
-    int     i, j;
-    /* get the parameters count */
-    for(i = 0; p[i]; i++)
-    {
-        ;
-    }
-    count = i;
-    /* get the shell parameter $# */
-    struct symtab_entry_s *entry = get_symtab_entry("#");
-    if(!entry)
-    {
-        entry = add_to_symtab("#");
-    }
-    if(!entry)
-    {
-        return;
-    }
-    /* save the old count from $# */
-    if(entry->val && entry->val[0])
-    {
-        oldcount = atoi(entry->val);
-    }
-    else
-    {
-        oldcount = 0;
-    }
-    /* save the count in $# */
-    sprintf(buf, "%d", count);
-    symtab_entry_setval(entry, buf);
-    /* replace the values of positional parameters $1 through $count */
-    for(i = 1, j = 0; i <= count; i++, j++)
-    {
-        sprintf(buf, "%d", i);
-        entry = add_to_symtab(buf);
-        if(!entry)
-        {
-            continue;
-        }
-        symtab_entry_setval(entry, p[j]);
-    }
-    /* unset the rest of old params (if oldcount is > count) */
-    for( ; i <= oldcount; i++)
-    {
-        sprintf(buf, "%d", i);
-        entry = get_symtab_entry(buf);
-        if(!entry)
-        {
-            continue;
-        }
-        symtab_entry_setval(entry, NULL);
+        sprintf(buf, "%d", count);
+        symtab_entry_setval(entry, buf);
+        entry->flags = FLAG_LOCAL | FLAG_READONLY;
     }
 }
 
@@ -452,12 +425,13 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
 {
     struct symtab_entry_s *entry;
     char buf[12];
+    char *strend;
     /* $? is the exit status of the most recent pipeline */
     entry = add_to_symtab("?");
     symtab_entry_setval(entry, "0");
     
     /* $$ is the decimal process ID of the shell */
-    sprintf(buf, "%u", tty_pid);
+    sprintf(buf, "%u", shell_pid);
     entry = add_to_symtab("$");
     symtab_entry_setval(entry, buf);
   
@@ -470,32 +444,53 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
   
     /* set the maximum size of the history list */
     entry = get_symtab_entry("HISTSIZE");
-    long l = (entry && entry->val) ? atol(entry->val) : 0;
-    if(!l)
+    long l = (entry->val) ? strtol(entry->val, &strend, 10) : 0;
+    if(!l || *strend)
     {
         l = default_HISTSIZE;
         sprintf(buf, "%ld", l);
         symtab_entry_setval(entry, buf);
     }
+
     /* set the maximum size of the history file */
     entry = add_to_symtab("HISTFILESIZE");
     sprintf(buf, "%ld", l);
     symtab_entry_setval(entry, buf);
-  
-    subshell_level = get_shell_vari("SUBSHELL", 0);
-    if(subshell_level == 0)
+
+    /*
+     * increment the shell nesting level with each shell invocation (bash/tcsh).
+     * tcsh also resets $SHLVL it to 1 in login shells.
+     */
+    entry = add_to_symtab("SHLVL");
+    l = (entry->val) ? strtol(entry->val, &strend, 10) : 0;
+    if(option_set('L') || l < 0 || *strend)    /* login shell or invalid value */
+    {
+        l = 0;
+    }
+    sprintf(buf, "%ld", ++l);
+    symtab_entry_setval(entry, buf);
+    entry->flags = FLAG_READONLY | FLAG_EXPORT;
+    shell_level = l;
+
+    /* incremented for each subshell invocation (similar to $BASH_SUBSHELL) */
+    entry = add_to_symtab("SUBSHELL");
+    l = (entry->val) ? strtol(entry->val, &strend, 10) : 0;
+    if(l < 0 || *strend)    /* invalid value */
+    {
+        l = 0;
+    }
+    sprintf(buf, "%ld", l);
+    symtab_entry_setval(entry, buf);
+    entry->flags = FLAG_READONLY | FLAG_EXPORT;
+    executing_subshell = l;
+
+    entry = add_to_symtab("FUNCNAME");
+    if(!entry->val)
     {
         /* first function name */
-        entry = add_to_symtab("FUNCNAME");
         symtab_entry_setval(entry, "main");
-        entry->flags = FLAG_READONLY | FLAG_EXPORT;
-  
-        /* incremented for each subshell invocation -- similar to $BASH_SUBSHELL */
-        entry = add_to_symtab("SUBSHELL");
-        symtab_entry_setval(entry, "0");
-        entry->flags = FLAG_READONLY | FLAG_EXPORT;
     }
-    set_shlvl_var();
+    entry->flags = FLAG_READONLY | FLAG_EXPORT;
     
     /*
      * $_ (or underscore) is an obscure variable that shells love to assign 
@@ -539,10 +534,17 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
     }
     
     /* tcsh has a 'tty' variable naming the controlling terminal */
-    if(isatty(0))
+    l = cur_tty_fd();
+    if(l >= 0)
     {
-        char *s = ttyname(0);
         entry = add_to_symtab("TTY");
-        symtab_entry_setval(entry, s);
+        symtab_entry_setval(entry, ttyname(l));
+    }
+    
+    /* init our 'special' vars (see vars.c) */
+    for(n = 0; n < special_var_count; n++)
+    {
+        entry = add_to_symtab(special_var_names[n]);
+        entry->flags = FLAG_SPECIAL_VAR | FLAG_EXPORT;
     }
 }

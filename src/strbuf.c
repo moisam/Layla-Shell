@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: strbuf.c
  *    This file is part of the Layla Shell project.
@@ -41,8 +41,9 @@
 /* the strings buffer (hash table) */
 struct hashtab_s *str_hashes = NULL;
 
-/* dummy value for an empty string */
+/* dummy value for an empty string and a newline string */
 char *empty_str = "";
+char *newline_str = "\n";
 
 
 /*
@@ -85,11 +86,19 @@ char *get_malloced_str(char *str)
     {
         return NULL;
     }
+
     /* empty string passed. return the dummy empty string entry */
     if(!*str)
     {
         return empty_str;
     }
+
+    /* newline. return the dummy string entry */
+    if(*str == '\n' && str[1] == '\0')
+    {
+        return newline_str;
+    }
+    
     /* search the strings buffer for str */
     if(str_hashes)
     {
@@ -127,6 +136,7 @@ char *get_malloced_strl(char *str, int start, int length)
     {
         return NULL;
     }
+
     char *s1 = str+start;
     char tmp[length+1];
     strncpy(tmp, s1, length);
@@ -141,10 +151,11 @@ char *get_malloced_strl(char *str, int start, int length)
  */
 void free_malloced_str(char *str)
 {
-    if(!str || str == empty_str)
+    if(!str || str == empty_str || str == newline_str)
     {
         return;
     }
+
     /* search the strings buffer for str */
     if(str_hashes)
     {

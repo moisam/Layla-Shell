@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: braceexp.c
  *    This file is part of the Layla Shell project.
@@ -28,7 +28,7 @@ char *add_pre_post(char *str, char *pre, char *post);
 char **get_brace_list(char *str, size_t end, size_t *count);
 char **get_letter_list(char *xs, char *ys, char *zs, size_t *count);
 char **get_num_list(char *xs, char *ys, char *zs, size_t *count);
-int add_to_list(char ***__list, char *p0, char *p1, size_t *list_count, size_t *list_size);
+int add_to_list(char ***__list, char *p0, char *p1, size_t *list_count, size_t *list_size, int where);
 int remove_from_list(char **list, int i, size_t *list_count);
 
 
@@ -47,8 +47,9 @@ char **brace_expand(char *str, size_t *count)
     {
         return NULL;
     }
+
     size_t i;
-    char *p = str;
+    char *p = str, c;
     char **list = NULL, **list2;
     size_t list_count = 0;
     size_t list_size  = 0;
@@ -59,14 +60,36 @@ loop:
     {
         switch(*p)
         {
-            /* skip single quoted strings */
+            /* skip quoted strings */
             case '\'':
-                while(*(++p) && *p != '\'')
+            case '"':
+            /* 
+             * skip back-quoted strings (they will be expanded in a subshell 
+             * when we perform command substitution).
+             */
+            case '`':
+                c = *p;
+                while(*(++p) && *p != c)
                 {
                     ;
                 }
                 break;
                 
+            /* skip embedded command substitution, arithmetic expansion and variable expansion */
+            case '$':
+                switch(p[1])
+                {
+                    /* we have a '${', '$(' or '$[' sequence */
+                    case '{':
+                    case '(':
+                    case '[':
+                        /* add the opening brace and everything up to the closing brace to the buffer */
+                        i = find_closing_brace(++p, 0);
+                        p += i;
+                        break;
+                }
+                break;
+
             /* parse brace expression */
             case '{':
                 /* ignore escaped braces and variable expansion braces */
@@ -74,13 +97,16 @@ loop:
                 {
                     break;
                 }
+
                 /* find the closing brace */
                 i = find_closing_brace(p, 0);
+                
                 /* closing brace not found */
                 if(i == 0)
                 {
                     break;
                 }
+
                 /* expand the brace list */
                 if((list2 = get_brace_list(p, i, &list2_count)))
                 {
@@ -90,8 +116,10 @@ loop:
                     {
                         pre = get_malloced_strl(str, 0, p-str);
                     }
+
                     /* get the postfix (the part after the closing brace) */
                     char *post = p+i+1;
+                    
                     /*
                      * affix the parts before and after the brace expression to each item in the list.
                      */
@@ -99,6 +127,7 @@ loop:
                     {
                         list2[i] = add_pre_post(list2[i], pre, post);
                     }
+                    
                     /*
                      * remove the original string, containing the brace expression we've just expanded.
                      */
@@ -106,23 +135,26 @@ loop:
                     {
                         remove_from_list(list, j, &list_count);
                     }
+                    
                     /*
                      * add the expanded items to the list.
                      */
                     for(i = 0; i < list2_count; i++)
                     {
                         char *item = list2[i];
-                        if(!add_to_list(&list, item, item+strlen(item), &list_count, &list_size))
+                        if(!add_to_list(&list, item, item+strlen(item), &list_count, &list_size, j+i))
                         {
                             goto err;
                         }
                     }
+                    
                     /* free temp memory */
                     for(i = 0; i < list2_count; i++)
                     {
                         free_malloced_str(list2[i]);
                     }
                     free(list2);
+                    
                     /* continue parsing from the next item, after the one we've just parsed */
                     p = list[j];
                     str = p;
@@ -192,6 +224,7 @@ char **get_brace_list(char *str, size_t end, size_t *count)
     char *p0 = str+1;
     char *p1 = p0;
     char *p2 = str+end;
+    char c;
     char **list = NULL, **list2 = NULL;
     size_t list_count = 0, list2_count = 0;
     size_t list_size  = 0;
@@ -202,6 +235,20 @@ char **get_brace_list(char *str, size_t end, size_t *count)
     {
         switch(*p1)
         {
+            /* skip quoted strings */
+            case '\'':
+            case '"':
+                c = *p1;
+                while(*(++p1) && *p1 != c)
+                {
+                    ;
+                }
+                break;
+                
+            case '\\':
+                p1++;
+                break;
+                
             /* brace expressions can be nested, but we don't process nested expressions here */
             case '{':
                 ob++;
@@ -222,11 +269,12 @@ char **get_brace_list(char *str, size_t end, size_t *count)
                 /* fall through */
                 
             case ',':
-                if(p1 == str || p1[-1] == '\\')
+                if(p1 == p0 || p1[-1] == '\\')
                 {
-                    continue;
+                    break;
                 }
-                if(!add_to_list(&list, p0, p1, &list_count, &list_size))
+
+                if(!add_to_list(&list, p0, p1, &list_count, &list_size, list_count))
                 {
                     goto err;
                 }
@@ -238,20 +286,24 @@ char **get_brace_list(char *str, size_t end, size_t *count)
                 {
                     break;
                 }
-                char *x, *y, *z = NULL;
+
                 /* get the first number */
+                char *x, *y, *z = NULL;
                 x = get_malloced_strl(p0, 0, p1-p0);
                 if(!x)
                 {
                     goto err;
                 }
+                
                 p0 = p1+2;
                 if(!*p0)
                 {
+                    free_malloced_str(x);
                     goto err;
                 }
-                p1 = p0;
+                
                 /* get the second number, after the '..' */
+                p1 = p0;
                 while(p1 < p2 && *p1 != '.')
                 {
                     if(*p1 == '{')
@@ -259,67 +311,111 @@ char **get_brace_list(char *str, size_t end, size_t *count)
                         i = find_closing_brace(p1, 0);
                         p1 += i;
                     }
+                    else if(*p1 == ',')
+                    {
+                        break;
+                    }
                     p1++;
                 }
-                if(*p1 && *p1 != '.' && *p1 != '}')
+
+                if(*p1 && *p1 != '.' && *p1 != '}' && *p1 != ',')
                 {
+                    free_malloced_str(x);
                     goto err;
                 }
+                
                 y = get_malloced_strl(p0, 0, p1-p0);
                 if(!y)
                 {
+                    free_malloced_str(x);
                     goto err;
                 }
+                
                 /* get the optional third number, after the '..' */
                 if(*p1 == '.')
                 {
+                    if(p1[1] != '.')
+                    {
+                        free_malloced_str(x);
+                        free_malloced_str(y);
+                        goto err;
+                    }
+                    
                     p0 = p1+2;
                     p1 = p2;
                     z = get_malloced_strl(p0, 0, p1-p0);
                     if(!z)
                     {
+                        free_malloced_str(x);
+                        free_malloced_str(y);
                         goto err;
                     }
                 }
                 p0 = p1+1;
+                
                 /* letter range in the form [x..y[..z]] */
                 if(isalpha(*x) && x[1] == '\0' && isalpha(*y) && y[1] == '\0')
                 {
                     list2 = get_letter_list(x, y, z, &list2_count);
                     if(!list2)
                     {
+                        free_malloced_str(x);
+                        free_malloced_str(y);
+                        free_malloced_str(z);
                         goto err;
                     }
                 }
                 /* number range in the form [n1..n2[..step]] */
-                else if(isdigit(*x) && isdigit(*y))
+                else if(is_num(x) && is_num(y))
                 {
+                    /* if there's an optional step, check it's a number */
+                    if(z && !is_num(z))
+                    {
+                        free_malloced_str(x);
+                        free_malloced_str(y);
+                        free_malloced_str(z);
+                        goto err;
+                    }
+                    
                     list2 = get_num_list(x, y, z, &list2_count);
                     if(!list2)
                     {
+                        free_malloced_str(x);
+                        free_malloced_str(y);
+                        free_malloced_str(z);
                         goto err;
                     }
                 }
                 else
                 {
+                    free_malloced_str(x);
+                    free_malloced_str(y);
+                    free_malloced_str(z);
                     break;
                 }
+                
+                free_malloced_str(x);
+                free_malloced_str(y);
+                free_malloced_str(z);
+                
                 /* add the sublist */
                 char **l = list2;
                 i = list2_count;
                 while(i--)
                 {
                     char *item = *l;
-                    if(!add_to_list(&list, item, item+strlen(item), &list_count, &list_size))
+                    if(!add_to_list(&list, item, item+strlen(item), &list_count, &list_size, list_count))
                     {
                         goto err2;
                     }
                     l++;
                 }
+                
                 for(i = 0; i < list2_count; i++)
                 {
                     free_malloced_str(list2[i]);
                 }
+                
                 free(list2);
                 list2 = NULL;
                 break;
@@ -510,10 +606,11 @@ char **get_num_list(char *xs, char *ys, char *zs, size_t *count)
  * returns 1 of the string is added successfully to the list, 0 in case of error.
  * list_count is incremented by 1.
  */
-int add_to_list(char ***__list, char *p0, char *p1, size_t *list_count, size_t *list_size)
+int add_to_list(char ***__list, char *p0, char *p1, size_t *list_count, size_t *list_size, int where)
 {
     char **list = *__list;
     int i;
+
     if(!list)
     {
         list = malloc(8 * sizeof(char *));
@@ -533,12 +630,21 @@ int add_to_list(char ***__list, char *p0, char *p1, size_t *list_count, size_t *
         }
         (*list_size) = i;
     }
+
     char *str = get_malloced_strl(p0, 0, p1-p0);
     if(!str)
     {
         return 0;
     }
-    list[(*list_count)] = str;
+    
+    /* shift all items down (if needed) */
+    int k = (*list_count);
+    for(i = k; i > where; i--)
+    {
+        list[i] = list[i-1];
+    }
+
+    list[i] = str;
     (*list_count) = (*list_count)+1;
     (*__list) = list;
     return 1;
@@ -556,11 +662,32 @@ int remove_from_list(char **list, int i, size_t *list_count)
     free_malloced_str(list[i]);
     int j = i;
     int k = (*list_count)-1;
+
     for( ; j < k; j++)
     {
         list[j] = list[j+1];
     }
+
     list[j] = NULL;
     *list_count = k;
     return 1;
+}
+
+
+/*
+ * check if the given string contains a valid decimal number.
+ */
+int is_num(char *str)
+{
+    if(*str == '+' || *str == '-')
+    {
+        str++;
+    }
+    
+    while(isdigit(*str))
+    {
+        str++;
+    }
+    
+    return (*str == '\0');
 }

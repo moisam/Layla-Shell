@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
  * 
  *    file: sig.h
  *    This file is part of the Layla Shell project.
@@ -28,7 +28,39 @@
 
 extern char *signames[];
 
-struct sigaction *get_sigaction(int signum);
-void   save_signals(void);
+/* block and unblock signals */
+#define SIGNAL_BLOCK(signal, set)           \
+do                                          \
+{                                           \
+    sigemptyset(&set);                      \
+    sigaddset(&set, signal);                \
+    sigprocmask(SIG_BLOCK, &set, NULL);     \
+} while(0)
+
+
+#define SIGNAL_UNBLOCK(set)                 \
+do                                          \
+{                                           \
+    sigprocmask(SIG_UNBLOCK, &set, NULL);   \
+} while(0)
+
+/* functions to work with signals */
+struct  sigaction *get_sigaction(int signum);
+void    save_signals(void);
+void    restore_signals(void);
+void    init_signals(void);
+
+int     set_signal_handler(int signum, void (handler)(int));
+void    set_SIGQUIT_handler(void);
+void    set_SIGALRM_handler(void);
+
+void    SIGCHLD_handler(int signum);
+void    SIGINT_handler(int signum);
+void    SIGHUP_handler(int signum);
+void    SIGWINCH_handler(int signum);
+void    SIGQUIT_handler(int signum);
+void    SIGALRM_handler(int sig __attribute__((unused)),
+                        siginfo_t *si __attribute__((unused)),
+                        void *uc __attribute__((unused)));
 
 #endif

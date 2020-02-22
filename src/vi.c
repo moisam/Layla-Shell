@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019 (c)
+ *    Copyright 2019, 2020 (c)
  * 
  *    file: vi.c
  *    This file is part of the Layla Shell project.
@@ -34,6 +34,7 @@
 #include "parser/parser.h"
 #include "parser/node.h"
 #include "backend/backend.h"
+#include "builtins/builtins.h"
 #include "debug.h"
 
 /* defined in cmdline.c */
@@ -42,10 +43,10 @@
 // extern uint16_t  cmdbuf_end  ;
 // extern uint16_t  cmdbuf_size ;
 extern long      CMD_BUF_SIZE;
-extern int       terminal_row;
-extern int       terminal_col;
-extern int       VGA_WIDTH   ;
-extern int       VGA_HEIGHT  ;
+// extern int       terminal_row;
+// extern int       terminal_col;
+// extern int       VGA_WIDTH   ;
+// extern int       VGA_HEIGHT  ;
 extern int       start_row   ;
 extern int       start_col   ;
 extern int       insert      ;
@@ -431,6 +432,7 @@ int vi_cmode()
     /* last command char and last count */
     char lc     = 0, lc2 = 0;
     int  lcount = 0;
+    int  tty    = cur_tty_fd();
     /* last search string used */
     lstring = NULL;
     
@@ -456,7 +458,7 @@ int vi_cmode()
         /***********************
          * get next key stroke
          ***********************/
-        c = get_next_key();
+        c = get_next_key(tty);
         if(c == 0)
         {
             continue;
@@ -729,7 +731,7 @@ select:
             
             case 't':
             case 'f':                       /* find next char */
-                c2 = get_next_key();
+                c2 = get_next_key(tty);
                 if(c2 == '\e')              /* ESC key */
                 {
                     count = 0;
@@ -760,7 +762,7 @@ select:
                 
             case 'T':
             case 'F':                       /* find prev char */
-                c2 = get_next_key();
+                c2 = get_next_key(tty);
                 if(c2 == '\e')              /* ESC key */
                 {
                     count = 0;
@@ -1024,7 +1026,7 @@ select:
                 break;
                 
             case '[':                   /* POSIX vi commands that begin with '[' */
-                c = get_next_key();
+                c = get_next_key(tty);
                 switch(c)
                 {
                     case 'A':                       /* the fetch prev command */
@@ -1229,7 +1231,7 @@ select:
                 
             case '/':                       /* search history backwards */
                 count = 0;
-                c = get_next_key();
+                c = get_next_key(tty);
                 if(c == '\e')               /* ESC key */
                 {
                     beep();
@@ -1245,7 +1247,7 @@ select:
                 }
                 while(count < BUFCHARS)
                 {
-                    c = get_next_key();
+                    c = get_next_key(tty);
                     if(c == '\n' || c == '\r')
                     {
                         break;
@@ -1276,7 +1278,7 @@ select:
                 
             case '?':                       /* search history forwards */
                 count = 0;
-                c = get_next_key();
+                c = get_next_key(tty);
                 if(c == '\e')               /* ESC key */
                 {
                     beep();
@@ -1292,7 +1294,7 @@ select:
                 }
                 while(count < BUFCHARS)
                 {
-                    c = get_next_key();
+                    c = get_next_key(tty);
                     if(c == '\n' || c == '\r')
                     {
                         break;
@@ -1436,7 +1438,7 @@ select:
                 return 0;
                 
             case 'r':                           /* replace count chars with c */
-                c = get_next_key();
+                c = get_next_key(tty);
                 if(c == '\e')                   /* ESC key */
                 {
                     beep();
@@ -1805,7 +1807,7 @@ select:
                 
             case '@':                       /* search for alias name */
                 count = 0;
-                c = get_next_key();
+                c = get_next_key(tty);
                 if(c == '\e')               /* ESC key */
                 {
                     beep();
@@ -1814,7 +1816,7 @@ select:
                 buf[count++] = c, count2 = 0;
                 while(count < BUFCHARS)
                 {
-                    c = get_next_key();
+                    c = get_next_key(tty);
                     if(c == '\n' || c == '\r')
                     {
                         break;
