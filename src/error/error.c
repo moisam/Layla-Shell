@@ -47,10 +47,10 @@
 char err_format[] = "%s [%d, %d]: error: %s\n%s\n";
 
 /*
- * get the full text of the line where the error occurred, so that we can
+ * Get the full text of the line where the error occurred, so that we can
  * print the whole line to show the user where the error occurred.
  * 
- * returns the malloc'd string, or NULL if malloc failed.
+ * Returns the malloc'd string, or NULL if malloc failed.
  */
 char *get_line(struct source_s *src, long linestart, int *tabs)
 {
@@ -102,8 +102,8 @@ char *get_line(struct source_s *src, long linestart, int *tabs)
 
 
 /*
- * print an error message given the error details in the error_s struct.
- * the errstr contains the body of the error message, which will be printed
+ * Print an error message given the error details in the error_s struct.
+ * The errstr contains the body of the error message, which will be printed
  * after the "error:" prompt (see the err_format field at the top of this file).
  */
 void print_err(struct error_s *err, char *errstr)
@@ -119,7 +119,7 @@ void print_err(struct error_s *err, char *errstr)
     }
     
     /* print the error message */
-    fprintf(stderr, err_format, SHELL_NAME, err->lineno, err->charno, errstr, line);
+    fprintf(stderr, err_format, SOURCE_NAME, err->lineno, err->charno, errstr, line);
     
     /* print a caret pointer '^' that points at the error token */
     spaces -= tabs;
@@ -139,7 +139,7 @@ void print_err(struct error_s *err, char *errstr)
 
 
 /*
- * raise a parsing or execution error and print a well-formatted error message
+ * Raise a parsing or execution error and print a well-formatted error message
  * according to the error whose details are passed in the error_s struct.
  */
 void raise_error(struct error_s err)
