@@ -43,9 +43,11 @@ do                                      \
     fprintf(stderr, __VA_ARGS__);       \
 } while(0)
 
-#define READONLY_ASSIGN_ERROR(utility, var)                 \
-    PRINT_ERROR("%s: cannot set `%s`: readonly variable\n", \
-                utility, var)
+#define READONLY_ASSIGN_ERROR(utility, name, type)      \
+    PRINT_ERROR("%s: cannot set `%s`: readonly %s\n",   \
+                utility, name, type)
+
+#define SOURCE_NAME         get_shell_varp("0", SHELL_NAME)
 
 /* I/O file redirection file open modes (for io_file_s->open_mode field) */
 #define MODE_WRITE                      (O_RDWR | O_CREAT | O_TRUNC )
@@ -81,6 +83,9 @@ do                                      \
 /* maximum number of aliases supported by this shell */
 #define MAX_ALIASES                     256
 
+/* maximum nested here-documents */
+#define MAX_NESTED_HEREDOCS             64
+
 /* flags for fork_command() */
 #define FORK_COMMAND_DONICE             (1 << 0)
 #define FORK_COMMAND_IGNORE_HUP         (1 << 1)
@@ -94,7 +99,8 @@ do                                      \
 
 /* default and maximum history entries */
 #define default_HISTSIZE                512
-#define MAX_CMD_HISTORY                 512
+#define MAX_CMD_HISTORY                 4096
+#define INIT_CMD_HISTORY_SIZE           2048
 
 /* value to indicate failure of the history expansion function */
 #define INVALID_HIST_EXPAND             ((char *)-1)
@@ -176,6 +182,15 @@ do                                      \
 #define SET_FLAG_APPEND                 (1 << 1)
 #define SET_FLAG_FORCE_NEW              (1 << 2)
 
+/* flags for parse_args() */
+/* print an error message when we find an unknown option */
+#define FLAG_ARGS_PRINTERR              (1 << 0)
+/* exit the non-interactive shell if we find an unknown option */
+#define FLAG_ARGS_ERREXIT               (1 << 1)
+
+/* flags for hist_expand() */
+#define FLAG_HISTEXPAND_DO_BACKUP       (1 << 0)
+
 /*
  * flags for the 'force_export_all' parameter of the do_export_vars()
  * and do_export_table() functions.
@@ -187,13 +202,19 @@ do                                      \
 /* export everything (used only by subshells) */
 #define EXPORT_VARS_FORCE_ALL           (1)
 
+#include "builtins/builtins.h"
+
 /* POSIX says non-interactive shell should exit on syntax errors */
-#define EXIT_IF_NONINTERACTIVE()                    \
-do {                                                \
-        if(!interactive_shell)                      \
-        {                                           \
-            exit_gracefully(EXIT_FAILURE, NULL);    \
-        }                                           \
+#define EXIT_IF_NONINTERACTIVE()                                    \
+do {                                                                \
+        if(!interactive_shell)                                      \
+        {                                                           \
+            /* try to exit (this will execute any EXIT traps) */    \
+            do_builtin_internal(exit_builtin, 2,                    \
+                                (char *[]){ "exit", "1", NULL });   \
+            /* if exit_builtin() failed, force exit */              \
+            exit_gracefully(EXIT_FAILURE, NULL);                    \
+        }                                                           \
 } while(0);
 
 /* macro to check if a flag is set */
@@ -303,12 +324,12 @@ struct trap_item_s
 extern  struct    alias_s aliases[MAX_ALIASES];     /* alias.c */
 extern  char      prompt[];                         /* prompt.c */
 extern  int       startup_finished;                 /* initsh.c */
-extern  int       terminal_row, terminal_col;       /* cmdline.c */
-extern  int       VGA_WIDTH, VGA_HEIGHT;
+extern  size_t    terminal_row, terminal_col;       /* cmdline.c */
+extern  size_t    VGA_WIDTH, VGA_HEIGHT;
 extern  char     *cmdbuf;                 /* ptr to buffer */
-extern  uint16_t  cmdbuf_index;           /* whrere to add incoming key */
-extern  uint16_t  cmdbuf_end;             /* index of last entered key */
-extern  uint16_t  cmdbuf_size;            /* actual malloc'd size */
+extern  size_t    cmdbuf_index;           /* whrere to add incoming key */
+extern  size_t    cmdbuf_end;             /* index of last entered key */
+extern  size_t    cmdbuf_size;            /* actual malloc'd size */
 extern  timer_t   timerid;
 extern  char     *COMMAND_DEFAULT_PATH;                 /* helpfunc.c */
 extern  char    **shell_argv;                           /* args.c */
@@ -316,6 +337,8 @@ extern  int       shell_argc;
 extern  char     *internal_optarg;
 extern  char      internal_opterr;
 extern  int       internal_argi;
+// extern  char    **internal_argv;
+extern  int       internal_argsub;
 extern  int       exit_status;                          /* params.c */
 extern  int       executing_subshell;
 extern  int       shell_level;
@@ -328,10 +351,12 @@ extern  int       tried_exit;                           /* builtins/exit.c */
 extern  struct    symtab_s *func_table;                 /* functab.c */
 extern  int       special_var_count;                    /* vars.c */
 extern  char     *special_var_names[];
-extern  struct    histent_s cmd_history[];              /* builtins/history.c */
+// extern  struct    histent_s cmd_history[];              /* builtins/history.c */
+extern  struct    histent_s *cmd_history;               /* builtins/history.c */
 extern  int       cmd_history_index;
 extern  int       cmd_history_end;
 extern  int       hist_file_count;
+extern  int       hist_cmds_this_session;
 extern  int       HISTSIZE;
 extern  char      default_hist_filename[];
 extern  int       executing_trap;                       /* builtins/trap.c */
@@ -364,7 +389,8 @@ int     parse_shell_args(int argc, char **argv, struct source_s *src);
 
 /* cmdline.c */
 void    cmdline(void);
-int     ext_cmdbuf(size_t howmuch);
+void    init_cmdbuf(void);
+int     ext_cmdbuf(char **cmdbuf, size_t *size, size_t howmuch);
 char   *read_cmd(void);
 int     is_incomplete_cmd(int first_time);
 size_t  glue_cmd_pieces(void);
@@ -383,8 +409,8 @@ void    move_cur(int row, int col);
 void    clear_screen(void);
 void    set_terminal_color(int FG, int BG);
 void    update_row_col(void);
-int     get_terminal_row(void);
-int     get_terminal_col(void);
+size_t  get_terminal_row(void);
+size_t  get_terminal_col(void);
 int     cur_tty_fd(void);
 struct  termios *save_tty_attr(void);
 int     set_tty_attr(int tty, struct termios *attr);
@@ -456,10 +482,10 @@ char  **brace_expand(char *str, size_t *count);
 int     is_num(char *str);
 
 /* tab.c */
-int     do_tab(char *cmdbuf, uint16_t *cmdbuf_index, uint16_t *cmdbuf_end);
+int     do_tab(char *cmdbuf, size_t *cmdbuf_index, size_t *cmdbuf_end);
 
 /* args.c */
-int     parse_args(int __argc, char **__argv, char *__ops, int *__argi, int errexit);
+int     parse_args(int __argc, char **__argv, char *__ops, int *__argi, int flags);
 
 /* params.c */
 void    init_shell_vars(char *pw_name, gid_t gid, char *fullpath);
@@ -503,9 +529,11 @@ char   *save_to_history(char *cmd_buf);
 void    flush_history(void);
 void    init_history(void);
 void    remove_newest(void);
+void    load_history_list(void);
 
 /* builtins/hist_expand.c */
-char   *hist_expand(int quotes);
+char   *hist_expand(int quotes, int flags);
+int     nodetree_hist_expand(struct node_s *cmd);
 
 /* alphalist.c */
 void    init_alpha_list(struct alpha_list_s *list);
@@ -563,7 +591,7 @@ void    do_pending_traps(void);
 int     search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH, int flags);
 
 /* builtins/cd.c */
-char   *get_home(void);
+char   *get_home(int no_fail);
 
 
 #endif

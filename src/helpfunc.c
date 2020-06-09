@@ -55,9 +55,9 @@
 
 
 /*
- * produce a beeping sound.
+ * Produce a beeping sound.
  * 
- * returns 1.
+ * Returns 1.
  */
 int beep(void)
 {
@@ -69,7 +69,7 @@ int beep(void)
 
 
 /*
- * return 1 if the current user is root, 0 otherwise.
+ * Return 1 if the current user is root, 0 otherwise.
  */
 int isroot(void)
 {
@@ -85,7 +85,7 @@ int isroot(void)
 
 
 /*
- * get the default path for searching commands.
+ * Get the default path for searching commands.
  */
 char *get_default_path(void)
 {
@@ -123,12 +123,12 @@ char *get_default_path(void)
 
 
 /*
- * search the path for the given file.. if use_path is NULL, we use the value
- * of $PATH, otherwise we use the value of use_path as the search path.. if
+ * Search the path for the given file. If use_path is NULL, we use the value
+ * of $PATH, otherwise we use the value of use_path as the search path. If
  * exe_only is non-zero, we search for executable files, otherwise we search
  * for any file with the given name in the path.
  *
- * returns the absolute path of the first matching file, NULL if no match is found.
+ * Returns the absolute path of the first matching file, NULL if no match is found.
  */
 char *search_path(char *file, char *use_path, int exe_only)
 {
@@ -181,14 +181,14 @@ char *search_path(char *file, char *use_path, int exe_only)
 
 
 /*
- * fork a new child process to execute a command, passing it argc and argv..
- * flagarg is an optional argument needed by flags.. if flags are empty (i.e. zero),
+ * Fork a new child process to execute a command, passing it argc and argv.
+ * flagarg is an optional argument needed by flags. If flags are empty (i.e. zero),
  * flagarg should also be zero.. use_path tells us if we should use $PATH when
- * searching for the command (if use_path is NULL).. flags are set by some builtin
- * utilities, such as nice and nohup.. the UTILITY parameter is the name of the builtin
+ * searching for the command (if use_path is NULL). flags are set by some builtin
+ * utilities, such as nice and nohup. The UTILITY parameter is the name of the builtin
  * utility that called us (we use it in printing error messages).
  *
- * returns the exit status of the child process after executing the command.
+ * Returns the exit status of the child process after executing the command.
  */
 int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags, int flagarg)
 {
@@ -280,6 +280,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
     }
 
     int status = wait_on_child(child_pid, NULL, NULL);
+    set_exit_status(status);
     if(WIFSTOPPED(status) && option_set('m'))
     {
         struct job_s *job = new_job(argv[0], 0);
@@ -295,7 +296,6 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
     }
     else
     {
-        set_exit_status(status);
         struct job_s *job = get_job_by_any_pid(child_pid);
         if(job)
         {
@@ -308,32 +308,44 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
     {
         tcsetpgrp(0, shell_pid);
     }
-    return status;
+    return exit_status;
 }
 
 
 /*
- * return 1 if path exists and is a regular file, 0 otherwise.
+ * Return 1 if path exists and is a regular file, 0 otherwise.
  */
 int file_exists(char *path)
 {
     struct stat st;
     if(stat(path, &st) == 0)
     {
-        if(S_ISREG(st.st_mode))
+        if(S_ISREG(st.st_mode) || S_ISLNK(st.st_mode))
         {
             return 1;
         }
+        else if(S_ISDIR(st.st_mode))
+        {
+            errno = EISDIR;
+        }
+        else
+        {
+            errno = EINVAL;
+        }
+    }
+    else
+    {
+        errno = ENOENT;
     }
     return 0;
 }
 
 
 /*
- * return the full path to a temporary filename template, to be passed to 
- * mkstemp() or mkdtemp().. as both functions modify the string we pass
+ * Return the full path to a temporary filename template, to be passed to 
+ * mkstemp() or mkdtemp(). As both functions modify the string we pass
  * them, we get an malloc'd string, instead of using a string from our
- * string buffer.. it is the caller's responsibility to free that string.
+ * string buffer. It is the caller's responsibility to free that string.
  */
 char *get_tmp_filename(void)
 {

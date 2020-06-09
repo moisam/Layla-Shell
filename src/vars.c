@@ -33,10 +33,10 @@
 #include "builtins/builtins.h"
 
 /*
- * in this file we deal with some shell variables whose values change dynamically
+ * In this file we deal with some shell variables whose values change dynamically
  * when they are accessed by the user, such as $RANDOM and $SECONDS.
  *
- * these 'special' variables are non-POSIX extensions and include:
+ * These 'special' variables are non-POSIX extensions and include:
  * 
  * RANDOM        - generate a random integer, uniformly distributed between 0 
  *                 and 32767
@@ -67,7 +67,7 @@ extern double shell_start_time;
 
 
 /*
- * seed the random number generator with the current time value, and initialize
+ * Seed the random number generator with the current time value, and initialize
  * the other variables.
  */
 void init_rand(void)
@@ -77,11 +77,11 @@ void init_rand(void)
 
 
 /*
- * return the value of the special variable whose name is given.
+ * Return the value of the special variable whose name is given.
  * old_val contains the current value of the variable, which is used to 
  * calculate the new value of some variables, such as $SECONDS.
  * 
- * returns the malloc'd var value, or NULL if the given name does not refer 
+ * Returns the malloc'd var value, or NULL if the given name does not refer 
  * to one of the special variables.
  */
 char *get_special_var(char *name, char *old_val)
@@ -155,9 +155,9 @@ char *get_special_var(char *name, char *old_val)
 
 
 /*
- * set the value of the special variable name to val.
+ * Set the value of the special variable name to val.
  * 
- * returns 1 if the variable is found and set, 0 otherwise.
+ * Returns 1 if the variable is found and set, 0 otherwise.
  */
 int set_special_var(char *name, char *val)
 {
@@ -233,10 +233,10 @@ int set_special_var(char *name, char *val)
 
 
 /*
- * retrive the string value of a symbol table entry (presumably a shell variable).
- * if name is not defined (or is null), return def_val, which can be NULL.
- * this function doesn't return empty strings (name must be set to a non-empty value).
- * you can bypass this by passing "" as the value of def_val;
+ * Retrive the string value of a symbol table entry (presumably a shell variable).
+ * If name is not defined (or is null), return def_val, which can be NULL.
+ * This function doesn't return empty strings (name must be set to a non-empty value).
+ * You can bypass this by passing "" as the value of def_val.
  */
 char *get_shell_varp(char *name, char *def_val)
 {
@@ -246,8 +246,8 @@ char *get_shell_varp(char *name, char *def_val)
 
 
 /*
- * retrive the integer value of a symbol table entry (presumably a shell variable).
- * if name is not defined (or is null), return def_val, which usually is passed as 0.
+ * Retrive the integer value of a symbol table entry (presumably a shell variable).
+ * If name is not defined (or is null), return def_val, which usually is passed as 0.
  */
 int get_shell_vari(char *name, int def_val)
 {
@@ -256,7 +256,7 @@ int get_shell_vari(char *name, int def_val)
 
 
 /*
- * same, but return long (not int) values.
+ * Same, but return long (not int) values.
  */
 long get_shell_varl(char *name, int def_val)
 {
@@ -276,7 +276,7 @@ long get_shell_varl(char *name, int def_val)
 
 
 /*
- * quick set of var value (without needing to retrieve symtab entry ourselves).
+ * Quick set of var value (without needing to retrieve symtab entry ourselves).
  */
 void set_shell_varp(char *name, char *val)
 {
@@ -301,7 +301,7 @@ void set_shell_vari(char *name, int val)
 
 
 /*
- * set the value of the underscore '$_' special parameter .
+ * Set the value of the underscore '$_' special parameter .
  */
 void set_underscore_val(char *val, int set_env)
 {
@@ -315,31 +315,37 @@ void set_underscore_val(char *val, int set_env)
 
 
 /*
- * save the value of $OPTIND and reset it to NULL, so that builtin utilities can
- * call getopts() to parse their options.. when a utility finishes execution, it
+ * Save the value of $OPTIND and reset it to NULL, so that builtin utilities can
+ * call getopts() to parse their options. When a utility finishes execution, it
  * should call reset_OPTIND() to restore the variable to its previous value.
  */
-static char *saved_OPTIND_val = NULL;
-static int   saved_argi       = 0;
+static char  *saved_OPTIND_val = NULL;
+static char  *saved_OPTSUB_val = NULL;
+// static char **saved_agrv       = NULL;
+static int    saved_argi       = 0;
+static int    saved_argsub     = 0;
 
 void save_OPTIND(void)
 {
     /* get $OPTIND's entry */
     struct symtab_entry_s *entry = get_symtab_entry("OPTIND");
     
-    /* add to the local symbol table, if not available in the global symtab */
-    if(!entry)
-    {
-        entry = add_to_symtab("OPTIND");
-    }
-    
     /* set $OPTIND's value to NULL */
-    saved_OPTIND_val = entry->val ? get_malloced_str(entry->val) : NULL;
+    saved_OPTIND_val = (entry && entry->val) ? get_malloced_str(entry->val) : NULL;
+    symtab_entry_setval(entry, NULL);
+    
+    /* get $OPTSUB's entry */
+    entry = get_symtab_entry("OPTSUB");
+
+    /* set $OPTSUB's value to NULL */
+    saved_OPTSUB_val = (entry && entry->val) ? get_malloced_str(entry->val) : NULL;
     symtab_entry_setval(entry, NULL);
     
     /* reset argi (see args.c), which is used by getopts() */
-    saved_argi = internal_argi;
-    internal_argi = 0;
+    saved_argi    = internal_argi;
+    saved_argsub  = internal_argsub;
+    internal_argi = 1;
+    internal_argsub = 0;
 }
 
 
@@ -347,12 +353,6 @@ void reset_OPTIND(void)
 {
     /* get $OPTIND's entry */
     struct symtab_entry_s *entry = get_symtab_entry("OPTIND");
-    
-    /* add to the local symbol table, if not available in the global symtab */
-    if(!entry)
-    {
-        entry = add_to_symtab("OPTIND");
-    }
     
     /* set $OPTIND's value to NULL */
     symtab_entry_setval(entry, saved_OPTIND_val);
@@ -362,6 +362,18 @@ void reset_OPTIND(void)
         saved_OPTIND_val = NULL;
     }
     
+    /* get $OPTSUB's entry */
+    entry = get_symtab_entry("OPTSUB");
+
+    /* set $OPTSUB's value to NULL */
+    symtab_entry_setval(entry, saved_OPTSUB_val);
+    if(saved_OPTSUB_val)
+    {
+        free_malloced_str(saved_OPTSUB_val);
+        saved_OPTSUB_val = NULL;
+    }
+    
     /* reset argi (see args.c), which is used by getopts() */
-    internal_argi = saved_argi;
+    internal_argi   = saved_argi;
+    internal_argsub = saved_argsub;
 }

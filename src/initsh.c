@@ -77,12 +77,12 @@ struct termios tty_attr_old;
  * current shell environment.
  * 
  * bash only reads and executes $ENV if it is running in POSIX mode
- * (when invoked as sh, or --posix option was supplied). otherwise, 
+ * (when invoked as sh, or --posix option was supplied). Otherwise, 
  * it reads $BASH_ENV if the shell is non-interactive.
  * 
- * this function is not called if the shell is not interactive.
+ * This function is not called if the shell is not interactive.
  * 
- * returns 1 if the $ENV file is found and executed, 0 otherwise.
+ * Returns 1 if the $ENV file is found and executed, 0 otherwise.
  */
 int check_env_file(void)
 {
@@ -113,7 +113,7 @@ int check_env_file(void)
 
 
 /*
- * initialize the shell environment.
+ * Initialize the shell environment.
  */
 void initsh(char **argv)
 {
@@ -128,9 +128,9 @@ void initsh(char **argv)
     
     /* init environ
      * 
-     * NOTE: some environ vars are set by the shell, while others 
+     * NOTE: Some environ vars are set by the shell, while others 
      *       are only set from the early environ if not already set.
-     *       this way, we let the user customize our behavior by
+     *       This way, we let the user customize our behavior by
      *       defining her own values and passing them to us when she
      *       invokes the shell.
      */
@@ -188,10 +188,7 @@ void initsh(char **argv)
             }
             
             /* set the entry's value */
-            if(entry)
-            {
-                symtab_entry_setval(entry, eq+1);
-            }
+            symtab_entry_setval(entry, eq+1);
         }
         else
         {
@@ -199,10 +196,7 @@ void initsh(char **argv)
         }
         
         /* set the export flag for all environment variables */
-        if(entry)
-        {
-            entry->flags = FLAG_EXPORT;
-        }
+        entry->flags = FLAG_EXPORT;
         p2++;
     }
 
@@ -217,7 +211,7 @@ void initsh(char **argv)
             case INDEX_HOME:
                 /*
                  * $HOME should be set by the login utility, not us.
-                 * we'll just try to set it in case it was not already set.
+                 * We'll just try to set it in case it was not already set.
                  */
                 e = getenv("HOME");
                 if(!e || !*e)
@@ -240,8 +234,8 @@ void initsh(char **argv)
                 e = buf;
                 break;
 
-            /* OLDPWD comes before PWD in our environment list. if OLDPWD
-             * was set, use the same value for PWD. otherwise, fall through
+            /* OLDPWD comes before PWD in our environment list. If OLDPWD
+             * was set, use the same value for PWD. Otherwise, fall through
              * to the OLDPWD case below.
              */
             case INDEX_PWD:
@@ -313,7 +307,7 @@ void initsh(char **argv)
             case INDEX_SHELL:
                 /*
                  * $SHELL should be set by the login utility, not us.
-                 * we'll just try to set it in case it was not already set.
+                 * We'll just try to set it in case it was not already set.
                  */
                 e = getenv("SHELL");
                 if(!e || !*e)
@@ -451,14 +445,12 @@ void initsh(char **argv)
         /* add environment variable to global symbol table     */
         /* POSIX says we should initialize shell vars from env */
         entry = add_to_symtab(name);
-        if(entry)
+        if(e)
         {
-            if(e)
-            {
-                symtab_entry_setval(entry, e);
-            }
-            entry->flags = flags;
+            symtab_entry_setval(entry, e);
         }
+        entry->flags = flags;
+        
         if(p)
         {
             free(p);
@@ -497,7 +489,7 @@ void initsh(char **argv)
 
 
 /*
- * initialize the terminal device.
+ * Initialize the terminal device.
  */
 void init_tty(void)
 {
@@ -577,7 +569,7 @@ void init_tty(void)
 
 
 /*
- * if this is a login shell, read and parse /etc/profile
+ * If this is a login shell, read and parse /etc/profile
  * and then ~/.profile.
  */
 void init_login(void)
@@ -587,8 +579,8 @@ void init_login(void)
         return;       /* bash extension */
     }
     /*
-     * we are called before initsh() gets to set terminal raw mode.
-     * so at least get the current termios struct so that we don't
+     * We are called before initsh() gets to set terminal raw mode.
+     * So at least get the current termios struct so that we don't
      * mess up the terminal while we run them startup scripts.
      */
     extern struct termios tty_attr_old;
@@ -634,7 +626,7 @@ void init_login(void)
 }
 
 /*
- * similar to init_login(), except is invoked for interactive shells only.
+ * Similar to init_login(), except is invoked for interactive shells only.
  */
 void init_rc(void)
 {
@@ -681,9 +673,6 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
     set_option('H', 1);     /* history expansion */
     set_option('w', 1);     /* history facilities */
     set_option('B', 1);     /* brace expansion */
-    /* ignore non-zero result from dot or . (same as bash & zsh) */
-    set_optionx(OPTION_IGNORE_DOT_RES      , 1);
-    set_optionx(OPTION_IGNORE_TEST_RES     , 1);
     /* auto-update $LINES AND $COLUMNS */
     set_optionx(OPTION_CHECK_WINSIZE       , 1);
     /* auto-save multiline commands as single liners */
@@ -989,7 +978,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
             {
                 PRINT_ERROR("%s: failed to read '%s': %s\n", 
                             SHELL_NAME, cmdfile, strerror(errno));
-                exit(EXIT_ERROR_NOENT);
+                exit(errno == ENOENT ? EXIT_ERROR_NOENT : EXIT_ERROR_NOEXEC);
             }
             
             /* $0 is the name of the shell or shell script */

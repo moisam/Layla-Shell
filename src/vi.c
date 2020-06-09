@@ -38,37 +38,32 @@
 #include "debug.h"
 
 /* defined in cmdline.c */
-// extern char     *cmdbuf      ;
-// extern uint16_t  cmdbuf_index;
-// extern uint16_t  cmdbuf_end  ;
-// extern uint16_t  cmdbuf_size ;
-extern long      CMD_BUF_SIZE;
-// extern int       terminal_row;
-// extern int       terminal_col;
-// extern int       VGA_WIDTH   ;
-// extern int       VGA_HEIGHT  ;
-extern int       start_row   ;
-extern int       start_col   ;
-extern int       insert      ;
+extern size_t CMD_BUF_SIZE;
+extern size_t start_row   ;
+extern size_t start_col   ;
+extern int    insert      ;
 
 /* saved copies of the current row, column, and command buffer index */
-static int srow, scol, scmdindex;
+static size_t srow, scol, scmdindex;
+
 /* flag to indicate if we are in the INSERT mode */
 int   sinsert = 0;
+
 /* last search string used */
 char *lstring = NULL;
+
 /* backup copy of the command buffer */
 char *backup  = NULL;
 
 
 /*
- * search history list for command containing string 'buf'.
- * if hook is > 0, search is limited to commands starting with
+ * Search history list for command containing string 'buf'.
+ * If hook is > 0, search is limited to commands starting with
  * search string. if back is > 0, search is done backwards
  * (towards first history entry), otherwise is done forwards
  * (towards last history entry).
  * 
- * returns the index of the command history line containing the
+ * Returns the index of the command history line containing the
  * search string, -1 if no matches were found.
  */
 int search_history(char *buf, int hook, int back)
@@ -139,34 +134,38 @@ int search_history(char *buf, int hook, int back)
 
 
 /*
- * find the next occurence of char c in the command buffer.
- * parameter c should be 't' or 'f' to indicate forward search.
- * if char c is found, move the cursor to that position, otherwise
+ * Find the next occurence of char c in the command buffer.
+ * Parameter c should be 't' or 'f' to indicate forward search.
+ * If char c is found, move the cursor to that position, otherwise
  * do nothing.
  */
-void find_next(char c, char c2, int count)
+void find_next(char c, char c2, size_t count)
 {
-    int count2;
+    size_t count2;
     switch(c)
     {
         case 't':
         case 'f':                       /* find next char */
             count2 = cmdbuf_index+1;
+            
             /* reached the end of buffer */
             if(cmdbuf_index >= cmdbuf_end)
             {
                 break;
             }
+            
             /* search for the char */
             while(cmdbuf[count2] != c2 && count2 < cmdbuf_end)
             {
                 count2++;
             }
+            
             if(cmdbuf[count2] == c2)
             {
                 count2 -= cmdbuf_index;
                 do_right_key(count2);
             }
+            
             /* t is equal to f-h */
             if(c == 't')
             {
@@ -179,15 +178,16 @@ void find_next(char c, char c2, int count)
                     do_left_key(count);
                 }
             }
+            
             break;
     }
 }
 
 
 /*
- * find the previous occurence of char c in the command buffer.
- * parameter c should be 'T' or 'F' to indicate backward search.
- * if char c is found, move the cursor to that position, otherwise
+ * Find the previous occurence of char c in the command buffer.
+ * Parameter c should be 'T' or 'F' to indicate backward search.
+ * If char c is found, move the cursor to that position, otherwise
  * do nothing.
  */
 void find_prev(char c, char c2, int count)
@@ -230,58 +230,67 @@ void find_prev(char c, char c2, int count)
 }
 
 /*
- * find the boundaries of the current word (under the cursor).
- * returns NULL if the cursor is on a blank char, otherwise the
+ * Find the boundaries of the current word (under the cursor).
+ * Returns NULL if the cursor is on a blank char, otherwise the
  * same buf pointer is returned with the word copied in buf.
- * start and end point to the start and end of word in the
+ * Start and end point to the start and end of word in the
  * original cmdbuf.
  */
-char *get_curword(char *buf, int *start, int *end)
+char *get_curword(char *buf, size_t *start, size_t *end)
 {
     char c = cmdbuf[cmdbuf_index];
+    
     if(isspace(c) || c == '\0')
     {
         return NULL;
     }
+    
     if(!buf)
     {
         return NULL;
     }
-    int i = cmdbuf_index;
-    int j = i;
+    
+    size_t i = cmdbuf_index;
+    size_t j = i;
     /* skip chars to determine the beginning of the word */
     while(!isspace(cmdbuf[i]) && i > 0)
     {
         i--;
     }
+    
     if(i && isspace(cmdbuf[i]))
     {
         i++;
     }
+    
     /* skip chars to determine the end of the word */
     while(!isspace(cmdbuf[j]) && j < cmdbuf_end)
     {
         j++;
     }
+    
     if(isspace(cmdbuf[j]) || cmdbuf[j] == 0)
     {
         j--;
     }
+    
     /* copy the word to the buffer */
     strncpy(buf, cmdbuf+i, j-i+1);
     buf[j-i+1] = '\0';
+    
     /* save the pointers */
-    *start = i;
-    *end   = j;
+    (*start) = i;
+    (*end  ) = j;
+    
     /* return the word */
     return buf;
 }
 
 
 /*
- * identify brace characters.
+ * Identify brace characters.
  * 
- * returns 1 if char c is a brace character, 0 otherwise.
+ * Returns 1 if char c is a brace character, 0 otherwise.
  */
 int isbrace(char c)
 {
@@ -294,22 +303,25 @@ int isbrace(char c)
 
 
 /*
- * find the next brace char.
+ * Find the next brace char.
  */
 void find_brace(void)
 {
-    int count2;
+    size_t count2;
     count2 = cmdbuf_index+1;
+    
     /* reached the end of buffer */
     if(cmdbuf_index >= cmdbuf_end)
     {
         return;
     }
+    
     /* find the next brace char */
     while(!isbrace(cmdbuf[count2]) && count2 < cmdbuf_end)
     {
         count2++;
     }
+    
     /* if we found a brace, move the cursor to its position */
     if(isbrace(cmdbuf[count2]))
     {
@@ -320,7 +332,7 @@ void find_brace(void)
 
 
 /*
- * save the current cursor position.
+ * Save the current cursor position.
  */
 void save_curpos(void)
 {
@@ -331,7 +343,7 @@ void save_curpos(void)
 
 
 /*
- * restore the cursor to its saved position.
+ * Restore the cursor to its saved position.
  */
 void restore_curpos(void)
 {
@@ -343,7 +355,7 @@ void restore_curpos(void)
 
 
 /*
- * insert some string at the cur position.
+ * Insert some string at the cur position.
  */
 void insert_at(char *s)
 {
@@ -384,7 +396,7 @@ void insert_at(char *s)
 
 
 /*
- * replace the whole buffer contents with another string.
+ * Replace the whole buffer contents with another string.
  */
 void replace_with(char *s)
 {
@@ -398,7 +410,7 @@ void replace_with(char *s)
 
 
 /*
- * free our internal buffers.
+ * Free our internal buffers.
  */
 void free_bufs(void)
 {
@@ -415,24 +427,26 @@ void free_bufs(void)
 
 
 /*
- * this function performs the actions of the vi-editing control mode.
- * see the 'vi Line Editing Command Mode' section of this link:
+ * This function performs the actions of the vi-editing control mode.
+ * See the 'vi Line Editing Command Mode' section of this link:
  * http://pubs.opengroup.org/onlinepubs/9699919799/utilities/sh.html
  * 
- * returns '\n' or '\r' if the user entered a newline or carriage return,
- * respectively, so that cmdline() would execute the command line.. returns
+ * Returns '\n' or '\r' if the user entered a newline or carriage return,
+ * respectively, so that cmdline() would execute the command line. Returns
  * zero otherwise.
  */
 int vi_cmode()
 {
-    int  c, c2;
-    int  tabs   = 0;
-    int  count  = 0, count2;
-    char *p, **pp;
+    size_t c, c2;
+    int    tabs   = 0;
+    int    count  = 0, count2;
+    char   *p, **pp;
+    
     /* last command char and last count */
-    char lc     = 0, lc2 = 0;
-    int  lcount = 0;
-    int  tty    = cur_tty_fd();
+    char   lc     = 0, lc2 = 0;
+    int    lcount = 0;
+    int    tty    = cur_tty_fd();
+    
     /* last search string used */
     lstring = NULL;
     
@@ -942,12 +956,12 @@ select:
                 {
                     count = 0;
                 }
-                else if(count > cmdbuf_end)
+                else if((size_t)count > cmdbuf_end)
                 {
                     count = cmdbuf_end;
                 }
                 /* move left or right? */
-                if(count < cmdbuf_index)
+                if((size_t)count < cmdbuf_index)
                 {
                     do_left_key(cmdbuf_index-count);
                     if(lc == 'c')
@@ -966,7 +980,7 @@ select:
                         restore_curpos();
                     }
                 }
-                else if(count > cmdbuf_index)
+                else if((size_t)count > cmdbuf_index)
                 {
                     do_right_key(count-cmdbuf_index);
                     if(lc == 'c')
@@ -1542,13 +1556,13 @@ select:
                     while(count--)
                     {
                         /* find start of word */
-                        while( isspace(p[c]) && c < count2)
+                        while( isspace(p[c]) && c < (size_t)count2)
                         {
                             c++;
                         }
                         c2 = c;
                         /* find end of word */
-                        while(!isspace(p[c]) && c < count2)
+                        while(!isspace(p[c]) && c < (size_t)count2)
                         {
                             c++;
                         }
@@ -1755,7 +1769,7 @@ select:
                 
             case '#':                           /* toggle commented lines */
                 count = 0;
-                while(isspace(cmdbuf[count]) && count < cmdbuf_end)
+                while(isspace(cmdbuf[count]) && (size_t)count < cmdbuf_end)
                 {
                     count++;
                 }

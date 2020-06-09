@@ -54,13 +54,13 @@ char **get_usernames();
 
 
 /*
- * perform auto-completion for filenames, matching files in the given *dir to the
+ * Perform auto-completion for filenames, matching files in the given *dir to the
  * given *path, which is treated as a regex pattern that specifies which filename(s)
- * we should match.. this happens when the user hits tab after entering a partial
- * command name.. this process is similar to pathname expansion, which is done by
+ * we should match. This happens when the user hits tab after entering a partial
+ * command name. This process is similar to pathname expansion, which is done by
  * get_filename_matches() (see backend/pattern.c).
  *
- * returns a char ** pointer to the list of matched filenames, or NULL if nothing matched.
+ * Returns a char ** pointer to the list of matched filenames, or NULL if nothing matched.
  */
 char **get_name_matches(char *dir, char *path, glob_t *matches)
 {
@@ -105,9 +105,9 @@ char **get_name_matches(char *dir, char *path, glob_t *matches)
 
 
 /*
- * auto-complete a pathname when the user enters a partial pathname and presses
- * tab.. the __count parameter contains the number of entries already stored in
- * the **results array.. the function saves the matched pathnames in the **results
+ * Auto-complete a pathname when the user enters a partial pathname and presses
+ * tab. The __count parameter contains the number of entries already stored in
+ * the **results array. The function saves the matched pathnames in the **results
  * array and returns the count of the matched pathnames in addition to __count.
  */
 int autocomplete_path(char *file, char **results, int __count)
@@ -223,24 +223,26 @@ int autocomplete_path(char *file, char **results, int __count)
 
 
 /*
- * get the longest column's width for formatting our output.. the **cmds parameter
+ * Get the longest column's width for formatting our output. The **cmds parameter
  * holds the matched entries which we are going to print, while count is their count.
  * 
- * returns the column width that is guaranteed to accommodate all of the entries.
+ * Returns the column width that is guaranteed to accommodate all of the entries.
  */
-int get_col_width(char **cmds, int count)
+size_t get_col_width(char **cmds, size_t count)
 {
-    int k;
-    int w = 0;
+    size_t k;
+    size_t w = 0;
+    
     /* find the longest entry */
     for(k = 0; k < count; k++)
     {
-        int len = strlen(cmds[k]);
+        size_t len = strlen(cmds[k]);
         if(len > w)
         {
             w = len+1;
         }
     }
+    
     /* try to put 4 columns on the screen */
     k = VGA_WIDTH/4;
     if(w > VGA_WIDTH)   /* our width is larger than the screen's */
@@ -251,23 +253,26 @@ int get_col_width(char **cmds, int count)
     {
         w = k;
     }
+    
     return w;
 }
 
 
 /*
- * print the list of matched entries, **cmds, which contains count entries,
+ * Print the list of matched entries, **cmds, which contains count entries,
  * adjusted to a column length of w.
  */
-void __output_results(char **cmds, int count, int w)
+void __output_results(char **cmds, size_t count, size_t w)
 {
-    int k, col = 0, col2;
+    size_t k, col = 0, col2;
+    
     for(k = 0; k < count; k++)
     {
         printf("%s", cmds[k]);
         col2 = col+w;
         col += strlen(cmds[k]);
-        printf("%*s", col2-col, " ");
+        printf("%*s", (int)(col2-col), " ");
+        
         if(col2+w > VGA_WIDTH)
         {
             putchar('\n');
@@ -278,6 +283,7 @@ void __output_results(char **cmds, int count, int w)
             col = col2;
         }
     }
+    
     if(count % (VGA_WIDTH/w))
     {
         putchar('\n');
@@ -286,20 +292,20 @@ void __output_results(char **cmds, int count, int w)
 
 
 /*
- * output the results of tab completion.
+ * Output the results of tab completion.
  */
-void output_results(char **cmds, int count)
+void output_results(char **cmds, size_t count)
 {
     putchar('\r');
     putchar('\n');
     /* get the longest field width */
-    int w = get_col_width(cmds, count);
-    int cols  = VGA_WIDTH/w;
-    int lines = count/cols;
+    size_t w = get_col_width(cmds, count);
+    size_t cols  = VGA_WIDTH/w;
+    size_t lines = count/cols;
     if(lines >= VGA_HEIGHT)
     {
         /* we have more lines than can be printed on one screen */
-        printf("Show all %d results? [y/N]: ", count);
+        printf("Show all %d results? [y/N]: ", (int)count);
         term_canon(1);
         int c = getc(stdin);
         if(c == 'y' || c == 'Y')
@@ -316,7 +322,7 @@ void output_results(char **cmds, int count)
 
 
 /*
- * get the common prefix from the list of results.
+ * Get the common prefix from the list of results.
  */
 char *get_common_prefix(char **cmds, int count)
 {
@@ -353,16 +359,16 @@ char *get_common_prefix(char **cmds, int count)
 
 
 /*
- * this procedure will do command, variable and filename auto-completion.
+ * This procedure will do command, variable and filename auto-completion.
  * 
- * returns 1 if tab completion is successful, 0 and beep otherwise.
+ * Returns 1 if tab completion is successful, 0 and beep otherwise.
  */
-int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
+int do_tab(char *cmdbuf, size_t *__cmdbuf_index, size_t *__cmdbuf_end)
 {
     extern int start_row, start_col;
-    uint16_t cmdbuf_index = *__cmdbuf_index;
-    uint16_t cmdbuf_end   = *__cmdbuf_end  ;
-    uint16_t j, k, i    = 0;
+    size_t   cmdbuf_index = *__cmdbuf_index;
+    size_t   cmdbuf_end   = *__cmdbuf_end  ;
+    size_t   j, k, i    = 0;
     int      is_cmd     = 0;
     int      first_word = 0;
 
@@ -371,6 +377,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
     {
         i--;
     }
+    
     /* get start of cur word */
     int endme = 0;
     while(i != 0)
@@ -394,10 +401,12 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                 }
                 break;
         }
+        
         if(endme)
         {
             break;
         }
+        
         i--;
     }
 
@@ -418,17 +427,21 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
     else
     {
         j = i-1;
+        
         while(isspace(cmdbuf[j]) && j != 0)
         {
             j--;    /* skip prev spaces */
         }
+        
         if(cmdbuf[j] == ';' || cmdbuf[j] == '|' || cmdbuf[j] == '&' ||
            cmdbuf[j] == '(' || cmdbuf[j] == '{' || cmdbuf[j] == ' ')
         {
             first_word = 1;
         }
+        
         j = cmdbuf_index;
     }
+    
     /*
      * is it a command word or a filename? command word must be the first in line,
      * or the first after an operator (like ; | ( { for example). command words should
@@ -440,6 +453,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         {
             k = 0;
             j = i;
+            
             while(j < cmdbuf_end)
             {
                 switch(cmdbuf[j])
@@ -458,30 +472,35 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                         }
                         break;
                 }
+                
                 if(k == 2)
                 {
                     break;
                 }
+                
                 j++;
             }
+            
             if(k != 1)
             {
                 is_cmd = 1;
             }
         }
     }
+    
     /* copy the word we are about to tab-complete */
-    char  tmp[j-i+2];    /* 2 chars for '\0' and possible trailing '*' */
-    int   eword = j;
-    int   res = 0;
-    char *cmds[MAX_CMDS];
-    char *p, *p2, *p3;
-    char *comm_prefix = NULL;
+    char   tmp[j-i+2];    /* 2 chars for '\0' and possible trailing '*' */
+    size_t eword = j;
+    size_t res = 0;
+    char  *cmds[MAX_CMDS];
+    char  *p, *p2, *p3;
+    char  *comm_prefix = NULL;
 
     /* copy the word, handling backslash-escaped chars */
     p  = cmdbuf+i;
     p2 = tmp;
     p3 = p+j;
+
     while(p < p3)
     {
         /* check the backslash is not the last char in the word */
@@ -492,6 +511,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         }
         *p2++ = *p++;
     }
+
     *p2 = '\0';
     //strncpy(tmp, cmdbuf+i, j-i);
     //tmp[j-i] = '\0';
@@ -510,6 +530,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                 p = cmds[0]+strlen(tmp)-1;  /* subtract 1 for the @ */
                 goto one_res;
             }
+            
             /* output the results */
             output_results(cmds, res);
             comm_prefix = get_common_prefix(cmds, res);
@@ -517,6 +538,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
             {
                 p = comm_prefix+strlen(tmp)-1;
             }
+            
             /* free used memory */
             for(j = 0; j < res; j++)
             {
@@ -545,6 +567,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                 p = cmds[0]+strlen(tmp)-1;  /* subtract 1 for the ~ */
                 goto one_res;
             }
+            
             /* output the results */
             output_results(cmds, res);
             comm_prefix = get_common_prefix(cmds, res);
@@ -552,6 +575,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
             {
                 p = comm_prefix+strlen(tmp)-1;
             }
+            
             /* free used memory */
             for(j = 0; j < res; j++)
             {
@@ -575,9 +599,11 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
             beep();  /* ring a bell */
             return 0;
         }
+        
         j = strlen(vars);
         res = 0;
         cmds[res++] = vars;
+        
         for(i = 0; i < j; i++)
         {
             if(vars[i] == ' ')
@@ -593,11 +619,13 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
                 }
             }
         }
+        
         if(res == 1)        /* one match found */
         {
             p = cmds[0]+strlen(tmp)-1;
             goto one_res;
         }
+        
         /* output the results */
         output_results(cmds, res);
         comm_prefix = get_common_prefix(cmds, res);
@@ -605,6 +633,7 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
         {
             p = comm_prefix+strlen(tmp)-1;
         }
+        
         /* free used memory */
         free(vars);
     }
@@ -633,11 +662,13 @@ int do_tab(char *cmdbuf, uint16_t *__cmdbuf_index, uint16_t *__cmdbuf_end)
             {
                 continue;
             }
+        
             if(strstr(cmd, tmp) != cmd)
             {
                 continue;
             }
             cmds[res++] = cmd;
+            
             /* maximum results reached */
             if(res == MAX_CMDS)
             {
@@ -939,9 +970,9 @@ one_res: ;
 }
 
 /*
- * match a partial hostname to the hostnames database entries.
+ * Match a partial hostname to the hostnames database entries.
  * 
- * returns the number of matched names, saving the entries in the matches array.
+ * Returns the number of matched names, saving the entries in the matches array.
  */
 int match_hostname(char *name, char **matches, int max)
 {
@@ -964,7 +995,7 @@ int match_hostname(char *name, char **matches, int max)
 }
 
 /*
- * get all the hostnames from the hosts database.
+ * Get all the hostnames from the hosts database.
  */
 char **get_hostnames(void)
 {
@@ -1109,9 +1140,9 @@ char **get_hostnames(void)
 
 
 /*
- * match a partial username to the passwd database entries.
+ * Match a partial username to the passwd database entries.
  * 
- * returns the number of matched names, saving the entries in the matches array.
+ * Returns the number of matched names, saving the entries in the matches array.
  */
 int match_username(char *name, char **matches, int max)
 {
@@ -1134,7 +1165,7 @@ int match_username(char *name, char **matches, int max)
 }
 
 /*
- * get all the usernames from the passwd database.
+ * Get all the usernames from the passwd database.
  */
 char **get_usernames(void)
 {

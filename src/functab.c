@@ -22,16 +22,17 @@
 #include <stdlib.h>
 #include "cmd.h"
 #include "symtab/symtab.h"
+#include "builtins/builtins.h"
 
 /*
- * the global functions table.. every defined function has an entry in
+ * The global functions table. Every defined function has an entry in
  * this table.
  */
 struct symtab_s *func_table = NULL;
 
 
 /*
- * initialize the functions table.. called on shell startup.
+ * Initialize the functions table. Called on shell startup.
  */
 void init_functab(void)
 {
@@ -40,7 +41,7 @@ void init_functab(void)
 
 
 /*
- * return the function definition of the given function name, or NULL
+ * Return the function definition of the given function name, or NULL
  * if name does not refer to a defined function.
  */
 struct symtab_entry_s *get_func(char *name)
@@ -54,9 +55,9 @@ struct symtab_entry_s *get_func(char *name)
 
 
 /*
- * add the given function name to the functions table.
+ * Add the given function name to the functions table.
  *
- * returns the entry for the newly added function, or NULL if the functions
+ * Returns the entry for the newly added function, or NULL if the functions
  * table is not initialized or if the function couldn't be added to the table.
  */
 struct symtab_entry_s *add_func(char *name)
@@ -84,9 +85,9 @@ struct symtab_entry_s *add_func(char *name)
 
 
 /*
- * unset a function definition, removing the function from the functions table.
+ * Unset a function definition, removing the function from the functions table.
  * 
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int unset_func(char *name)
 {
@@ -95,12 +96,19 @@ int unset_func(char *name)
     {
         return 0;
     }
+
+    if(flag_set(func->flags, FLAG_READONLY))
+    {
+        UNSET_PRINT_ERROR(name, "readonly function");
+        return 0;
+    }
+    
     return rem_from_symtab(func, func_table);
 }
 
 
 /*
- * print the functions with the given flag (readonly or export).
+ * Print the functions with the given flag (readonly or export).
  */
 void print_func_attribs(unsigned int flag)
 {

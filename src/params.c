@@ -30,14 +30,14 @@
 int exit_status = 0;
 
 /*
- * the current subshell level (how many subshells have we started in tandem).
- * incremented every time the shell forks a subshell.
+ * The current subshell level (how many subshells have we started in tandem).
+ * Incremented every time the shell forks a subshell.
  */
 int executing_subshell = 0;
 
 /*
- * the current shell level (how many times has lsh been invoked).
- * incremented on shell startup.
+ * The current shell level (how many times has lsh been invoked).
+ * Incremented on shell startup.
  */
 int shell_level = 0;;
 
@@ -46,10 +46,10 @@ int get_supp_groups(char *name, gid_t gid, gid_t **_supp_groups, int *_n);
 
 
 /*
- * set the exit status of the last command executed in both the global
+ * Set the exit status of the last command executed in both the global
  * exit_status variable and the $? shell variable.
- * this function examines the status argument to extract the actual
- * exit status.. if the flag is 0, it sets the exit status to status,
+ * This function examines the status argument to extract the actual
+ * exit status. If the flag is 0, it sets the exit status to status,
  * otherwise it uses the <wait.h> macros to get the status.
  */
 void set_exit_status(int status)
@@ -72,9 +72,9 @@ void set_exit_status(int status)
 
 
 /*
- * set the exit status of the last command executed in both the global
+ * Set the exit status of the last command executed in both the global
  * exit_status variable and the $? shell variable.
- * this function is used by the shell builtins and functions to set
+ * This function is used by the shell builtins and functions to set
  * the exit status, without applying the macros from <wait.h>.
  */
 void set_internal_exit_status(int status)
@@ -91,7 +91,7 @@ void set_internal_exit_status(int status)
 
 
 /*
- * reset the positional parameters by setting the value of each parameter to
+ * Reset the positional parameters by setting the value of each parameter to
  * NULL, followed by setting the value of $# to zero.
  */
 void reset_pos_params(void)
@@ -121,7 +121,7 @@ void reset_pos_params(void)
 
 
 /*
- * return the symbol table entry for positional parameter i,
+ * Return the symbol table entry for positional parameter i,
  * which is the value of shell variable $i.
  */
 struct symtab_entry_s *get_pos_param(int i)
@@ -133,8 +133,8 @@ struct symtab_entry_s *get_pos_param(int i)
 
 
 /*
- * return 1 if name is a valid positional parameter name, 0 otherwise.
- * this function only checks the validity of the name, it does not check if
+ * Return 1 if name is a valid positional parameter name, 0 otherwise.
+ * This function only checks the validity of the name, it does not check if
  * the positional parameter is actually set or not.
  */
 int is_pos_param(char *name)
@@ -166,8 +166,8 @@ int is_pos_param(char *name)
 
 
 /*
- * return 1 if name is a valid special parameter name, 0 otherwise.
- * this function only checks the validity of the name, it does not check if
+ * Return 1 if name is a valid special parameter name, 0 otherwise.
+ * This function only checks the validity of the name, it does not check if
  * the special parameter is actually set or not.
  */
 int is_special_param(char *name)
@@ -195,7 +195,7 @@ int is_special_param(char *name)
 
 
 /*
- * return the positional parameter count, which we get from the shell variable $#.
+ * Return the positional parameter count, which we get from the shell variable $#.
  */
 int pos_param_count(void)
 {
@@ -227,7 +227,7 @@ $*
 */
 
 /*
- * return the values of all positional parameters, NULL if there is none.
+ * Return the values of all positional parameters, NULL if there is none.
  */
 char *get_all_pos_params_str(char which, int quoted)
 {
@@ -242,10 +242,10 @@ char *get_all_pos_params_str(char which, int quoted)
 
 
 /*
- * return the values of positional parameters starting from parameter 'offset' and counting
- * 'count' parameters.. the which parameter tells whether we want to access the parameters as
+ * Return the values of positional parameters starting from parameter 'offset' and counting
+ * 'count' parameters. The which parameter tells whether we want to access the parameters as
  * the $@ or the $* special parameter, which affects the number of fields we get (see the
- * POSIX excerpt comment above).. the quoted parameter indicates whether we should expand
+ * POSIX excerpt comment above). The quoted parameter indicates whether we should expand
  * the values as if we are doing it inside double quotes.
  */
 char *get_pos_params_str(char which, int quoted, int offset, int count)
@@ -351,9 +351,9 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
 
 
 /*
- * set the values of positional parameters $1 to $count.. if the new paramer
+ * Set the values of positional parameters $1 to $count. If the new paramer
  * count is less than the old parameter count, positional parameters $count+1
- * to $oldcount are set to NULL.. we set all of these parameters in the local
+ * to $oldcount are set to NULL. We set all of these parameters in the local
  * symbol table, so that when a dot script or shell function returns, we pop
  * the local symbol table off the stack, and those parameters resume the values
  * they had before we entered the script/function.
@@ -417,8 +417,8 @@ void set_local_pos_params(int count, char **params)
 
 
 /*
- * initialize some of the shell variables to preset default values.
- * called on shell initialization. the first two params are the current
+ * Initialize some of the shell variables to preset default values.
+ * Called on shell initialization. The first two params are the current
  * user's name and gid, the 3rd param is the shell's fullpath or argv[0].
  */
 void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
@@ -441,6 +441,9 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
   
     entry = add_to_symtab("OPTIND");
     symtab_entry_setval(entry, "1");
+  
+    entry = add_to_symtab("OPTSUB");
+    symtab_entry_setval(entry, "0");
   
     /* set the maximum size of the history list */
     entry = get_symtab_entry("HISTSIZE");
@@ -494,12 +497,12 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
     
     /*
      * $_ (or underscore) is an obscure variable that shells love to assign 
-     * different values to. it starts with being the shell's name as passed in 
-     * the environment. then it becomes the last argument of the last command 
-     * executed. sometimes it is assigned the absolute pathname of the command 
-     * and passed to the command in its environment. it also gets assigned the 
+     * different values to. It starts with being the shell's name as passed in 
+     * the environment. Then it becomes the last argument of the last command 
+     * executed. Sometimes it is assigned the absolute pathname of the command 
+     * and passed to the command in its environment. It also gets assigned the 
      * value of the matching MAIL file when cheking the mail. csh assigns it 
-     * the command line of the last command executed. had enough yet? :)
+     * the command line of the last command executed. Had enough yet? :)
      */
     entry = add_to_symtab("_");
     symtab_entry_setval(entry, fullpath);

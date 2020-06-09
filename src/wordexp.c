@@ -46,10 +46,10 @@
 
 
 /*
- * convert the string *word to a cmd_token struct, so it can be passed to
+ * Convert the string *word to a cmd_token struct, so it can be passed to
  * functions such as word_expand().
  *
- * returns the malloc'd cmd_token struct, or NULL if insufficient memory.
+ * Returns the malloc'd cmd_token struct, or NULL if insufficient memory.
  */
 struct word_s *make_word(char *str)
 {
@@ -59,6 +59,8 @@ struct word_s *make_word(char *str)
     {
         return NULL;
     }
+    memset(word, 0, sizeof(struct word_s));
+    
     /* alloc string memory */
     size_t  len  = strlen(str);
     char   *data = malloc(len+1);
@@ -67,18 +69,19 @@ struct word_s *make_word(char *str)
         free(word);
         return NULL;
     }
+
     /* copy string */
     strcpy(data, str);
     word->data = data;
     word->len  = len;
-    word->next = NULL;
+
     /* return struct */
     return word;
 }
 
 
 /*
- * free the memory used by a list of tokens.
+ * Free the memory used by a list of tokens.
  */
 void free_all_words(struct word_s *first)
 {
@@ -98,12 +101,12 @@ void free_all_words(struct word_s *first)
 
 
 /*
- * convert a tree of tokens into a command string (i.e. re-create the original
- * command line from the token tree.. if add_spaces is non-zero, the function
+ * Convert a tree of tokens into a command string (i.e. re-create the original
+ * command line from the token tree. If add_spaces is non-zero, the function
  * will separate the tokens by spaces, otherwise the tokens are concatenated
  * together with no intervening spaces.
  *
- * returns the malloc'd command string, or NULL if there is an error.
+ * Returns the malloc'd command string, or NULL if there is an error.
  */
 char *wordlist_to_str(struct word_s *word, int add_spaces)
 {
@@ -150,7 +153,7 @@ char *wordlist_to_str(struct word_s *word, int add_spaces)
 
 
 /*
- * delete the character at the given index in the given str.
+ * Delete the character at the given index in the given str.
  */
 void delete_char_at(char *str, size_t index)
 {
@@ -164,7 +167,7 @@ void delete_char_at(char *str, size_t index)
 
 
 /*
- * check if a char is an alphanumeric character.
+ * Check if a char is an alphanumeric character.
  */
 static inline int is_alphanum(char c)
 {
@@ -189,7 +192,7 @@ static inline int is_alphanum(char c)
 
 
 /*
- * extract a number from buf, starting from the character at index start
+ * Extract a number from buf, starting from the character at index start
  * and ending at index end.
  */
 long extract_num(char *buf, int start, int end)
@@ -206,10 +209,10 @@ long extract_num(char *buf, int start, int end)
 
 
 /*
- * check if the given str is a valid name.. POSIX says a names can consist of
+ * Check if the given str is a valid name.. POSIX says a names can consist of
  * alphanumeric chars and underscores, and start with an alphabetic char or underscore.
  *
- * returns 1 if str is a valid name, 0 otherwise.
+ * Returns 1 if str is a valid name, 0 otherwise.
  */
 int is_name(char *str)
 {
@@ -231,8 +234,8 @@ int is_name(char *str)
 
 
 /*
- * when searching the matching brace using $(), we might encounter a 'case'
- * conditional, which might have one or more ')'.. we need to carefully skip
+ * When searching the matching brace using $(), we might encounter a 'case'
+ * conditional, which might have one or more ')'. We need to carefully skip
  * over the 'case' conditional, so that we won't mistakenly treat it as the
  * end of the $() construct.
  */
@@ -288,12 +291,12 @@ size_t skip_case_clause(char *data)
 
 
 /*
- * find the closing quote that matches the opening quote, which is the first
+ * Find the closing quote that matches the opening quote, which is the first
  * char of the data string.
  * sq_nesting is a flag telling us if we should allow single quote nesting
  * (prohibited by POSIX, but allowed in ANSI-C strings).
  *
- * returns the zero-based index of the closing quote.. a return value of 0
+ * Returns the zero-based index of the closing quote. A return value of 0
  * means we didn't find the closing quote.
  */
 size_t find_closing_quote(char *data, int in_double_quotes, int sq_nesting)
@@ -386,10 +389,10 @@ size_t find_closing_quote(char *data, int in_double_quotes, int sq_nesting)
 
 
 /*
- * find the closing brace that matches the opening brace, which is the first
+ * Find the closing brace that matches the opening brace, which is the first
  * char of the data string.
  *
- * returns the zero-based index of the closing brace.. a return value of 0
+ * Returns the zero-based index of the closing brace. A return value of 0
  * means we didn't find the closing brace.
  */
 size_t find_closing_brace(char *data, int in_double_quotes)
@@ -397,6 +400,9 @@ size_t find_closing_brace(char *data, int in_double_quotes)
     /* check the type of opening brace we have */
     char c, opening_brace = data[0], closing_brace;
     char *p;
+    int heredoc_count = 0;
+    int skip;
+    char *heredoc_delims[MAX_NESTED_HEREDOCS];
     
     if(opening_brace != '{' && opening_brace != '(' && opening_brace != '[')
     {
@@ -463,6 +469,14 @@ size_t find_closing_brace(char *data, int in_double_quotes)
                 {
                     /* here-document '<<' */
                     p += 2;
+                    
+                    if(*p == '<')
+                    {
+                        /* here-string <<< */
+                        i += 2;
+                        break;
+                    }
+                    
                     if(*p == '-')
                     {
                         /* here-document '<<-' */
@@ -470,46 +484,56 @@ size_t find_closing_brace(char *data, int in_double_quotes)
                     }
 
                     /*
-                     * if we are in arithmetic expansion (not command substitution),
+                     * If we are in arithmetic expansion (not command substitution),
                      * the << chars might appear as the left-shift operator (not the
-                     * here-document redirection operator).. perform a simple check
+                     * here-document redirection operator). Perform a simple check
                      * to try and recognize this by checking if the operator is 
-                     * followed by a digit.. of course, this is a mundane test, as 
+                     * followed by a digit. Of course, this is a mundane test, as 
                      * we might have a here-document with digits for the delimiter
                      * word, as well as a left-shift operation with a variable name
                      * for the right-hand side.
                      * 
-                     * TODO: should find a better way of resolving this case.
+                     * TODO: Should find a better way of resolving this case.
                      */
-                    char *p2 = p;
-                    while(isspace(*p2))
+                    char *delim_end;
+                    if(heredoc_count >= MAX_NESTED_HEREDOCS)
                     {
-                        p2++;
+                        PRINT_ERROR("%s: maximum number of heredocs reached (%d)\n",
+                                    SOURCE_NAME, MAX_NESTED_HEREDOCS);
+                        return 0;
                     }
-                    
-                    if(isdigit(*p2))
+                    else if(!heredoc_delim(p, &skip, &heredoc_delims[heredoc_count], &delim_end))
                     {
-                        i++;
-                        break;
+                        return 0;
                     }
-                    
-                    /* now get the here-document's end */
-                    char *delim, *nl;
-                    int expand;
-                    p2 = heredoc_end(p, &expand, &delim, &nl, closing_brace);
-
-                    if(p2)
-                    {
-                        i = p2 - data + strlen(delim);
-                    }
-                    else
-                    {
-                        i = p - data;
-                    }
-                    i--;
+                    heredoc_count++;
+                    i = (size_t)(delim_end - data);
+                    i--;    /* will be incremented in the loop above */
                 }
                 break;
                 
+            case '\n':
+                /* collect our heredocs (if there are any) */
+                if(heredoc_count)
+                {
+                    p = data+i;
+                    if((p = last_heredoc_end(p, heredoc_count, heredoc_delims,
+                                             closing_brace)) == NULL)
+                    {
+                        return 0;
+                    }
+                    i = (size_t)(p - data);
+                    i--;    /* will be incremented in the loop above */
+
+                    int k;
+                    for(k = 0; k < heredoc_count; k++)
+                    {
+                        free_malloced_str(heredoc_delims[k]);
+                    }
+                    heredoc_count = 0;
+                }
+                break;
+
             case '$':
                 c = data[i+1];
                 if(c != '{' && c != '(' && c != '[')
@@ -577,14 +601,14 @@ size_t find_closing_brace(char *data, int in_double_quotes)
 
 
 /*
- * substitute the substring of s1, from character start to character end,
+ * Substitute the substring of s1, from character start to character end,
  * with the s2 string.
  *
  * start should point to the first char to be deleted from s1.
  * end should point to the last char to be deleted from s, NOT the
  * char coming after it.
  *
- * returns the malloc'd new string, or NULL on error.
+ * Returns the malloc'd new string, or NULL on error.
  */
 char *substitute_str(char *s1, char *s2, size_t start, size_t end)
 {
@@ -603,7 +627,7 @@ char *substitute_str(char *s1, char *s2, size_t start, size_t end)
     char *final = malloc(totallen+1);
     if(!final)
     {
-        PRINT_ERROR("%s: insufficient memory for %s\n", SHELL_NAME, 
+        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
                     "performing variable substitution");
         /* POSIX says non-interactive shell should exit on expansion errors */
         if(!interactive_shell)
@@ -627,13 +651,13 @@ char *substitute_str(char *s1, char *s2, size_t start, size_t end)
 
 
 /*
- * perform word expansion on the word starting at *p and counting len characters.
- * this function calls the function passed in the third parameter to do the actual
+ * Perform word expansion on the word starting at *p and counting len characters.
+ * This function calls the function passed in the third parameter to do the actual
  * expansion, then replaces len characters from *pstart, starting at *p.
- * the expanded value is quoted, adding quotes around the value if add_quotes is
+ * The expanded value is quoted, adding quotes around the value if add_quotes is
  * non-zero.
  *
- * returns 1 if the expansion succeeds, 0 on error.
+ * Returns 1 if the expansion succeeds, 0 on error.
  */
 int substitute_word(char **pstart, char **p, size_t len, char *(func)(char *), int in_double_quotes)
 // int substitute_word(char **pstart, char **p, size_t len, char *(func)(char *), int add_quotes)
@@ -716,8 +740,8 @@ int substitute_word(char **pstart, char **p, size_t len, char *(func)(char *), i
 
 
 /* 
- * restricted shells can't set/unset the values of SHELL, ENV, FPATH, 
- * or PATH. this function checks if the given name is one of these.
+ * Restricted shells can't set/unset the values of SHELL, ENV, FPATH, 
+ * or PATH. This function checks if the given name is one of these.
  * bash also restricts BASH_ENV.
  * zsh also restricts EGID, EUID, GID, HISTFILE, HISTSIZE, IFS, 
  * UID and USERNAME (among others we're not using in this shell).
@@ -739,9 +763,9 @@ int is_restrict_var(char *name)
 
 
 /*
- * find all shell variables that start with the given prefix.
+ * Find all shell variables that start with the given prefix.
  *
- * returns the list of matched variables separated by spaces, or NULL if
+ * Returns the list of matched variables separated by spaces, or NULL if
  * no matches found.
  */
 char *get_all_vars(char *prefix)
@@ -843,12 +867,12 @@ char *get_all_vars(char *prefix)
 
 
 /*
- * perform command substitutions.
- * the backquoted flag tells if we are called from a backquoted command substitution:
+ * Perform command substitutions.
+ * The backquoted flag tells if we are called from a backquoted command substitution:
  *
  *    `command`
  *
- * or a regular one:
+ * Or a regular one:
  *
  *    $(command)
  */
@@ -872,7 +896,7 @@ char *command_substitute(char *orig_cmd)
     char *cmd2 = cmd;
     if(!cmd)
     {
-        PRINT_ERROR("%s: insufficient memory for %s\n", SHELL_NAME, 
+        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
                     "command substitution");
         return NULL;
     }
@@ -956,7 +980,7 @@ char *command_substitute(char *orig_cmd)
             buf = malloc(strlen(b)+1);
             if(!buf)
             {
-                PRINT_ERROR("%s: insufficient memory for %s\n", SHELL_NAME, 
+                PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
                             "command substitution");
                 return NULL;
             }
@@ -981,7 +1005,7 @@ char *command_substitute(char *orig_cmd)
     if(!fp)
     {
         free(cmd2);
-        PRINT_ERROR("%s: failed to open pipe: %s\n", SHELL_NAME, strerror(errno));
+        PRINT_ERROR("%s: failed to open pipe: %s\n", SOURCE_NAME, strerror(errno));
         return NULL;
     }
 
@@ -1057,7 +1081,7 @@ fin:
     free(cmd2);
     if(!buf)
     {
-        PRINT_ERROR("%s: insufficient memory for %s\n", SHELL_NAME, 
+        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
                     "command substitution");
     }
 
@@ -1066,9 +1090,10 @@ fin:
 
 
 /*
- * bash extension for variable expansion. it takes the form of:
+ * bash extension for variable expansion. It takes the form of:
  *       ${parameter@operator}
- * where operator is a single letter of the following:
+ * 
+ * Where operator is a single letter of the following:
  *       Q - value of parameter properly quoted.
  *       E - value of parameter with backslash escape sequences expanded,
  *           similar to ANSI-C strings.
@@ -1076,13 +1101,13 @@ fin:
  *       A - expand parameter as an assignment statement.
  *       a - flag values representing parameter’s attributes (not used here).
  * 
- * arguments:
+ * Arguments:
  *       op       - operator, one of the above.
  *       orig_val - variable's value, to be expanded and quoted.
  *       var_name - variable's name.
  *       name_len - var_name's length.
  * 
- * returns the malloc'd result of the expansion, or NULL if the expansion fails.
+ * Returns the malloc'd result of the expansion, or NULL if the expansion fails.
  */
 char *var_info_expand(char op, char *orig_val, char *var_name, int name_len)
 {
@@ -1125,8 +1150,8 @@ char *var_info_expand(char op, char *orig_val, char *var_name, int name_len)
 
 
 /*
- * perform variable (parameter) expansion.
- * our options are:
+ * Perform variable (parameter) expansion.
+ * Our options are:
  * syntax           POSIX description   var defined     var undefined
  * ======           =================   ===========     =============
  * $var             Substitute          var             nothing
@@ -1140,7 +1165,7 @@ char *var_info_expand(char op, char *orig_val, char *var_name, int name_len)
  * ${#var}          Calculate String Length
  * 
  * Using the same options in the table above, but without the colon, results in
- * a test for a parameter that is unset. using the colon results in a test for a
+ * a test for a parameter that is unset. Using the colon results in a test for a
  * parameter that is unset or null.
  *
  * TODO: we should test our implementation of the following string processing 
@@ -1162,10 +1187,10 @@ char *var_info_expand(char op, char *orig_val, char *var_name, int name_len)
 
 
 /*
- * read input from stdin and substitute it for a variable (tcsh extension), or
+ * Read input from stdin and substitute it for a variable (tcsh extension), or
  * return the length of that string if get_length is non-zero.
  *
- * returns the malloc'd input string (or its length), or NULL in case of error.
+ * Returns the malloc'd input string (or its length), or NULL in case of error.
  */
 char *get_stdin_var(int get_length)
 {
@@ -1183,7 +1208,7 @@ char *get_stdin_var(int get_length)
         return NULL;
     }
     /* turn on canonical mode so we can read from stdin */
-    if(read_stdin)
+    if(read_stdin && interactive_shell)
     {
         term_canon(1);
     }
@@ -1205,14 +1230,14 @@ char *get_stdin_var(int get_length)
         /* free the buffer */
         free(in);
         /* return to non-canonical mode */
-        if(read_stdin)
+        if(read_stdin && interactive_shell)
         {
             term_canon(0);
         }
         return tmp;
     }
     /* return to non-canonical mode */
-    if(read_stdin)
+    if(read_stdin && interactive_shell)
     {
         term_canon(0);
     }
@@ -1222,9 +1247,9 @@ char *get_stdin_var(int get_length)
 
 
 /*
- * perform variable (parameter) expansion.
+ * Perform variable (parameter) expansion.
  *
- * returns an malloc'd string of the expanded variable value, or NULL if the
+ * Returns an malloc'd string of the expanded variable value, or NULL if the
  * variable is not defined or the expansion failed.
  */
 char *var_expand(char *orig_var_name)
@@ -1236,8 +1261,8 @@ char *var_expand(char *orig_var_name)
     }
 
     /*
-     *  if the var substitution is in the $var format, remove the $.
-     *  if it's in the ${var} format, remove the ${}.
+     *  If the var substitution is in the $var format, remove the $.
+     *  If it's in the ${var} format, remove the ${}.
      */
 
     /* skip the $ */
@@ -1263,7 +1288,7 @@ char *var_expand(char *orig_var_name)
         /* use of '#' should come with omission of ':' */
         if(strchr(orig_var_name, ':'))
         {
-            PRINT_ERROR("%s: invalid substitution at: %s\n", SHELL_NAME, orig_var_name);
+            PRINT_ERROR("%s: invalid substitution at: %s\n", SOURCE_NAME, orig_var_name);
             /* POSIX says non-interactive shell should exit on expansion errors */
             EXIT_IF_NONINTERACTIVE();
             return INVALID_VAR;
@@ -1287,26 +1312,11 @@ char *var_expand(char *orig_var_name)
     }
 
     /*
-     * sanity-check the name. it should only include alphanumeric chars, or one of
-     * the special parameter names, such as !, ?, # and so on.
-     */
-    char *p = orig_var_name;
-    if(!is_alphanum(*p) && *p != '!' && *p != '?' && *p != '#' &&
-                           *p != '$' && *p != '-' && *p != '@' &&
-                           *p != '*' && *p != '<')
-    {
-        PRINT_ERROR("%s: invalid substitution at: %s\n", SHELL_NAME, orig_var_name);
-        /* POSIX says non-interactive shell should exit on expansion errors */
-        EXIT_IF_NONINTERACTIVE();
-        return INVALID_VAR;
-    }
-
-    /*
      * search for a colon, which we use to separate the variable name from the
      * value or substitution we are going to perform on the variable.
      */
     //int   colon = 0;
-    char *sub   = strchr(orig_var_name, ':');
+    char *sub = strchr(orig_var_name, ':');
     if(sub)     /* we have a colon + substitution */
     {
         /* colon = 1 */ ;
@@ -1345,8 +1355,21 @@ char *var_expand(char *orig_var_name)
     var_name[len]   = '\0';
 
     /*
-     * common extension (bash, ksh, ...) to return variables whose name
-     * starts with a prefix. the format is ${!prefix*} or ${!prefix@}. the
+     * sanity-check the name. it should only include alphanumeric chars, or one of
+     * the special parameter names, such as !, ?, # and so on.
+     */
+    char *p = var_name;
+    if(!is_name(p) && !is_pos_param(p) && !is_special_param(p) && strcmp(p, "<"))
+    {
+        PRINT_ERROR("%s: invalid substitution at: %s\n", SOURCE_NAME, orig_var_name);
+        /* POSIX says non-interactive shell should exit on expansion errors */
+        EXIT_IF_NONINTERACTIVE();
+        return INVALID_VAR;
+    }
+
+    /*
+     * Common extension (bash, ksh, ...) to return variables whose name
+     * starts with a prefix. The format is ${!prefix*} or ${!prefix@}. The
      * latter expands each varname to a separate field if called within double
      * quotes (bash), but we treat both the same here for the sake of simplicity.
      */
@@ -1399,7 +1422,7 @@ char *var_expand(char *orig_var_name)
         /* no unset parameters are accepted */
         if(option_set('u') && !pos_params)
         {
-            PRINT_ERROR("%s: %s: %s\n", SHELL_NAME, var_name, "parameter not set");
+            PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME, var_name, "parameter not set");
             if(!interactive_shell)
             {
                 exit_gracefully(EXIT_FAILURE, NULL);
@@ -1432,13 +1455,16 @@ char *var_expand(char *orig_var_name)
                     if(is_pos_param(var_name) || is_special_param(var_name))
                     {
                         PRINT_ERROR("%s: invalid variable assignment: %s\n", 
-                                    SHELL_NAME, orig_var_name);
+                                    SOURCE_NAME, orig_var_name);
                         /* NOTE: this is not strict POSIX behaviour. see the table above */
                         if(!interactive_shell)
                         {
                             if(option_set('e'))
                             {
-                                /* exit if non-interactive */
+                                /* try to exit (this will execute any EXIT traps) */
+                                do_builtin_internal(exit_builtin, 2, (char *[]){ "exit", "1", NULL });
+                
+                                /* if exit_builtin() failed, force exit */
                                 exit_gracefully(EXIT_FAILURE, NULL);
                             }
                         }
@@ -1459,11 +1485,11 @@ char *var_expand(char *orig_var_name)
                      */
                     if(sub[1] == '\0')
                     {
-                        PRINT_ERROR("%s: %s: %s\n", SHELL_NAME, var_name, "parameter not set");
+                        PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME, var_name, "parameter not set");
                     }
                     else
                     {
-                        PRINT_ERROR("%s: %s: %s\n", SHELL_NAME, var_name, sub+1);
+                        PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME, var_name, sub+1);
                     }
                     /* exit if non-interactive */
                     if(!interactive_shell)
@@ -1683,14 +1709,17 @@ char *var_expand(char *orig_var_name)
         }
     }
 
+    p = NULL;
     /* do we need to set new value to the variable? */
     if(setme)
     {
-        do_set(var_name, tmp, 0, 0, 0);
+        if(do_set(var_name, tmp, 0, 0, 0) == NULL)
+        {
+            goto err;
+        }
     }
 
     /* return the length of the variable's value */
-    p = NULL;
     if(get_length)
     {
         if(pos_params)
@@ -1722,6 +1751,7 @@ char *var_expand(char *orig_var_name)
         free(tmp);
     }
 
+err:
     /* POSIX says non-interactive shell should exit on expansion errors */
     if(!p && !interactive_shell)
     {
@@ -1729,14 +1759,14 @@ char *var_expand(char *orig_var_name)
     }
 
     /* return the result */
-    return p ? : INVALID_VAR;
+    return p ? p : INVALID_VAR;
 }
 
 
 /*
- * perform variable (parameter) expansion for the positional parameters.
+ * Perform variable (parameter) expansion for the positional parameters.
  *
- * returns an malloc'd string of the positional parameters, or NULL if no
+ * Returns an malloc'd string of the positional parameters, or NULL if no
  * positional parameters are defined or the expansion failed.
  */
 char *pos_params_expand(char *tmp, int in_double_quotes)
@@ -1834,14 +1864,14 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
     else
     {
         /*
-         * for the prefix and suffix matching routines, there is
-         * a special case when the parameter is @ or *. we do this 
+         * For the prefix and suffix matching routines, there is
+         * a special case when the parameter is @ or *. We do this 
          * in order to follow what the major shells do, where the
          * matching operation is applied to each element in turn, and
          * the result is the list of all these elements after
          * processing.
          * bash expands the pattern part, but ksh doesn't seem to do
-         * the same (as far as the manpage is concerned). we follow ksh.
+         * the same (as far as the manpage is concerned). We follow ksh.
          */
         sub = strchr(tmp, '#');
         if(!sub)
@@ -1896,11 +1926,11 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
 
 
 /*
- * parse an ANSI-C string.. this is a string that appears in input in the form of
- * $'string'.. escape sequences such as \a, \b, \n, etc are allowed inside ANSI-C
+ * Parse an ANSI-C string. This is a string that appears in input in the form of
+ * $'string'. Escape sequences such as \a, \b, \n, etc are allowed inside ANSI-C
  * strings, as well escaped single quotes.
  *
- * returns an malloc'd copy of the original string, with the escaped sequences
+ * Returns an malloc'd copy of the original string, with the escaped sequences
  * parsed, or NULL in case of insufficient memory.
  */
 char *ansic_expand(char *str)
@@ -1923,8 +1953,8 @@ char *ansic_expand(char *str)
     char buf[8];
 
     /*
-     * if we're parsing an ANSI-C string in the format $'string', we process
-     * the \cC sequence as representing a control char.. otherwise, we process
+     * If we're parsing an ANSI-C string in the format $'string', we process
+     * the \cC sequence as representing a control char. Otherwise, we process
      * it as the terminate parsing sequence or \c (happens when echo or glob
      * passes us a string to parse when the -e option is supplied).
      */
@@ -2108,7 +2138,7 @@ char *ansic_expand(char *str)
                         char *s2 = realloc(str, l+j-i+1);
                         if(!s2)
                         {
-                            PRINT_ERROR("%s: insufficient memory to parse ANSI-C string\n", SHELL_NAME);
+                            PRINT_ERROR("%s: insufficient memory to parse ANSI-C string\n", SOURCE_NAME);
                             free(str);
                             return NULL;
                         }
@@ -2241,9 +2271,9 @@ char *ansic_expand(char *str)
 
 
 /*
- * perform tilde expansion.
+ * Perform tilde expansion.
  *
- * returns the malloc'd expansion of the tilde prefix, NULL if expansion failed.
+ * Returns the malloc'd expansion of the tilde prefix, NULL if expansion failed.
  */
 char *tilde_expand(char *s)
 {
@@ -2259,7 +2289,7 @@ char *tilde_expand(char *s)
     /* null tilde prefix. substitute with the value of home */
     if(len == 1)
     {
-        home = get_home();
+        home = get_home(1);
     }
     else
     {
@@ -2282,7 +2312,7 @@ char *tilde_expand(char *s)
             }
             else                    /* ~+N and ~-N (dirstack entries) */
             {
-                ds = get_dirstack_entry(s+1, NULL);
+                ds = get_dirstack_entry(s+1, NULL, NULL);
                 if(ds)
                 {
                     home = ds->path;
@@ -2291,7 +2321,7 @@ char *tilde_expand(char *s)
         }
         else if(isdigit(s[1]))      /* ~N (dirstack entries) */
         {
-            ds = get_dirstack_entry(s+1, NULL);
+            ds = get_dirstack_entry(s+1, NULL, NULL);
             if(ds)
             {
                 home = ds->path;
@@ -2327,9 +2357,9 @@ char *tilde_expand(char *s)
 
 
 /* 
- * perform word expansion on a single word, pointed to by orig_word.
+ * Perform word expansion on a single word, pointed to by orig_word.
  *
- * returns the head of the linked list of the expanded fields and stores the last field
+ * Returns the head of the linked list of the expanded fields and stores the last field
  * in the tail pointer.
  */
 struct word_s *word_expand_one_word(char *orig_word, int flags)
@@ -2483,7 +2513,7 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
                 tmp = malloc(len+1);
                 if(!tmp)
                 {
-                    PRINT_ERROR("%s: insufficient memory for internal buffers\n", SHELL_NAME);
+                    PRINT_ERROR("%s: insufficient memory for internal buffers\n", SOURCE_NAME);
                     break;
                 }
                 strncpy(tmp, pstart, len);
@@ -2495,8 +2525,8 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
                 }
                 
                 /*
-                 * if the string before '=' is a valid var name, we have a variable
-                 * assignment.. we set in_var_assign to indicate that, and we set
+                 * If the string before '=' is a valid var name, we have a variable
+                 * assignment. We set in_var_assign to indicate that, and we set
                  * var_assign_eq which indicates this is the first equals sign (we use
                  * this when performing tilde expansion -- see code above).
                  */
@@ -2698,13 +2728,13 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
                         }
                         
                         /*
-                         * otherwise, extract the expression and substitute its value.
-                         * if we have one brace (i == 0), we'll perform command substitution.
-                         * otherwise, arithmetic expansion.
-                         * we make sure its an arithmetic expansion, not command substitution,
+                         * Otherwise, extract the expression and substitute its value.
+                         * If we have one brace (i == 0), we'll perform command substitution.
+                         * Otherwise, arithmetic expansion.
+                         * We make sure its an arithmetic expansion, not command substitution,
                          * by ensuring it begins with two '((' [i > 0], and ends with two
                          * '))' [the second-to-last char, or *p2 below, should be ')'].
-                         * of course, we can still be wrong, and we'll check again in
+                         * Of course, we can still be wrong, and we'll check again in
                          * arithm_expand() to see if we have command substitution
                          * masquerading as arithmetic expansion.
                          */
@@ -2793,11 +2823,11 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
 
             default:
                 /*
-                 * we should not have whitespace chars in tokens, as the
-                 * parser should have got rid of these. however, shit happens.
-                 * for example, when we are passed an alias string from the
-                 * backend executor. alias names almost always contain whispaces.
-                 * we need to manually remove the whitespace chars and split the
+                 * We should not have whitespace chars in tokens, as the
+                 * parser should have got rid of these. However, shit happens.
+                 * For example, when we are passed an alias string from the
+                 * backend executor. Alias names almost always contain whispaces.
+                 * We need to manually remove the whitespace chars and split the
                  * token in two (but beware not to remove whitespaces from within
                  * quoted strings and heredocs).
                  */
@@ -2834,7 +2864,7 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
         /* error making word struct */
         if(!words)
         {
-            PRINT_ERROR("%s: insufficient memory\n", SHELL_NAME);
+            PRINT_ERROR("%s: insufficient memory\n", SOURCE_NAME);
             free(pstart);
             return NULL;
         }
@@ -2845,13 +2875,13 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
 
 
 /*
- * perform brace expansion, followed by word expansion on each word that resulted from the
- * brace expansion.. if no brace expansion is done, performs word expansion on the given word.
- * head contains the word to be expanded.. in_heredoc tells us if we are performing the
- * word expansion inside a heredoc.. flags tell us if we should strip quotes and spaces
+ * Perform brace expansion, followed by word expansion on each word that resulted from the
+ * brace expansion. If no brace expansion is done, performs word expansion on the given word.
+ * Head contains the word to be expanded. In_heredoc tells us if we are performing the
+ * word expansion inside a heredoc. flags tell us if we should strip quotes and spaces
  * from the expanded word.
  *
- * returns the head of the linked list of the expanded fields and stores the last field
+ * Returns the head of the linked list of the expanded fields and stores the last field
  * in the tail pointer.
  */
 struct word_s *word_expand(char *orig_word, int flags)
@@ -2926,7 +2956,7 @@ struct word_s *word_expand(char *orig_word, int flags)
 
 
 /*
- * perform pathname expansion.
+ * Perform pathname expansion.
  */
 struct word_s *pathnames_expand(struct word_s *words)
 {
@@ -2937,9 +2967,9 @@ struct word_s *pathnames_expand(struct word_s *words)
     }
 
     /*
-     *  make sure we don't add / after directory names in the expanded fields.
-     *  this option is mainly of use to interactive shells, when performing tab
-     *  completion for filenames.. it shouldn't be used in pathname expansion,
+     *  Make sure we don't add / after directory names in the expanded fields.
+     *  This option is mainly of use to interactive shells, when performing tab
+     *  completion for filenames. It shouldn't be used in pathname expansion,
      *  so we turn it off here.
      */
     int save_addsuffix = optionx_set(OPTION_ADD_SUFFIX);
@@ -2985,7 +3015,7 @@ struct word_s *pathnames_expand(struct word_s *words)
             /* print error and bail out (bash extension) */
             if(optionx_set(OPTION_FAIL_GLOB))
             {
-                PRINT_ERROR("%s: file globbing failed for %s\n", SHELL_NAME, p);
+                PRINT_ERROR("%s: file globbing failed for %s\n", SOURCE_NAME, p);
                 /* restore the flag to its saved value */
                 set_optionx(OPTION_ADD_SUFFIX, save_addsuffix);
                 /* return failure */
@@ -3052,7 +3082,7 @@ struct word_s *pathnames_expand(struct word_s *words)
 
 
 /*
- * perform quote removal.
+ * Perform quote removal.
  */
 void remove_quotes(struct word_s *wordlist)
 {
@@ -3192,9 +3222,9 @@ char *word_expand_to_str(char *word)
 
 
 /*
- * check if char c is a valid $IFS character.
+ * Check if char c is a valid $IFS character.
  *
- * returns 1 if char c is an $IFS character, 0 otherwise.
+ * Returns 1 if char c is an $IFS character, 0 otherwise.
  */
 int is_IFS_char(char c, char *IFS)
 {
@@ -3214,7 +3244,7 @@ int is_IFS_char(char c, char *IFS)
 
 
 /*
- * skip all whitespace characters that are part of $IFS.
+ * Skip all whitespace characters that are part of $IFS.
  */
 void skip_IFS_whitespace(char **str, char *IFS)
 {
@@ -3233,7 +3263,7 @@ void skip_IFS_whitespace(char **str, char *IFS)
 
 
 /*
- * skip $IFS delimiters, which can be whitespace characters as well as other chars.
+ * Skip $IFS delimiters, which can be whitespace characters as well as other chars.
  */
 void skip_IFS_delim(char *str, char *IFS_space, char *IFS_delim, size_t *_i, size_t len)
 {
@@ -3255,9 +3285,9 @@ void skip_IFS_delim(char *str, char *IFS_space, char *IFS_delim, size_t *_i, siz
 
 
 /*
- * convert the words resulting from a word expansion into separate fields.
+ * Convert the words resulting from a word expansion into separate fields.
  *
- * returns a pointer to the first field, NULL if no field splitting was done.
+ * Returns a pointer to the first field, NULL if no field splitting was done.
  */
 struct word_s *field_split(char *str)
 {
@@ -3424,7 +3454,7 @@ struct word_s *field_split(char *str)
                     /* TODO: do something better than bailing out here */
                     if(!tmp)
                     {
-                        PRINT_ERROR("%s: insufficient memory for %s\n", SHELL_NAME, 
+                        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
                                     "making fields");
                         return first_field;
                     }

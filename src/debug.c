@@ -25,9 +25,9 @@
 #include "debug.h"
 
 /*
- * print a debug message, preceded by the filename and function name from which
- * the error/message originated.. the message format and any extra arguments are
- * passed to printf to be printed.. if the format field is NULL, the function
+ * Print a debug message, preceded by the filename and function name from which
+ * the error/message originated. The message format and any extra arguments are
+ * passed to printf to be printed. If the format field is NULL, the function
  * prints the filename and function name in a separate line and returns.
  */
 void __debug (const char *file, const char *function, char *format, ...)

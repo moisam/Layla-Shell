@@ -32,7 +32,7 @@ struct early_env_item_s
 };
 
 /*
- * some indices into the following array of structs. useful when accessing
+ * Some indices into the following array of structs. useful when accessing
  * array members from initsh().
  */
 #define INDEX_COLUMNS       0
@@ -48,18 +48,18 @@ struct early_env_item_s
 #define INDEX_LINES         17
 #define INDEX_LOGNAME       18
 #define INDEX_OLDPWD        21
-#define INDEX_PATH          25
-#define INDEX_PS1           27
-#define INDEX_PS2           28
-#define INDEX_PS3           29
-#define INDEX_PS4           30
-#define INDEX_PWD           31
-#define INDEX_SHELL         32
-#define INDEX_USER          33
-#define INDEX_USERNAME      34
-#define INDEX_UID           35
+#define INDEX_PATH          26
+#define INDEX_PS1           28
+#define INDEX_PS2           29
+#define INDEX_PS3           30
+#define INDEX_PS4           31
+#define INDEX_PWD           32
+#define INDEX_SHELL         33
+#define INDEX_USER          34
+#define INDEX_USERNAME      35
+#define INDEX_UID           36
 /* everything after this one will be readonly -- just out of laziness */
-#define INDEX_MACHTYPE      38
+#define INDEX_MACHTYPE      39
 // #define INDEX_COLUMNS   5
 // #define INDEX_EGID      10
 // #define INDEX_EUID      11
@@ -109,6 +109,7 @@ struct early_env_item_s early_environ[] =
   { "OPTARG"      , ""                      },
   { "OPTERR"      , ""                      },
   { "OPTIND"      , ""                      },
+  { "OPTSUB"      , ""                      },
   //{ "PATH"       , "/media/cdrom/bin:/bin" },
   { "PATH"        , "/bin:/usr/bin:/sbin:/usr/sbin" },
   /* parent process ID during shell initialization */
@@ -131,8 +132,8 @@ struct early_env_item_s early_environ[] =
   /*
    * TODO: $MACHTYPE should be in the standard gnu cpu-company-system format
    * 
-   * NOTE: all of the following variables will be given the FLAG_READONLY flag in
-   *       initsh(). if you want to add another variable but not give it the 
+   * NOTE: All of the following variables will be given the FLAG_READONLY flag in
+   *       initsh(). If you want to add another variable but not give it the 
    *       readonly flag, please do add it above this comment.
    */
   { "MACHTYPE"    , CPU_ARCH                },  
@@ -140,8 +141,6 @@ struct early_env_item_s early_environ[] =
   { "OSTYPE"      , OS_TYPE                 },
   { "COMPILERTYPE", COMPILER_TYPE           },
   { "COMPILERBUILD", COMPILER_BUILD         },
-  { "THIS_SH", "/home/mima/projects/shell/build/lsh" },
-  { "TMPDIR"     , "/tmp"                      },
 };
 
 size_t early_environ_length = sizeof(early_environ)/sizeof(struct early_env_item_s);

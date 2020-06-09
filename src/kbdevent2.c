@@ -52,9 +52,9 @@ char VLNEXT_KEY;
 
 
 /*
- * turn the raw mode on.
+ * Turn the raw mode on.
  * 
- * returns 1 if the terminal attributes are set successfully, 0 otherwise.
+ * Returns 1 if the terminal attributes are set successfully, 0 otherwise.
  */
 int rawon(void)
 {
@@ -112,7 +112,7 @@ int rawon(void)
 
 
 /*
- * return the next key press from the terminal.
+ * Return the next key press from the terminal.
  */
 int get_next_key(int tty)
 {

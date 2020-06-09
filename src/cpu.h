@@ -23,9 +23,9 @@
 #define CPU_H
 
 /*
- * we try to guess the cpu architecture at compile time, by testing for 
+ * We try to guess the cpu architecture at compile time, by testing for 
  * a number of compiler-defined macros (which differ by the compiler, of 
- * course). these tests are built on the information provided in the following
+ * course). These tests are built on the information provided in the following
  * two links:
  * 
  * https://sourceforge.net/p/predef/wiki/Architectures/

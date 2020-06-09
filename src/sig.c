@@ -46,7 +46,7 @@ extern int do_periodic;
 
 
 /*
- * NOTE: these signal names are ordered such that the array's
+ * NOTE: These signal names are ordered such that the array's
  *       index of a signal is the value of that signal. that is,
  *       SIGHUP has the numeric value of 1, SIGINT of 2, ...
  *       These signal values (0-31) are Linux-centric. If you are
@@ -95,7 +95,7 @@ struct sigaction signal_handlers[SIGNAL_COUNT];
 
 
 /*
- * save the default sigaction for each signal.
+ * Save the default sigaction for each signal.
  */
 void save_signals(void)
 {
@@ -108,7 +108,7 @@ void save_signals(void)
 
 
 /*
- * restore the default sigaction for each signal (called on exec).
+ * Restore the default sigaction for each signal (called on exec).
  */
 void restore_signals(void)
 {
@@ -121,7 +121,7 @@ void restore_signals(void)
 
 
 /*
- * return the sigaction for the given signal.
+ * Return the sigaction for the given signal.
  */
 struct sigaction *get_sigaction(int signum)
 {
@@ -134,7 +134,7 @@ struct sigaction *get_sigaction(int signum)
 
 
 /*
- * initialize the shell's signal handlers.
+ * Initialize the shell's signal handlers.
  */
 void init_signals(void)
 {
@@ -160,7 +160,7 @@ void init_signals(void)
 
 
 /*
- * set SIGQUIT's signal handler properly.
+ * Set SIGQUIT's signal handler properly.
  */
 void set_SIGQUIT_handler(void)
 {
@@ -183,12 +183,12 @@ void set_SIGQUIT_handler(void)
 
 
 /*
- * set SIGALRM's signal handler properly.
+ * Set SIGALRM's signal handler properly.
  */
 void set_SIGALRM_handler(void)
 {
     /*
-     * set a special timer for handling the $TPERIOD variable, which causes
+     * Set a special timer for handling the $TPERIOD variable, which causes
      * the 'periodic' alias to be executed at certain intervals (tcsh extension).
      */
     struct sigevent sev;
@@ -230,7 +230,7 @@ void set_SIGALRM_handler(void)
 
 
 /*
- * signal handler for SIGALRM (alarm signal). we use this signal to inform us
+ * Signal handler for SIGALRM (alarm signal). We use this signal to inform us
  * when a period of $TPERIOD minutes has elapsed so that we can execute the 'periodic'
  * special alias.
  */
@@ -243,7 +243,7 @@ void SIGALRM_handler(int sig __attribute__((unused)),
 
 
 /*
- * signal handler for SIGINT (interrupt signal).
+ * Signal handler for SIGINT (interrupt signal).
  */
 void SIGINT_handler(int signum)
 {
@@ -254,7 +254,7 @@ void SIGINT_handler(int signum)
 
 
 /*
- * signal handler for SIGQUIT (quit signal).
+ * Signal handler for SIGQUIT (quit signal).
  */
 void SIGQUIT_handler(int signum)
 {
@@ -264,7 +264,7 @@ void SIGQUIT_handler(int signum)
 
 
 /*
- * signal handler for SIGWINCH (window size change signal).
+ * Signal handler for SIGWINCH (window size change signal).
  */
 void SIGWINCH_handler(int signum)
 {
@@ -274,7 +274,7 @@ void SIGWINCH_handler(int signum)
 
 
 /*
- * signal handler for SIGCHLD (child status change signal).
+ * Signal handler for SIGCHLD (child status change signal).
  */
 void SIGCHLD_handler(int signum)
 {
@@ -311,7 +311,7 @@ void SIGCHLD_handler(int signum)
 
 
 /*
- * signal handler for SIGHUP (hangup signal).
+ * Signal handler for SIGHUP (hangup signal).
  */
 void SIGHUP_handler(int signum)
 {
@@ -321,7 +321,7 @@ void SIGHUP_handler(int signum)
 
 
 /*
- * set the signal handler function for signal number signum to sa_handler().
+ * Set the signal handler function for signal number signum to sa_handler().
  */
 int set_signal_handler(int signum, void (handler)(int))
 {

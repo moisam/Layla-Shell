@@ -83,7 +83,7 @@ int    error     = 0;
 // struct symtab_entry_s dummy_var = { .name = "", .val_type = SYM_STR, .val = "0" };
 
 /*
- * recursively call arithm_expand() to perform the expansion on a variable
+ * Recursively call arithm_expand() to perform the expansion on a variable
  * or a sub-expression.
  */
 char *arithm_expand_recursive(char *str)
@@ -108,7 +108,7 @@ char *arithm_expand_recursive(char *str)
 
 
 /*
- * the following functions perform different operations on their operands,
+ * The following functions perform different operations on their operands,
  * such as bitwise AND and OR, addition, subtraction, etc.
  */
 
@@ -191,7 +191,7 @@ long eval_sub(struct stack_item_s *a1, struct stack_item_s *a2)
 
 
 /*
- * functions to perform left and right bit shift.
+ * Functions to perform left and right bit shift.
  */
 
 long eval_lsh(struct stack_item_s *a1, struct stack_item_s *a2)
@@ -206,7 +206,7 @@ long eval_rsh(struct stack_item_s *a1, struct stack_item_s *a2)
 
 
 /*
- * functions to perform numeric comparisons: <, <=, >, >=, ==, !=.
+ * Functions to perform numeric comparisons: <, <=, >, >=, ==, !=.
  */
 
 long eval_lt(struct stack_item_s *a1, struct stack_item_s *a2)
@@ -241,7 +241,7 @@ long eval_ne(struct stack_item_s *a1, struct stack_item_s *a2)
 
 
 /*
- * functions to perform bitwise operations: &, ^, |.
+ * Functions to perform bitwise operations: &, ^, |.
  */
 
 long eval_bitand(struct stack_item_s *a1, struct stack_item_s *a2)
@@ -261,7 +261,7 @@ long eval_bitor(struct stack_item_s *a1, struct stack_item_s *a2)
 
 
 /*
- * functions to perform logical operations: &&, ||.
+ * Functions to perform logical operations: &&, ||.
  */
 
 long eval_logand(struct stack_item_s *a1, struct stack_item_s *a2)
@@ -276,7 +276,7 @@ long eval_logor(struct stack_item_s *a1, struct stack_item_s *a2)
 
 
 /*
- * functions to perform arithmetic operators: exp, /, %.
+ * Functions to perform arithmetic operators: exp, /, %.
  */
 
 long do_eval_exp(long a1, long a2)
@@ -295,7 +295,7 @@ long eval_div(struct stack_item_s *a1, struct stack_item_s *a2)
     long n2 = long_value(a2);
     if(!n2)
     {
-        PRINT_ERROR("%s: division by zero\n", SHELL_NAME);
+        PRINT_ERROR("%s: division by zero\n", SOURCE_NAME);
         error = 1;
         return 0;
     }
@@ -308,7 +308,7 @@ long eval_mod(struct stack_item_s *a1, struct stack_item_s *a2)
     long n2 = long_value(a2);
     if(!n2)
     {
-        PRINT_ERROR("%s: division by zero\n", SHELL_NAME);
+        PRINT_ERROR("%s: division by zero\n", SOURCE_NAME);
         error = 1;
         return 0;
     }
@@ -322,7 +322,7 @@ long eval_assign_val(struct stack_item_s *a1, long val)
         /* can't assign to read-only variables */
         if(flag_set(a1->ptr->flags, FLAG_READONLY))
         {
-            READONLY_ASSIGN_ERROR(SHELL_NAME, a1->ptr->name);
+            READONLY_ASSIGN_ERROR(SOURCE_NAME, a1->ptr->name, "variable");
             error = 1;
             return 0;
         }
@@ -362,7 +362,7 @@ long eval_assign_val(struct stack_item_s *a1, long val)
     else
     {
         /* assignment to non-variable */
-        PRINT_ERROR("%s: assignment to non-variable: %ld\n", SHELL_NAME, long_value(a1));
+        PRINT_ERROR("%s: assignment to non-variable: %ld\n", SOURCE_NAME, long_value(a1));
         error = 1;
         val = 0;
     }
@@ -432,7 +432,7 @@ long eval_assign_or(struct stack_item_s *a1, struct stack_item_s *a2)
 
 
 /*
- * functions to perform pre- and post- increment and decrement operators.
+ * Functions to perform pre- and post- increment and decrement operators.
  */
 
 long do_eval_inc_dec(int pre, int add, struct stack_item_s *a1)
@@ -444,7 +444,8 @@ long do_eval_inc_dec(int pre, int add, struct stack_item_s *a1)
     if(a1->type != ITEM_VAR_PTR)
     {
         /* assignment to non-variable */
-        PRINT_ERROR("%s: expected operand for operator: %s\n", SHELL_NAME, add ? "++" : "--");
+        PRINT_ERROR("%s: expected operand for operator: %s\n", 
+                    SOURCE_NAME, add ? "++" : "--");
         error = 1;
         return 0;
     }
@@ -452,7 +453,7 @@ long do_eval_inc_dec(int pre, int add, struct stack_item_s *a1)
     /* can't assign to read-only variables */
     if(flag_set(a1->ptr->flags, FLAG_READONLY))
     {
-        READONLY_ASSIGN_ERROR(SHELL_NAME, a1->ptr->name);
+        READONLY_ASSIGN_ERROR(SOURCE_NAME, a1->ptr->name, "variable");
         error = 1;
         return 0;
     }
@@ -530,7 +531,7 @@ long eval_predec(struct stack_item_s *a1, struct stack_item_s *unused __attribut
 enum { ASSOC_NONE = 0, ASSOC_LEFT, ASSOC_RIGHT };
 
 /*
- * see this link for C operator precedence:
+ * See this link for C operator precedence:
  * https://en.cppreference.com/w/c/language/operator_precedence
  */
 
@@ -636,7 +637,7 @@ struct op_s *OP_COMMA        = &arithm_ops[40];
 
 
 /*
- * return 1 if the given char is a valid shell variable name char.
+ * Return 1 if the given char is a valid shell variable name char.
  */
 int valid_name_char(char c)
 {
@@ -660,13 +661,13 @@ int valid_name_char(char c)
 
 
 /*
- * push an operator on the operator stack.
+ * Push an operator on the operator stack.
  */
 void push_opstack(struct op_s *op)
 {
     if(nopstack > MAXOPSTACK-1)
     {
-        PRINT_ERROR("%s: operator stack overflow\n", SHELL_NAME);
+        PRINT_ERROR("%s: operator stack overflow\n", SOURCE_NAME);
         error = 1;
         return;
     }
@@ -675,13 +676,14 @@ void push_opstack(struct op_s *op)
 
 
 /*
- * pop an operator from the operator stack.
+ * Pop an operator from the operator stack.
  */
 struct op_s *pop_opstack(void)
 {
     if(!nopstack)
     {
-        PRINT_ERROR("%s: operator stack is empty: operator expected\n", SHELL_NAME);
+        PRINT_ERROR("%s: operator stack is empty: operator expected\n", 
+                    SOURCE_NAME);
         error = 1;
         return NULL;
     }
@@ -690,13 +692,13 @@ struct op_s *pop_opstack(void)
 
 
 /*
- * push a long numeric operand on the operand stack.
+ * Push a long numeric operand on the operand stack.
  */
 void push_numstackl(long val)
 {
     if(nnumstack > MAXNUMSTACK-1)
     {
-        PRINT_ERROR("%s: number stack overflow\n", SHELL_NAME);
+        PRINT_ERROR("%s: number stack overflow\n", SOURCE_NAME);
         error = 1;
         return;
     }
@@ -707,13 +709,13 @@ void push_numstackl(long val)
 
 
 /*
- * push a shell variable operand on the operand stack.
+ * Push a shell variable operand on the operand stack.
  */
 void push_numstackv(struct symtab_entry_s *val)
 {
     if(nnumstack > MAXNUMSTACK-1)
     {
-        PRINT_ERROR("%s: number stack overflow\n", SHELL_NAME);
+        PRINT_ERROR("%s: number stack overflow\n", SOURCE_NAME);
         error = 1;
         return;
     }
@@ -724,13 +726,14 @@ void push_numstackv(struct symtab_entry_s *val)
 
 
 /*
- * pop an operand from the operand stack.
+ * Pop an operand from the operand stack.
  */
 struct stack_item_s pop_numstack(void)
 {
     if(!nnumstack)
     {
-        PRINT_ERROR("%s: number stack is empty: operand expected\n", SHELL_NAME);
+        PRINT_ERROR("%s: number stack is empty: operand expected\n", 
+                    SOURCE_NAME);
         error = 1;
         return (struct stack_item_s) { };
     }
@@ -739,15 +742,15 @@ struct stack_item_s pop_numstack(void)
 
 
 /*
- * perform operator shunting when we have a new operator by popping the operator
+ * Perform operator shunting when we have a new operator by popping the operator
  * at the top of the stack and applying it to the operands on the operand stack.
- * we do this if the operator on top of the stack is not a '(' operator and:
+ * We do this if the operator on top of the stack is not a '(' operator and:
  * 
  *   - has greater precedence than the new operator, or
  *   - has equal precedence to the new operator, but the top-of-stack one is
  *     left-associative
  * 
- * after popping the operator, we push the new operator on the operator stack,
+ * After popping the operator, we push the new operator on the operator stack,
  * and we push the previous top-of-stack operator's result on the operand stack.
  */
 
@@ -794,7 +797,7 @@ void shunt_op(struct op_s *op)
         {
             if(!(pop = pop_opstack()) || pop->op != '(')
             {
-                PRINT_ERROR("%s: stack error: no matching \'(\'\n", SHELL_NAME);
+                PRINT_ERROR("%s: stack error: no matching \'(\'\n", SOURCE_NAME);
                 error = 1;
             }
         }
@@ -848,12 +851,12 @@ void shunt_op(struct op_s *op)
 
 
 /*
- * check if the given digit falls in the range [0]..[base-1], then return
+ * Check if the given digit falls in the range [0]..[base-1], then return
  * the numeric value of that digit.
- * the base can be any number from 2 to 64, with values higher than 9
+ * The base can be any number from 2 to 64, with values higher than 9
  * represented by the letters a-z, then A-Z, then @ and _ (similar to bash).
- * if the base is <= 36, small and capital letters can be used interchangeably.
- * the result is place in the *result field, and 1 is returned.. otherwise
+ * If the base is <= 36, small and capital letters can be used interchangeably.
+ * the result is place in the *result field, and 1 is returned. Otherwise
  * zero is returned.
  */
 int get_ndigit(char c, int base, int *result)
@@ -938,14 +941,15 @@ int get_ndigit(char c, int base, int *result)
 
 invalid:
     /* invalid digit */
-    PRINT_ERROR("%s: digit (%c) exceeds the value of the base (%d)\n", SHELL_NAME, c, base);
+    PRINT_ERROR("%s: digit (%c) exceeds the value of the base (%d)\n", 
+                SOURCE_NAME, c, base);
     error = 1;
     return 0;
 }
 
 
 /*
- * extract an arithmetic operator from the beginning of expr.
+ * Extract an arithmetic operator from the beginning of expr.
  */
 struct op_s *get_op(char *expr)
 {
@@ -1087,10 +1091,10 @@ struct op_s *get_op(char *expr)
 
 
 /*
- * extract a numeric operand from the beginning of the given string.
- * numbers can be hex constants (preceded by 0x or 0X), octal (preceded by 0),
+ * Extract a numeric operand from the beginning of the given string.
+ * Numbers can be hex constants (preceded by 0x or 0X), octal (preceded by 0),
  * binary (preceded by 0b or 0B), or in any base, given in the format: [base#]n.
- * the number of characters used to get the number is stored in *char_count,
+ * The number of characters used to get the number is stored in *char_count,
  * while the number itself is return as a long int.
  */
 long get_num(char *s, int *char_count)
@@ -1136,7 +1140,7 @@ long get_num(char *s, int *char_count)
                 }
                 else
                 {
-                    PRINT_ERROR("%s: invalid number near: %s\n", SHELL_NAME, s);
+                    PRINT_ERROR("%s: invalid number near: %s\n", SOURCE_NAME, s);
                     error = 1;
                     return 0;
                 }
@@ -1165,8 +1169,8 @@ long get_num(char *s, int *char_count)
     }
 
     /*
-     * numbers can be written as base#n, where base is a number
-     * between 2 and 64.. this is a non-POSIX extension.. digits higher
+     * Numbers can be written as base#n, where base is a number
+     * between 2 and 64. This is a non-POSIX extension. Digits higher
      * than 9 are represented by alphabetic characters a..z, A..Z, @ and _.
      * the number of legal letters depends on the selected base.
      */
@@ -1175,7 +1179,7 @@ long get_num(char *s, int *char_count)
         if(num < MINBASE || num > MAXBASE)
         {
             /* invalid base */
-            PRINT_ERROR("%s: invalid arithmetic base: %ld\n", SHELL_NAME, num);
+            PRINT_ERROR("%s: invalid arithmetic base: %ld\n", SOURCE_NAME, num);
             error = 1;
             return 0;
         }
@@ -1199,7 +1203,7 @@ long get_num(char *s, int *char_count)
         /* check the number is not attached to non-digit chars */
         if(*s2 && !isspace(*s2))
         {
-            PRINT_ERROR("%s: invalid number near: %s\n", SHELL_NAME, s);
+            PRINT_ERROR("%s: invalid number near: %s\n", SOURCE_NAME, s);
             error = 1;
             return 0;
         }
@@ -1210,7 +1214,7 @@ long get_num(char *s, int *char_count)
 
 
 /*
- * extract a shell variable name operand from the beginning of chars.
+ * Extract a shell variable name operand from the beginning of chars.
  */
 struct symtab_entry_s *get_var(char *s, int *char_count)
 {
@@ -1275,9 +1279,9 @@ struct symtab_entry_s *get_var(char *s, int *char_count)
 
 
 /*
- * determine whether an increment '++' or decrement '--' operator works as a
+ * Determine whether an increment '++' or decrement '--' operator works as a
  * pre- or post-operator by examining the characters preceding the operator.
- * if the operator is preceded by an alphanumeric character, its a post-op,
+ * If the operator is preceded by an alphanumeric character, its a post-op,
  * otherwise its a pre-op (post-ops have higher precedence than pre-ops).
  */
 int is_post_op(char *baseexp, char *expr)
@@ -1348,7 +1352,8 @@ char *arithm_expand(char *orig_expr)
     char *baseexp = malloc(baseexp_len+1);
     if(!baseexp)
     {
-        PRINT_ERROR("%s: insufficient memory for arithmetic expansion\n", SHELL_NAME);
+        PRINT_ERROR("%s: insufficient memory for arithmetic expansion\n", 
+                    SOURCE_NAME);
         return NULL;
     }
 
@@ -1428,7 +1433,8 @@ char *arithm_expand(char *orig_expr)
                             }
                             else if(op->op != '(' && !op->unary)
                             {
-                                PRINT_ERROR("%s: illegal use of binary operator near: %s\n", SHELL_NAME, expr);
+                                PRINT_ERROR("%s: illegal use of binary operator near: %s\n", 
+                                            SOURCE_NAME, expr);
                                 goto err;
                             }
                         }
@@ -1504,7 +1510,7 @@ char *arithm_expand(char *orig_expr)
                 if(i == 0)
                 {
                     /* closing brace not found */
-                    PRINT_ERROR("%s: syntax error near: %s\n", SHELL_NAME, expr);
+                    PRINT_ERROR("%s: syntax error near: %s\n", SOURCE_NAME, expr);
                     goto err;
                 }
                 
@@ -1514,7 +1520,8 @@ char *arithm_expand(char *orig_expr)
                 
                 if(!sub_expr)
                 {
-                    PRINT_ERROR("%s: insufficient memory to parse arithmetic expression\n", SHELL_NAME);
+                    PRINT_ERROR("%s: insufficient memory to parse arithmetic expression\n", 
+                                SOURCE_NAME);
                     goto err;
                 }
 
@@ -1545,7 +1552,8 @@ char *arithm_expand(char *orig_expr)
                 struct symtab_entry_s *n1 = get_var(tstart, &n2);
                 if(!n1)
                 {
-                    PRINT_ERROR("%s: failed to add symbol near: %s\n", SHELL_NAME, tstart);
+                    PRINT_ERROR("%s: failed to add symbol near: %s\n", 
+                                SOURCE_NAME, tstart);
                     goto err;
                 }
                 DISCARD_COMMA();
@@ -1627,7 +1635,7 @@ char *arithm_expand(char *orig_expr)
          */
         if(op->op == '(')
         {
-            PRINT_ERROR("%s: error: missing \')\'\n", SHELL_NAME);
+            PRINT_ERROR("%s: error: missing \')\'\n", SOURCE_NAME);
             goto err;
         }
         
@@ -1658,7 +1666,8 @@ char *arithm_expand(char *orig_expr)
     /* we must have only 1 item on the stack now */
     if(nnumstack != 1)
     {
-        PRINT_ERROR("%s: number stack has %d elements after evaluation (should be 1)\n", SHELL_NAME, nnumstack);
+        PRINT_ERROR("%s: number stack has %d elements after evaluation (should be 1)\n", 
+                    SOURCE_NAME, nnumstack);
         goto err;
     }
 

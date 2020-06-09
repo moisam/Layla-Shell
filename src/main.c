@@ -22,6 +22,7 @@
 /* macro definition needed to use setenv() */
 #define _POSIX_C_SOURCE 200809L
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -32,6 +33,7 @@
 #include "cmd.h"
 #include "sig.h"
 #include "debug.h"
+#include "utf.h"
 #include "backend/backend.h"
 #include "symtab/symtab.h"
 #include "builtins/builtins.h"
@@ -61,7 +63,7 @@ long read_pipe(FILE *f, char **str);
 
 
 /*
- * main shell entry point.
+ * Main shell entry point.
  */
 int main(int argc, char **argv)
 {
@@ -156,7 +158,7 @@ int main(int argc, char **argv)
     }
     
     /*
-     * we check to see if this is a login shell. If so, read /etc/profile
+     * We check to see if this is a login shell. If so, read /etc/profile
      * and then ~/.profile.
      */
     if(islogin)
@@ -165,8 +167,8 @@ int main(int argc, char **argv)
     }
 
     /*
-     * check for and execute $ENV file, if any (if not in privileged mode).
-     * if not privileged, ksh also uses /etc/suid_profile instead of $ENV
+     * Check for and execute $ENV file, if any (if not in privileged mode).
+     * If not privileged, ksh also uses /etc/suid_profile instead of $ENV
      * (but we pass this one).
      */
     if(interactive_shell)
@@ -175,8 +177,8 @@ int main(int argc, char **argv)
     }
     
     /*
-     * the restricted mode '-r' is enabled below, after $ENV and .profile
-     * scripts have been read and executed (above). this is in conformance
+     * The restricted mode '-r' is enabled below, after $ENV and .profile
+     * scripts have been read and executed (above). This is in conformance
      * to ksh behaviour.
      */
 
@@ -193,7 +195,7 @@ int main(int argc, char **argv)
     }
     
     /* initialize the terminal */
-    if(read_stdin)
+    if(read_stdin && interactive_shell)
     {
         init_tty();
     }
@@ -208,15 +210,18 @@ int main(int argc, char **argv)
     init_signals();
     
     /*
-     * speed up the startup of subshells by omitting some features that are used
-     * for interactive shells, like command history, aliases and dirstacks. in this
+     * Speed up the startup of subshells by omitting some features that are used
+     * for interactive shells, like command history, aliases and dirstacks. In this
      * case, we only init these features if this is NOT a subshell.
      */
     if(interactive_shell)
     {
         /* init history */
-        init_history();
-
+        if(hist_cmds_this_session == 0)
+        {
+            load_history_list();
+        }
+        
         /* init the directory stack */
         init_dirstack();
 
@@ -257,7 +262,24 @@ int main(int argc, char **argv)
     /* main program loop */
     if(read_stdin)
     {
-        cmdline();
+        if(interactive_shell)
+        {
+            cmdline();
+        }
+        else
+        {
+            long i;
+            char *tmpbuf = NULL;
+            if((i = read_pipe(stdin, &tmpbuf)))
+            {
+                src.buffer   = tmpbuf;
+                src.bufsize  = i;
+                src.srctype  = SOURCE_STDIN;
+                src.srcname  = NULL;
+                src.curpos   = INIT_SRC_POS;
+                parse_and_execute(&src);
+            }
+        }
     }
     else
     {
@@ -269,6 +291,7 @@ int main(int argc, char **argv)
 }
 
 
+#if 0
 #define SAVE_TO_HISTORY_AND_PRINT(cmd_node)     \
 do {                                            \
     if(save_hist)                               \
@@ -280,12 +303,78 @@ do {                                            \
         fprintf(stderr, "%s\n", (cmd_node));    \
     }                                           \
 } while(0)
+#endif
 
 
 /*
- * parse and execute the translation unit we have in the passed source_s struct.
+ * Perform history expansion if we didn't get the command from the comamndline,
+ * and if the -H option is set. Afterwards, save command to history, and then 
+ * print the command (if the -v option is set).
+ */
+void do_history_and_print(struct source_s *src, struct node_s *cmd_tree)
+// void do_history_and_print(struct source_s *src, char *orig_cmd)
+{
+    
+#if 0
+    if(src->buffer != cmdbuf && option_set('H'))
+    {
+        nodetree_hist_expand(cmd_tree);
+        strcpy(cmdbuf, orig_cmd);
+        cmdbuf_end = strlen(orig_cmd);
+        
+        /* perform history expansion on the line */
+        char *p;
+        
+        if((p = hist_expand(0, 0)) && (p != INVALID_HIST_EXPAND))
+        {
+            cmd = p;
+        }
+    }
+#endif
+    
+    char *cmd = cmd_nodetree_to_str(cmd_tree, 1);
+    
+    /*
+     * Determine if we're going to save commands to the history list.
+     * We save history commands when the shell is interactive and we're reading
+     * from stdin, or if the -o history (-w) option is set.
+     * 
+     * We perform the check inside the REPL loop because one of the executed
+     * commands might set -o history on or off, which should affect the commands
+     * following that one. This can happen when we're reading batches of commands,
+     * e.g. from a script file.
+     */
+    int save_hist = (interactive_shell && src->srctype == SOURCE_STDIN) ||
+                     optionx_set(OPTION_SAVE_HIST);
+
+    if(cmd)
+    {
+        if(save_hist)
+        {
+            save_to_history(cmd);
+        }
+        
+        if(option_set('v'))
+        {
+            fprintf(stderr, "%s\n", cmd);
+        }
+
+#if 0
+    if(cmd != orig_cmd)
+    {
+        free_malloced_str(cmd);
+    }
+#endif
+
+        free(cmd);
+    }
+}
+
+
+/*
+ * Parse and execute the translation unit we have in the passed source_s struct.
  * 
- * returns 1.
+ * Returns 1.
  */
 int parse_and_execute(struct source_s *src)
 {
@@ -307,21 +396,6 @@ int parse_and_execute(struct source_s *src)
     req_continue   = 0;
     req_break      = 0;
     cur_loop_level = 0;
-
-    /*
-     * the -n option means read commands but don't execute them.
-     * only effective in non-interactive shells (POSIX says interactive shells
-     * may safely ignore it). this option is good for checking a script for
-     * syntax errors.
-     */
-    int noexec = (option_set('n') && !interactive_shell);
-
-    /*
-     * determine if we're going to save commands to the history list.
-     * we save history commands when the shell is interactive and we're reading
-     * from stdin.
-     */
-    int save_hist = interactive_shell && src->srctype == SOURCE_STDIN;
 
     int i = src->curpos;
     int res = 1;             /* the result of parsing/executing */
@@ -367,10 +441,18 @@ int parse_and_execute(struct source_s *src)
     parser_err = 0;
 
     /* restore the terminal's canonical mode if needed */
-    if(read_stdin)
+    if(read_stdin && interactive_shell)
     {
         term_canon(1);
     }
+    
+    /*
+     * backup our standard streams so that we can restore them in case we needed
+     * to execute an EXIT trap any time while we are executing commands.
+     */
+    save_std(0, backup_fd);
+    save_std(1, backup_fd);
+    save_std(2, backup_fd);
 
     /* loop parsing and executing commands */
     while(tok->type != TOKEN_EOF)
@@ -380,6 +462,7 @@ int parse_and_execute(struct source_s *src)
         /* parse the next command */
         struct node_s *cmd = parse_list(tok);
         struct node_s *cmd2 = cmd;
+        dump_node_tree(cmd, 0);
 
         /* parser encountered an error */
         if(parser_err)
@@ -403,6 +486,21 @@ int parse_and_execute(struct source_s *src)
             cmd->lineno = src->curline;
         }
 
+#if 0
+        /*
+         * Determine if we're going to save commands to the history list.
+         * We save history commands when the shell is interactive and we're reading
+         * from stdin, or if the -o history (-w) option is set.
+         * 
+         * We perform the check inside the REPL loop because one of the executed
+         * commands might set -o history on or off, which should affect the commands
+         * following that one. This can happen when we're reading batches of commands,
+         * e.g. from a script file.
+         */
+        int save_hist = (interactive_shell && src->srctype == SOURCE_STDIN) ||
+                        optionx_set(OPTION_SAVE_HIST);
+#endif
+        
         /* add command to the history list and echo it (if -v option is set) */
         switch(cmd2->type)
         {
@@ -417,7 +515,8 @@ int parse_and_execute(struct source_s *src)
                 else
                 {
                     /* 'time' word with no timed command */
-                    SAVE_TO_HISTORY_AND_PRINT("time");
+                    struct node_s tmp = { .val_type = VAL_STR, .val.str = "time" };
+                    do_history_and_print(src, &tmp);
                     break;
                 }
                 /* fall through to the next case */
@@ -425,11 +524,26 @@ int parse_and_execute(struct source_s *src)
 
             case NODE_COMMAND:
             case NODE_LIST:
-                if(cmd2->val_type == VAL_STR && cmd2->val.str)
+            case NODE_PIPE:
+            case NODE_FUNCTION:
+            case NODE_ANDOR:
+            case NODE_SUBSHELL:
+            case NODE_WHILE:
+            case NODE_UNTIL:
+            case NODE_FOR:
+#if 0
+                p = cmd_nodetree_to_str(cmd2, 1);
+                if(p)
                 {
-                    SAVE_TO_HISTORY_AND_PRINT(cmd2->val.str);
+                    do_history_and_print(src, p);
+                    free(p);
                     break;
                 }
+#endif
+                
+                do_history_and_print(src, cmd2);
+                break;
+                
                 /* fall through to the next case */
                 __attribute__((fallthrough));
 
@@ -442,41 +556,31 @@ int parse_and_execute(struct source_s *src)
                 p = get_malloced_strl(src->buffer, i, src->curpos-i);
                 if(p)
                 {
-                    SAVE_TO_HISTORY_AND_PRINT(p);
+                    struct node_s tmp = { .val_type = VAL_STR, .val.str = p };
+                    do_history_and_print(src, &tmp);
                     free_malloced_str(p);
                 }
-#if 0
-                ;
-                int j = src->curpos-(tok->text_len);
-                while(src->buffer[j] == '\n')
-                {
-                    j--;
-                }
-                /* copy command line to buffer */
-                char buf[j-i+1];
-                int k = 0;
-                do
-                {
-                    buf[k++] = src->buffer[i++];
-                } while(i < j);
-                buf[k] = '\0';
-                SAVE_TO_HISTORY_AND_PRINT(buf);
-#endif
                 break;
         }
         
         /*
-         * dump the Abstract Source Tree (AST) of this translation unit.
-         * note that we are using an extended option '-d' which is not
+         * Dump the Abstract Source Tree (AST) of this translation unit.
+         * Note that we are using an extended option '-d' which is not
          * defined by POSIX.
          */
         if(option_set('d'))
         {
             dump_node_tree(cmd, 1);
         }
+        
 
-        /* we've got a command. now are we going to execute it? */
-        if(noexec)
+        /*
+         * The -n option means read commands but don't execute them.
+         * Only effective in non-interactive shells (POSIX says interactive shells
+         * may safely ignore it). This option is good for checking a script for
+         * syntax errors.
+         */
+        if(option_set('n') && !interactive_shell)
         {
             free_node_tree(cmd);
             tok = get_current_token();
@@ -495,7 +599,6 @@ int parse_and_execute(struct source_s *src)
             }
         }
         tok = get_current_token();
-        
 
         /* free the nodetree */
         free_node_tree(cmd);
@@ -521,8 +624,8 @@ int parse_and_execute(struct source_s *src)
         /*
          * POSIX does not specify the -t (or onecmd) option, as it says it is
          * mainly used with here-documents. this flag causes the shell to read
-         * and execute only one command before exiting.. it is not clear what
-         * exactly constitutes 'one command'.. here, we just execute the first
+         * and execute only one command before exiting. It is not clear what
+         * exactly constitutes 'one command'. Here, we just execute the first
          * node tree we've got and exit.
          */
         if(option_set('t'))
@@ -531,8 +634,8 @@ int parse_and_execute(struct source_s *src)
         }
 
         /*
-         * prepare for parsing the next command.
-         * skip optional newline and comment tokens.
+         * Prepare for parsing the next command.
+         * Skip optional newline and comment tokens.
          */
         while(tok->type != TOKEN_EOF)
         {
@@ -546,21 +649,6 @@ int parse_and_execute(struct source_s *src)
             }
         }
 
-#if 0
-        /* reached EOF or error getting next token */
-        if(tok->type == TOKEN_EOF)
-        {
-            break;
-        }
-
-        /* keep a track of the first char of the current command line */
-        i = src->curpos-(tok->text_len);
-        while(src->buffer[i] == '\n')
-        {
-            i++;
-        }
-#endif
-
         /* save the start of this line */
         src->wstart = src->curpos-(tok->text_len);
     }
@@ -572,12 +660,22 @@ int parse_and_execute(struct source_s *src)
     /* finished parsing and executing commands */
     fflush(stdout);
     fflush(stderr);
+    
+    /* discard the backup streams */
+    for(i = 0; i < 3; i++)
+    {
+        if(backup_fd[i] >= 0)
+        {
+            close(backup_fd[i]);
+            backup_fd[i] = -1;
+        }
+    }
 
     /* reset the received signal flag */
     signal_received = 0;
 
     /* restore the terminal's non-canonical mode if needed */
-    if(read_stdin)
+    if(read_stdin && interactive_shell)
     {
         term_canon(0);
         update_row_col();
@@ -592,26 +690,35 @@ int parse_and_execute(struct source_s *src)
 
 
 /*
- * read a file (presumably a script file) and initialize the
+ * Read a file (presumably a script file) and initialize the
  * source_s struct so that we can parse and execute the file.
  * 
- * NOTE: this function doesn't handle big files.. we should extend
+ * NOTE: This function doesn't handle big files. We should extend
  *       it so it uses memmaped files or any other method for handling
  *       big files.
  * 
- * returns 1 if the file is loaded successfully, 0 otherwise.
+ * Returns 1 if the file is loaded successfully, 0 otherwise.
  */
 int read_file(char *filename, struct source_s *src)
 {
     errno = 0;
     if(!filename)
     {
+        errno = EINVAL;
         return 0;
     }
     
     char *filename2 = word_expand_to_str(filename);
     if(!filename2)
     {
+        errno = EINVAL;
+        return 0;
+    }
+    
+    /* errno whill be set by file_exists() */
+    if(!file_exists(filename2))
+    {
+        free(filename2);
         return 0;
     }
     
@@ -710,6 +817,31 @@ read:
     }
 
     fclose(f);
+    
+    /*
+     * Make sure we've got a valid text file. bash seems to check files for
+     * NULL characters, and if it finds more than 256, it regards the file
+     * as a binary file.
+     */
+    char *p = tmpbuf, *p2 = p+i;
+    int nulls = 0;
+    while(p < p2)
+    {
+        if(*p == 0)
+        {
+            if(++nulls == 256)
+            {
+                PRINT_ERROR("%s: cannot read `%s`: binary file\n", 
+                            SOURCE_NAME, filename);
+                free(tmpbuf);
+                free(filename2);
+                errno = ENOEXEC;
+                return 0;
+            }
+        }
+        p++;
+    }
+    
     src->buffer   = tmpbuf;
     src->bufsize  = i;
     src->srctype  = SOURCE_EXTERNAL_FILE;
@@ -735,9 +867,9 @@ error:
 
 
 /*
- * similar to read_file(), except it reads from a pipe.
+ * Similar to read_file(), except it reads from a pipe.
  * 
- * returns the count of bytes read, and stores the read string in str.
+ * Returns the count of bytes read, and stores the read string in str.
  */
 long read_pipe(FILE *f, char **str)
 {
@@ -747,7 +879,7 @@ long read_pipe(FILE *f, char **str)
     
     if(!buf)
     {
-        PRINT_ERROR("%s: failed to allocate buffer: %s\n", SHELL_NAME,
+        PRINT_ERROR("%s: failed to allocate buffer: %s\n", SOURCE_NAME,
                     strerror(errno));
         return 0;
     }
@@ -764,7 +896,7 @@ long read_pipe(FILE *f, char **str)
         
         if(!may_extend_string_buf(&buf, &buf_end, &b, &buf_size))
         {
-            PRINT_ERROR("%s: failed to allocate buffer: %s\n", SHELL_NAME,
+            PRINT_ERROR("%s: failed to allocate buffer: %s\n", SOURCE_NAME,
                         strerror(errno));
             return 0;
         }

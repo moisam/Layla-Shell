@@ -26,13 +26,13 @@
 #include "debug.h"
 
 /*
- * the string buffer aims to create a pool of the frequently used strings, instead
+ * The string buffer aims to create a pool of the frequently used strings, instead
  * of wasting malloc calls which will inevitably result in heap memory fragmentation
- * and exhaution. candidates for string buffering are short-length, frquently accessed
+ * and exhaution. Candidates for string buffering are short-length, frquently accessed
  * strings, such as shell variable names. a heredoc, for example, is not a good candidate,
- * as it is either infrequently accessed, or is long. it is up to the caller to decide if
- * the string is a good candidate. if it is, obtain a buffered string by calling get_malloced_str()
- * or get_malloced_strl(). otherwise, call __get_malloced_str() directly. also, if you know you
+ * as it is either infrequently accessed, or is long. It is up to the caller to decide if
+ * the string is a good candidate. If it is, obtain a buffered string by calling get_malloced_str()
+ * or get_malloced_strl(). Otherwise, call __get_malloced_str() directly. also, if you know you
  * are going to make changes to the string, then call __get_malloced_str() and work on your
  * own copy, as strings returned by get_malloced_str() are shared by others (this is the whole
  * point of it).
@@ -47,7 +47,7 @@ char *newline_str = "\n";
 
 
 /*
- * initialize the strings buffer.
+ * Initialize the strings buffer.
  */
 void init_str_hashtable(void)
 {
@@ -56,10 +56,10 @@ void init_str_hashtable(void)
 
 
 /*
- * return an malloc'd copy of the given str.. call it directly if you want a private
- * copy of str, one that you can modify at will.. also called by get_malloced_str() below.
+ * Return an malloc'd copy of the given str. Call it directly if you want a private
+ * copy of str, one that you can modify at will. Also called by get_malloced_str() below.
  * 
- * returns the malloc'd str, or NULL if failed to alloc memory.
+ * Returns the malloc'd str, or NULL if failed to alloc memory.
  */
 char *__get_malloced_str(char *str)
 {
@@ -74,10 +74,10 @@ char *__get_malloced_str(char *str)
 
 
 /*
- * search for the given str in the string buffer.. if not found, __get_malloced_str()
+ * Search for the given str in the string buffer. If not found, __get_malloced_str()
  * is called to alloc a new string, which added to the buffer and returned.
  * 
- * returns the strings buffer entry of str, or NULL if failed to alloc memory.
+ * Returns the strings buffer entry of str, or NULL if failed to alloc memory.
  */
 char *get_malloced_str(char *str)
 {
@@ -124,11 +124,11 @@ char *get_malloced_str(char *str)
 
 
 /*
- * this function is similar to get_malloced_str(), except that it doesn't search
+ * This function is similar to get_malloced_str(), except that it doesn't search
  * the buffer for the whole str, it searches for the substring starting at the start
  * index with the given length.
  * 
- * returns the strings buffer entry of str, or NULL if failed to alloc memory.
+ * Returns the strings buffer entry of str, or NULL if failed to alloc memory.
  */
 char *get_malloced_strl(char *str, int start, int length)
 {
@@ -146,7 +146,7 @@ char *get_malloced_strl(char *str, int start, int length)
 
 
 /*
- * decrement the count of str references in the strings buffer.. if the count
+ * Decrement the count of str references in the strings buffer. If the count
  * reaches zero, the string is freed.
  */
 void free_malloced_str(char *str)

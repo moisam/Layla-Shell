@@ -44,7 +44,7 @@ extern struct termios tty_attr;
 
 
 /*
- * return a new file descriptor to the current terminal device.
+ * Return a new file descriptor to the current terminal device.
  */
 int cur_tty_fd(void)
 {
@@ -85,7 +85,7 @@ int cur_tty_fd(void)
 
 
 /*
- * read one char from the terminal.
+ * Read one char from the terminal.
  */
 int read_char(int tty)
 {
@@ -104,7 +104,7 @@ int read_char(int tty)
 
 
 /*
- * turn the terminal canonical mode on or off.
+ * Turn the terminal canonical mode on or off.
  */
 void term_canon(int on)
 {
@@ -130,9 +130,9 @@ struct termios cur_tty_attr;
 
 
 /*
- * save the current termios structure from the given file descriptor.
+ * Save the current termios structure from the given file descriptor.
  * 
- * returns 1 the current tty atributes on success, NULL on failure.
+ * Returns 1 the current tty atributes on success, NULL on failure.
  */
 struct termios *save_tty_attr(void)
 {
@@ -149,9 +149,9 @@ struct termios *save_tty_attr(void)
 
 
 /*
- * set the termios structure on the given file descriptor.
+ * Set the termios structure on the given file descriptor.
  * 
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int set_tty_attr(int tty, struct termios *attr)
 {
@@ -168,10 +168,10 @@ int set_tty_attr(int tty, struct termios *attr)
 
 
 /*
- * get the screen size and save the width and height in the $COLUMNS and $LINES
+ * Get the screen size and save the width and height in the $COLUMNS and $LINES
  * shell variables, respectively.
  *
- * returns 1 if the screen size if obtained and saved, 0 otherwise.
+ * Returns 1 if the screen size if obtained and saved, 0 otherwise.
  */
 int get_screen_size(void)
 {
@@ -200,7 +200,7 @@ int get_screen_size(void)
         e = add_to_symtab("COLUMNS");
     }
     
-    if(sprintf(buf, "%d", VGA_WIDTH))
+    if(sprintf(buf, "%zu", VGA_WIDTH))
     {
         symtab_entry_setval(e, buf);
     }
@@ -213,7 +213,7 @@ int get_screen_size(void)
         e = add_to_symtab("LINES");
     }
     
-    if(sprintf(buf, "%d", VGA_HEIGHT))
+    if(sprintf(buf, "%zu", VGA_HEIGHT))
     {
         symtab_entry_setval(e, buf);
     }
@@ -223,7 +223,7 @@ int get_screen_size(void)
 
 
 /*
- * move the cursor to the given row (line) and column.. both values are 1-based,
+ * Move the cursor to the given row (line) and column. Both values are 1-based,
  * counting from the top-left corner of the screen.
  */
 void move_cur(int row, int col)
@@ -237,7 +237,7 @@ void move_cur(int row, int col)
 
 
 /*
- * clear the screen.
+ * Clear the screen.
  */
 void clear_screen(void)
 {
@@ -251,7 +251,7 @@ void clear_screen(void)
 
 
 /*
- * set the text foreground and background color.
+ * Set the text foreground and background color.
  */
 void set_terminal_color(int FG, int BG)
 {
@@ -264,7 +264,7 @@ void set_terminal_color(int FG, int BG)
 
 
 /*
- * read the row or column number from the terminal.
+ * Read the row or column number from the terminal.
  */
 int term_get_num(int *delim, int tty)
 {
@@ -284,15 +284,15 @@ int term_get_num(int *delim, int tty)
 
 
 /*
- * get the cursor position (current row and column), which are 1-based numbers,
+ * Get the cursor position (current row and column), which are 1-based numbers,
  * counting from the top-left corner of the screen.
  */
 void update_row_col(void)
 {
     /*
-     * clear the terminal device's EOF flag.. this would have been set, for example,
+     * Clear the terminal device's EOF flag. This would have been set, for example,
      * if we used the read builtin to read from the terminal and the user pressed
-     * CTRL-D to indicate end of input.. we can't read the cursor position without
+     * CTRL-D to indicate end of input. We can't read the cursor position without
      * clearing that flag.
      */
     if(feof(stdin))
@@ -364,20 +364,20 @@ void update_row_col(void)
 
 
 /*
- * return the current row at which the cursor is positioned.. rows are 1-based,
+ * Return the current row at which the cursor is positioned. Rows are 1-based,
  * counting from the top of the screen.
  */
-int get_terminal_row(void)
+size_t get_terminal_row(void)
 {
     return terminal_row;
 }
 
 
 /*
- * return the current column at which the cursor is positioned.. columns are 1-based,
+ * Return the current column at which the cursor is positioned. Columns are 1-based,
  * counting from the left side of the screen.
  */
-int get_terminal_col(void)
+size_t get_terminal_col(void)
 {
     return terminal_col;
 }

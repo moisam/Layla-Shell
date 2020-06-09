@@ -79,7 +79,7 @@ int listindex = 0;
 
 
 /*
- * update the job table entry with the exit status of the process with the
+ * Update the job table entry with the exit status of the process with the
  * given pid.
  */
 void add_pid_to_job(struct job_s *job, pid_t pid)
@@ -122,7 +122,7 @@ void add_pid_to_job(struct job_s *job, pid_t pid)
 
 
 /*
- * update the job table entry with the exit status of the process with the
+ * Update the job table entry with the exit status of the process with the
  * given pid.
  */
 int get_pid_exit_status(struct job_s *job, pid_t pid)
@@ -147,7 +147,7 @@ int get_pid_exit_status(struct job_s *job, pid_t pid)
 
 
 /*
- * update the job table entry with the exit status of the process with the
+ * Update the job table entry with the exit status of the process with the
  * given pid.
  */
 void set_pid_exit_status(struct job_s *job, pid_t pid, int status)
@@ -190,8 +190,8 @@ void set_pid_exit_status(struct job_s *job, pid_t pid, int status)
 
 
 /*
- * set the job's exit status according to the exit status of its member processes.
- * if the pipefail '-l' option is set, the job's exit status is that of the last
+ * Set the job's exit status according to the exit status of its member processes.
+ * If the pipefail '-l' option is set, the job's exit status is that of the last
  * process to exit with non-zero exit status, otherwise its that of the process
  * whose pid == pgid of the job.
  */
@@ -279,7 +279,7 @@ void set_job_exit_status(struct job_s *job, pid_t pid, int status)
 
 
 /*
- * update the job's exit status by updating the exit status of the job's member 
+ * Update the job's exit status by updating the exit status of the job's member 
  * processes and setting the job's exit status accordingly.
  */
 void update_job_exit_status(struct job_s *job)
@@ -304,9 +304,9 @@ void update_job_exit_status(struct job_s *job)
 
 
 /*
- * check for POSIX list terminators: ';', '\n', and '&'.
+ * Check for POSIX list terminators: ';', '\n', and '&'.
  * 
- * returns 1 if the first char of *c is a list terminator, 0 otherwise.
+ * Returns 1 if the first char of *c is a list terminator, 0 otherwise.
  */
 inline int is_list_terminator(char *c)
 {
@@ -323,10 +323,10 @@ inline int is_list_terminator(char *c)
 
 
 /*
- * print a notification message telling the user about the status of the job to
- * which process pid (with the given exit status) belongs.. the output_pid
- * parameter indicates whether we should print the pid as part of the message or not..
- * if the rip_dead parameter is non-zero, we will remove the job from the jobs table.
+ * Print a notification message telling the user about the status of the job to
+ * which process pid (with the given exit status) belongs. The output_pid
+ * parameter indicates whether we should print the pid as part of the message or not.
+ * If the rip_dead parameter is non-zero, we will remove the job from the jobs table.
  */
 void do_output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_dead)
 {
@@ -357,9 +357,9 @@ void do_output_status(pid_t pid, int status, int output_pid, FILE *out, int rip_
 
 
 /*
- * print the notification message telling the exit status of a job or pid.
+ * Print the notification message telling the exit status of a job or pid.
  * if 'job' is not NULL, the status printed is that of the job as a whole,
- * and 'pid' is not used.. otherwise, the status of 'pid' is printed.
+ * and 'pid' is not used. Otherwise, the status of 'pid' is printed.
  */
 void print_status_message(struct job_s *job, pid_t pid, int status, int output_pid, FILE *out)
 {
@@ -457,10 +457,10 @@ void print_status_message(struct job_s *job, pid_t pid, int status, int output_p
  */
 
 /*
- * get the job id for the given job string (should be one of the entries in
+ * Get the job id for the given job string (should be one of the entries in
  * the table above).
  * 
- * returns the job id number, or 0 if the job is not found.
+ * Returns the job id number, or 0 if the job is not found.
  */
 int get_jobid(char *jobid_str)
 {
@@ -500,7 +500,7 @@ int get_jobid(char *jobid_str)
         int jobid = strtol(jobid_str, &strend, 10);
         if(*strend)
         {
-            PRINT_ERROR("%s: invalid job id: %s\n", SHELL_NAME, jobid_str);
+            PRINT_ERROR("%s: invalid job id: %s\n", SOURCE_NAME, jobid_str);
             return 0;
         }
         return jobid;
@@ -546,9 +546,9 @@ int get_jobid(char *jobid_str)
 
 
 /*
- * get the number of current jobs.. if except_job is non-NULL, it contains
- * a pointer to the job we don't want to count in the returned number..
- * that way, when the exit builtin is checking for pending jobs, it won't
+ * Get the number of current jobs. If except_job is non-NULL, it contains
+ * a pointer to the job we don't want to count in the returned number.
+ * That way, when the exit builtin is checking for pending jobs, it won't
  * also count itself.
  */
 int pending_jobs(void)
@@ -570,10 +570,10 @@ int pending_jobs(void)
 
 
 /*
- * kill all the pending jobs.
+ * Kill all the pending jobs.
  * 
- * called by exit() and others to kill all child processes.
- * the flag field tells us if we want to exclude specific
+ * Called by exit() and others to kill all child processes.
+ * The flag field tells us if we want to exclude specific
  * jobs from receiving the signal, e.g. all jobs except
  * the disowned ones (this is what a login terminal does
  * when it receives a SIGHUP signal).
@@ -599,11 +599,11 @@ void kill_all_jobs(int signum, int flag)
 
 
 /*
- * replace all jobspec occurences in the form of '%n' in the given argv, starting
+ * Replace all jobspec occurences in the form of '%n' in the given argv, starting
  * with argv[startat], then call the command builtin utility, passing it the
  * arguments to execute them.
  * 
- * returns 0 if the command is found and executed, non-zero otherwise.
+ * Returns 0 if the command is found and executed, non-zero otherwise.
  */
 int replace_and_run(int startat, int argc, char **argv)
 {
@@ -723,7 +723,7 @@ int replace_and_run(int startat, int argc, char **argv)
 
 
 /*
- * output the status of a job.. called by the jobs builtin utility (see below).
+ * Output the status of a job. Called by the jobs builtin utility (see below).
  */
 void output_job_status(struct job_s *job, int flags)
 {
@@ -764,11 +764,11 @@ void output_job_status(struct job_s *job, int flags)
 
 
 /*
- * the jobs builtin utility (POSIX).. used to list the status of running/stopped jobs.
- * returns 0, unless an unknown option or jobspec was supplied.
+ * The jobs builtin utility (POSIX). Used to list the status of running/stopped jobs.
+ * Returns 0, unless an unknown option or jobspec was supplied.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help jobs` or `jobs -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help jobs` or `jobs -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -782,7 +782,7 @@ int jobs_builtin(int argc, char **argv)
      * process the arguments
      ****************************/
     int v = 1, c;
-    while((c = parse_args(argc, argv, "hvlpnrsx", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hvlpnrsx", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -823,11 +823,13 @@ int jobs_builtin(int argc, char **argv)
                 return replace_and_run(v+1, argc, argv);
         }
     }
+    
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
+    
     /* loop on the arguments */
     for(i = v; i < argc; i++)
     {
@@ -870,10 +872,10 @@ int jobs_builtin(int argc, char **argv)
         }
     }
     /* 
-     * we didn't kill the exited jobs in the above loop, because it will
+     * We didn't kill the exited jobs in the above loop, because it will
      * mess the shell's notion of who's current and who's previous job,
      * i.e. we might get two or more jobs denoted with '+' or '-'.
-     * so, loop through the job list again and kill those who need killing.
+     * So, loop through the job list again and kill those who need killing.
      */
     for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
@@ -890,8 +892,8 @@ int jobs_builtin(int argc, char **argv)
 
 
 /*
- * check for any child processes that has changed status since our last check.
- * called by cmdline() every time its about to print $PS1.
+ * Check for any child processes that has changed status since our last check.
+ * Called by cmdline() every time its about to print $PS1.
  */
 void check_on_children(void)
 {
@@ -963,8 +965,8 @@ void check_on_children(void)
 
 
 /*
- * if a child process changes status, notify the user of this by calling
- * do_output_status() if the -b option is set.. otherwise, add the pid and
+ * If a child process changes status, notify the user of this by calling
+ * do_output_status() if the -b option is set. Otherwise, add the pid and
  * status to the deadlist for us to reap later on in the check_on_children()
  * function.
  */
@@ -1069,8 +1071,8 @@ void notice_termination(pid_t pid, int status, int add_to_deadlist)
 
 
 /*
- * reap a dead child process whose pid is given by removing it from the dead
- * list and returning its exit status.. if the child process is not found in
+ * Reap a dead child process whose pid is given by removing it from the dead
+ * list and returning its exit status. If the child process is not found in
  * the table, return -1.
  */
 int rip_dead(pid_t pid)
@@ -1106,8 +1108,8 @@ int rip_dead(pid_t pid)
 
 
 /*
- * return a job entry given the pid of any process in the job pipeline..
- * if the job is not found, return NULL.
+ * Return a job entry given the pid of any process in the job pipeline.
+ * If the job is not found, return NULL.
  */
 struct job_s *get_job_by_any_pid(pid_t pid)
 {
@@ -1139,7 +1141,7 @@ struct job_s *get_job_by_any_pid(pid_t pid)
 
 
 /*
- * return a job entry given the job id.. if the job is not found, return NULL.
+ * Return a job entry given the job id. If the job is not found, return NULL.
  */
 struct job_s *get_job_by_jobid(int n)
 {
@@ -1162,9 +1164,9 @@ struct job_s *get_job_by_jobid(int n)
 
 
 /*
- * set the current job.
+ * Set the current job.
  * 
- * returns 1 if the current job is set successfully, 0 otherwise.
+ * Returns 1 if the current job is set successfully, 0 otherwise.
  */
 int set_cur_job(struct job_s *job)
 {
@@ -1175,8 +1177,8 @@ int set_cur_job(struct job_s *job)
     }
     
     /*
-     * only make a suspended job the current one.
-     * NOTE: maybe redundant, as we only call this function for suspended jobs.
+     * Only make a suspended job the current one.
+     * NOTE: Maybe redundant, as we only call this function for suspended jobs.
      */
     if(WIFSTOPPED(job->status))
     {
@@ -1195,10 +1197,10 @@ int set_cur_job(struct job_s *job)
 
 
 /*
- * create a new job given the job's command string, and a flag telling whether
+ * Create a new job given the job's command string, and a flag telling whether
  * its a background job or not.
  * 
- * returns the new job struct, or NULL on error.
+ * Returns the new job struct, or NULL on error.
  */
 struct job_s *new_job(char *commandstr, int is_bg)
 {
@@ -1225,11 +1227,11 @@ struct job_s *new_job(char *commandstr, int is_bg)
 
 
 /*
- * add a new job entry given the job struct, which the caller should free (without
+ * Add a new job entry given the job struct, which the caller should free (without
  * freeing the pids[] and exit_codes[] arrays, as we'll use them from now on as
  * part of the new job table entry).
  * 
- * returns the a pointer to the added job entry, or NULL on error.
+ * Returns the a pointer to the added job entry, or NULL on error.
  */
 struct job_s *add_job(struct job_s *new_job)
 {
@@ -1276,13 +1278,13 @@ struct job_s *add_job(struct job_s *new_job)
         }
     }
 
-    PRINT_ERROR("%s: jobs table is full\n", SHELL_NAME);
+    PRINT_ERROR("%s: jobs table is full\n", SOURCE_NAME);
     return NULL;
 }
 
 
 /*
- * free the memory used by the given job structure.. if the 'free_struct' flag
+ * Free the memory used by the given job structure. If the 'free_struct' flag
  * is non-zero, we'll free the job's structure itself.
  */
 void free_job(struct job_s *job, int free_struct)
@@ -1334,9 +1336,9 @@ void free_job(struct job_s *job, int free_struct)
 
 
 /*
- * remove the given job from the jobs table.
+ * Remove the given job from the jobs table.
  * 
- * returns the job number if it was successfully removed from the jobs table,
+ * Returns the job number if it was successfully removed from the jobs table,
  * or 0 if the job is not found in the table.
  */
 int remove_job(struct job_s *job)
@@ -1406,7 +1408,7 @@ int remove_job(struct job_s *job)
 
 
 /*
- * return the total number of jobs.
+ * Return the total number of jobs.
  */
 int get_total_jobs(void)
 {
@@ -1415,7 +1417,7 @@ int get_total_jobs(void)
 
 
 /*
- * alloc memory for the process pids table for a job.
+ * Alloc memory for the process pids table for a job.
  */
 pid_t *get_malloced_pids(pid_t pids[], int pid_count)
 {
@@ -1442,7 +1444,7 @@ pid_t *get_malloced_pids(pid_t pids[], int pid_count)
 
 
 /*
- * alloc memory for the exit status codes table for a job.
+ * Alloc memory for the exit status codes table for a job.
  */
 int *get_malloced_exit_codes(int pid_count)
 {

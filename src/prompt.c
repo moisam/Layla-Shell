@@ -53,7 +53,7 @@ char *month[]   = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
                     "Sep", "Oct", "Nov", "Dec" };
 
 /*
- * return 1 if char c is an octal digit, 0 otherwise.
+ * Return 1 if char c is an octal digit, 0 otherwise.
  */
 static inline int is_octal(char c)
 {
@@ -66,11 +66,11 @@ static inline int is_octal(char c)
 
 
 /*
- * get the tty name. if using zsh's '%l' escape sequence, remove the /dev/tty or the /dev/
+ * Get the tty name. If using zsh's '%l' escape sequence, remove the /dev/tty or the /dev/
  * prefix if the tty name starts with one of them. otherwise, get the basename of the tty
  * device and add it to the buffer.
  * 
- * return value is the number of characters added to the buffer (length of used tty name).
+ * Return value is the number of characters added to the buffer (length of used tty name).
  */
 int get_ttyname(int rem_prefix)
 {
@@ -108,11 +108,11 @@ int get_ttyname(int rem_prefix)
 
 
 /*
- * get the current working directory name, formatted properly as required by the
- * different escape sequences. this function parses POSIX \w and \W escape sequences,
+ * Get the current working directory name, formatted properly as required by the
+ * different escape sequences. This function parses POSIX \w and \W escape sequences,
  * in addition to zsh %d, %/ and %~ escape sequences.
  * 
- * return value is the number of characters added to the buffer (length of cwd used).
+ * Return value is the number of characters added to the buffer (length of cwd used).
  */
 int get_pwd(char *pwd, char *escseq, int baseonly, int tildsub)
 {
@@ -121,6 +121,7 @@ int get_pwd(char *pwd, char *escseq, int baseonly, int tildsub)
         strcat(prompt, escseq);
         return strlen(escseq);
     }
+    
     char *home = get_shell_varp("HOME", NULL);
     if(home && *home)
     {
@@ -142,6 +143,7 @@ int get_pwd(char *pwd, char *escseq, int baseonly, int tildsub)
                     return strlen(home);
                 }
             }
+
             /* full path with tilde substitution: '%~' (zsh) and '\w' (POSIX) */
             if(!baseonly && tildsub)
             {
@@ -152,13 +154,18 @@ int get_pwd(char *pwd, char *escseq, int baseonly, int tildsub)
             }
         }
     }
+    
     /* base name only: '\W' (POSIX) */
     if(baseonly)
     {
-        pwd = basename(pwd);
-        strcat(prompt, pwd);
-        return strlen(pwd);
+        char *pwd2 = basename(pwd);
+        /* if pwd is the system root, basename will by empty */
+        if(pwd2 && *pwd2)
+        {
+            pwd = pwd2;
+        }
     }
+
     /* full path with no tilde substitution: '%d' and '%/' (zsh) */
     strcat(prompt, pwd);
     return strlen(pwd);
@@ -166,9 +173,10 @@ int get_pwd(char *pwd, char *escseq, int baseonly, int tildsub)
 
 
 /*
- * get the index of the current history command. this function parses POSIX \! escape
+ * Get the index of the current history command. This function parses POSIX \! escape
  * sequence, in addition to zsh %h escape sequence.
- * return value is the number of characters added to the buffer.
+ * 
+ * Return value is the number of characters added to the buffer.
  */
 int get_histindex(void)
 {
@@ -180,9 +188,10 @@ int get_histindex(void)
 
 
 /*
- * format the date according to the passed format string. this function parses POSIX \d and \D
+ * Format the date according to the passed format string. This function parses POSIX \d and \D
  * escape sequences, in addition to zsh %D, %w, %W escape sequences.
- * return value is the number of characters added to the buffer.
+ * 
+ * Return value is the number of characters added to the buffer.
  */
 int get_date(char *fmt, struct tm *now)
 {
@@ -201,10 +210,10 @@ int get_date(char *fmt, struct tm *now)
 
 
 /*
- * evaluate a prompt string, substituting both POSIX '\' and zsh '%' escape
+ * Evaluate a prompt string, substituting both POSIX '\' and zsh '%' escape
  * sequences, then performing word expansion on the prompt.
  * 
- * result is the malloc'd word-expanded prompt string.
+ * Result is the malloc'd word-expanded prompt string.
  */
 char *evaluate_prompt(char *PS)
 {
@@ -230,11 +239,11 @@ char *evaluate_prompt(char *PS)
             /*
              * zsh has an option, PROMPT_PERCENT, which determines whether we recognize escape
              * sequences that are introduced by the percent sign, instead of the backslash character.
-             * all of these are zsh non-POSIX extensions. as some of them are really useful, we include
+             * All of these are zsh non-POSIX extensions. as some of them are really useful, we include
              * them here (well, most of them anyway). being POSIX-compliant and all, we don't enable
              * this option by default.
              * 
-             * for the complete list of zsh escape sequences, see section "Prompt Expansion" of the
+             * For the complete list of zsh escape sequences, see section "Prompt Expansion" of the
              * zsh manpage.
              */
             case '%':
@@ -245,7 +254,7 @@ char *evaluate_prompt(char *PS)
                     break;
                 }
                 /*
-                 * NOTE: fall through to the next case, so that we can handle both POSIX and zsh
+                 * NOTE: Fall through to the next case, so that we can handle both POSIX and zsh
                  * escape sequences using the same switch clause.
                  * 
                  * WARNING: DO NOT put any intervening cases (or a break statement) here!
@@ -253,7 +262,7 @@ char *evaluate_prompt(char *PS)
                 __attribute__((fallthrough));
 
             /*
-             * normal POSIX escape sequences.
+             * Normal POSIX escape sequences.
              */
             case '\\':
                 i++;
@@ -873,7 +882,7 @@ char *evaluate_prompt(char *PS)
                 else
                 {
                     /* 
-                     * we should replace '!' with history index of the next command, 
+                     * We should replace '!' with history index of the next command, 
                      * as per POSIX. They say:
                      *     "The shell shall replace each instance of the character '!' in 
                      *      PS1 with the history file number of the next command to be 
@@ -910,7 +919,7 @@ char *evaluate_prompt(char *PS)
 }
 
 /*
- * for $PS4, repeat the first char to indicate levels of indirection (bash).
+ * For $PS4, repeat the first char to indicate levels of indirection (bash).
  */
 void repeat_first_char(char *PS)
 {
@@ -1004,7 +1013,7 @@ void do_print_prompt(char *which)
 }
 
 /* 
- * print the primary prompt $PS1.
+ * Print the primary prompt $PS1.
  */
 void print_prompt(void)
 {
@@ -1018,7 +1027,7 @@ void print_prompt(void)
 }
 
 /*
- * print secondary prompt $PS2.
+ * Print secondary prompt $PS2.
  */
 void print_prompt2(void)
 {
@@ -1026,7 +1035,7 @@ void print_prompt2(void)
 }
 
 /*
- * print the select loop prompt $PS3.
+ * Print the select loop prompt $PS3.
  */
 void print_prompt3(void)
 {
@@ -1034,7 +1043,7 @@ void print_prompt3(void)
 }
 
 /*
- * print 'execution trace' prompt $PS4.
+ * Print 'execution trace' prompt $PS4.
  */
 void print_prompt4(void)
 {

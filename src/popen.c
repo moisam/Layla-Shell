@@ -36,7 +36,7 @@
 
 
 /*
- * initialize a subshell's environment.
+ * Initialize a subshell's environment.
  */
 void init_subshell(void)
 {
@@ -48,8 +48,6 @@ void init_subshell(void)
     {
         set_signal_handler(SIGINT , SIG_IGN);
         set_signal_handler(SIGQUIT, SIG_IGN);
-        close(0);
-        open("/dev/null", O_RDONLY);
     }
 
     /* reset the -dumpast option if set */
@@ -71,8 +69,8 @@ void init_subshell(void)
     do_export_vars(EXPORT_VARS_FORCE_ALL);
 
     /*
-     * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
-     * if -o errtrace (-E) is not set. traced functions inherit both traps
+     * Reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
+     * if -o errtrace (-E) is not set. Traced functions inherit both traps
      * from the calling shell (bash).
      */
     if(!option_set('T'))
@@ -98,7 +96,7 @@ void init_subshell(void)
 
 
 /*
- * increment the value of the $SUBSHELL variable when we're running a subshell.
+ * Increment the value of the $SUBSHELL variable when we're running a subshell.
  */
 void inc_subshell_var(void)
 {
@@ -118,7 +116,7 @@ void inc_subshell_var(void)
 
 
 /*
- * increment the value of $SHLVL by the given amount, typically 1 if the shell
+ * Increment the value of $SHLVL by the given amount, typically 1 if the shell
  * is starting anew, or -1 if we're executing an exec command.
  */
 void inc_shlvl_var(int amount)
@@ -144,8 +142,8 @@ void inc_shlvl_var(int amount)
 
 
 /*
- * this call is similar to popen(), except it sets the environment in the subshell
- * by exporting variables and function definitions. the 'r' suffix is because we
+ * This call is similar to popen(), except it sets the environment in the subshell
+ * by exporting variables and function definitions. The 'r' suffix is because we
  * open the pipe for reading, equivalent to calling pipe(cmd, "r").
  */
 
@@ -176,12 +174,12 @@ FILE *popenr(char *cmd)
         close(filedes[1]);
 
         /*
-         * execute the command. we imitate POSIX's definition of popen(), where the call to popen()
+         * Execute the command. we imitate POSIX's definition of popen(), where the call to popen()
          * results in behaviour akin to:
          * 
          *      execl(shell path, "sh", "-c", command, (char *)0);
          * 
-         * see this link: https://pubs.opengroup.org/onlinepubs/009695399/functions/popen.html
+         * See this link: https://pubs.opengroup.org/onlinepubs/009695399/functions/popen.html
          */
         struct source_s src;
         src.buffer   = cmd;
@@ -191,39 +189,14 @@ FILE *popenr(char *cmd)
         src.curpos   = INIT_SRC_POS;
 
         parse_and_execute(&src);
+        
+        /* execute the EXIT trap (if any) */
+        trap_handler(0);
         exit(exit_status);
-
-#if 0
-        errno = 0;
-        execl(shell_argv[0], "sh", "-c", cmd, NULL);
-
-        /* returning from execl means error */
-        execl("/bin/sh", "sh", "-c", cmd, NULL);
-
-        /* returning from execl means error */
-        if(errno)
-        {
-            PRINT_ERROR("%s: failed to exec `%s`: %s\n", SHELL_NAME, "/bin/sh", strerror(errno));
-        }
-
-        /* exit in error */
-        if(errno == ENOEXEC)
-        {
-            exit(EXIT_ERROR_NOEXEC);
-        }
-        else if(errno == ENOENT)
-        {
-            exit(EXIT_ERROR_NOENT);
-        }
-        else
-        {
-            exit(EXIT_FAILURE);
-        }
-#endif
     }
     else if(pid < 0)            /* error */
     {
-        PRINT_ERROR("%s: failed to fork subshell: %s\n", SHELL_NAME, strerror(errno));
+        PRINT_ERROR("%s: failed to fork subshell: %s\n", SOURCE_NAME, strerror(errno));
         return NULL;
     }
     else

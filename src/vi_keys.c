@@ -27,14 +27,14 @@
 #include "debug.h"
 
 /* defined in cmdline.c */
-extern long      CMD_BUF_SIZE;
+extern size_t    CMD_BUF_SIZE;
 extern int       start_row   ;
 extern int       start_col   ;
 extern int       insert      ;
 
 /*
- * clear the command (in whole or part) that's in the command buffer from the
- * screen.. we do this when we are processing some keys (backspace, delete, ^W),
+ * Clear the command (in whole or part) that's in the command buffer from the
+ * screen. We do this when we are processing some keys (backspace, delete, ^W),
  * and when we want to replace the command in the buffer (such as when the user
  * presses UP or DOWN keys to navigate the history list).
  */
@@ -68,7 +68,7 @@ void clear_cmd(int startat)
 
 
 /* 
- * print the command in the command buffer to the screen.. we output the
+ * Print the command in the command buffer to the screen. We output the
  * command manually so we can calculate how many newlines are there and
  * update the start_row and terminal_row variables correctly.
  */
@@ -98,14 +98,14 @@ void output_cmd(void)
 
 
 /*
- * insert the given char at the current cursor position.
+ * Insert the given char at the current cursor position.
  */
 void do_insert(char c)
 {
     /* normal char, add to buffer and print */
     if(cmdbuf_end >= CMD_BUF_SIZE)
     {
-        if(!ext_cmdbuf(CMD_BUF_SIZE+1))     /* TODO: we must handle this error */
+        if(!ext_cmdbuf(&cmdbuf, &cmdbuf_size, CMD_BUF_SIZE+1))     /* TODO: we must handle this error */
         {
             return;
         }
@@ -132,7 +132,7 @@ void do_insert(char c)
     if(cmdbuf_index < cmdbuf_end)
     {
         /* make room for the new char */
-        uint16_t u;
+        size_t u;
         for(u = cmdbuf_end+1; u > cmdbuf_index; u--)
         {
             cmdbuf[u] = cmdbuf[u-1];
@@ -161,7 +161,7 @@ void do_insert(char c)
 
 
 /*
- * handle the kill key (default is ^U), which clears the current command from
+ * Handle the kill key (default is ^U), which clears the current command from
  * the screen and the buffer.
  */
 void do_kill_key(void)
@@ -179,9 +179,9 @@ void do_kill_key(void)
 
 
 /*
- * handle the delete key (default is DEL), which removes the character after the
- * cursor.. we generalize the case here so that we can indicate how many characters
- * we want deleted.. handling DEL equates to calling do_del_key(1).
+ * Handle the delete key (default is DEL), which removes the character after the
+ * cursor. We generalize the case here so that we can indicate how many characters
+ * we want deleted. Handling DEL equates to calling do_del_key(1).
  */
 void do_del_key(int count)
 {
@@ -195,7 +195,7 @@ void do_del_key(int count)
          * shift characters from cursor till the end of the string 'count' positions
          * to the left.
          */
-        uint16_t u;
+        size_t u;
         for(u = cmdbuf_index; u <= cmdbuf_end-count; u++)
         {
             cmdbuf[u] = cmdbuf[u+count];
@@ -217,11 +217,11 @@ void do_del_key(int count)
 
 
 /*
- * handle the backspace key (default is BKSP or ^H), which removes the character before
- * the cursor.. we generalize the case here so that we can indicate how many characters
- * we want deleted.. handling BKSP equates to calling do_backspace(1).
+ * Handle the backspace key (default is BKSP or ^H), which removes the character before
+ * the cursor. We generalize the case here so that we can indicate how many characters
+ * we want deleted. Handling BKSP equates to calling do_backspace(1).
  */
-void do_backspace(int count)
+void do_backspace(size_t count)
 {
     if(!count)
     {
@@ -243,7 +243,7 @@ void do_backspace(int count)
      * shift characters from cursor till the end of the string 'count' positions
      * to the left.
      */
-    uint16_t u;
+    size_t u;
     for(u = cmdbuf_index; u <= cmdbuf_end-count; u++)
     {
         cmdbuf[u] = cmdbuf[u+count];
@@ -274,16 +274,16 @@ void do_backspace(int count)
     }
     move_cur(terminal_row, terminal_col);
     /* print the new command string, and replace the deleted chars with spaces */
-    printf("%s%*s", cmdbuf+cmdbuf_index, count, " ");
+    printf("%s%*s", cmdbuf+cmdbuf_index, (int)count, " ");
     /* move the cursor back to where it was */
     move_cur(terminal_row, terminal_col);
 }
 
 
 /*
- * handle the UP arrow key, which we usually use to navigate to the previous command in the
- * history list.. we generalize the case here so that we can indicate how many positions
- * we want to go backwards in the list.. handling UP equates to calling do_up_key(1).
+ * Handle the UP arrow key, which we usually use to navigate to the previous command in the
+ * history list. We generalize the case here so that we can indicate how many positions
+ * we want to go backwards in the list. Handling UP equates to calling do_up_key(1).
  */
 void do_up_key(int count)
 {
@@ -318,9 +318,9 @@ void do_up_key(int count)
 
 
 /*
- * handle the DOWN arrow key, which we usually use to navigate to the next command in the
- * history list.. we generalize the case here so that we can indicate how many positions
- * we want to go forward in the list.. handling DOWN equates to calling do_down_key(1).
+ * Handle the DOWN arrow key, which we usually use to navigate to the next command in the
+ * history list. We generalize the case here so that we can indicate how many positions
+ * we want to go forward in the list. Handling DOWN equates to calling do_down_key(1).
  */
 void do_down_key(int count)
 {
@@ -362,11 +362,11 @@ void do_down_key(int count)
 
 
 /*
- * handle the RIGHT arrow key, which we usually use to navigate to the next character
- * after the cursor.. we generalize the case here so that we can indicate how many chars
- * we want to go forward in the line.. handling RIGHT equates to calling do_right_key(1).
+ * Handle the RIGHT arrow key, which we usually use to navigate to the next character
+ * after the cursor. We generalize the case here so that we can indicate how many chars
+ * we want to go forward in the line. Handling RIGHT equates to calling do_right_key(1).
  */
-void do_right_key(int count)
+void do_right_key(size_t count)
 {
     /* we are already at the last char */
     if(cmdbuf_index >= cmdbuf_end)
@@ -381,7 +381,7 @@ void do_right_key(int count)
     }
 
     /* calculate the new column index and adjust the row index accordingly */
-    int newcol = terminal_col+count;
+    size_t newcol = terminal_col+count;
     if(newcol > VGA_WIDTH)
     {
         terminal_col = newcol-VGA_WIDTH;
@@ -400,9 +400,9 @@ void do_right_key(int count)
 
 
 /*
- * handle the LEFT arrow key, which we usually use to navigate to the previous character
- * before the cursor.. we generalize the case here so that we can indicate how many chars
- * we want to go backward in the line.. handling LEFT equates to calling do_left_key(1).
+ * Handle the LEFT arrow key, which we usually use to navigate to the previous character
+ * before the cursor. We generalize the case here so that we can indicate how many chars
+ * we want to go backward in the line. Handling LEFT equates to calling do_left_key(1).
  */
 void do_left_key(int count)
 {
@@ -440,7 +440,7 @@ void do_left_key(int count)
 
 
 /*
- * handle the HOME key, which moves the cursor to the beginning of the command line.
+ * Handle the HOME key, which moves the cursor to the beginning of the command line.
  */
 void do_home_key(void)
 {
@@ -456,7 +456,7 @@ void do_home_key(void)
 
 
 /*
- * handle the END key, which moves the cursor to the end of the command line.
+ * Handle the END key, which moves the cursor to the end of the command line.
  */
 void do_end_key(void)
 {
@@ -483,7 +483,7 @@ void do_end_key(void)
 
 
 /*
- * output a control key, such as ^C or ^V.
+ * Output a control key, such as ^C or ^V.
  */
 void print_ctrl_key(char c)
 {
@@ -498,7 +498,7 @@ char *savebuf      = NULL;      /* buffer to save a copy of the command line */
 int   savebuf_size = 0;         /* size of the save buffer */
 
 /*
- * copy (or yank) characters from the command buffer to the
+ * Copy (or yank) characters from the command buffer to the
  * special save buffer, starting at character number 'start',
  * ending at character number 'end' (indexes are zero-based).
  */
@@ -513,7 +513,7 @@ void yank(int start, int end)
         savebuf = malloc(savebuf_size);
         if(!savebuf)
         {
-            PRINT_ERROR("FATAL ERROR: Insufficient memory for the yank buffer");
+            PRINT_ERROR("ERROR: insufficient memory for the yank buffer");
             return;
         }
         savebuf[0] = '\0';

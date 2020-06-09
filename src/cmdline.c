@@ -45,10 +45,10 @@ char     *incomplete_cmd = NULL;
 
 /* our main command line buffer */
 char     *cmdbuf         = NULL;        /* ptr to buffer */
-uint16_t  cmdbuf_index   = 0;           /* whrere to add incoming key */
-uint16_t  cmdbuf_end     = 0;           /* index of last entered key */
-uint16_t  cmdbuf_size    = 0;           /* actual malloc'd size` */
-long      CMD_BUF_SIZE   = 0;           /* size to alloc and extend the buffer by */
+size_t    cmdbuf_index   = 0;           /* whrere to add incoming key */
+size_t    cmdbuf_end     = 0;           /* index of last entered key */
+size_t    cmdbuf_size    = 0;           /* actual malloc'd size` */
+size_t    CMD_BUF_SIZE   = 0;           /* size to alloc and extend the buffer by */
 
 /* flag to tell us if we are inside a here-document */
 int       in_heredoc     = -1;
@@ -60,12 +60,12 @@ char     *heredoc_mark [FOPEN_MAX] = { 0, };
 int       heredocs       = 0;
 
 /* screen size and cursor position */
-int       terminal_row   = 0;
-int       terminal_col   = 0;
-int       VGA_WIDTH      = 80;
-int       VGA_HEIGHT     = 25;
-int       start_row      = 0;
-int       start_col      = 0;
+size_t    terminal_row   = 0;
+size_t    terminal_col   = 0;
+size_t    VGA_WIDTH      = 80;
+size_t    VGA_HEIGHT     = 25;
+size_t    start_row      = 0;
+size_t    start_col      = 0;
 
 /* flag to indicate if INS was pressed */
 int       insert         = 0;
@@ -88,7 +88,7 @@ static int __heredocs = 0;                 /* count heredocs */
 
 
 /*
- * kill input by emptying the command buffer, printing a newline followed by
+ * Kill input by emptying the command buffer, printing a newline followed by
  * the first prompt, and updating the cursor position.
  */
 void kill_input(void)
@@ -120,7 +120,7 @@ void kill_input(void)
 }
 
 /*
- * main interactive shell REPL (Read-Execute-Print-Loop).
+ * Main interactive shell REPL (Read-Execute-Print-Loop).
  */
 void cmdline(void)
 {
@@ -237,38 +237,13 @@ void cmdline(void)
 
 
 /*
- * extend the command buffer by the given amount of bytes.
- *
- * returns 1 if the buffer is successfully extended, 0 otherwise.
+ * Initialize the command buffer for first use.
  */
-int ext_cmdbuf(size_t howmuch)
+void init_cmdbuf(void)
 {
-    uint16_t newsz = cmdbuf_size + howmuch;
-    char *newbuf = realloc(cmdbuf, newsz);
-    if(!newbuf)
-    {
-        return 0;
-    }
-    cmdbuf       = newbuf;
-    cmdbuf_size  = newsz;
-    return 1;
-}
-
-/*
- * read the next command line into our command buffer.
- *
- * returns a pointer to the buffer if the command is read successfully,
- * NULL if there's no input or EOF is reached.
- */
-char *read_cmd(void)
-{
-    char *p;
-    int c;
-    int tty = cur_tty_fd();
-
     cmdbuf_index = 0;
     cmdbuf_end   = 0;
-
+    
     /* first call. init buffer */
     if(!cmdbuf)
     {
@@ -277,19 +252,57 @@ char *read_cmd(void)
         {
             CMD_BUF_SIZE = DEFAULT_LINE_MAX;
         }
-
+        
         cmdbuf = malloc(CMD_BUF_SIZE);
         if(!cmdbuf)
         {
             exit_gracefully(EXIT_FAILURE, "FATAL ERROR: Insufficient memory for command buffer");
         }
-
+        
         cmdbuf_size  = CMD_BUF_SIZE;
     }
-
+    
     /* empty the buffer */
     cmdbuf[0] = '\0';
+}
+
+
+/*
+ * Extend the command buffer by the given amount of bytes.
+ *
+ * Returns 1 if the buffer is successfully extended, 0 otherwise.
+ */
+int ext_cmdbuf(char **cmdbuf, size_t *size, size_t howmuch)
+{
+    size_t newsz = (*size) + howmuch;
+    char *newbuf = realloc(cmdbuf, newsz);
     
+    if(!newbuf)
+    {
+        return 0;
+    }
+    
+    (*cmdbuf) = newbuf;
+    (*size)   = newsz;
+
+    return 1;
+}
+
+
+/*
+ * Read the next command line into our command buffer.
+ *
+ * Returns a pointer to the buffer if the command is read successfully,
+ * NULL if there's no input or EOF is reached.
+ */
+char *read_cmd(void)
+{
+    char *p;
+    int c;
+    int tty = cur_tty_fd();
+    
+    init_cmdbuf();
+
     /* update cursor position */
     update_row_col();
     
@@ -297,10 +310,10 @@ char *read_cmd(void)
     start_col = get_terminal_col();
 
     /*
-     * get the number of consecutive EOFs to force exit. default is 10 (bash)
-     * or 1 (tcsh).. we obtain the value manually, instead of calling 
+     * Get the number of consecutive EOFs to force exit. Default is 10 (bash)
+     * or 1 (tcsh). We obtain the value manually, instead of calling 
      * get_shell_vari(), because if the variable is defined, but its value is
-     * invalid, we'll use our default MAX_EOFS value.. if the variable isn't
+     * invalid, we'll use our default MAX_EOFS value. If the variable isn't
      * defined, we'll use 0.
      */
     struct symtab_entry_s *entry = get_symtab_entry("IGNOREEOF");
@@ -340,8 +353,8 @@ char *read_cmd(void)
     while(1)
     {
         /*
-         * check if we received a signal for which we have a trap set.
-         * if so, clear the input buffer and reprint the prompt string.
+         * Check if we received a signal for which we have a trap set.
+         * If so, clear the input buffer and reprint the prompt string.
          */
         if(signal_received)
         {
@@ -351,7 +364,7 @@ char *read_cmd(void)
         }
         
         /*
-         * this flag tells us whether we've received an EOF (CTRL-D) with a
+         * This flag tells us whether we've received an EOF (CTRL-D) with a
          * non-empty buffer, in which case we'll consider the command line complete,
          * without actually calling is_incomplete_cmd() to do the check.
          */
@@ -495,7 +508,7 @@ char *read_cmd(void)
                 //update_row_col();
                 if(CTRL_MASK && cmdbuf_index < cmdbuf_end)
                 {
-                    int i = cmdbuf_index;
+                    size_t i = cmdbuf_index;
                     if(isspace(cmdbuf[i]))
                     {
                         while(i < cmdbuf_end &&  isspace(cmdbuf[i]))
@@ -557,8 +570,8 @@ char *read_cmd(void)
                     continue;
                 }
                 
-                int z = cmdbuf_index-1;
-                while(z >= 0)
+                size_t z = cmdbuf_index-1;
+                while(z)
                 {
                     if(cmdbuf[z] == ' ' || ispunct(cmdbuf[z]))
                     {
@@ -581,7 +594,7 @@ char *read_cmd(void)
                 
                 size_t old_row = terminal_row, old_col = terminal_col;
                 move_cur(start_row, start_col);
-                printf("%*s", cmdbuf_end, " ");
+                printf("%*s", (int)cmdbuf_end, " ");
                 char *p1 = cmdbuf+z;
                 char *p2 = cmdbuf+cmdbuf_index;
                 while((*p1++ = *p2++))
@@ -612,7 +625,7 @@ char *read_cmd(void)
 
             case '\e':
                 /*
-                 * NOTE: this case must be the case immediately preceding the 
+                 * NOTE: This case must be the case immediately preceding the 
                  *       newline/carriage return case, otherwise it won't work
                  *       when the user presses Enter to exit the vi-editing mode.
                  */
@@ -636,7 +649,8 @@ char *read_cmd(void)
             case '\r':
                 printf("\n");
                 /* perform history expansion on the line */
-                if(in_heredoc < 0 && option_set('H') && (p = hist_expand(quotes)))
+                if(in_heredoc < 0 && option_set('H') &&
+                    (p = hist_expand(quotes, FLAG_HISTEXPAND_DO_BACKUP)))
                 {
                     if(p == INVALID_HIST_EXPAND)
                     {
@@ -767,9 +781,9 @@ char *read_cmd(void)
 
 
 /*
- * after user presses ENTER, check if he entered a full command or not.
+ * After user presses ENTER, check if he entered a full command or not.
  *
- * returns 1 if the command is incomplete, 0 if it is complete.
+ * Returns 1 if the command is incomplete, 0 if it is complete.
  */
 int is_incomplete_cmd(int first_time)
 {
@@ -839,10 +853,10 @@ int is_incomplete_cmd(int first_time)
                 p1--;
             }
             /*
-             * check how many consecutive backslashes we have.. if we have
+             * Check how many consecutive backslashes we have. If we have
              * an even number, the backslashes escape each other and the
-             * newline is not escaped, so we return the input line..
-             * if we have an odd number, the last backslash escapes the
+             * newline is not escaped, so we return the input line.
+             * If we have an odd number, the last backslash escapes the
              * newline character and so we continue reading input.
              */
             if((p2-p1) % 2)
@@ -983,9 +997,9 @@ int is_incomplete_cmd(int first_time)
                     }
                     
                     /*
-                     * strictly speaking, POSIX says the heredoc word should come directly
+                     * Strictly speaking, POSIX says the heredoc word should come directly
                      * after the '<<' or '<<-' operator, with no intervening spaces.
-                     * as most users will eventually enter a space between the word and
+                     * As most users will eventually enter a space between the word and
                      * the operator for readability, we'll accept this behavior in here.
                      */
                     while(isspace(cmd[i]))
@@ -995,7 +1009,7 @@ int is_incomplete_cmd(int first_time)
                     
                     if(cmd[i] == '\0')
                     {
-                        PRINT_ERROR("%s: missing here-document delimiter word after << or <<-\n", SHELL_NAME);
+                        PRINT_ERROR("%s: missing heredoc delimiter word after << or <<-\n", SHELL_NAME);
                         return -1;
                     }
                     
@@ -1010,7 +1024,7 @@ int is_incomplete_cmd(int first_time)
                         
                         if(!heredoc_mark[__heredocs])
                         {
-                            PRINT_ERROR("%s: insufficient memory to save here-document delimiter word\n", SHELL_NAME);
+                            PRINT_ERROR("%s: insufficient memory to save heredoc delimiter word\n", SHELL_NAME);
                             return -1;
                         }
                         
@@ -1199,9 +1213,9 @@ check:
 
 
 /*
- * form the complete command line by amalgamating all lines together.
+ * Form the complete command line by amalgamating all lines together.
  *
- * returns the total length of the command lines.
+ * Returns the total length of the command lines.
  */
 size_t glue_cmd_pieces(void)
 {
@@ -1216,7 +1230,7 @@ size_t glue_cmd_pieces(void)
     if((cmdbuf_len+incomplete_len) >= cmdbuf_size)
     {
         /* TODO: not enough memory. we should react better to this error */
-        if(!ext_cmdbuf(incomplete_len+1))
+        if(!ext_cmdbuf(&cmdbuf, &cmdbuf_size, incomplete_len+1))
         {
             return 0;
         }

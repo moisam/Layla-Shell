@@ -26,7 +26,7 @@
 #define DEBUG_MODE
 
 /*
- * depending on whether you commented the line above or not, the debug function
+ * Depending on whether you commented the line above or not, the debug function
  * will either be defined as a null macro, or as a function that outputs debug 
  * messages.
  */

@@ -23,9 +23,9 @@
 #define COMPTYPE_H
 
 /*
- * we try to guess the compiler type at compile time, by testing for 
+ * We try to guess the compiler type at compile time, by testing for 
  * a number of compiler-defined macros (which differ by the compiler, of 
- * course). these tests are built on the information provided in the following
+ * course). These tests are built on the information provided in the following
  * three links:
  * 
  * https://blog.kowalczyk.info/article/j/guide-to-predefined-macros-in-c-compilers-gcc-clang-msvc-etc..html

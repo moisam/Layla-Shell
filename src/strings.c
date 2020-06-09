@@ -33,9 +33,9 @@
  ****************************************/
 
 /*
- * convert string str letters to uppercase.
+ * Convert string str letters to uppercase.
  *
- * returns 1 on success, 0 if a NULL str pointer is given.
+ * Returns 1 on success, 0 if a NULL str pointer is given.
  */
 int strupper(char *str)
 {
@@ -53,9 +53,9 @@ int strupper(char *str)
 
 
 /*
- * convert string str letters to lowercase.
+ * Convert string str letters to lowercase.
  *
- * returns 1 on success, 0 if a NULL str pointer is given.
+ * Returns 1 on success, 0 if a NULL str pointer is given.
  */
 int strlower(char *str)
 {
@@ -73,7 +73,7 @@ int strlower(char *str)
 
 
 /*
- * append character chr to string str at position pos (zero based).
+ * Append character chr to string str at position pos (zero based).
  */
 inline void strcat_c(char *str, int pos, char chr)
 {
@@ -83,9 +83,9 @@ inline void strcat_c(char *str, int pos, char chr)
 
 
 /*
- * search string for any one of the passed characters.
+ * Search string for any one of the passed characters.
  *
- * returns a char pointer to the first occurence of any of the characters,
+ * Returns a char pointer to the first occurence of any of the characters,
  * NULL if none found.
  */
 char *strchr_any(char *string, char *chars)
@@ -113,7 +113,7 @@ char *strchr_any(char *string, char *chars)
 
 
 /*
- * returns 1 if the two strings are the same, 0 otherwise.
+ * Returns 1 if the two strings are the same, 0 otherwise.
  */
 int is_same_str(char *s1, char *s2)
 {
@@ -126,9 +126,9 @@ int is_same_str(char *s1, char *s2)
 
 
 /*
- * return the passed string value, quoted in a format that can
- * be used for reinput to the shell.. if the 'add_quotes' flag is non-zero,
- * the function surrounds val in double quotes.. if escape_sq is non-zero,
+ * Return the passed string value, quoted in a format that can
+ * be used for reinput to the shell. If the 'add_quotes' flag is non-zero,
+ * the function surrounds val in double quotes. If escape_sq is non-zero,
  * all single quotes are backslash-escaped.
  */
 char *quote_val(char *val, int add_quotes, int escape_sq)
@@ -236,8 +236,8 @@ char *quote_val(char *val, int add_quotes, int escape_sq)
 
 
 /*
- * convert a string array to a single string with members
- * separated by spaces.. the last member must be NULL, or else
+ * Convert a string array to a single string with members
+ * separated by spaces. The last member must be NULL, or else
  * we will loop until we SIGSEGV! a non-zero dofree argument
  * causes the passed list to be freed (if the caller is too
  * lazy to free its own memory).
@@ -291,7 +291,7 @@ char *list_to_str(char **list)
 
 
 /*
- * get the system-defined maximum line length.. if no value is defined by the
+ * Get the system-defined maximum line length. If no value is defined by the
  * system, use our own default value.
  */
 int get_linemax(void)
@@ -311,15 +311,15 @@ int get_linemax(void)
 
 
 /*
- * get the next entry in a colon-separated string, such as the ones we use in
+ * Get the next entry in a colon-separated string, such as the ones we use in
  * shell variables $SHELLOPTS, $MAILPATH and $HISTCONTROL.
- * the 'colon_list' argument contains a pointer to the colon-separated string, 
+ * The 'colon_list' argument contains a pointer to the colon-separated string, 
  * in which we'll store a pointer to our current position in the string, so 
  * that each call to this function, using the same argument, will keep 
- * processing the list until it's finished.. the caller should initialize 
+ * processing the list until it's finished. The caller should initialize 
  * 'colon_list', and shouldn't modify it once we're called.
  * 
- * returns the malloc'd next entry, or NULL if we reached the end of the string,
+ * Returns the malloc'd next entry, or NULL if we reached the end of the string,
  * or an error occurrs.
  */
 char *next_colon_entry(char **colon_list)
@@ -359,14 +359,14 @@ char *next_colon_entry(char **colon_list)
 
 
 /*
- * similar to next_colon_entry(), except that it creates a pathname by
- * concatenating the next colon entry and the given filename.. used by
+ * Similar to next_colon_entry(), except that it creates a pathname by
+ * concatenating the next colon entry and the given filename. Used by
  * cd when it searches $CDPATH to find a directory, by search_path() in
  * helpfunc.c when it searches $PATH to find a file, etc.
- * if 'use_dot' is non-zero, we prepend './' to the pathname if the next 
+ * If 'use_dot' is non-zero, we prepend './' to the pathname if the next 
  * colon entry is an empty string.
  * 
- * returns the malloc'd pathname, or NULL if we reached the end of the string,
+ * Returns the malloc'd pathname, or NULL if we reached the end of the string,
  * or an error occurrs.
  */
 char *next_path_entry(char **colon_list, char *filename, int use_dot)
@@ -442,13 +442,13 @@ char *next_path_entry(char **colon_list, char *filename, int use_dot)
 
 
 /*
- * alloc memory for, or extend the host (or user) names buffer if needed..
- * in the first call, the buffer is initialized to 32 entries.. subsequent
+ * Alloc memory for, or extend the host (or user) names buffer if needed.
+ * In the first call, the buffer is initialized to 32 entries. Subsequent
  * calls result in the buffer size doubling, so that it becomes 64, 128, ...
  * count is the number of used entries in the buffer, while len is the number
  * of alloc'd entries (size of buffer divided by sizeof(char **)).
  *
- * returns 1 if the buffer is alloc'd/extended, 0 otherwise.
+ * Returns 1 if the buffer is alloc'd/extended, 0 otherwise.
  */
 int check_buffer_bounds(int *count, int *len, char ***buf)
 {
@@ -482,9 +482,9 @@ int check_buffer_bounds(int *count, int *len, char ***buf)
 
 
 /*
- * convert a time value of the format [secs[.usecs]] to two separate parts.
+ * Convert a time value of the format [secs[.usecs]] to two separate parts.
  * 
- * returns 1 if the conversion is successful, 0 otherwise.
+ * Returns 1 if the conversion is successful, 0 otherwise.
  */
 int get_secs_usecs(char *str, struct timeval *res)
 {
@@ -522,7 +522,7 @@ int get_secs_usecs(char *str, struct timeval *res)
 
 
 /*
- * alloc 'size' bytes and return the pointer.. also, make the string 'ready for reading'
+ * Alloc 'size' bytes and return the pointer. Also, make the string 'ready for reading'
  * by putting null at the first byte.
  */
 char *alloc_string_buf(int size)
@@ -538,10 +538,10 @@ char *alloc_string_buf(int size)
 
 
 /*
- * check the string buffer's and extend it if needed, adjusting the pointers if
+ * Check the string buffer's and extend it if needed, adjusting the pointers if
  * the buffer is realloced.
  * 
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int may_extend_string_buf(char **buf, char **buf_end, char **buf_ptr, int *buf_size)
 {
