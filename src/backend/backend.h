@@ -31,7 +31,7 @@
 int   do_exec_cmd(int argc, char **argv, char *use_path, int (*internal_cmd)(int, char **));
 pid_t fork_child(void);
 int   wait_on_child(pid_t pid, struct node_s *cmd, struct job_s *job);
-char *get_cmdstr(struct node_s *cmd);
+// char *get_cmdstr(struct node_s *cmd);
 
 int   do_list(struct source_s *src, struct node_s *node, struct node_s *redirect_list);
 int   do_and_or(struct source_s *src, struct node_s *node, struct node_s *redirect_list, int fg);
@@ -84,7 +84,10 @@ void  restore_stds(int *saved_fd);
 /* coprocess file descriptors and pid */
 extern int rfiledes[];
 extern int wfiledes[];
-extern pid_t coproc_pid ;
+extern pid_t coproc_pid;
+
+/* backup descriptors for the shell's standard streams */
+extern int backup_fd[];
 
 /*
  * flag to indicate we want to restore the standard streams after executing an
@@ -110,14 +113,22 @@ extern pid_t waiting_pid;
 /* if set, we're executing the test clause of a loop or conditional */
 extern int in_test_clause;
 
-#define ERR_TRAP_OR_EXIT()                          \
-do {                                                \
-    if(!res || exit_status)                         \
-    {                                               \
-        trap_handler(ERR_TRAP_NUM);                 \
-        if(option_set('e'))                         \
-            exit_gracefully(EXIT_FAILURE, NULL);    \
-    }                                               \
+#include "../builtins/builtins.h"
+
+#define ERR_TRAP_OR_EXIT()                                          \
+do {                                                                \
+    if(!res || exit_status)                                         \
+    {                                                               \
+        trap_handler(ERR_TRAP_NUM);                                 \
+        if(option_set('e'))                                         \
+        {                                                           \
+            /* try to exit (this will execute any EXIT traps) */    \
+            do_builtin_internal(exit_builtin, 2,                    \
+                                (char *[]){ "exit", "1", NULL });   \
+            /* if exit_builtin() failed, force exit */              \
+            exit_gracefully(EXIT_FAILURE, NULL);                    \
+        }                                                           \
+    }                                                               \
 } while(0)
 
 

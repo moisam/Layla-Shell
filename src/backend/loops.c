@@ -19,9 +19,9 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-/* macro definitions needed to use sig*() and setenv() */
+/* Macro definitions needed to use sig*() and setenv() */
 #define _POSIX_C_SOURCE 200112L
-/* for uslepp(), but also _POSIX_C_SOURCE shouldn't be >= 200809L */
+/* For uslepp(), but also _POSIX_C_SOURCE shouldn't be >= 200809L */
 #define _XOPEN_SOURCE   500
 
 #include <ctype.h>
@@ -44,29 +44,24 @@
 #include "../builtins/setx.h"
 
 
-int cur_loop_level = 0;     /* current loop level (number of nested loops) */
-int req_break      = 0;     /* if set, break was encountered in a loop */
-int req_continue   = 0;     /* if set, continue was encountered in a loop */
+int cur_loop_level = 0;     /* Current loop level (number of nested loops) */
+int req_break      = 0;     /* If set, break was encountered in a loop */
+int req_continue   = 0;     /* If set, continue was encountered in a loop */
 
 
 /*
- * this function handles the break builtin utility, which is used to break out
- * of loops (for, while, until). an optional argument (argv[1]) can be used to
+ * This function handles the break builtin utility, which is used to break out
+ * of loops (for, while, until). An optional argument (argv[1]) can be used to
  * specify how many levels (loops) to break out from. the default is 1.
  * 
- * returns 0, unless an error occurs (such as an invalid argument being passed,
+ * Returns 0, unless an error occurs (such as an invalid argument being passed,
  * or 'break' being called outside a loop). in case of error, 1 is returned.
  */
 int break_builtin(int argc, char **argv)
 {
     if(!cur_loop_level)
     {
-        PRINT_ERROR("%s: break clause outside a loop\n", SHELL_NAME);
-        /* POSIX says non-interactive shell should exit on syntax errors */
-        if(!interactive_shell)
-        {
-            exit_gracefully(EXIT_FAILURE, NULL);
-        }
+        PRINT_ERROR("%s: break clause outside a loop\n", SOURCE_NAME);
         return 1;
     }
     
@@ -80,7 +75,7 @@ int break_builtin(int argc, char **argv)
         int n = strtol(argv[1], &strend, 10);
         if(*strend || n < 1)
         {
-            PRINT_ERROR("break: invalid loop number: %s\n", argv[1]);
+            PRINT_ERROR("break: invalid loop count: %s\n", argv[1]);
             return 1;
         }
         req_break = n;
@@ -90,24 +85,19 @@ int break_builtin(int argc, char **argv)
 
 
 /*
- * this function handles the continue builtin utility, which is used to continue
+ * This function handles the continue builtin utility, which is used to continue
  * execution of loops (for, while, until) from the top of the loop.
- * an optional argument (argv[1]) can be used to specify how many levels (loops) to
+ * An optional argument (argv[1]) can be used to specify how many levels (loops) to
  * break out from before continuing the last loop from the top. the default is 1.
  * 
- * returns 0, unless an error occurs (such as an invalid argument being passed,
+ * Returns 0, unless an error occurs (such as an invalid argument being passed,
  * or 'continue' being called outside a loop). in case of error, 1 is returned.
  */
 int continue_builtin(int argc, char **argv)
 {
     if(!cur_loop_level)
     {
-        PRINT_ERROR("%s: continue clause outside a loop\n", SHELL_NAME);
-        /* POSIX says non-interactive shell should exit on syntax errors */
-        if(!interactive_shell)
-        {
-            exit_gracefully(EXIT_FAILURE, NULL);
-        }
+        PRINT_ERROR("%s: continue clause outside a loop\n", SOURCE_NAME);
         return 1;
     }
 
@@ -121,7 +111,7 @@ int continue_builtin(int argc, char **argv)
         int n = strtol(argv[1], &strend, 10);
         if(*strend || n < 1)
         {
-            PRINT_ERROR("continue: invalid loop number: %s\n", argv[1]);
+            PRINT_ERROR("continue: invalid loop count: %s\n", argv[1]);
             return 1;
         }
         req_continue = n;
@@ -131,12 +121,12 @@ int continue_builtin(int argc, char **argv)
 
 
 /*
- * extract and return the word list that is used as part of the
- * for and select loops. if no *nodelist is provided, we use the value
+ * Extract and return the word list that is used as part of the
+ * for and select loops. If no *nodelist is provided, we use the value
  * of the $@ special parameter, which contains the current values of the
  * positional parameters.
  *
- * returns the string array on success, NULL if there's not enough memory
+ * Returns the string array on success, NULL if there's not enough memory
  * to store the words, or if the resultant word list is empty.
  */
 struct word_s *get_loop_wordlist(struct node_s *nodelist)
@@ -151,7 +141,8 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
             if((w = make_word(nodelist->val.str)) == NULL)
             {
                 free_all_words(head);
-                PRINT_ERROR("%s: insufficient memory for loop's wordlist\n", SHELL_NAME);
+                PRINT_ERROR("%s: insufficient memory for loop's wordlist\n", 
+                            SOURCE_NAME);
                 return NULL;
             }
 
@@ -170,7 +161,7 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
     }
     else
     {
-        /* use the actual arguments to the script (i.e. "$@") */
+        /* Use the actual arguments to the script (i.e. "$@") */
         int count = get_shell_vari("#", 0);
         int i = 1;
         char buf[32];
@@ -188,7 +179,8 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
             if((w = make_word(p2)) == NULL)
             {
                 free_all_words(head);
-                PRINT_ERROR("%s: insufficient memory for loop's wordlist\n", SHELL_NAME);
+                PRINT_ERROR("%s: insufficient memory for loop's wordlist\n", 
+                            SOURCE_NAME);
                 return NULL;
             }
 
@@ -206,26 +198,26 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
         }
     }
     
-    /* now go POSIX-style on those tokens */
+    /* Now go POSIX-style on those tokens */
     cur  = head;
     tail = head;
     prev = NULL;
 
     while(cur)
     {
-        /* then, word expansion */
+        /* Then, word expansion */
         w = word_expand(cur->data,
               FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES|FLAG_FIELD_SPLITTING);
 
-        /* null? remove this token from list */
+        /* Null? remove this token from list */
         if(!w)
         {
             w = cur->next;
-            /* free this word struct */
+            /* Free this word struct */
             free(cur->data);
             free(cur);
             
-            /* and remove it from the list */
+            /* And remove it from the list */
             if(prev)
             {
                 prev->next = w;
@@ -236,18 +228,18 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
             }
             cur = w;
         }
-        /* new sublist is formed (i.e. field splitting resulted in more than one field) */
+        /* New sublist is formed (i.e. field splitting resulted in more than one field) */
         else
         {
             struct word_s *next = cur->next;
-            /* free this word struct */
+            /* Free this word struct */
             if(w != cur)
             {
                 free(cur->data);
                 free(cur);
             }
             
-            /* and remove it from the list */
+            /* And remove it from the list */
             if(prev)
             {
                 prev->next = w;
@@ -257,14 +249,14 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
                 head = w;
             }
 
-            /* find the last word */
+            /* Find the last word */
             tail = w;
             while(tail->next)
             {
                 tail = tail->next;
             }
             
-            /* and adjust the pointers */
+            /* And adjust the pointers */
             tail->next = next;
             prev = tail;
             cur = next;
@@ -276,13 +268,13 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
 
 
 /* 
- * execute the second form of 'for' loops, the arithmetic for loop:
+ * Execute the second form of 'for' loops, the arithmetic for loop:
  * 
  *    for((expr1; expr2; expr3)); do commands; done
  * 
- * this is a non-POSIX extension used by all major shells.
+ * This is a non-POSIX extension used by all major shells.
  * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
+ * Returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
 int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
@@ -317,7 +309,7 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
         return 1;
     }
     
-    /* redirects specific to the loop should override global ones */
+    /* Redirects specific to the loop should override global ones */
     int saved_fd[3] = { -1, -1, -1 };
     struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
@@ -333,13 +325,13 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
         }
     }
 
-    /* first evaluate expr1 */
+    /* First evaluate expr1 */
     char *str = expr1->val.str;
     char *str2;
     if(str && *str)
     {
         /*
-         * the DEBUG trap is executed (bash):
+         * The DEBUG trap is executed (bash):
          * - before each simple command
          * - before each for, case, select, and arithmetic for commands
          * - before the first command in a shell function
@@ -349,13 +341,16 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
         str2 = arithm_expand(str);
         if(!str2)     /* invalid expr */
         {
-            restore_stds(saved_fd);
+            if(redirect_list)
+            {
+                restore_stds(saved_fd);
+            }
             return 0;
         }
         free(str2);
     }
 
-    /* then loop as long as expr2 evaluates to non-zero result */
+    /* Then loop as long as expr2 evaluates to non-zero result */
     int res = 0;
     char *onestr = "1";
     cur_loop_level++;
@@ -367,29 +362,33 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
         {
             trap_handler(DEBUG_TRAP_NUM);    
             str2 = arithm_expand(str);
-            if(!str2)       /* invalid expr */
+            if(!str2)       /* Invalid expr */
             {
                 res = 0;
                 break;
             }
             
-            if(!*str2)      /* empty expression, treat as 1 */
+            if(!*str2)      /* Empty expression, treat as 1 */
             {
                 str2 = onestr;
             }
         }
-        else                /* treat it as 1 and loop */
+        else                /* Treat it as 1 and loop */
         {
             str2 = onestr;
         }
 
         /*
-         * perform the loop body (we don't need to call strtol(), because we
+         * Perform the loop body (we don't need to call strtol(), because we
          * know arithm_expand() only returns a string-formatted number.
          */
         if(atol(str2))
         {
-            do_do_group(src, commands, NULL);
+            if(!do_do_group(src, commands, NULL))
+            {
+                res = 0;
+                break;
+            }
             
             if(return_set || signal_received == SIGINT)
             {
@@ -416,13 +415,13 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
             }
             res = 1;
             
-            /* evaluate expr3 */
+            /* Evaluate expr3 */
             str = expr3->val.str;
             if(str && *str)
             {
                 trap_handler(DEBUG_TRAP_NUM);    
                 str2 = arithm_expand(str);
-                if(!str2)     /* invalid expr */
+                if(!str2)     /* Invalid expr */
                 {
                     res = 0;
                     break;
@@ -438,7 +437,7 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
     }
     cur_loop_level--;
 
-    if(local_redirects)
+    if(redirect_list)
     {
         restore_stds(saved_fd);
     }
@@ -447,11 +446,11 @@ int do_for_loop2(struct source_s *src, struct node_s *node, struct node_s *redir
 
 
 /* 
- * execute the first (classic) form of 'for' loops, which is defined by POSIX:
+ * Execute the first (classic) form of 'for' loops, which is defined by POSIX:
  * 
  *    for var [in word-list]; do commands; done
  * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
+ * Returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
 int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
@@ -480,7 +479,7 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
         return 1;
     }
 
-    /* redirects specific to the loop should override global ones */
+    /* Redirects specific to the loop should override global ones */
     int saved_fd[3] = { -1, -1, -1 };
     struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
@@ -500,55 +499,47 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
     if(!list)
     {
         set_internal_exit_status(0);
-        restore_stds(saved_fd);
+        if(redirect_list)
+        {
+            restore_stds(saved_fd);
+        }
         return 1;
     }
     
-    /* we should now be set at the first command inside the for loop */
+    /* We should now be set at the first command inside the for loop */
     int res = 0;
     char *index_name = index->val.str;
     struct word_s *l = list;
 
-    /* get our index variable's symbol table entry */
+    /* Get our index variable's symbol table entry */
     struct symtab_entry_s *entry = get_symtab_entry(index_name);
     if(!entry)
     {
         entry = add_to_symtab(index_name);
     }
     
-    /* check we've got the entry */
-    if(!entry)
+    /* Check we're not trying to assign to a readonly variable */
+    if(flag_set(entry->flags, FLAG_READONLY))
     {
-        PRINT_ERROR("%s: failed to add variable %s to symbol table\n", 
-                    SHELL_NAME, index_name);
-        /* set l to NULL so we won't enter the loop below */
+        READONLY_ASSIGN_ERROR(SOURCE_NAME, index_name, "variable");
+        /* Set l to NULL so we won't enter the loop below */
         l = NULL;
         res = 0;
     }
     else
     {
-        /* check we're not trying to assign to a readonly variable */
-        if(flag_set(entry->flags, FLAG_READONLY))
-        {
-            READONLY_ASSIGN_ERROR(SHELL_NAME, index_name);
-            /* set l to NULL so we won't enter the loop below */
-            l = NULL;
-            res = 0;
-        }
-        else
-        {
-            /*
-             * we set FLAG_CMD_EXPORT so that the index var will be exported to all commands
-             * inside the for loop.
-             */
-            symtab_entry_setval(entry, NULL);
-            entry->flags |= FLAG_CMD_EXPORT;
-        }
+        /*
+         * We set FLAG_CMD_EXPORT so that the index var will be exported to all commands
+         * inside the for loop.
+         */
+        symtab_entry_setval(entry, NULL);
+        entry->flags |= FLAG_CMD_EXPORT;
     }
+    
     cur_loop_level++;
 
     /*
-     * the DEBUG trap is executed (bash):
+     * The DEBUG trap is executed (bash):
      * - before each simple command
      * - before each for, case, select, and arithmetic for commands
      * - before the first command in a shell function
@@ -560,7 +551,7 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
         symtab_entry_setval(entry, l->data);
         res = do_do_group(src, commands, NULL);
 
-        if(return_set || signal_received == SIGINT)
+        if(!res || return_set || signal_received == SIGINT)
         {
             break;
         }
@@ -581,11 +572,11 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
         //res = 1;
     }
 
-    /* free used memory */
+    /* Free used memory */
     free_all_words(list);
     cur_loop_level--;
 
-    if(local_redirects)
+    if(redirect_list)
     {
         restore_stds(saved_fd);
     }
@@ -594,14 +585,14 @@ int do_for_loop(struct source_s *src, struct node_s *node, struct node_s *redire
 
 
 /* 
- * execute a select clause (or loop), which takes the form of:
+ * Execute a select clause (or loop), which takes the form of:
  * 
  *    select name [in word-list]; do commands; done
  * 
- * this is a non-POSIX extension used by all major shells. you should notice the
+ * This is a non-POSIX extension used by all major shells. You should notice the
  * similarity between this function's code and the do_for_loop() function above.
  * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
+ * Returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
 int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
@@ -626,7 +617,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
         return 1;
     }
 
-    /* redirects specific to the loop should override global ones */
+    /* Redirects specific to the loop should override global ones */
     struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
@@ -646,20 +637,31 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
     if(!list)
     {
         set_internal_exit_status(0);
-        restore_stds(saved_fd);
+        if(redirect_list)
+        {
+            restore_stds(saved_fd);
+        }
         return 1;
     }
     
-    /* we should now be set at the first command inside the for loop */
+    /* We should now be set at the first command inside the for loop */
     char *index_name = index->val.str;
     int j, res = 0, count = 0;
     struct word_s *l = list;
 
-    do_set(index_name, NULL, 0, 0, 0);
+    if(do_set(index_name, NULL, 0, 0, 0) == NULL)
+    {
+        if(redirect_list)
+        {
+            restore_stds(saved_fd);
+        }
+        return 0;
+    }
+
     cur_loop_level++;
     
     /*
-     * the DEBUG trap is executed (bash):
+     * The DEBUG trap is executed (bash):
      * - before each simple command
      * - before each for, case, select, and arithmetic for commands
      * - before the first command in a shell function
@@ -682,12 +684,12 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
             break;
         }
 
-        /* parse the selection */
+        /* Parse the selection */
         char *strend;
         struct symtab_entry_s *entry = get_symtab_entry("REPLY");
         
         /*
-         * empty response. ksh prints PS3, while bash and zsh reprint the select list.
+         * Empty response. ksh prints PS3, while bash and zsh reprint the select list.
          * the second approach seems more appropriate, so we follow it.
          */
         if(!entry->val || !entry->val[0])
@@ -700,7 +702,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
         }
         
         int sel = strtol(entry->val, &strend, 10);
-        /* invalid (non-numeric) response */
+        /* Invalid (non-numeric) response */
         if(strend == entry->val)
         {
             symtab_entry_setval(entry, NULL);
@@ -718,9 +720,17 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
         {
             ;
         }
-        do_set(index_name, l->data, 0, 0, 0);
         
-        do_do_group(src, commands, NULL);
+        if(do_set(index_name, l->data, 0, 0, 0) == NULL)
+        {
+            break;
+        }
+        
+        if(!do_do_group(src, commands, NULL))
+        {
+            res = 0;
+            break;
+        }
         
         if(return_set || signal_received == SIGINT)
         {
@@ -742,7 +752,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
         }
         res = 1;
         
-        /* if var is null, reprint the list */
+        /* If var is null, reprint the list */
         entry = get_symtab_entry("REPLY");
         if(!entry->val || !entry->val[0])
         {
@@ -756,7 +766,7 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
     free_all_words(list);
     cur_loop_level--;
 
-    if(local_redirects)
+    if(redirect_list)
     {
         restore_stds(saved_fd);
     }
@@ -765,11 +775,11 @@ int do_select_loop(struct source_s *src, struct node_s *node, struct node_s *red
 
 
 /* 
- * execute a while clause (or loop), which takes the form of:
+ * Execute a while clause (or loop), which takes the form of:
  * 
  *    while test; do commands; done
  * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
+ * Returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
 int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
@@ -783,7 +793,7 @@ int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redi
     struct node_s *clause   = node->first_child;
     struct node_s *commands = clause->next_sibling;
     
-    /* redirects specific to the loop should override global ones */
+    /* Redirects specific to the loop should override global ones */
     struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
@@ -813,7 +823,11 @@ int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redi
         
         if(exit_status == 0)
         {
-            do_do_group(src, commands, NULL);
+            if(!do_do_group(src, commands, NULL))
+            {
+                res = 0;
+                break;
+            }
             
             if(return_set || signal_received == SIGINT)
             {
@@ -843,7 +857,7 @@ int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redi
     } while(1);
     cur_loop_level--;
 
-    if(local_redirects)
+    if(redirect_list)
     {
         restore_stds(saved_fd);
     }
@@ -852,11 +866,11 @@ int do_while_loop(struct source_s *src, struct node_s *node, struct node_s *redi
 
 
 /* 
- * execute an until clause (or loop), which takes the form of:
+ * Execute an until clause (or loop), which takes the form of:
  * 
  *    until test; do commands; done
  * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
+ * Returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
 int do_until_loop(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
@@ -869,7 +883,7 @@ int do_until_loop(struct source_s *src, struct node_s *node, struct node_s *redi
     int saved_fd[3] = { -1, -1, -1 };
     struct node_s *clause   = node->first_child;
     struct node_s *commands = clause->next_sibling;
-    /* redirects specific to the loop should override global ones */
+    /* Redirects specific to the loop should override global ones */
     struct node_s *local_redirects = commands ? commands->next_sibling : NULL;
     if(local_redirects)
     {
@@ -904,7 +918,11 @@ int do_until_loop(struct source_s *src, struct node_s *node, struct node_s *redi
         }
         else
         {
-            do_do_group(src, commands, NULL);
+            if(!do_do_group(src, commands, NULL))
+            {
+                res = 0;
+                break;
+            }
             
             if(return_set || signal_received == SIGINT)
             {
@@ -929,7 +947,7 @@ int do_until_loop(struct source_s *src, struct node_s *node, struct node_s *redi
     } while(1);
     cur_loop_level--;
 
-    if(local_redirects)
+    if(redirect_list)
     {
         restore_stds(saved_fd);
     }

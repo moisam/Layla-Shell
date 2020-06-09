@@ -38,13 +38,14 @@
 
 
 /*
- * check if the string *p has any regular expression (regex) characters,
+ * Check if the string *p has any regular expression (regex) characters,
  * which are *, ?, [ and ].
  */
 int has_glob_chars(char *p, size_t len)
 {
     char *p2 = p+len;
-    char ob = 0, cb = 0;    /* count of opening and closing brackets */
+    char ob = 0, cb = 0;    /* Count of opening and closing brackets */
+    
     while(p < p2 && *p)
     {
         switch(*p)
@@ -63,21 +64,23 @@ int has_glob_chars(char *p, size_t len)
         }
         p++;
     }
-    /* do we have a matching number of opening and closing brackets? */
+    
+    /* Do we have a matching number of opening and closing brackets? */
     if(ob && ob == cb)
     {
         return 1;
     }
+    
     return 0;
 }
 
 
 /*
- * find the shortest or longest prefix of str that matches
- * pattern, depending on the value of longest.
- * return value is the index of 1 after the last character
- * in the prefix, i.e. where you should put a '\0' to get 
- * the prefix.
+ * find the shortest or longest prefix of str that matches pattern, depending 
+ * on the value of longest.
+ * 
+ * return value is the index of 1 after the last character in the prefix, 
+ * i.e. where you should put a '\0' to get the prefix.
  */
 int match_prefix(char *pattern, char *str, int longest)
 {
@@ -90,6 +93,7 @@ int match_prefix(char *pattern, char *str, int longest)
     char  c = *s;
     char *smatch = NULL;
     char *lmatch = NULL;
+    
     while(c)
     {
         *s = '\0';
@@ -110,7 +114,7 @@ int match_prefix(char *pattern, char *str, int longest)
         c = *(++s);
     }
     
-    /* check the result of the comparison */
+    /* Check the result of the comparison */
     if(lmatch)
     {
         return lmatch-str;
@@ -120,15 +124,16 @@ int match_prefix(char *pattern, char *str, int longest)
     {
         return smatch-str;
     }
+    
     return 0;
 }
 
 
 /*
- * find the shortest or longest suffix of str that matches
- * pattern, depending on the value of longest.
- * return value is the index of the first character in the
- * matched suffix.
+ * Find the shortest or longest suffix of str that matches pattern, depending 
+ * on the value of longest.
+ * 
+ * Return value is the index of the first character in the matched suffix.
  */
 int match_suffix(char *pattern, char *str, int longest)
 {
@@ -136,9 +141,11 @@ int match_suffix(char *pattern, char *str, int longest)
     {
         return 0;
     }
+
     char *s = str+strlen(str)-1;
     char *smatch = NULL;
     char *lmatch = NULL;
+    
     while(s > str)
     {
         if(match_pattern(pattern, s))
@@ -156,7 +163,7 @@ int match_suffix(char *pattern, char *str, int longest)
         s--;
     }
     
-    /* check the result of the comparison */
+    /* Check the result of the comparison */
     if(lmatch)
     {
         return lmatch-str;
@@ -166,16 +173,17 @@ int match_suffix(char *pattern, char *str, int longest)
     {
         return smatch-str;
     }
+    
     return 0;
 }
 
 
 /*
- * check if the string str matches the given pattern.
- * print_err is a flag that tells us if we should output an
- * error message in case no match was found.
+ * Check if the string str matches the given pattern.
+ * 'print_err' is a flag that tells us if we should output an error message 
+ * in case no match was found.
  *
- * returns 1 if we have a match, 0 otherwise.
+ * Returns 1 if we have a match, 0 otherwise.
  */
 int match_filename(char *pattern, char *str, int print_err, int ignore)
 {
@@ -183,21 +191,27 @@ int match_filename(char *pattern, char *str, int print_err, int ignore)
     {
         return 0;
     }
+
     /*
      * $FIGNORE is a non-POSIX extension that defines the set of 
      * file names that is ignored when performing file name matching.
      * bash has a similar $GLOBIGNORE variable.
      */
     char *fignore = get_shell_varp("FIGNORE", NULL);
-    /* set up the flags */
+    /* Set up the flags */
     int flags = FNM_NOESCAPE | FNM_PATHNAME | FNM_LEADING_DIR;
+    
     if( optionx_set(OPTION_NOCASE_MATCH)) flags |= FNM_CASEFOLD;
     if( optionx_set(OPTION_EXT_GLOB    )) flags |= FNM_EXTMATCH;
     if(!optionx_set(OPTION_DOT_GLOB    )) flags |= FNM_PERIOD  ;
-    /* perform the match */
+    
+    /* Perform the match */
     if(optionx_set(OPTION_GLOB_ASCII_RANGES)) setlocale(LC_ALL, "C");
+    
     int res = fnmatch(pattern, str, flags);
+    
     if(optionx_set(OPTION_GLOB_ASCII_RANGES)) setlocale(LC_ALL, "");
+    
     switch(res)
     {
         case 0:
@@ -216,7 +230,7 @@ int match_filename(char *pattern, char *str, int print_err, int ignore)
         default:
             if(print_err)
             {
-                PRINT_ERROR("%s: failed to match filename(s)\n", SHELL_NAME);
+                PRINT_ERROR("%s: failed to match filename(s)\n", SOURCE_NAME);
             }
             return 0;
     }
@@ -224,10 +238,10 @@ int match_filename(char *pattern, char *str, int print_err, int ignore)
 
 
 /*
- * similar to match_filename(), but matches strings for variable expansion
+ * Similar to match_filename(), but matches strings for variable expansion
  * and others.
  *
- * returns 1 if we have a match, 0 otherwise.
+ * Returns 1 if we have a match, 0 otherwise.
  */
 int match_pattern(char *pattern, char *str)
 {
@@ -236,7 +250,7 @@ int match_pattern(char *pattern, char *str)
         return 0;
     }
 
-    /* set up the flags */
+    /* Set up the flags */
     int flags = FNM_LEADING_DIR;
     if(optionx_set(OPTION_NOCASE_MATCH))
     {
@@ -248,7 +262,7 @@ int match_pattern(char *pattern, char *str)
         flags |= FNM_EXTMATCH;
     }
 
-    /* perform the match */
+    /* Perform the match */
     if(optionx_set(OPTION_GLOB_ASCII_RANGES))
     {
         setlocale(LC_ALL, "C");
@@ -266,12 +280,12 @@ int match_pattern(char *pattern, char *str)
 
 
 /*
- * match a string to a pattern using POSIX extended regex syntax (used when
+ * Match a string to a pattern using POSIX extended regex syntax (used when
  * the =~ operator is passed to the test builtin).
  */
 int match_pattern_ext(char *pattern, char *str)
 {
-    /* set up the flags */
+    /* Set up the flags */
     int flags = REG_EXTENDED;
     if(optionx_set(OPTION_NOCASE_MATCH))
     {
@@ -284,7 +298,7 @@ int match_pattern_ext(char *pattern, char *str)
     /* Non-zero result means error. */
     if(result)
     {
-        fprintf(stderr, "%s: regex match failed: ", SHELL_NAME);
+        fprintf(stderr, "%s: regex match failed: ", SOURCE_NAME);
         switch(result)
         {
             case REG_BADBR:
@@ -354,7 +368,7 @@ int match_pattern_ext(char *pattern, char *str)
         size_t length = regerror (result, &regex, NULL, 0);
         char buffer[length];
         (void) regerror (result, &regex, buffer, length);
-        fprintf(stderr, "%s: regex match failed: %s\r\n", SHELL_NAME, buffer);
+        fprintf(stderr, "%s: regex match failed: %s\r\n", SOURCE_NAME, buffer);
     }
 
     /* Free the memory allocated from regcomp(). */
@@ -363,7 +377,7 @@ int match_pattern_ext(char *pattern, char *str)
 }
 
 
-/* dummy function to satisfy scandir() */
+/* Dummy function to satisfy scandir() */
 static int one(const struct dirent *unused __attribute__((unused)))
 {
     return 1;
@@ -373,7 +387,7 @@ struct stat   statbuf;
 struct dirent **eps;
 
 /*
- * scan the provided path to look for input files.
+ * Scan the provided path to look for input files.
  */
 int scan_dir(char *path, int report_err)
 {
@@ -388,75 +402,83 @@ int scan_dir(char *path, int report_err)
         if(report_err)
         {
             PRINT_ERROR("%s: failed to open `%s`: %s\n", 
-                        SHELL_NAME, path, strerror(errno));
+                        SOURCE_NAME, path, strerror(errno));
         }
         return 0;
     }
 }
 
 
-char *__next_path    = NULL;
+char *__next_path = NULL;
 
 /*
- * gets the next filename from the directory listing.
+ * Gets the next filename from the directory listing.
  */
 char *get_next_filename(char *__path, int *n, int report_err)
 {
     static int   first_time = 1;
     static int   file_count = 0, index = 0;
+
     if(__next_path != __path)
     {
         __next_path = __path;
         first_time  = 1;
         index       = 0;
     }
+
     if(first_time)
     {
         if(!(file_count = scan_dir(__next_path, report_err)))
         {
-            /* error or empty directory */
+            /* Error or empty directory */
             if(n)
             {
                 *n = 0;
             }
             return NULL;
         }
+        
         first_time = 0;
+        
         if(n)
         {
             *n = file_count;
         }
     }
+    
 loop:
     if(index >= file_count)
     {
         return NULL;
     }
     /*
-     * something funny happens after stating '.' & '..', the first file after
-       those is not seen as a file but as a dir. So wipe out the struct to
-       prevent this from happening.
+     * Something funny happens after stating '.' & '..', the first file after
+     * those is not seen as a file but as a dir. So wipe out the struct to
+     * prevent this from happening.
      */
     memset(&statbuf, 0, sizeof(struct stat));
+    
     char *name = eps[index]->d_name;
     lstat(name, &statbuf);
-    /* skip dot and dot-dot */
+    
+    /* Skip dot and dot-dot */
     if(S_ISDIR(statbuf.st_mode) &&
        (strcmp(name, "..") == 0 || strcmp(name, ".") == 0))
     {
         index++;
         goto loop;
     }
+    
     return eps[index++]->d_name;
 }
 
 
 /*
- * perform pathname (or filename) expansion, matching files in the given *dir to the
+ * Perform pathname (or filename) expansion, matching files in the given *dir to the
  * given *path, which is treated as a regex pattern that specifies which filename(s)
  * we should match.
  *
- * returns a char ** pointer to the list of matched filenames, or NULL if nothing matched.
+ * Returns a char ** pointer to the list of matched filenames, or NULL if nothing matched.
  */
 char **get_filename_matches(char *pattern, glob_t *matches)
 {
@@ -471,12 +493,12 @@ char **get_filename_matches(char *pattern, glob_t *matches)
 
     char *fignore = get_shell_varp("GLOBIGNORE", NULL);
 
-    /* set up the flags */
+    /* Set up the flags */
     int flags = 0;
     if(optionx_set(OPTION_DOT_GLOB  )) flags |= GLOB_PERIOD;
     if(option_set('B')) flags |= GLOB_BRACE;
 
-    /* perform the match */
+    /* Perform the match */
     if(optionx_set(OPTION_GLOB_ASCII_RANGES)) setlocale(LC_ALL, "C");
     int res = glob(pattern, flags, NULL, matches);
     if(optionx_set(OPTION_GLOB_ASCII_RANGES)) setlocale(LC_ALL, "");
@@ -511,9 +533,9 @@ char **get_filename_matches(char *pattern, glob_t *matches)
 
 
 /*
- * test filename against a colon-separated pattern field to determine if it 
- * matches one of the patterns in the field. used when performing filename 
- * expansion to determine which file names to ignore. the pattern is usually 
+ * Test filename against a colon-separated pattern field to determine if it 
+ * matches one of the patterns in the field. Used when performing filename 
+ * expansion to determine which file names to ignore. The pattern is usually 
  * the value of $FIGNORE, $GLOBIGNORE or $EXECIGNORE.
  */
 int match_ignore(char *pattern, char *filename)

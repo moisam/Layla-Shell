@@ -43,18 +43,19 @@
  * perform I/O redirections of a command.
  **********************************************/
 
-/* special value to represent an invalid variable */
+/* Special value to represent an invalid variable */
 #define INVALID_VAR     ((char *)-1)
 
 /*
- * when a builtin or function redirects one of the shell's standard streams,
- * we store the original stream so that we can restore it after the builtin
- * or function finishes execution.
+ * Backup of the shell's standard streams, used to restore standard streams
+ * before executing an EXIT trap (just in case the streams were redirected
+ * by a command that failed, and we needed to exit promptly due to the -e
+ * option being set).
  */
-// int saved_fd[3] = { -1, -1, -1 };
+int backup_fd[3] = { -1, -1, -1 };
 
 /*
- * if we are executing a builtin utility or a shell function, we need to save the
+ * If we are executing a builtin utility or a shell function, we need to save the
  * state of the standard streams so that we can restore them after the utility or
  * function finishes execution.
  */
@@ -68,7 +69,7 @@ void save_std(int fd, int *saved_fd)
 
 
 /*
- * after a builtin utility or a shell function finishes execution, restore the
+ * After a builtin utility or a shell function finishes execution, restore the
  * standard streams if there were any I/O redirections.
  */
 void restore_stds(int *saved_fd)
@@ -83,7 +84,6 @@ void restore_stds(int *saved_fd)
         {
             dup2(saved_fd[i], i);
             close(saved_fd[i]);
-            debug ("restoring %d from %d\n", i, saved_fd[i]);
             saved_fd[i] = -1;
         }
     }
@@ -91,9 +91,9 @@ void restore_stds(int *saved_fd)
 
 
 /*
- * perform process substitution. the op parameter specifies the redirection operator to
- * apply to the process substitution, which can be '<' or '>'. the cmdline parameter
- * contains the command(s) to execute in the process. the tmpname parameter contains
+ * Perform process substitution. the op parameter specifies the redirection operator to
+ * apply to the process substitution, which can be '<' or '>'. The cmdline parameter
+ * contains the command(s) to execute in the process. The tmpname parameter contains
  * the pathname of the file we'll use for the redirection.
  */
 void redirect_proc_do(char *cmdline, char op, int fd)
@@ -115,6 +115,9 @@ void redirect_proc_do(char *cmdline, char op, int fd)
         src.srcname  = NULL;
 
         parse_and_execute(&src);
+        /* execute the EXIT trap (if any) */
+        trap_handler(0);
+
         exit(exit_status);
     }
     close(fd);
@@ -122,11 +125,12 @@ void redirect_proc_do(char *cmdline, char op, int fd)
 
 
 /*
- * prepare for process substitution by opening a FIFO under /tmp/lsh, or if the
+ * Prepare for process substitution by opening a FIFO under /tmp/lsh, or if the
  * system doesn't support named FIFO's, create a regular pipe and use its file
- * descriptors in place of the FIFO. in the latter case, the pipe will be passed
+ * descriptors in place of the FIFO. In the latter case, the pipe will be passed
  * to the process as a file named /dev/fdN, where N is the file descriptor number.
- * returns the pathname of the FIFO/pipe, so that we can pass it to the other end,
+ * 
+ * Returns the pathname of the FIFO/pipe, so that we can pass it to the other end,
  * i.e. the command which will read from or write to the process we'll fork.
  */
 char *redirect_proc(char op, char *cmdline)
@@ -139,7 +143,7 @@ char *redirect_proc(char op, char *cmdline)
     while(tries--)
     {
         sprintf(tmpname, "%s%clsh/fifo%d", tmpdir, '/', tries);
-        /* try to perform process substitution via using a named pipe/fifo */
+        /* Try to perform process substitution via using a named pipe/fifo */
         if(mkfifo(tmpname, 0600) != 0)
         {
             if(errno == EEXIST)
@@ -147,9 +151,9 @@ char *redirect_proc(char op, char *cmdline)
                 continue;
             }
             /*
-             * if the system doesn't support named pipes, or another error occurred, such as
+             * If the system doesn't support named pipes, or another error occurred, such as
              * insufficient disk space, try performing this via a regular pipe, whose path we'll
-             * pass as /dev/fd/filedes. if the system doesn't support this scheme, we won't be able
+             * pass as /dev/fd/filedes. If the system doesn't support this scheme, we won't be able
              * to perform process substitution.
              */
             int filedes[2];
@@ -167,7 +171,8 @@ char *redirect_proc(char op, char *cmdline)
                 }
                 else
                 {
-                    PRINT_ERROR("%s: error creating fifo: %s\n", SHELL_NAME, "system doesn't support `/dev/fd` file names");
+                    PRINT_ERROR("%s: error creating fifo: %s\n", SOURCE_NAME, 
+                                "system doesn't support `/dev/fd` file names");
                     close(filedes[0]);
                     close(filedes[1]);
                     return NULL;
@@ -175,14 +180,16 @@ char *redirect_proc(char op, char *cmdline)
             }
             else
             {
-                PRINT_ERROR("%s: error creating fifo: %s\n", SHELL_NAME, strerror(errno));
+                PRINT_ERROR("%s: error creating fifo: %s\n", 
+                            SOURCE_NAME, strerror(errno));
                 return NULL;
             }
         }
         
         if((fd = open(tmpname, O_RDWR)) == -1)
         {
-            PRINT_ERROR("%s: failed to open fifo: %s\n", SHELL_NAME, strerror(errno));
+            PRINT_ERROR("%s: failed to open fifo: %s\n", 
+                        SOURCE_NAME, strerror(errno));
             return NULL;
         }
         
@@ -195,8 +202,10 @@ char *redirect_proc(char op, char *cmdline)
 
 
 /*
- * get the slot belonging to this fileno, or else the first empty
- * slot in the redirection table. returns -1 if no slot is available.
+ * Get the slot belonging to this fileno, or else the first empty
+ * slot in the redirection table.
+ * 
+ * Returns -1 if no slot is available.
  */
 int get_slot(int fileno, struct io_file_s *io_files)
 {
@@ -213,7 +222,7 @@ int get_slot(int fileno, struct io_file_s *io_files)
 
 
 /*
- * prepare a redirection file from the given redirection node.
+ * Prepare a redirection file from the given redirection node.
  */
 int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
 {
@@ -230,7 +239,7 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
             s = child->val.str;
             i = strlen(s);
             /*
-             * check for the non-POSIX bash and zsh redirection extensions of {var}<&N
+             * Check for the non-POSIX bash and zsh redirection extensions of {var}<&N
              * and {var}>&N. the {var} part would have been added as the previous
              * node.
              */
@@ -248,7 +257,7 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                 }
 
                 /*
-                 * if the path is '-', it means we need to close the fd, so we'll get the fd number
+                 * If the path is '-', it means we need to close the fd, so we'll get the fd number
                  * from the shell variable where it was saved before.
                  */
                 if(child2 && child2->val.str && strcmp(child2->val.str, "-") == 0)
@@ -269,20 +278,17 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                     break;
                 }
 
-                /* search for an available slot for the new file descriptor, starting with #10 */
+                /* Search for an available slot for the new file descriptor, starting with #10 */
                 for(fileno = 10; fileno < FOPEN_MAX; fileno++)
                 {
-                    /* get a vacant file descriptor */
+                    /* Get a vacant file descriptor */
                     errno = 0;
                     if(fcntl(fileno, F_GETFD) == -1 && errno == EBADF)
                     {
-                        /* we need to save the file number for later reference */
+                        /* We need to save the file number for later reference */
                         struct symtab_entry_s *entry = add_to_symtab(s+1);
-                        if(entry)
-                        {
-                            sprintf(buf, "%d", fileno);
-                            symtab_entry_setval(entry, buf);
-                        }
+                        sprintf(buf, "%d", fileno);
+                        symtab_entry_setval(entry, buf);
                         break;
                     }
                 }           
@@ -296,13 +302,13 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
         
     if(fileno < 0 || fileno >= FOPEN_MAX)
     {
-        PRINT_ERROR("%s: invalid redirection file number: %d\n", SHELL_NAME, fileno);
+        PRINT_ERROR("%s: invalid redirected file number: %d\n", SOURCE_NAME, fileno);
         return 0;
     }
     
     if((i = get_slot(fileno, io_files)) == -1)
     {
-        PRINT_ERROR("%s: too many open files\n", SHELL_NAME);
+        PRINT_ERROR("%s: too many open files\n", SOURCE_NAME);
         return 0;
     }
 
@@ -318,8 +324,8 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
     {
         io_files[i].fileno = fileno;
         /*
-         * in the case of combined stdout/stderr redirection, redirected word must
-         * not be a number or '-'. this form of redirection is written as >&word or &>word.
+         * In the case of combined stdout/stderr redirection, redirected word must
+         * not be a number or '-'. This form of redirection is written as >&word or &>word.
          */
         child = child->first_child;
         if(fileno == 1 && child && child->type == NODE_IO_FILE)
@@ -345,7 +351,7 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                 }
                 else
                 {
-                    PRINT_ERROR("%s: failed to duplicate stdout on stderr\n", SHELL_NAME);
+                    PRINT_ERROR("%s: failed to duplicate stdout on stderr\n", SOURCE_NAME);
                     return 0;
                 }
             }
@@ -356,7 +362,7 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
 
 
 /*
- * initialize the redirection table for the command to be executed.
+ * Initialize the redirection table for the command to be executed.
  */
 int init_redirect_list(struct io_file_s *io_files)
 {
@@ -364,7 +370,9 @@ int init_redirect_list(struct io_file_s *io_files)
     {
         return 0;
     }
+    
     int i = 0;
+    
     for( ; i < FOPEN_MAX; i++)
     {
         io_files[i].path        = NULL;
@@ -373,6 +381,7 @@ int init_redirect_list(struct io_file_s *io_files)
         io_files[i].open_mode   =  0;
         io_files[i].extra_flags =  0;
     }
+    
     return 0;
 }
 
@@ -382,15 +391,16 @@ do {                                                    \
     fprintf(stderr,                                     \
             "%s: error opening %s: "                    \
             "use of invalid redirection operator\n",    \
-            SHELL_NAME, path);                          \
+            SOURCE_NAME, path);                         \
     errno = EINVAL;                                     \
     return -1;                                          \
 } while(0)
 
 /*
- * open a special file, such as a remote tcp or udp connection, or a filename
+ * Open a special file, such as a remote tcp or udp connection, or a filename
  * such as /dev/stdin.
- * returns the file descriptor on which the file is opened, -1 otherwise.
+ * 
+ * Returns the file descriptor on which the file is opened, -1 otherwise.
  */
 int open_special(char *path, int mode)
 {
@@ -441,18 +451,18 @@ int open_special(char *path, int mode)
 
     if(remote)
     {
-        /* get the hostname and port parts */
+        /* Get the hostname and port parts */
         char *s1 = path+9;
         char *s2 = strchr(s1, '/');
         if(!s2)
         {
-            PRINT_ERROR("%s: error opening socket: missing port number\n", SHELL_NAME);
+            PRINT_ERROR("%s: error opening socket: missing port number\n", SOURCE_NAME);
             errno = EINVAL;
             return -1;
         }
         if(!*++s2)
         {
-            PRINT_ERROR("%s: error opening socket: missing port number\n", SHELL_NAME);
+            PRINT_ERROR("%s: error opening socket: missing port number\n", SOURCE_NAME);
             errno = EINVAL;
             return -1;
         }
@@ -469,7 +479,7 @@ int open_special(char *path, int mode)
         fd = socket(AF_INET, (remote == 1) ? SOCK_STREAM : SOCK_DGRAM, 0);
         if(fd < 0) 
         {
-            //PRINT_ERROR("%s: error opening socket: %s\n", SHELL_NAME, strerror(errno));
+            //PRINT_ERROR("%s: error opening socket: %s\n", SOURCE_NAME, strerror(errno));
             return -1;
         }
 
@@ -477,7 +487,7 @@ int open_special(char *path, int mode)
         server = gethostbyname(s1);
         if(server == NULL)
         {
-            PRINT_ERROR("%s: no such host: %s\n", SHELL_NAME, s1);
+            PRINT_ERROR("%s: no such host: %s\n", SOURCE_NAME, s1);
             s2[-1] = '/';
             return -1;
         }
@@ -489,7 +499,7 @@ int open_special(char *path, int mode)
         
         if(connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
         {
-            //PRINT_ERROR("%s: error connecting to socket: %s\n", SHELL_NAME, strerror(errno));
+            //PRINT_ERROR("%s: error connecting to socket: %s\n", SOURCE_NAME, strerror(errno));
             return -1;
         }
     }
@@ -498,15 +508,15 @@ int open_special(char *path, int mode)
 
 
 /*
- * perform the redirections in the *io_files redirection list. this function should be
+ * Perform the redirections in the *io_files redirection list. This function should be
  * called after the shell has forked a child process to handle execution of a command.
- * if called from the shell itself, the redirections will affect the file descriptors
+ * If called from the shell itself, the redirections will affect the file descriptors
  * of the shell process.
  */
 int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
 {
     int i, j;
-    /* perform the redirections */
+    /* Perform the redirections */
     for(i = 0; i < FOPEN_MAX; i++)
     {
         j = io_files[i].fileno;
@@ -537,7 +547,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                 path = word_expand_to_str(path);
                 if(!path)
                 {
-                    PRINT_ERROR("%s: failed to expand path: %s\n", SHELL_NAME, io_files[i].path);
+                    PRINT_ERROR("%s: failed to expand path: %s\n", SOURCE_NAME, io_files[i].path);
                     return 0;
                 }
 
@@ -546,12 +556,12 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                 {
                     if(S_ISREG(st.st_mode))
                     {
-                        /* check the noclobber situation */
+                        /* Check the noclobber situation */
                         if(io_files[i].open_mode == MODE_WRITE && option_set('C'))
                         {
                             if(!flag_set(io_files[i].extra_flags, NOCLOBBER_FLAG))
                             {
-                                PRINT_ERROR("%s: redirection failed: file already exists: %s\n", SHELL_NAME, path);
+                                PRINT_ERROR("%s: file already exists: %s\n", SOURCE_NAME, path);
                                 free(path);
                                 return 0;
                             }
@@ -560,7 +570,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                     }
                     else if(S_ISFIFO(st.st_mode))
                     {
-                        /* fix the FIFO's file open mode */
+                        /* Fix the FIFO's file open mode */
                         if(io_files[i].open_mode == MODE_WRITE || io_files[i].open_mode == MODE_APPEND)
                         {
                             io_files[i].open_mode = O_WRONLY;
@@ -573,7 +583,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                  * >#((expr)) and <#((expr)) are non-POSIX extensions to move
                  * I/O file pointers to the offset specified by expr.
                  * 
-                 * TODO: implement ksh-like redirection operators
+                 * TODO: Implement ksh-like redirection operators
                  *       '<#pattern' and '<##pattern'.
                  * 
                  *       See the Input and Output section on
@@ -593,25 +603,25 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                         if(pend == p2)
                         {
                             free(p2);
-                            PRINT_ERROR("%s: %s: %s\n", SHELL_NAME, "invalid file offset", expr);
-                            EXIT_IF_NONINTERACTIVE();
+                            PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME,
+                                        "invalid file offset", expr);
                             return 0;
                         }
                         free(p2);
 
-                        /* now seek to the given offset */
+                        /* Now seek to the given offset */
                         if(lseek(i, len, SEEK_SET) < 0)
                         {
-                            PRINT_ERROR("%s: %s: %s\n", SHELL_NAME, "failed to lseek file", strerror(errno));
-                            EXIT_IF_NONINTERACTIVE();
+                            PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME,
+                                        "failed to lseek file", strerror(errno));
                             return 0;
                         }
                     }
                     else
                     {
-                            PRINT_ERROR("%s: %s: %s\n", SHELL_NAME, "invalid file offset", expr);
-                            EXIT_IF_NONINTERACTIVE();
-                            return 0;
+                        PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME,
+                                    "invalid file offset", expr);
+                        return 0;
                     }
                 }
                 
@@ -625,8 +635,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                     if((fd = open_special(path, io_files[i].open_mode)) < 0)
                     {
                         PRINT_ERROR("%s: failed to open `%s`: %s\n", 
-                                    SHELL_NAME, io_files[i].path, strerror(errno));
-                        EXIT_IF_NONINTERACTIVE();
+                                    SOURCE_NAME, io_files[i].path, strerror(errno));
                         free(path);
                         return 0;
                     }
@@ -636,6 +645,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                 {
                     save_std(j, saved_fd);
                 }
+
                 if(fd != j)
                 {
                     dup2(fd, j);
@@ -667,11 +677,10 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                     }
                     break;
             }
-            /* if error, bail out on all redirections */
+            /* If error, bail out on all redirections */
             if(err)
             {
-                PRINT_ERROR("%s: failed redirection: incorrect file permissions\n", SHELL_NAME);
-                EXIT_IF_NONINTERACTIVE();
+                PRINT_ERROR("%s: incorrect file permissions\n", SOURCE_NAME);
                 return 0;
             }
 
@@ -685,13 +694,13 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                 close(f->duplicates);
             }
         }
-    } /* end for */
+    } /* End for */
     return 1;
 }
 
 
 /*
- * prepare a redirection list and then execute the redirections.
+ * Prepare a redirection list and then execute the redirections.
  */
 int redirect_prep_and_do(struct node_s *redirect_list, int *saved_fd)
 {
@@ -703,7 +712,7 @@ int redirect_prep_and_do(struct node_s *redirect_list, int *saved_fd)
     struct io_file_s io_files[FOPEN_MAX];
     struct node_s *child = redirect_list->first_child;
 
-    /* prepare the redirections */
+    /* Prepare the redirections */
     init_redirect_list(io_files);
     
     while(child)
@@ -712,7 +721,7 @@ int redirect_prep_and_do(struct node_s *redirect_list, int *saved_fd)
         {
             if(!redirect_prep_node(child, io_files))
             {
-                /* bail out on redirection error */
+                /* Bail out on redirection error */
                 return 0;
             }
         }
@@ -729,7 +738,7 @@ int redirect_prep_and_do(struct node_s *redirect_list, int *saved_fd)
 
 
 /*
- * prepare an I/O redirection for a file.
+ * Prepare an I/O redirection for a file.
  */
 int file_redirect_prep(struct node_s *node, struct io_file_s *io_file)
 {
@@ -750,10 +759,10 @@ int file_redirect_prep(struct node_s *node, struct io_file_s *io_file)
            c == IO_FILE_GREATAND  || c == IO_FILE_DGREAT  || c == IO_FILE_AND_GREAT_GREAT)
         {
             /*
-             * NOTE: consequences of failed redirection are handled by the caller, 
+             * NOTE: Consequences of failed redirection are handled by the caller, 
              *       i.e. do_simple_command().
              */
-            fprintf(stderr," %s: restricted shells can't redirect output\n", SHELL_NAME);
+            PRINT_ERROR("%s: restricted shells can't redirect output\n", SOURCE_NAME);
             return 0;
         }
     }
@@ -827,7 +836,7 @@ int file_redirect_prep(struct node_s *node, struct io_file_s *io_file)
         else
         {
             char *str2 = NULL;
-            /* get the file number from the shell variable in the >{$var} type of redirection */
+            /* Get the file number from the shell variable in the >{$var} type of redirection */
             if(str[0] == '$')
             {
                 str2 = word_expand_to_str(str);
@@ -871,9 +880,9 @@ int file_redirect_prep(struct node_s *node, struct io_file_s *io_file)
     return 1;
     
 invalid:
-    PRINT_ERROR("%s: invalid redirection file number: %d\n", SHELL_NAME, fileno);
+    PRINT_ERROR("%s: invalid redirection file number: %d\n", SOURCE_NAME, fileno);
     /*
-     * NOTE: consequences of failed redirection are handled by the caller, 
+     * NOTE: Consequences of failed redirection are handled by the caller, 
      *       i.e. do_simple_command().
      */
     return 0;
@@ -881,15 +890,16 @@ invalid:
 
 
 /*
- * when preparing a here-document redirection, perform word expansion on the word
+ * When preparing a here-document redirection, perform word expansion on the word
  * starting at *p and counting len characters.
- * this function calls the function passed in the third parameter to do the actual
+ * This function calls the function passed in the third parameter to do the actual
  * expansion, then prints the expanded result to out, which should be a temp file.
  */
 void heredoc_substitute_word(char *p, size_t len, char *(func)(char *), FILE *out)
 {
-    /* extract the word to be substituted */
+    /* Extract the word to be substituted */
     char *tmp = malloc(len+1);
+    
     if(!tmp)
     {
         char *p2 = p;
@@ -900,10 +910,13 @@ void heredoc_substitute_word(char *p, size_t len, char *(func)(char *), FILE *ou
         }
         return;
     }
+    
     strncpy(tmp, p, len);
     tmp[len] = '\0';
-    /* and expand it */
+    
+    /* And expand it */
     char *tmp2 = func(tmp);
+    
     if(tmp2 && tmp2 != INVALID_VAR)
     {
         fprintf(out, "%s", tmp2);
@@ -913,12 +926,13 @@ void heredoc_substitute_word(char *p, size_t len, char *(func)(char *), FILE *ou
     {
         fprintf(out, "%s", tmp);
     }
+    
     free(tmp);
 }
 
 
 /*
- * prepare an I/O redirection for a here document.
+ * Prepare an I/O redirection for a here-document.
  */
 int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
 {
@@ -928,7 +942,7 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
         return 0;
     }
 
-    /* we implement here-documents as temp files */
+    /* We implement here-documents as temp files */
     char *heredoc = child->val.str;
     FILE *tmp = tmpfile();
     if(!tmp)
@@ -936,8 +950,23 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
         return 0;
     }
 
-    /* determine whether to word-expand the here-document body or not */
-    if(node->val.chr == IO_HERE_NOEXPAND)
+    /* Determine whether to word-expand the here-string or the heredoc body or not */
+    if(node->val.chr == IO_HERE_STR)
+    {
+        struct word_s *w = word_expand(heredoc, FLAG_REMOVE_QUOTES /* | FLAG_STRIP_VAR_ASSIGN | FLAG_EXPAND_VAR_ASSIGN */);
+        
+        if(!w)
+        {
+            return 1;
+        }
+
+        char *p = wordlist_to_str(w, WORDLIST_ADD_SPACES);
+        free_all_words(w);
+        
+        fprintf(tmp, "%s\n", p);
+        free(p);
+    }
+    else if(node->val.chr == IO_HERE_NOEXPAND)
     {
         fprintf(tmp, "%s", heredoc);
     }
@@ -960,7 +989,7 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                         break;
                     }
 
-                    /* skip backslash-quoted '`', '$' and '\' */
+                    /* Skip backslash-quoted '`', '$' and '\' */
                     if(p[1] == '`' || p[1] == '$' || p[1] == '\\')
                     {
                         p++;
@@ -969,20 +998,20 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                     break;
 
                 case '`':
-                    /* find the closing back quote */
+                    /* Find the closing back quote */
                     if((len = find_closing_quote(p, 0, 0)) == 0)
                     {
                         /* not found. print the ` and break */
                         fputc(*p, tmp);
                         break;
                     }
-                    /* otherwise, extract the command and substitute its output */
+                    /* Otherwise, extract the command and substitute its output */
                     heredoc_substitute_word(p, len+1, command_substitute, tmp);
                     p += len;
                     break;
 
                 /*
-                 * the $ sign might introduce:
+                 * The $ sign might introduce:
                  * - ANSI-C strings: $''
                  * - arithmetic expansions (non-POSIX): $[]
                  * - parameter expansions: ${var} or $var
@@ -997,14 +1026,14 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                          * ANSI-C string
                          */
                         case '\'':
-                            /* find the closing quote */
+                            /* Find the closing quote */
                             if((len = find_closing_quote(p+1, 0, 1)) == 0)
                             {
-                                /* not found. print the ' and break */
+                                /* Not found. Print the ' and break */
                                 fputc(*p, tmp);
                                 break;
                             }
-                            /* otherwise, extract the string and substitute its value */
+                            /* Otherwise, extract the string and substitute its value */
                             heredoc_substitute_word(p, len+2, ansic_expand, tmp);
                             p += len;
                             break;
@@ -1014,30 +1043,30 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                      */
                         case '{':
                         case '[':
-                            /* find the closing quote */
+                            /* Find the closing quote */
                             if((len = find_closing_brace(p+1, 0)) == 0)
                             {
-                                /* not found. print the { or [ and break */
+                                /* Not found. Print the { or [ and break */
                                 fputc(*p, tmp);
                                 break;
                             }
-                            /* otherwise, extract the expression and substitute its value */
+                            /* Otherwise, extract the expression and substitute its value */
                             func = (c == '[') ? arithm_expand : var_expand;
                             heredoc_substitute_word(p, len+2, func, tmp);
                             p += len;
                             break;
 
                         /*
-                         * arithmetic expansion $(()) or command substitution $().
+                         * Arithmetic expansion $(()) or command substitution $().
                          */
                         case '(':
-                            /* check if we have one or two opening braces */
+                            /* Check if we have one or two opening braces */
                             i = 0;
                             if(p[2] == '(')
                             {
                                 i++;
                             }
-                            /* find the closing quote */
+                            /* Find the closing quote */
                             if((len = find_closing_brace(p+1, 0)) == 0)
                             {
                                 /* not found. print the ( and break */
@@ -1045,9 +1074,9 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                                 break;
                             }
                             /*
-                             * otherwise, extract the expression and substitute its value.
-                             * if we have one brace (i == 0), we'll perform command substitution.
-                             * otherwise, arithmetic expansion.
+                             * Otherwise, extract the expression and substitute its value.
+                             * If we have one brace (i == 0), we'll perform command substitution.
+                             * Otherwise, arithmetic expansion.
                              */
                             func = i ? arithm_expand : command_substitute;
                             heredoc_substitute_word(p, len+2, func, tmp);
@@ -1055,7 +1084,7 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                             break;
 
                         /*
-                         * special variable substitution.
+                         * Special variable substitution.
                          */
                         case '#':
                             p++;
@@ -1094,14 +1123,14 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                             break;
 
                         default:
-                            /* var names must start with an alphabetic char or _ */
+                            /* Var names must start with an alphabetic char or _ */
                             if(!isalpha(p[1]) && p[1] != '_')
                             {
                                 fputc(*p, tmp);
                                 break;
                             }
                             p2 = p+1;
-                            /* get the end of the var name */
+                            /* Get the end of the var name */
                             while(*p2)
                             {
                                 if(!isalnum(*p2) && *p2 != '_')
@@ -1110,13 +1139,13 @@ int heredoc_redirect_prep(struct node_s *node, struct io_file_s *io_file)
                                 }
                                 p2++;
                             }
-                            /* empty name */
+                            /* Empty name */
                             if(p2 == p+1)
                             {
                                 fputc(*p, tmp);
                                 break;
                             }
-                            /* perform variable expansion */
+                            /* Perform variable expansion */
                             len = p2-p;
                             heredoc_substitute_word(p, len, var_expand, tmp);
                             p += len-1;

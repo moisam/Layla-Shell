@@ -19,9 +19,9 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-/* macro definitions needed to use sig*() and setenv() */
+/* Macro definitions needed to use sig*() and setenv() */
 #define _POSIX_C_SOURCE 200112L
-/* for usleep(), but also _POSIX_C_SOURCE shouldn't be >= 200809L */
+/* For usleep(), but also _POSIX_C_SOURCE shouldn't be >= 200809L */
 #define _XOPEN_SOURCE   500
 
 #include <ctype.h>
@@ -44,7 +44,7 @@
 
 
 /*
- * this function executes a case item:
+ * This function executes a case item:
  * 
  * case x in
  *  a|b) ...
@@ -52,10 +52,10 @@
  *  *) ...
  * esac
  * 
- * each of a|b, c|d|e and * is a case item. this function executes the case item by comparing
- * each pattern in the item (a and b for the first item; c, d and e for the second item). if one
- * of the patterns match, the function executes the compound list of commands asociated with
- * that item.
+ * Each of a|b, c|d|e and * is a case item. This function executes the case 
+ * item by comparing each pattern in the item (a and b for the first item; 
+ * c, d and e for the second item). if one of the patterns match, the 
+ * function executes the compound list of commands asociated with that item.
  * 
  * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
@@ -78,7 +78,7 @@ int do_case_item(struct source_s *src, struct node_s *node, char *word, struct n
         struct word_s *w = word_expand_one_word(node->val.str, 0);
         if(w)
         {
-            /* remove quoting only if there was word expansion */
+            /* Remove quoting only if there was word expansion */
             if(strcmp(w->data, pat_str))
             {
                 remove_quotes(w);
@@ -126,15 +126,15 @@ int do_case_item(struct source_s *src, struct node_s *node, char *word, struct n
 
 
 /*
- * this function executes a case clause by trying to match and execute each case item,
- * in turn. if one of the patterns of a case item matched and we executed its compound
+ * This function executes a case clause by trying to match and execute each case item,
+ * in turn. If one of the patterns of a case item matched and we executed its compound
  * list of commands, further action depends on how the case item was terminated when the
  * user entered the command. a case item ending in ';&' means we should execute the 
  * compound list of the following case item, while ';;&' (bash) and ';|' (zsh) mean we
  * will search the other case items looking for matches. both of these are non-POSIX extensions.
- * the only case item terminator defined by POSIX is ';;', which we'll also handle here.
+ * The only case item terminator defined by POSIX is ';;', which we'll also handle here.
  * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
+ * Returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
 int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
@@ -148,7 +148,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
     struct node_s *item = word_node->next_sibling;
     int saved_fd[3] = { -1, -1, -1 };
 
-    /* redirects specific to the loop should override global ones */
+    /* Redirects specific to the loop should override global ones */
     struct node_s *local_redirects = word_node;
     while(local_redirects && local_redirects->type != NODE_IO_REDIRECT_LIST)
     {
@@ -169,7 +169,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
     }
 
     /*
-     * perform word expansion (including pathname expansion and quote removal,
+     * Perform word expansion (including pathname expansion and quote removal,
      * but not field splitting) on the word.
      */
     char *word = word_node->val.str;
@@ -195,8 +195,8 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
 
     if(empty_word)
     {
-        PRINT_ERROR("%s: empty case word\n", SHELL_NAME);
-        if(local_redirects)
+        PRINT_ERROR("%s: empty case word\n", SOURCE_NAME);
+        if(redirect_list)
         {
             restore_stds(saved_fd);
         }
@@ -206,7 +206,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
     }
 
     /*
-     * the DEBUG trap is executed (bash):
+     * The DEBUG trap is executed (bash):
      * - before each simple command
      * - before each for, case, select, and arithmetic for commands
      * - before the first command in a shell function
@@ -219,10 +219,10 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
         if(do_case_item(src, item, word, NULL))
         {
             match = 1;
-            /* check for case items ending in ';&' */
+            /* Check for case items ending in ';&' */
             while(item->val_type == VAL_CHR && item->val.chr == '&')
             {
-                /* do the next item */
+                /* Do the next item */
                 item = item->next_sibling;
                 if(!item || item->type != NODE_CASE_ITEM)
                 {
@@ -248,7 +248,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
                 }
             }
 
-            /* check for case items ending in ';;&' (or ';|') */
+            /* Check for case items ending in ';;&' (or ';|') */
             if(!item || item->val_type != VAL_CHR || item->val.chr != ';')
             {
                 break;
@@ -264,7 +264,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
     
 // fin:
     free(word);
-    if(local_redirects)
+    if(redirect_list)
     {
         restore_stds(saved_fd);
     }
@@ -273,11 +273,11 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
 
 
 /* 
- * execute an if clause (or conditional), which takes the form of:
+ * Execute an if clause (or conditional), which takes the form of:
  * 
  *    if test1; then commands1; elif test2; then commands2; else commands3; fi
  * 
- * returns 1 on success, 0 on failure (see the comment before do_complete_command() for
+ * Returns 1 on success, 0 on failure (see the comment before do_complete_command() for
  * the relation between this result and the exit status of the commands executed).
  */
 int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redirect_list)
@@ -298,7 +298,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
         _else = _then->next_sibling;
     }
 
-    /* redirects specific to the loop should override global ones */
+    /* Redirects specific to the loop should override global ones */
     struct node_s *local_redirects = clause;
     while(local_redirects && local_redirects->type != NODE_IO_REDIRECT_LIST)
     {
@@ -318,12 +318,12 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
         }
     }
 
-    /* execute the test clause */
+    /* Execute the test clause */
     in_test_clause = 1;
     if(!do_compound_list(src, clause, NULL))
     {
         in_test_clause = 0;
-        if(local_redirects)
+        if(redirect_list)
         {
             restore_stds(saved_fd);
         }
@@ -331,22 +331,22 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
     }
     in_test_clause = 0;
     
-    /* test clause returned true. execute the then clause */
+    /* Test clause returned true. execute the then clause */
     if(exit_status == 0)
     {
         res = do_compound_list(src, _then, NULL);
         ERR_TRAP_OR_EXIT();
-        if(local_redirects)
+        if(redirect_list)
         {
             restore_stds(saved_fd);
         }
         return res;
     }
     
-    /* test clause returned false. check if we have an else clause */
+    /* Test clause returned false. check if we have an else clause */
     if(!_else)
     {
-        if(local_redirects)
+        if(redirect_list)
         {
             restore_stds(saved_fd);
         }
@@ -357,7 +357,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
     {
         res = do_if_clause(src, _else, NULL);
         ERR_TRAP_OR_EXIT();
-        if(local_redirects)
+        if(redirect_list)
         {
             restore_stds(saved_fd);
         }
@@ -367,7 +367,7 @@ int do_if_clause(struct source_s *src, struct node_s *node, struct node_s *redir
     res = do_compound_list(src, _else, NULL);
     ERR_TRAP_OR_EXIT();
     
-    if(local_redirects)
+    if(redirect_list)
     {
         restore_stds(saved_fd);
     }
