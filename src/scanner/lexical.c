@@ -50,10 +50,10 @@ struct token_s eof_token =
 };
 
 /*
- * return the token type that describes one of the shell's keywords.
- * the keywords are stored in an array (defined in keywords.h) and the
- * index field gives the index of an item in the array.. the value we
- * return is the token type describing the indexed keyword.. if the
+ * Return the token type that describes one of the shell's keywords.
+ * The keywords are stored in an array (defined in keywords.h) and the
+ * index field gives the index of an item in the array. The value we
+ * return is the token type describing the indexed keyword. If the
  * index is out of the keywords array bounds, we return TOKEN_KEYWORD_NA.
  */
 enum token_type_e get_keyword_toktype(int index)
@@ -86,8 +86,8 @@ enum token_type_e get_keyword_toktype(int index)
 
 
 /*
- * return a string describing the given type of token..
- * used in printing error and debugging messages.
+ * Return a string describing the given type of token.
+ * Used in printing error and debugging messages.
  */
 char *get_token_description(enum token_type_e type)
 {
@@ -165,9 +165,9 @@ char *get_token_description(enum token_type_e type)
 
 
 /*
- * check if the given str is a shell keyword.
+ * Check if the given str is a shell keyword.
  * 
- * returns the index of str in the keywords array, which is 0 to
+ * Returns the index of str in the keywords array, which is 0 to
  * one less than keyword_count, or -1 if the str is not a keyword.
  */
 int is_keyword(char *str)
@@ -192,10 +192,10 @@ int is_keyword(char *str)
 
 
 /*
- * check if the given token type represents a separator token, such as
+ * Check if the given token type represents a separator token, such as
  * the semicolon, &&, ||, braces, the pipe operator, and so on.
  * 
- * returns 1 if the type represents a separator operator, 0 otherwise.
+ * Returns 1 if the type represents a separator operator, 0 otherwise.
  */
 int is_separator_tok(enum token_type_e type)
 {
@@ -232,7 +232,7 @@ int is_separator_tok(enum token_type_e type)
 
 
 /*
- * set the type field of the given token, according to the value of
+ * Set the type field of the given token, according to the value of
  * the token's text field.
  */
 void set_token_type(struct token_s *tok)
@@ -456,9 +456,9 @@ void set_token_type(struct token_s *tok)
 
 
 /*
- * create a new token for the given str.
+ * Create a new token for the given str.
  * 
- * returns a pointer to the struct token_s of the new token.
+ * Returns a pointer to the struct token_s of the new token.
  */
 struct token_s *create_token(char *str)
 {
@@ -475,7 +475,7 @@ struct token_s *create_token(char *str)
 
 
 /*
- * add a character to the token buffer.. when NULL-terminated later on,
+ * Add a character to the token buffer. When NULL-terminated later on,
  * the buffer will contain the text of the current token.
  */
 void add_to_buf(char c)
@@ -499,7 +499,7 @@ void add_to_buf(char c)
 
 
 /*
- * return a pointer to the current token.
+ * Return a pointer to the current token.
  */
 struct token_s *get_current_token(void)
 {
@@ -508,7 +508,7 @@ struct token_s *get_current_token(void)
 
 
 /*
- * return a pointer to the previous token.
+ * Return a pointer to the previous token.
  */
 struct token_s *get_previous_token(void)
 {
@@ -517,7 +517,7 @@ struct token_s *get_previous_token(void)
 
 
 /*
- * return a pointer to the previous token.
+ * Return a pointer to the previous token.
  */
 void set_current_token(struct token_s *tok)
 {
@@ -526,7 +526,7 @@ void set_current_token(struct token_s *tok)
 
 
 /*
- * return a pointer to the previous token.
+ * Return a pointer to the previous token.
  */
 void set_previous_token(struct token_s *tok)
 {
@@ -535,9 +535,9 @@ void set_previous_token(struct token_s *tok)
 
 
 /*
- * duplicate a token struct.
+ * Duplicate a token struct.
  * 
- * returns the newly alloc'd token struct, or NULL in case of error.
+ * Returns the newly alloc'd token struct, or NULL in case of error.
  */
 struct token_s *dup_token(struct token_s *tok)
 {
@@ -570,7 +570,7 @@ struct token_s *dup_token(struct token_s *tok)
 
 
 /*
- * free the memory used by a token.
+ * Free the memory used by a token.
  */
 void free_token(struct token_s *tok)
 {
@@ -604,11 +604,11 @@ void free_token(struct token_s *tok)
 
 
 /*
- * sometimes we need to check tokens against a number of different types.
- * for example, an if clause can end in elif, else or fi. we need to check
+ * Sometimes we need to check tokens against a number of different types.
+ * For example, an if clause can end in elif, else or fi. we need to check
  * all three when parsing if clauses, and so on for the other types of tokens.
  * 
- * returns 1 if the token is of the given type, 0 otherwise.
+ * Returns 1 if the token is of the given type, 0 otherwise.
  */
 int is_token_of_type(struct token_s *tok, enum token_type_e type)
 {
@@ -661,9 +661,9 @@ int is_token_of_type(struct token_s *tok, enum token_type_e type)
 
 
 /*
- * scan the input source and get the next token.
+ * Scan the input source and get the next token.
  * 
- * returns an malloc'd token_s struct containing the next token
+ * Returns an malloc'd token_s struct containing the next token
  * if successfull, NULL on error.
  */
 struct token_s *tokenize(struct source_s *src)
@@ -703,7 +703,7 @@ struct token_s *tokenize(struct source_s *src)
     }
 
     struct token_s *tok = NULL;
-    long line, chr;
+    long linest, line, chr;
     char nc2, pc;
     size_t i;
     /* flag to end the loop */
@@ -719,11 +719,13 @@ struct token_s *tokenize(struct source_s *src)
     src->curpos_old = src->curpos+1;
     if(src->curpos < 0)
     {
+        linest = 0;
         line = 1;
-        chr  = 1;
+        chr = 1;
     }
     else
     {
+        linest = src->curlinestart;
         line = src->curline;
         chr  = src->curchar;
     }
@@ -782,9 +784,9 @@ struct token_s *tokenize(struct source_s *src)
                 nc2 = next_char(src);
 
                 /*
-                 * discard backslash+newline '\\n' combination.. in an interactive shell, this
+                 * Discard backslash+newline '\\n' combination. In an interactive shell, this
                  * case shouldn't happen as the read_cmd() function discards the '\\n' sequence
-                 * automatically.. however, if the input comes from a command string or script,
+                 * automatically. However, if the input comes from a command string or script,
                  * we might encounter this sequence.
                  */
                 if(nc2 == '\n')
@@ -936,9 +938,9 @@ struct token_s *tokenize(struct source_s *src)
                 if(nc == '(')
                 {
                     /*
-                     * recognize the ((expr)) structs (an old shorthand for arithmetic evaluation),
+                     * Recognize the ((expr)) structs (an old shorthand for arithmetic evaluation),
                      * and the >(cmd) and <(cmd) structs, which are used for process substitution.
-                     * all of these are non-POSIX extensions.
+                     * All of these are non-POSIX extensions.
                      */
                     pc = prev_char(src);
                     nc2 = peek_char(src);
@@ -983,9 +985,9 @@ struct token_s *tokenize(struct source_s *src)
                 if(tok_bufindex > 0)
                 {
                     endloop = 1;
-                    /* we return the whitespace char to input, because we need to
+                    /* We return the whitespace char to input, because we need to
                      * check the current input char when we're parsing I/O redirections.
-                     * this is important as it makes the difference between cmds like
+                     * This is important as it makes the difference between cmds like
                      * `echo 2>out` and `echo 2 >out`.
                      */
                     unget_char(src);
@@ -1069,7 +1071,8 @@ struct token_s *tokenize(struct source_s *src)
     tok = create_token(tok_buf);
     if(!tok)
     {
-        PRINT_ERROR("%s: failed to alloc buffer: %s\n", SHELL_NAME, strerror(errno));
+        PRINT_ERROR("%s: failed to alloc buffer: %s\n", 
+                    SOURCE_NAME, strerror(errno));
         return &eof_token;
     }
     
@@ -1077,10 +1080,10 @@ struct token_s *tokenize(struct source_s *src)
     set_token_type(tok);
 
     /*
-     * if the token consists solely of a number, we need to check the next
-     * character.. if it's the beginning of a redirection operator ('>' or '<'),
+     * If the token consists solely of a number, we need to check the next
+     * character. If it's the beginning of a redirection operator ('>' or '<'),
      * we have an TOKEN_IO_NUMBER, which is your file descriptor in redirections
-     * such as '2>&/dev/null' or '1<some_file'.. otherwise treat it as a word.
+     * such as '2>&/dev/null' or '1<some_file'. Otherwise treat it as a word.
      */
     if(tok->type == TOKEN_INTEGER)
     {
@@ -1098,7 +1101,7 @@ struct token_s *tokenize(struct source_s *src)
     tok->lineno    = line;
     tok->charno    = chr;
     tok->src       = src;
-    tok->linestart = src->curlinestart;
+    tok->linestart = linest;
     
     /* we do the -v option in the parse_translation_unit() function */
     //if(option_set('v')) fprintf(stderr, "%s", tok->text);

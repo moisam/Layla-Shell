@@ -24,7 +24,7 @@
 #include "source.h"
 
 /*
- * check if the given char is a space or tab char.
+ * Check if the given char is a space or tab char.
  */
 static inline char is_space(char c)
 {
@@ -37,7 +37,7 @@ static inline char is_space(char c)
 
 
 /*
- * return the last char read from input back to the input buffer.
+ * Return the last char read from input back to the input buffer.
  */
 void unget_char(struct source_s *src)
 {
@@ -68,8 +68,9 @@ void unget_char(struct source_s *src)
 
 
 /*
- * get the previous char we read from input.
- * returns the previous character, or ERRCHAR (0) in case of error.
+ * Get the previous char we read from input.
+ * 
+ * Returns the previous character, or ERRCHAR (0) in case of error.
  */
 char prev_char(struct source_s *src)
 {
@@ -91,8 +92,9 @@ char prev_char(struct source_s *src)
 
 
 /*
- * get the next char in the input source.
- * returns the next character, ERRCHAR (0) in case of error, or EOF (-1)
+ * Get the next char in the input source.
+ * 
+ * Returns the next character, ERRCHAR (0) in case of error, or EOF (-1)
  * if we reached the end of input.
  */
 char next_char(struct source_s *src)
@@ -104,9 +106,6 @@ char next_char(struct source_s *src)
         return ERRCHAR;
     }
     
-#if 0
-    char c1 = 0;
-#endif
     /* first time? adjust source pointers */
     if(src->curpos == INIT_SRC_POS)
     {
@@ -115,13 +114,6 @@ char next_char(struct source_s *src)
         src->curpos       = -1;
         src->curlinestart =  0;
     }
-#if 0
-    else
-    {
-        /* save the current char */
-        c1 = src->buffer[src->curpos];
-    }
-#endif
 
     /* did we reach EOF? */
     if(++src->curpos >= src->bufsize)
@@ -152,11 +144,11 @@ char next_char(struct source_s *src)
 
 
 /*
- * peek into the next char in the input source.. peeking is similar to getting
+ * Peek into the next char in the input source. Peeking is similar to getting
  * the next char, except it doesn't 'remove' the char from input, which means
  * it doesn't modify the current position, char and line pointers of src.
  * 
- * returns the next character, ERRCHAR (0) in case of error, or EOF (-1)
+ * Returns the next character, ERRCHAR (0) in case of error, or EOF (-1)
  * if we reached the end of input.
  */
 char peek_char(struct source_s *src)
@@ -188,7 +180,7 @@ char peek_char(struct source_s *src)
 
 
 /*
- * skip over whitespace characters in the input source.
+ * Skip over whitespace characters in the input source.
  */
 void skip_white_spaces(struct source_s *src)
 {
