@@ -23,7 +23,7 @@
 #define SYMTAB_H
 
 /*
- * use hash tables to implement the symbol table struct.. remove this macro,
+ * Use hash tables to implement the symbol table struct. Remove this macro,
  * or set it to 0 if you want to use the linked lists implementation instead.
  */
 #define USE_HASH_TABLES 1
