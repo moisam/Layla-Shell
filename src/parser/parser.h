@@ -36,6 +36,9 @@
 #define IO_FILE_DGREAT          8       /* '>>' append redirection operator */
 #define IO_HERE_EXPAND          9       /* expandable heredoc (without quoted heredoc word) */
 #define IO_HERE_NOEXPAND        10      /* nonexpandable heredoc (with quoted heredoc word) */
+#define IO_HERE_STRIP_EXPAND    11      /* strip heredoc tabs, but no expansion */
+#define IO_HERE_STRIP_NOEXPAND  12      /* strip heredoc tabs, with expansion */
+#define IO_HERE_STR             13      /* here-string */
 
 /* skip optional newlines */
 #define skip_newline_tokens()                                   \
@@ -87,10 +90,17 @@ struct node_s *parse_command(struct token_s *tok);
 struct node_s *parse_translation_unit();
 char          *get_alias_val(char *cmd);
 struct node_s *io_file_node(int fd, char type, char *namestr, int lineno);
-struct word_s *get_heredoc(struct source_s *src, int strip, int *expand);
 int            is_name(char *str);
+
+/* functions for working with here-documents */
+// struct word_s *get_heredoc(struct source_s *src, int strip, int *expand);
+char          *get_heredoc(char *start, char *end, int strip);
 char          *herestr_end(char *cmd);
-char          *heredoc_end(char *orig_cmd, int *expand, char **__delim, char **start, char last_char);
+// char          *heredoc_end(char *orig_cmd, int *expand, char **__delim, char **start, char last_char);
+char          *heredoc_end(char *start, char *delim, char last_char);
+char          *last_heredoc_end(char *start, int heredoc_count, char **heredoc_delims, char last_char);
+int            heredoc_delim(char *orig_cmd, int *expand, char **__delim, char **__delim_end);
+int            extract_heredocs(struct source_s *src, struct node_s *cmd, int heredoc_count);
 int            next_cmd_word(char **start, char **end, int do_braces);
 
 /* flag to indicate a parsing error */

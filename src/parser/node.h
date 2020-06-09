@@ -124,8 +124,7 @@ void    set_node_val_str(struct node_s *node, char *val);
 char   *get_node_type_str(enum node_type_e type);
 void    dump_node_tree(struct node_s *func_body, int level);
 void    free_node_tree(struct node_s *node);
-// char *nodetree_to_str(struct node_s *root);
-char   *cmd_nodetree_to_str(struct node_s *root);
+char   *cmd_nodetree_to_str(struct node_s *node, int is_root);
 struct  node_s *last_child(struct node_s *parent);
 
 #endif

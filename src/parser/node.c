@@ -30,9 +30,9 @@
 
 
 /*
- * create a new node and assign it the given type.
+ * Create a new node and assign it the given type.
  * 
- * returns the new node's struct, or NULL on error (we can also take the extreme
+ * Returns the new node's struct, or NULL on error (we can also take the extreme
  * approach and exit the shell if there's not enough memory for the node struct).
  */
 struct node_s *new_node(enum node_type_e type)
@@ -53,10 +53,10 @@ struct node_s *new_node(enum node_type_e type)
 
 
 /*
- * add a child node to a parent node.. the child is added as the last child
+ * Add a child node to a parent node. The child is added as the last child
  * in the parent's children list.
  * 
- * returns nothing.
+ * Returns nothing.
  */
 void add_child_node(struct node_s *parent, struct node_s *child)
 {
@@ -83,9 +83,9 @@ void add_child_node(struct node_s *parent, struct node_s *child)
 
 
 /*
- * get the last child in the parent's children list.
+ * Get the last child in the parent's children list.
  * 
- * returns the last child node, or NULL if the parent has no children.
+ * Returns the last child node, or NULL if the parent has no children.
  */
 struct node_s *last_child(struct node_s *parent)
 {
@@ -111,7 +111,7 @@ struct node_s *last_child(struct node_s *parent)
 
 
 /*
- * set the node's value to the given integer value.
+ * Set the node's value to the given integer value.
  */
 void set_node_val_sint(struct node_s *node, long val)
 {
@@ -121,7 +121,7 @@ void set_node_val_sint(struct node_s *node, long val)
 
 
 /*
- * set the node's value to the given unsigned integer value.
+ * Set the node's value to the given unsigned integer value.
  */
 void set_node_val_uint(struct node_s *node, unsigned long val)
 {
@@ -131,7 +131,7 @@ void set_node_val_uint(struct node_s *node, unsigned long val)
 
 
 /*
- * set the node's value to the given long long integer value.
+ * Set the node's value to the given long long integer value.
  */
 void set_node_val_sllong(struct node_s *node, long long val)
 {
@@ -141,7 +141,7 @@ void set_node_val_sllong(struct node_s *node, long long val)
 
 
 /*
- * set the node's value to the given unsigned long long integer value.
+ * Set the node's value to the given unsigned long long integer value.
  */
 void set_node_val_ullong(struct node_s *node, unsigned long long val)
 {
@@ -151,7 +151,7 @@ void set_node_val_ullong(struct node_s *node, unsigned long long val)
 
 
 /*
- * set the node's value to the given double value.
+ * Set the node's value to the given double value.
  */
 void set_node_val_sfloat(struct node_s *node, double val)
 {
@@ -161,7 +161,7 @@ void set_node_val_sfloat(struct node_s *node, double val)
 
 
 /*
- * set the node's value to the given double value.
+ * Set the node's value to the given double value.
  */
 void set_node_val_sdouble(struct node_s *node, double val)
 {
@@ -171,7 +171,7 @@ void set_node_val_sdouble(struct node_s *node, double val)
 
 
 /*
- * set the node's value to the given long double value.
+ * Set the node's value to the given long double value.
  */
 void set_node_val_ldouble(struct node_s *node, long double val)
 {
@@ -181,7 +181,7 @@ void set_node_val_ldouble(struct node_s *node, long double val)
 
 
 /*
- * set the node's value to the given char value.
+ * Set the node's value to the given char value.
  */
 void set_node_val_chr(struct node_s *node, char val)
 {
@@ -191,7 +191,7 @@ void set_node_val_chr(struct node_s *node, char val)
 
 
 /*
- * set the node's value to the given string value.
+ * Set the node's value to the given string value.
  */
 void set_node_val_str(struct node_s *node, char *val)
 {
@@ -200,11 +200,11 @@ void set_node_val_str(struct node_s *node, char *val)
 }
 
 /*
- * return a string that describes the given node type.. this is useful when we
+ * Return a string that describes the given node type. This is useful when we
  * are debugging the shell, or dumping the Abstract Source Tree (AST) of a parsed
  * translation unit (which the shell does when the dumpast '-d' option is set).
  * 
- * returns a string describing the given node type.
+ * Returns a string describing the given node type.
  */
 char *get_node_type_str(enum node_type_e type)
 {
@@ -243,12 +243,12 @@ char *get_node_type_str(enum node_type_e type)
 
 
 /*
- * similar to get_node_type_str(), this function returns a string that describes
- * the given node's val type.. this is useful when we are debugging the shell,
+ * Similar to get_node_type_str(), this function returns a string that describes
+ * the given node's val type. This is useful when we are debugging the shell,
  * or dumping the Abstract Source Tree (AST) of a parsed translation unit
  * (which the shell does when the dumpast '-d' option is set).
  * 
- * returns a string describing the given node type.
+ * Returns a string describing the given node type.
  */
 char *get_node_val_type_str(enum val_type_e type)
 {
@@ -268,7 +268,7 @@ char *get_node_val_type_str(enum val_type_e type)
 
 
 /*
- * dump the contents of all the nodes in the given node tree.
+ * Dump the contents of all the nodes in the given node tree.
  */
 void dump_node_tree(struct node_s *root, int level)
 {
@@ -330,7 +330,7 @@ void dump_node_tree(struct node_s *root, int level)
 
 
 /*
- * free the memory used by the given nodetree.
+ * Free the memory used by the given nodetree.
  */
 void free_node_tree(struct node_s *node)
 {
@@ -359,219 +359,675 @@ void free_node_tree(struct node_s *node)
 }
 
 
+
+
 /*
- * get the length of the node's value field, i.e. how much memory we need to alloc
- * if we wanted to make a copy of the value field.
+ * The following functions convert different AST's to string format.
  */
-size_t get_node_len(struct node_s *root)
-{
-    if(!root)
-    {
-        return 0;
-    }
-    size_t len = 0;
-    struct node_s *child = root->first_child;
-    /* special handling of redirection nodes */
-    if(child->type == NODE_IO_REDIRECT)
-    {
-        struct node_s *io = child->first_child;
-        struct node_s *file = io->first_child;
-        return strlen(file->val.str)+7;
-    }
-    /* determine value length according to value type */
-    switch(root->val_type)
-    {
-        case VAL_CHR:
-            len = 1;
-            break;
-            
-        case VAL_STR:
-            len = strlen(root->val.str);
-            break;
-            
-        case VAL_SINT:
-        case VAL_UINT:
-            len = 10;
-            break;
-            
-        default:
-            len = 1;
-    }
-    return len;
+
+
+#define INIT_NODETREE_BUF_SIZE      2048
+
+#define CHECKED_NODETREE_APPEND(str, len)   \
+if(!buf_append(&nodetree_buf, &nodetree_ptr,\
+    &nodetree_buf_size, &nodetree_buf_len,  \
+    (str), (len)))                          \
+{                                           \
+    return 0;                               \
 }
 
-
-/*
- * get the collective length of the string values of all the nodes in the
- * given nodetree.. useful when we want to reconstruct a command string out
- * of the command's parsed nodetree.
- */
-size_t get_nodetree_len(struct node_s *root)
-{
-    if(!root)
-    {
-        return 0;
-    }
-    size_t len = root->val_type == VAL_STR ? strlen(root->val.str) : 0;
-    struct node_s *child = root->first_child;
-    /* get lengths of the string values of all children */
-    while(child)
-    {
-        len += get_nodetree_len(child)+1;
-        child = child->next_sibling;
-    }
-    /* return collective length */
-    return len+1;
+#define CHECKED_HEREDOCS_APPEND(str, len)   \
+if(!buf_append(&heredoc_buf, &heredoc_ptr,  \
+    &heredoc_buf_size, &heredoc_buf_len,    \
+    (str), (len)))                          \
+{                                           \
+    return 0;                               \
 }
+    
 
-/*
- * convert a nodetree to a string, i.e. reconstruct the original command line from
- * the parsed nodetree.
- * 
- * WARNING: this function is severely defective. it can't process many commands, such
- *          as loops and if/case conditionals. as a matter of fact, we should forget
- *          this function altogether and find a better way to store the original
- *          command in the node structure itself.
- */
-char *cmd_nodetree_to_str(struct node_s *root)
+char  *nodetree_buf = NULL;
+char  *nodetree_ptr = NULL;
+size_t nodetree_buf_size = 0;
+size_t nodetree_buf_len  = 0;
+
+char  *heredoc_buf = NULL;
+char  *heredoc_ptr = NULL;
+size_t heredoc_buf_size = 0;
+size_t heredoc_buf_len  = 0;
+
+
+static inline int buf_append(char **buf, char **buf_ptr,
+                             size_t *buf_size, size_t *buf_len,
+                             char *str, size_t str_len)
 {
-    if(!root)
+    if((*buf) == NULL)
     {
-        return NULL;
-    }
-    size_t len = get_nodetree_len(root);
-    if(!len)
-    {
-        return NULL;
-    }
-    char *str = malloc(len+1);
-    if(!str)
-    {
-        return NULL;
-    }
-    *str = '\0';
-    char buf[32];
-    char *tmp;
-    /*
-     * pipes have their children in reverse direction.
-     * we need to account for this in the loop.
-     */
-    int ispipe = root->type == NODE_PIPE;
-    struct node_s *child = ispipe ? last_child(root) : root->first_child;
-    char *separator = " ";
-    if(ispipe)
-    {
-        separator = " | ";
-    }
-    else
-    {
-        switch(child->type)
+        (*buf) = malloc(INIT_NODETREE_BUF_SIZE);
+        if(!(*buf))
         {
-            case NODE_LIST:
-                if(child->val.chr == '&')
-                {
-                    separator = "& ";
-                }
-                else
-                {
-                    separator = "; ";
-                }
-                break;
-                
-            case NODE_COMMAND:
-                separator = "; ";
-                break;
-                
-            default:
-                break;
+            return 0;
+        }
+        (*buf_ptr) = (*buf);
+        (*buf_size) = INIT_NODETREE_BUF_SIZE;
+        (*buf_len) = 0;
+    }
+    else if(((*buf_len) + str_len) >= (*buf_size))
+    {
+        if(!ext_cmdbuf(buf, buf_size, *buf_size))
+        {
+            return 0;
+        }
+        (*buf_ptr) = (*buf) + (*buf_len);
+    }
+    
+    sprintf((*buf_ptr), "%s", str);
+    (*buf_ptr) += str_len;
+    (*buf_len) += str_len;
+    
+    return 1;
+}
+
+
+void add_heredocs_to_tree(void)
+{
+    if(heredoc_buf_len == 0)
+    {
+        return;
+    }
+    
+    if(nodetree_ptr[-1] != '\n')
+    {
+        if(!buf_append(&nodetree_buf, &nodetree_ptr,
+            &nodetree_buf_size, &nodetree_buf_len, "\n", 1))
+        {
+            return;
         }
     }
     
-    /* now loop on children */
-    while(child)
+    if(!buf_append(&nodetree_buf, &nodetree_ptr,
+        &nodetree_buf_size, &nodetree_buf_len, heredoc_buf, heredoc_buf_len))
     {
-        switch(child->type)
+        return;
+    }
+    
+    if(nodetree_ptr[-1] != '\n')
+    {
+        if(!buf_append(&nodetree_buf, &nodetree_ptr,
+            &nodetree_buf_size, &nodetree_buf_len, "\n", 1))
         {
-            case NODE_IO_REDIRECT:
-                if(child->val.sint > 2)
-                {
-                    sprintf(buf, "%ld", child->val.sint);
-                    strcat(str, buf);
-                }
-                struct node_s *io = child->first_child;
-                if(io->type == NODE_IO_FILE)
-                {
-                    switch(io->val.chr)
-                    {
-                        case IO_FILE_LESS     : strcat(str, "< " ); break;
-                        case IO_FILE_LESSAND  : strcat(str, "<& "); break;
-                        case IO_FILE_LESSGREAT: strcat(str, "<> "); break;
-                        case IO_FILE_CLOBBER  : strcat(str, ">| "); break;
-                        case IO_FILE_GREAT    : strcat(str, "> " ); break;
-                        case IO_FILE_GREATAND : strcat(str, ">& "); break;
-                        case IO_FILE_DGREAT   : strcat(str, ">> "); break;
-                    }
-                    struct node_s *file = io->first_child;
-                    strcat(str, file->val.str);
-                }
-                else
-                {
-                    strcat(str, "<< ");
-                    struct node_s *heredoc = io->first_child;
-                    strcat(str, heredoc->val.str);
-                }
-                break;
-
-            case NODE_SUBSHELL:
-                strcat(str, "( ");
-                tmp = cmd_nodetree_to_str(child);
-                if(tmp)
-                {
-                    strcat(str, tmp);
-                    free(tmp);
-                }
-                strcat(str, " )");
-                break;
-
-            case NODE_LIST:
-            case NODE_TERM:
-                tmp = cmd_nodetree_to_str(child);
-                if(tmp)
-                {
-                    strcat(str, tmp);
-                    free(tmp);
-                }
-                break;
-
-            case NODE_COMMAND: ;
-                struct node_s *child2 = child->first_child;
-                while(child2)
-                {
-                    if(child2->val_type == VAL_STR && child2->val.str)
-                    {
-                        strcat(str, child2->val.str);
-                        if(child2->next_sibling)
-                        {
-                            strcat(str, " ");
-                        }
-                    }
-                    child2 = child2->next_sibling;
-                }
-                break;
-        
-            default:
-                if(child->val_type == VAL_STR && child->val.str)
-                {
-                    strcat(str, child->val.str);
-                }
-                break;
-        
-        }
-        child = ispipe ? child->prev_sibling : child->next_sibling;
-        if(child)
-        {
-            strcat(str, separator);
+            return;
         }
     }
-    return str;
+    
+    heredoc_buf_len = 0;
+    heredoc_buf[0] = '\0';
+}
+
+
+int func_tree_to_str(struct node_s *node)
+{
+    if(node->val_type != VAL_STR)
+    {
+        return 0;
+    }
+    
+    /* make sure we don't have heredocs from the last command */
+    add_heredocs_to_tree();
+
+    CHECKED_NODETREE_APPEND(node->val.str, strlen(node->val.str));
+    CHECKED_NODETREE_APPEND("()\n{\n", 5);
+    
+    if(!cmd_nodetree_to_str(node->first_child, 0))
+    {
+        return 0;
+    }
+    
+    /* make sure we don't have heredocs from the last command */
+    add_heredocs_to_tree();
+    
+    CHECKED_NODETREE_APPEND("}\n", 2);
+
+    return 1;
+}
+
+
+int list_tree_to_str(struct node_s *node)
+{
+    struct node_s *child = node->first_child;
+    if(!child)
+    {
+        return 0;
+    }
+
+    while(child)
+    {
+        if(!cmd_nodetree_to_str(child, 0))
+        {
+            return 0;
+        }
+        
+        /* make sure we don't have heredocs from the last command */
+        add_heredocs_to_tree();
+
+        if(nodetree_ptr[-1] != '\n')
+        {
+            CHECKED_NODETREE_APPEND("\n", 1);
+        }
+
+        child = child->next_sibling;
+    }
+    
+    if(node->val_type == VAL_CHR)
+    {
+        if(node->val.chr == '&' && nodetree_ptr[-1] != '\n')
+        {
+            CHECKED_NODETREE_APPEND(" &", 2);
+        }
+
+        if(nodetree_ptr[-1] != '\n')
+        {
+            CHECKED_NODETREE_APPEND("\n", 1);
+        }
+    }
+    
+    return 1;
+}
+
+
+int andor_tree_to_str(struct node_s *node)
+{
+    struct node_s *child = node->first_child;
+    if(!child)
+    {
+        return 0;
+    }
+    
+    while(child)
+    {
+        struct node_s *child2 = NULL;
+        
+        if(child->type == NODE_AND_IF)
+        {
+            CHECKED_NODETREE_APPEND(" && ", 4);
+            child2 = child->first_child;
+        }
+        else if(child->type == NODE_OR_IF)
+        {
+            CHECKED_NODETREE_APPEND(" || ", 4);
+            child2 = child->first_child;
+        }
+        else
+        {
+            child2 = child;
+        }
+        
+        if(!child2 || !cmd_nodetree_to_str(child2, 0))
+        {
+            return 0;
+        }
+        
+        child = child->next_sibling;
+    }
+    
+    return 1;
+}
+
+
+int pipe_tree_to_str(struct node_s *node)
+{
+    struct node_s *child = last_child(node);
+    if(!child)
+    {
+        return 0;
+    }
+    
+    while(child)
+    {
+        if(!cmd_nodetree_to_str(child, 0))
+        {
+            return 0;
+        }
+
+        child = child->prev_sibling;
+        
+        if(child)
+        {
+            CHECKED_NODETREE_APPEND(" | ", 3);
+        }
+    }
+    
+    return 1;
+}
+
+
+int word_nodes_to_str(struct node_s *node)
+{
+    int first = 1;
+    struct node_s *child = node->first_child;
+    
+    if(!child)
+    {
+        return 0;
+    }
+    
+    while(child)
+    {
+        if(!first)
+        {
+            CHECKED_NODETREE_APPEND(" ", 1);
+        }
+        
+        if(child->val_type == VAL_STR && child->val.str)
+        {
+            char *str = child->val.str;
+            CHECKED_NODETREE_APPEND(str, strlen(str));
+        }
+        else if(child->type == NODE_IO_REDIRECT)
+        {
+            if(!io_redirect_tree_to_str(child))
+            {
+                return 0;
+            }
+        }
+        
+        first = 0;
+        child = child->next_sibling;
+    }
+    
+    return 1;
+}
+
+
+int simple_cmd_tree_to_str(struct node_s *node)
+{
+    return word_nodes_to_str(node);
+}
+
+
+int io_redirect_tree_to_str(struct node_s *node)
+{
+    if(node->val.sint > 2)
+    {
+        char buf[8];
+        sprintf(buf, "%ld", node->val.sint);
+        CHECKED_NODETREE_APPEND(buf, strlen(buf));
+    }
+
+    node = node->first_child;
+    if(!node)
+    {
+        return 0;
+    }
+    
+    if(node->type == NODE_IO_FILE)
+    {
+        switch(node->val.chr)
+        {
+            case IO_FILE_LESS     : CHECKED_NODETREE_APPEND("<" , 1); break;
+            case IO_FILE_LESSAND  : CHECKED_NODETREE_APPEND("<&", 2); break;
+            case IO_FILE_LESSGREAT: CHECKED_NODETREE_APPEND("<>", 2); break;
+            case IO_FILE_CLOBBER  : CHECKED_NODETREE_APPEND(">|", 2); break;
+            case IO_FILE_GREAT    : CHECKED_NODETREE_APPEND(">" , 1); break;
+            case IO_FILE_GREATAND : CHECKED_NODETREE_APPEND(">&", 2); break;
+            case IO_FILE_DGREAT   : CHECKED_NODETREE_APPEND(">>", 2); break;
+        }
+        
+        node = node->first_child;
+        if(!node)
+        {
+            return 0;
+        }
+        
+        char *str = node->val.str;
+        CHECKED_NODETREE_APPEND(str, strlen(str));
+    }
+    else    /* heredoc or here-string */
+    {
+        /* is it a here-string? */
+        if(node->val.chr == IO_HERE_STR)
+        {
+            CHECKED_NODETREE_APPEND("<<<", 3);
+            
+            node = node->first_child;                   /* here-string */
+            if(!node)
+            {
+                return 0;
+            }
+
+            CHECKED_NODETREE_APPEND(node->val.str, strlen(node->val.str));
+        }
+        else        /* here-doc */
+        {
+            CHECKED_NODETREE_APPEND("<<", 2);
+            
+            node = node->first_child;                   /* heredoc body */
+            if(!node)
+            {
+                return 0;
+            }
+            
+            struct node_s *node2 = node->next_sibling;  /* delimiter word */
+            if(!node2)
+            {
+                return 0;
+            }
+            
+            char *str = node->val.str;
+            char *str2 = node2->val.str;
+            size_t len = strlen(str2);
+
+            CHECKED_NODETREE_APPEND(str2, len);
+            
+            CHECKED_HEREDOCS_APPEND(str, strlen(str));
+            CHECKED_HEREDOCS_APPEND(str2, len);
+            CHECKED_HEREDOCS_APPEND("\n", 1);
+        }
+    }
+    
+    return 1;
+}
+
+
+int io_redirect_list_tree_to_str(struct node_s *node)
+{
+    struct node_s *child = node->first_child;
+    if(!child)
+    {
+        return 0;
+    }
+    
+    while(child)
+    {
+        if(!io_redirect_tree_to_str(child))
+        {
+            return 0;
+        }
+        
+        child = child->next_sibling;
+    }
+    
+    return 1;
+}
+
+
+int subshell_tree_to_str(struct node_s *node)
+{
+    CHECKED_NODETREE_APPEND("( ", 2);
+    
+    if(!cmd_nodetree_to_str(node->first_child, 0))
+    {
+        return 0;
+    }
+    
+    CHECKED_NODETREE_APPEND(" )\n", 3);
+    
+    return 1;
+}
+
+
+int do_done_to_str(struct node_s *child)
+{
+    /* the DO keyword */
+    CHECKED_NODETREE_APPEND("\ndo\n", 4);
+    
+    /* the loop body */
+    if(child)
+    {
+        if(!cmd_nodetree_to_str(child, 0))
+        {
+            return 0;
+        }
+        
+        /* make sure we don't have heredocs from the last command */
+        add_heredocs_to_tree();
+        
+        /* the DONE keyword */
+        if(nodetree_ptr[-1] != '\n')
+        {
+            CHECKED_NODETREE_APPEND("\n", 1);
+        }
+        
+        CHECKED_NODETREE_APPEND("done", 4);
+        
+        /* the optional redirection list */
+        child = child->next_sibling;
+        if(child)
+        {
+            if(!io_redirect_list_tree_to_str(child))
+            {
+                return 0;
+            }
+        }
+    }
+    else
+    {
+        CHECKED_NODETREE_APPEND("done", 4);
+    }
+    
+    if(nodetree_ptr[-1] != '\n')
+    {
+        CHECKED_NODETREE_APPEND("\n", 1);
+    }
+    
+    return 1;
+}
+
+
+int while_until_tree_to_str(struct node_s *node)
+{
+    /* make sure we don't have heredocs from the last command */
+    add_heredocs_to_tree();
+
+    /* the loop header */
+    if(node->type == NODE_WHILE)
+    {
+        CHECKED_NODETREE_APPEND("while ", 6);
+    }
+    else
+    {
+        CHECKED_NODETREE_APPEND("until ", 6);
+    }
+    
+    /* the test clause */
+    struct node_s *child = node->first_child;
+    if(!child)
+    {
+        return 0;
+    }
+    
+    if(!cmd_nodetree_to_str(child, 0))
+    {
+        return 0;
+    }
+    
+    /* make sure we don't have heredocs from the last command */
+    add_heredocs_to_tree();
+    
+    /* the loop body */
+    return do_done_to_str(child->next_sibling);
+}
+
+
+int arithm_for_tree_to_str(struct node_s *node)
+{
+    /* the rest of the loop header */
+    CHECKED_NODETREE_APPEND("((", 2);
+    
+    /* the loop clauses */
+    struct node_s *child = node->first_child;
+    int i = 0;
+    static char *sep[] = { ";", ";", "))" };
+    static int sep_len[] = { 1, 1, 2 };
+    
+    for( ; i < 3; i++)
+    {
+        if(!child || child->type != NODE_ARITHMETIC_EXPR)
+        {
+            return 0;
+        }
+
+        char *str = child->val.str;
+        CHECKED_NODETREE_APPEND(str, strlen(str));
+        CHECKED_NODETREE_APPEND(sep[i], sep_len[i]);
+        
+        child = child->next_sibling;
+    }
+    
+    /* the loop body */
+    return do_done_to_str(child);
+}
+
+
+int for_tree_to_str(struct node_s *node)
+{
+    /* make sure we don't have heredocs from the last command */
+    add_heredocs_to_tree();
+    
+    /* the loop header */
+    CHECKED_NODETREE_APPEND("for ", 4);
+    
+    /* the test clause */
+    struct node_s *child = node->first_child;
+    if(!child)
+    {
+        return 0;
+    }
+    
+    if(child->type == NODE_ARITHMETIC_EXPR)
+    {
+        return arithm_for_tree_to_str(node);
+    }
+    
+    /* the index variable */
+    char *str = child->val.str;
+    CHECKED_NODETREE_APPEND(str, strlen(str));
+
+    /* the word list */
+    child = child->next_sibling;
+    
+    if(child->type == NODE_WORDLIST)
+    {
+        CHECKED_NODETREE_APPEND(" in ", 4);
+        
+        if(!word_nodes_to_str(child))
+        {
+            return 0;
+        }
+        
+        child = child->next_sibling;
+    }
+    
+    /* the loop body */
+    return do_done_to_str(child);
+}
+
+
+char *cmd_nodetree_to_str(struct node_s *node, int is_root)
+{
+    if(!node)
+    {
+        return NULL;
+    }
+    
+    /* clear buf */
+    if(is_root)
+    {
+        if(nodetree_buf)
+        {
+            nodetree_buf[0] = '\0';
+            nodetree_buf_len = 0;
+            nodetree_ptr = nodetree_buf;
+        }
+
+        if(heredoc_buf)
+        {
+            heredoc_buf[0] = '\0';
+            heredoc_buf_len = 0;
+            heredoc_ptr = heredoc_buf;
+        }
+        
+        /* empty command tree */
+        /*
+         * we call __get_malloced_str() because the other call to cmd_nodetree_to_str()
+         * doesn't call get_malloced_str(), which will confuse our caller when it wants
+         * to free the returned string.
+         */
+        if(!node)
+        {
+            return __get_malloced_str("(no command)");
+        }
+    }
+    
+    int (*func)(struct node_s *node) = NULL;
+    
+    switch(node->type)
+    {
+        case NODE_FUNCTION:
+            func = func_tree_to_str;
+            break;
+
+        case NODE_LIST:
+        case NODE_TERM:
+            func = list_tree_to_str;
+            break;
+            
+        case NODE_COMMAND:
+            func = simple_cmd_tree_to_str;
+            break;
+            
+        case NODE_SUBSHELL:
+            func = subshell_tree_to_str;
+            break;
+            
+        case NODE_PIPE:
+            func = pipe_tree_to_str;
+            break;
+            
+        case NODE_ANDOR:
+            func = andor_tree_to_str;
+            break;
+            
+        case NODE_WHILE:
+        case NODE_UNTIL:
+            func = while_until_tree_to_str;
+            break;
+            
+        case NODE_FOR:
+            func = for_tree_to_str;
+            break;
+    }
+
+    if(!func || !func(node))
+    {
+        return NULL;
+    }
+    
+    if(nodetree_ptr[-1] != '\n')
+    {
+        CHECKED_NODETREE_APPEND("\n", 1);
+    }
+    
+    if(is_root)
+    {
+        /* add 2 for '\0' and possible '\n' before the heredocs */
+        char *str = malloc(nodetree_buf_len+heredoc_buf_len+2);
+        if(!str)
+        {
+            return NULL;
+        }
+        
+        strcpy(str, nodetree_buf);
+
+        if(heredoc_buf_len)
+        {
+            str[nodetree_buf_len] = '\n';
+            strcpy(str+nodetree_buf_len+1, heredoc_buf);
+        }
+        
+        return str;
+    }
+    else
+    {
+        return nodetree_buf;
+    }
 }

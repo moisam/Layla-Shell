@@ -31,11 +31,11 @@
 
 
 /*
- * get the word list that we use in for and select loops.
- * the list includes all words starting with the given token upto the first
+ * Get the word list that we use in for and select loops.
+ * The list includes all words starting with the given token upto the first
  * non-word token (which can be a separator operator, the 'in' keyword, etc).
  * 
- * returns the word list as a nodetree, NULL in case of error.
+ * Returns the word list as a nodetree, NULL in case of error.
  */
 struct node_s *get_wordlist(struct token_s *tok)
 {
@@ -80,11 +80,11 @@ struct node_s *get_wordlist(struct token_s *tok)
 
 
 /*
- * parse a traditional, POSIX-style 'for' loop:
+ * Parse a traditional, POSIX-style 'for' loop:
  * 
  *     for i in list; do compound-list; done
  * 
- * returns the parsed nodetree, NULL on parsing errors.
+ * Returns the parsed nodetree, NULL on parsing errors.
  */
 struct node_s *parse_for_loop(struct token_s *tok)
 {
@@ -96,11 +96,11 @@ struct node_s *parse_for_loop(struct token_s *tok)
     if(!is_name(tok->text))
     {
         /* 
-         * check for the second form of 'for' loops:
+         * Check for the second form of 'for' loops:
          * 
          *    for((expr1; expr2; expr3)); do commands; done
          * 
-         * this is a non-POSIX extension used by all major shells.
+         * This is a non-POSIX extension used by all major shells.
          */
         if(tok->text && tok->text[0] == '(' && tok->text[1] == '(' && !option_set('P'))
         {
@@ -179,7 +179,7 @@ struct node_s *parse_for_loop(struct token_s *tok)
 
 
 /*
- * skip all characters until we find the given char.. this involves skipping 
+ * Skip all characters until we find the given char. This involves skipping 
  * over quoted strings, semicolons, and word expansion structs.
  */
 char *find_char(char *str, char c)
@@ -235,12 +235,12 @@ char *find_char(char *str, char c)
 
 
 /* 
- * parse the second form of 'for' loops:
+ * Parse the second form of 'for' loops:
  * 
  *    for((expr1; expr2; expr3)); do commands; done
  * 
- * this is a non-POSIX extension used by all major shells.
- * returns the parsed nodetree, NULL on parsing errors.
+ * This is a non-POSIX extension used by all major shells.
+ * Returns the parsed nodetree, NULL on parsing errors.
  */
 struct node_s *parse_for_loop2(struct token_s *tok)
 {
@@ -364,12 +364,12 @@ eof:
 
 
 /* 
- * parse a 'select' loop (note the similarities with the for loop's code above):
+ * Parse a 'select' loop (note the similarities with the for loop's code above):
  * 
  *    select i in list; do commands; done
  * 
- * this is a non-POSIX extension used by all major shells.
- * returns the parsed nodetree, NULL on parsing errors.
+ * This is a non-POSIX extension used by all major shells.
+ * Returns the parsed nodetree, NULL on parsing errors.
  */
 struct node_s *parse_select_loop(struct token_s *tok)
 {
@@ -450,9 +450,9 @@ struct node_s *parse_select_loop(struct token_s *tok)
 
 
 /* 
- * parse the while clause (or loop).
+ * Parse the while clause (or loop).
  * 
- * returns the parsed nodetree, NULL on parsing errors.
+ * Returns the parsed nodetree, NULL on parsing errors.
  */
 struct node_s *parse_while_loop(struct token_s *tok)
 {
@@ -498,9 +498,9 @@ struct node_s *parse_while_loop(struct token_s *tok)
 
 
 /* 
- * parse the until clause (or loop).
+ * Parse the until clause (or loop).
  * 
- * returns the parsed nodetree, NULL on parsing errors.
+ * Returns the parsed nodetree, NULL on parsing errors.
  */
 struct node_s *parse_until_loop(struct token_s *tok)
 {

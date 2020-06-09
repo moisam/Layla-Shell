@@ -31,9 +31,9 @@
 
 
 /* 
- * parse a case item.
+ * Parse a case item.
  * 
- * returns the parsed nodetree, NULL on parsing errors.
+ * Returns the parsed nodetree, NULL on parsing errors.
  */
 struct node_s *parse_case_item(struct token_s *tok)
 {
@@ -152,9 +152,9 @@ struct node_s *parse_case_item(struct token_s *tok)
 
 
 /* 
- * parse a case clause (or conditional), which can consist of one or more case items.
+ * Parse a case clause (or conditional), which can consist of one or more case items.
  * 
- * returns the parsed nodetree, NULL on parsing errors.
+ * Returns the parsed nodetree, NULL on parsing errors.
  */
 struct node_s *parse_case_clause(struct token_s *tok)
 {
@@ -246,9 +246,9 @@ struct node_s *parse_case_clause(struct token_s *tok)
 
 
 /* 
- * parse an if clause (or conditional), which can have a then, elif and else parts.
+ * Parse an if clause (or conditional), which can have a then, elif and else parts.
  * 
- * returns the parsed nodetree, NULL on parsing errors.
+ * Returns the parsed nodetree, NULL on parsing errors.
  */
 struct node_s *parse_if_clause(struct token_s *tok)
 {
