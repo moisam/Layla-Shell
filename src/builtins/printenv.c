@@ -38,15 +38,15 @@ extern char **environ;
 
 
 /*
- * the printenv builtin utility (non-POSIX).. prints the environment variables.
+ * The printenv builtin utility (non-POSIX). Prints the environment variables.
  *
- * the printenv utility is a tcsh non-POSIX extension. bash doesn't have it,
+ * The printenv utility is a tcsh non-POSIX extension. bash doesn't have it,
  * as it is part of the GNU coreutils package, not the shell itself.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help printenv` or `printenv -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help printenv` or `printenv -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -57,7 +57,7 @@ int printenv_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hv0", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hv0", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {

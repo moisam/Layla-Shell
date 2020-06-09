@@ -36,12 +36,12 @@
 
 
 /*
- * process the options supplied to echo and glob.. the 'opts' argument contains 
- * the recognized options ('eEn' for echo and 'eE' for glob).. if -e is supplied,
- * 'allow_escaped' is set to 1, if -E is supplied, it is set to 0.. if -n is
+ * Process the options supplied to echo and glob. The 'opts' argument contains 
+ * the recognized options ('eEn' for echo and 'eE' for glob). If -e is supplied,
+ * 'allow_escaped' is set to 1, if -E is supplied, it is set to 0. If -n is
  * supplied (for echo, not glob), 'supp_nl' is set to 1.
  * 
- * returns the index of the first non-option argument to be printed by the
+ * Returns the index of the first non-option argument to be printed by the
  * calling utility.
  */
 int process_echo_options(int argc, char **argv, char *opts, int *allow_escaped, int *supp_nl)
@@ -60,9 +60,9 @@ int process_echo_options(int argc, char **argv, char *opts, int *allow_escaped, 
             int op = (*p != '\0');  /* so that `echo -` prints '-' */
 
             /*
-             * check the validity of the options string.. we only accept
+             * Check the validity of the options string. We only accept
              * three options: e, n and E (for echo), or two options: e and E
-             * (for glob).. if the string contains any other letter, we treat 
+             * (for glob). If the string contains any other letter, we treat 
              * it as an argument to be printed, not as an option.
              */
             while(*p)
@@ -126,23 +126,23 @@ int process_echo_options(int argc, char **argv, char *opts, int *allow_escaped, 
 
 
 /*
- * the echo builtin utility (non-POSIX).. prints back the arguments passed to it,
+ * The echo builtin utility (non-POSIX). Prints back the arguments passed to it,
  * followed by an optional newline.
  *
- * returns 0 invariably.
+ * Returns 0 invariably.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help echo` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help echo` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
 int echo_builtin(int argc, char **argv)
 {
     /*
-     * in bash, shopt option 'xpg_echo' is used to indicate whether escape
-     * sequences are enabled by echo by default.. this behavior can be overriden
+     * In bash, shopt option 'xpg_echo' is used to indicate whether escape
+     * sequences are enabled by echo by default. This behavior can be overriden
      * by use of the -e and -E options (see below).
-     * we enable escape sequences in --posix mode and if xpg-echo is set.
+     * We enable escape sequences in --posix mode and if xpg-echo is set.
      */
     int supp_nl = 0;
     int allow_escaped = option_set('P') || optionx_set(OPTION_XPG_ECHO);
@@ -164,8 +164,8 @@ int echo_builtin(int argc, char **argv)
 
 
 /*
- * argv is processed and printed, starting from arg number v..
- * the flags parameter fine tunes the process, like allowing the use of escape
+ * argv is processed and printed, starting from arg number v.
+ * The flags parameter fine tunes the process, like allowing the use of escape
  * chars, for example.
  */
 void do_echo(int v, int argc, char **argv, int flags)
@@ -239,7 +239,7 @@ void do_echo(int v, int argc, char **argv, int flags)
     
     /*
      * glob utility works similar to echo, except that it outputs its arguments
-     * separated by null chars '\0' instead of spaces.. we make sure we terminate
+     * separated by null chars '\0' instead of spaces. We make sure we terminate
      * the last argument printed by glob with a null char.
      */
     if(separator == '\0')

@@ -26,18 +26,39 @@
 #include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
+#include "../parser/parser.h"
 #include "../debug.h"
 
 #define UTILITY         "getopts"
 
+/* useful macros for printing utilities help message (from help.c) */
+#define SYNOPSIS        (1 << 0)    /* print usage summary (one liner) */
+
+
+#define INIT_VAR(var, name)                                 \
+do                                                          \
+{                                                           \
+    var = get_symtab_entry(name);                           \
+    if(!var)                                                \
+    {                                                       \
+        var = add_to_symtab(name);                          \
+    }                                                       \
+    else if(flag_set(var->flags, FLAG_READONLY))            \
+    {                                                       \
+        READONLY_ASSIGN_ERROR(invoking_prog,                \
+                              name, "variable");            \
+        return 1;                                           \
+    }                                                       \
+} while(0)
+
 
 /*
- * the getopts builtin utility (POSIX).. used to process command line arguments.
+ * The getopts builtin utility (POSIX). Used to process command line arguments.
  *
- * returns 0 on success, 2 if the options list finished, non-zero in case of error.
+ * Returns 0 on success, 2 if the options list finished, non-zero in case of error.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help getopts` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help getopts` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -47,17 +68,40 @@ int getopts_builtin(int argc, char **argv)
     if(argc < 3)
     {
         PRINT_ERROR("%s: missing argument(s)\n", UTILITY);
-        print_help(argv[0], &GETOPTS_BUILTIN, 0);
-        return 1;
+        print_help(argv[0], &GETOPTS_BUILTIN, SYNOPSIS);
+        return 2;
     }
-    char  *optstring     = argv[1];
-    char  *name          = argv[2];
-    char **args          = &argv[2];
-    int    argsc         = argc-2;
+    
+    /* we don't accept any options yet, but parse options and return error */
+    int i = 1;
+    for( ; i < argc; i++)
+    {
+        char *arg = argv[i];
+        if(*arg != '-')
+        {
+            break;
+        }
+        
+        PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, arg[1] ? arg[1] : '-');
+        return 2;
+    }
+    
+    char  *optstring     = argv[i++];
+    char  *name          = argv[i];
+    char **args          = &argv[i];
+    int    argsc         = argc-i;
     int    free_args     = 0;
-    char  *invoking_prog = NULL;
+    char  *invoking_prog = get_symtab_entry("0")->val;
+    struct symtab_entry_s *OPTIND, *OPTSUB, *NAME;
     char   buf[12];
 
+    /* sanity check for the given variable name */
+    if(!is_name(name))
+    {
+        PRINT_ERROR("%s: invalid name: %s\n", UTILITY, name);
+        return 2;
+    }
+    
     /* get the value of $OPTERR */
     int opterr = (strcmp(get_shell_varp("OPTERR", "1"), "0") == 0) ? 0 : 1;
     
@@ -69,29 +113,11 @@ int getopts_builtin(int argc, char **argv)
                      ((*optstring == '+' || *optstring == '-') && optstring[1] == ':'));
 
     /* get the current value of $OPTIND and initialize it to 1 if its unset */
-    struct symtab_entry_s *OPTIND = get_symtab_entry("OPTIND");
-    if(!OPTIND)
-    {
-        OPTIND = add_to_symtab("OPTIND");
-        symtab_entry_setval(OPTIND, "1");
-    }
-
-    /* get the value of $OPTIND */
-    if(OPTIND->val)
-    {
-        char *strend = NULL;
-        internal_argi = strtol(OPTIND->val, &strend, 10);
-        if(*strend || internal_argi <= 0)
-        {
-            internal_argi = 0;
-        }
-    }
-    
-    /* store the name of our index variable, initialize $OPTARG, and get argv[0] value */
-    struct symtab_entry_s *NAME   = add_to_symtab(name    );
-    struct symtab_entry_s *OPTARG = add_to_symtab("OPTARG");
-    struct symtab_entry_s *param0 = get_symtab_entry("0");
-    invoking_prog = param0->val;
+    INIT_VAR(OPTIND, "OPTIND");
+    INIT_VAR(OPTSUB, "OPTSUB");
+    INIT_VAR(NAME  , name    );
+    internal_argi = get_shell_vari("OPTIND", 1);
+    internal_argsub = get_shell_vari("OPTSUB", 0);
 
     /* no args? use positional params instead */
     if(argsc == 1)
@@ -101,24 +127,25 @@ int getopts_builtin(int argc, char **argv)
         if(count <= 0)
         {
             symtab_entry_setval(OPTIND, "1");
+            symtab_entry_setval(OPTSUB, "0");
             symtab_entry_setval(NAME  , "?");
             return 2;
         }
         
         /*
-         *  get a copy of all positional parameters in addition to special param $0.
-         *  effectively, we will be working on an array similar to a C program's argv.
+         *  Get a copy of all positional parameters in addition to special param $0.
+         *  Effectively, we will be working on an array similar to a C program's argv.
          */
         args = malloc((count+2) * sizeof(char *));
         if(!args)
         {
             PRINT_ERROR("%s: insufficient memory to load args\n", UTILITY);
-            return 5;
+            return 1;
         }
         
         free_args = 1;
         memset(args, 0, (count+2) * sizeof(char *));
-        args[0] = param0->val;
+        args[0] = invoking_prog;
         
         if(count)
         {
@@ -139,11 +166,12 @@ int getopts_builtin(int argc, char **argv)
      * process the options
      ****************************/
     int v = 1, c;
-    while((c = parse_args(argsc, args, optstring, &v, 0)) > 0)
+    int res = 0;
+    if((c = parse_args(argsc, args, optstring, &v, 0)) > 0)
     {
         /*
-         *  set the index variable's value to the most recent option.
-         *  if the option string starts with +, we precede the option with +.
+         *  Set the index variable's value to the most recent option.
+         *  If the option string starts with +, we precede the option with +.
          */
         char cstr[3];
         if(*optstring == '+')
@@ -155,11 +183,13 @@ int getopts_builtin(int argc, char **argv)
             sprintf(cstr,  "%c", c);
         }
 
-        symtab_entry_setval(NAME  , cstr);
+        symtab_entry_setval(NAME, cstr);
         
         /* set $OPTIND to the index of this argument */
         sprintf(buf, "%d", v);
-        symtab_entry_setval(OPTIND, buf );
+        symtab_entry_setval(OPTIND, buf);
+        sprintf(buf, "%d", internal_argsub);
+        symtab_entry_setval(OPTSUB, buf);
         
         /* check if we have an option argument */
         if(internal_optarg)
@@ -171,76 +201,65 @@ int getopts_builtin(int argc, char **argv)
                 if(silent)
                 {
                     char estr[] = { internal_opterr, '\0' };
-                    symtab_entry_setval(OPTARG, estr);
                     symtab_entry_setval(NAME  , ":" );
+                    res = do_set("OPTARG", estr, 0, 0, 0) ? 0 : 1;
                 }
                 else
                 {
-                    symtab_entry_setval(OPTARG, NULL);
                     symtab_entry_setval(NAME  , "?" );
+                    res = do_set("OPTARG", NULL, 0, 0, 0) ? 0 : 1;
                     
                     /* print an error message */
                     if(opterr)
                     {
-                        PRINT_ERROR("%s: option requires an argument -- %c\n", invoking_prog, internal_opterr);
+                        PRINT_ERROR("%s: option requires an argument -- %c\n", 
+                                    invoking_prog, internal_opterr);
                     }
                 }
             }
             /* valid argument. save it in $OPTARG */
             else
             {
-                symtab_entry_setval(OPTARG, internal_optarg);
+                res = do_set("OPTARG", internal_optarg, 0, 0, 0) ? 0 : 1;
             }
         }
-        
-        /* free temp memory */
-        if(free_args)
-        {
-            free(args);
-        }
-        return 0;
     }
-
-    sprintf(buf, "%d", v);
-    symtab_entry_setval(OPTIND, buf);
-    symtab_entry_setval(NAME  , "?");
-    
-    /* unknown option */
-    if(c == -1)
+    else
     {
-        /* set the index variable to "?" */
-        symtab_entry_setval(NAME, "?");
+        /* end of options or unknown option */
+        sprintf(buf, "%d", v);
+        symtab_entry_setval(OPTIND, buf);
+        sprintf(buf, "%d", internal_argsub);
+        symtab_entry_setval(OPTSUB, buf);
+        symtab_entry_setval(NAME  , "?");
         
-        /* set $OPTARG appropriately, and print an error msg if needed */
-        if(silent)
+        /* unknown option */
+        if(c == -1)
         {
-            char estr[] = { internal_opterr, '\0' };
-            symtab_entry_setval(OPTARG, estr);
+            /* set $OPTARG appropriately, and print an error msg if needed */
+            if(silent)
+            {
+                char estr[] = { internal_opterr, '\0' };
+                res = do_set("OPTARG", estr, 0, 0, 0) ? 0 : 1;
+            }
+            else
+            {
+                /* print the error-causing option */
+                PRINT_ERROR("%s: unknown option: -%c\n", invoking_prog, internal_opterr);
+                res = do_set("OPTARG", NULL, 0, 0, 0) ? 0 : 1;
+            }
         }
         else
         {
-            /* print the error-causing option */
-            PRINT_ERROR("%s: unknown option -- %c\n", invoking_prog, internal_opterr);
-            symtab_entry_setval(OPTARG, NULL);
+            res = 2;
         }
-
-        /* free temp memory */
-        if(free_args)
-        {
-            free(args);
-        }
-        return 0;
     }
     
-    /********************/
-    /* end of arguments */
-    /********************/
-
     /* free temp memory */
     if(free_args)
     {
         free(args);
     }
 
-    return 2;
+    return res;
 }

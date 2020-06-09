@@ -39,21 +39,21 @@ int process_echo_options(int argc, char **argv, char *opts, int *allow_escaped, 
 
 
 /*
- * the glob builtin utility (non-POSIX).. prints its arguments list in a way similar
+ * The glob builtin utility (non-POSIX). Prints its arguments list in a way similar
  * to what echo does, except that glob null-terminates each argument.
  *
- * returns 0.
+ * Returns 0.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help glob` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help glob` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
 int glob_builtin(int argc, char **argv)
 {
     /*
-     * in bash, shopt option 'xpg_echo' is used to indicate whether escape
-     * sequences are enabled by echo by default.. this behavior can be overriden
+     * In bash, shopt option 'xpg_echo' is used to indicate whether escape
+     * sequences are enabled by echo by default. This behavior can be overriden
      * by use of the -e and -E options (see below).
      */
     int allow_escaped = optionx_set(OPTION_XPG_ECHO);

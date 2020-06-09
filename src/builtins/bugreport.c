@@ -19,7 +19,7 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-/* required macro definition for popen() and pclose() */
+/* Required macro definition for popen() and pclose() */
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdlib.h>
@@ -36,11 +36,11 @@
 
 
 /*
- * this utility is a non-POSIX extension, similar to bashbug in bash. it is used
+ * This utility is a non-POSIX extension, similar to bashbug in bash. It is used
  * to send bugreports to the shell's author(s), and depends on a properly set and
- * working sendmail program in the system on which lsh is running. the tool is
+ * working sendmail program in the system on which lsh is running. The tool is
  * interactive, following a step-wise approach to help the user fill in the bugreport.
- * bash implements bashbug as a shell script that invokes vi. this makes sense, but
+ * bash implements bashbug as a shell script that invokes vi. This makes sense, but
  * I think it is better to implement this tool as an integral part of the shell, so
  * that we can collect the information we need reliably (such as the machine type
  * and shell version), without relying on the shell/environment variables which might
@@ -55,7 +55,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
     char   *subject = NULL, *body = NULL, *from = NULL;
     int     bodysz = 0;
     struct  utsname buf;
-    /* get the kernel's uname info */
+    /* Get the kernel's uname info */
     int     got_uname = !uname(&buf);
     int     res = 0;
     
@@ -101,71 +101,80 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
     printf("  * Shell version: %s\n", shell_ver);
     printf("\n");
     
-    /* get the email subject */
+    /* Get the email subject */
     printf("Please enter the subject of your email message (an empty line will cancel this bugreport)\n\n");
-    /* abort if error reading input */
+
+    /* Abort if error reading input */
     if(do_builtin_internal(read_builtin, 2, read_argv) != 0)
     {
         printf("\n\nAborted\n\n");
         return 2;
     }    
+
     if(REPLY && REPLY->val)
     {
-        /* abort if input is empty */
+        /* Abort if input is empty */
         if(REPLY->val[0] == '\0')
         {
             printf("\n\nAborted\n\n");
             return 2;
         }
-        /* save the email subject */
+        
+        /* Save the email subject */
         subject = get_malloced_str(REPLY->val);
     }
     printf("\n");
 
-    /* get the user's email address */
+    /* Get the user's email address */
     printf("Please enter your email address (an empty line will cancel this bugreport)\n\n");
-    /* abort if error reading input */
+
+    /* Abort if error reading input */
     if(do_builtin_internal(read_builtin, 2, read_argv) != 0)
     {
         printf("\n\nAborted\n\n");
-        /* discard saved subject */
+
+        /* Discard saved subject */
         free_malloced_str(subject);
         return 2;
-    }    
+    }
+    
     if(REPLY && REPLY->val)
     {
-        /* abort if input is empty */
+        /* Abort if input is empty */
         if(REPLY->val[0] == '\0')
         {
             printf("\n\nAborted\n\n");
-            /* discard saved subject */
+            
+            /* Discard saved subject */
             free_malloced_str(subject);
             return 2;
         }    
-        /* save the email address */
+
+        /* Save the email address */
         from = get_malloced_str(REPLY->val);
     }
     printf("\n");
     
-    /* get the message body */
+    /* Get the message body */
     printf("Please enter the body of your email message. Try to be as detailed as you can. You can enter\n"
            "multiple lines. When you are finished with writing your message, press CTRL-D to continue:\n\n");
     
-    /* keep reading input, until we hit EOF */
+    /* Keep reading input, until we hit EOF */
     while(1)
     {
         symtab_entry_setval(REPLY, NULL);
-        /* stop if error reading input */
+        /* Stop if error reading input */
         if(do_builtin_internal(read_builtin, 2, read_argv) != 0)
         {
             break;
         } 
-        /* we've got input */
+
+        /* We've got input */
         if(REPLY && REPLY->val)
         {
             int len = strlen(REPLY->val);
             /*
-             * first line in the message body. determine how much memory we need by
+             * First line in the message body. Determine how much memory we need by
              * starting at 512 bytes, doubling it up until we have a number large enough
              * to store the message body, then we alloc that much memory and store our
              * input there.
@@ -177,6 +186,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
                 {
                     bodysz <<= 1;
                 }
+
                 body = malloc(bodysz);
                 if(body)
                 {
@@ -186,7 +196,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
             else
             {
                 /*
-                 * second and following lines. extend the memory storage we have by doubling
+                 * Second and following lines. Extend the memory storage we have by doubling
                  * the size until we have enough to save the old body in addition to the new
                  * line. after realloc'ing the memory, concatenate the new line to the old
                  * message body.
@@ -195,6 +205,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
                 {
                     bodysz <<= 1;
                 }
+
                 char *body2 = realloc(body, bodysz);
                 if(body2)
                 {
@@ -205,17 +216,17 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
         }
     }
     
-    /* abort if message body is empty */
+    /* Abort if message body is empty */
     if(!body)
     {
-        /* discard saved subject and email address */
+        /* Discard saved subject and email address */
         free_malloced_str(subject);
         free_malloced_str(from);
         printf("\n\nAborted\n\n");
         return 2;
     }
     
-    /* send the email via sendmail (see `man sendmail` for the message structure) */
+    /* Send the email via sendmail (see `man sendmail` for the message structure) */
     FILE *mailpipe = popen("/usr/lib/sendmail -t", "w");
     if(mailpipe != NULL)
     {
@@ -232,6 +243,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
             "\n"
             "  * Runtime system info:\n"
             , CPU_ARCH, OS_TYPE, COMPILER_TYPE, COMPILER_BUILD);
+        
         if(got_uname)
         {
             fprintf(mailpipe,
@@ -246,6 +258,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
             fprintf(mailpipe,
                 "    COULDN'T DETERMINE THE RUNNIG OPERATING SYSTEM\n");
         }
+        
         fprintf(mailpipe, "  * Shell version: %s\n", shell_ver);
         fwrite(".\n", 1, 2, mailpipe);
         pclose(mailpipe);
@@ -262,7 +275,7 @@ int bugreport_builtin(int argc __attribute__((unused)), char **argv __attribute_
         res = 1;
      }
     
-    /* discard saved subject, email address and body */
+     /* Discard saved subject, email address and body */
      free_malloced_str(subject);
      free_malloced_str(from);
      free(body);

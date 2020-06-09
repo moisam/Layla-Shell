@@ -61,12 +61,12 @@ extern struct hashtab_s *str_hashes;
 
 
 /*
- * the memusage utility (non-POSIX extension).. used to print a (rather crude)
+ * The memusage utility (non-POSIX extension). Used to print a (rather crude)
  * breakdown of the dynamic memory used by different shell structures, such as
  * the symbol table stack and hashed utilities table.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help memusage` or `memusage -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help memusage` or `memusage -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -78,7 +78,7 @@ int memusage_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvl", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hvl", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -182,7 +182,7 @@ int memusage_builtin(int argc, char **argv)
  *****************************************************************/
 
 /*
- * print the shell's general memory usage.
+ * Print the shell's general memory usage.
  */
 void print_mu_vm(int lengthy)
 {
@@ -210,7 +210,7 @@ void print_mu_vm(int lengthy)
 
 
 /*
- * print the memory used for the directory stack.
+ * Print the memory used for the directory stack.
  */
 void print_mu_dirstack(int lengthy)
 {
@@ -232,7 +232,7 @@ void print_mu_dirstack(int lengthy)
 
 
 /*
- * print the memory used for the symbol table stack.
+ * Print the memory used for the symbol table stack.
  */
 void print_mu_stack(int lengthy)
 {
@@ -255,7 +255,7 @@ void print_mu_stack(int lengthy)
 
 
 /*
- * print the memory used for the hashed utilities table.
+ * Print the memory used for the hashed utilities table.
  */
 void print_mu_hashtab(int lengthy)
 {
@@ -277,7 +277,7 @@ void print_mu_hashtab(int lengthy)
 
 
 /*
- * print the memory used for the strings buffer entries.
+ * Print the memory used for the strings buffer entries.
  */
 void print_mu_str_hashtab(int lengthy)
 {
@@ -299,7 +299,7 @@ void print_mu_str_hashtab(int lengthy)
 
 
 /*
- * print the memory used for the trap strings.
+ * Print the memory used for the trap strings.
  */
 void print_mu_traps(void)
 {
@@ -311,7 +311,7 @@ void print_mu_traps(void)
 
 
 /*
- * print the memory used for the input buffer.
+ * Print the memory used for the input buffer.
  */
 void print_mu_inputbuf(void)
 {
@@ -326,7 +326,7 @@ void print_mu_inputbuf(void)
 
 
 /*
- * print the memory used for the alias strings.
+ * Print the memory used for the alias strings.
  */
 void print_mu_aliases(void)
 {
@@ -338,7 +338,7 @@ void print_mu_aliases(void)
 
 
 /*
- * print the memory used for the history list.
+ * Print the memory used for the history list.
  */
 void print_mu_history(void)
 {
@@ -350,7 +350,7 @@ void print_mu_history(void)
 
 
 /*
- * print the memory used for the command buffer.
+ * Print the memory used for the command buffer.
  */
 void print_mu_cmdbuf(void)
 {
@@ -367,7 +367,7 @@ void print_mu_cmdbuf(void)
  *****************************************************************/
 
 /*
- * calculate the memory used for the directory stack.
+ * Calculate the memory used for the directory stack.
  */
 long long memusage_dirstack(long long *res)
 {
@@ -389,7 +389,7 @@ long long memusage_dirstack(long long *res)
 
 
 /*
- * calculate the memory used for the symbol table stack.
+ * Calculate the memory used for the symbol table stack.
  */
 long long memusage_symtab_stack(long long *res)
 {
@@ -413,7 +413,7 @@ long long memusage_symtab_stack(long long *res)
 
 
 /*
- * calculate the memory used for the symbol table stack.
+ * Calculate the memory used for the symbol table stack.
  */
 long long memusage_symtab(struct symtab_s *symtab, long long *__res)
 {
@@ -476,7 +476,7 @@ long long memusage_symtab(struct symtab_s *symtab, long long *__res)
 
 
 /*
- * calculate the memory used for the hashed utilities table.
+ * Calculate the memory used for the hashed utilities table.
  */
 long long memusage_hashtab(struct hashtab_s *hashtab, long long *__res, int addvals)
 {
@@ -527,7 +527,7 @@ long long memusage_hashtab(struct hashtab_s *hashtab, long long *__res, int addv
 
 
 /*
- * calculate the memory used for the given nodetree.
+ * Calculate the memory used for the given nodetree.
  */
 long long memusage_node(struct node_s *node, long long *__res)
 {
@@ -567,7 +567,7 @@ long long memusage_node(struct node_s *node, long long *__res)
 
 
 /*
- * calculate the memory used for the trap strings.
+ * Calculate the memory used for the trap strings.
  */
 long long memusage_traps(long long *__res)
 {
@@ -589,7 +589,7 @@ long long memusage_traps(long long *__res)
 
 
 /*
- * calculate the memory used for the alias strings.
+ * Calculate the memory used for the alias strings.
  */
 long long memusage_aliases(long long *__res)
 {
@@ -615,7 +615,7 @@ long long memusage_aliases(long long *__res)
 
 
 /*
- * calculate the memory used for the history list.
+ * Calculate the memory used for the history list.
  */
 long long memusage_history(long long *__res)
 {
@@ -636,7 +636,7 @@ long long memusage_history(long long *__res)
 }
 
 /*
- * output byte size in a properly formatted way.
+ * Output byte size in a properly formatted way.
  */
 void output_size(long long __size)
 {

@@ -41,6 +41,31 @@ struct builtin_s
     unsigned char flags;
 };
 
+/* flags for the print_command_type() function */
+#define TYPE_FLAG_PRINT_PATH        (1 << 0)
+#define TYPE_FLAG_PRINT_WORD        (1 << 1)
+#define TYPE_FLAG_PRINT_FUNCS       (1 << 2)
+#define TYPE_FLAG_PRINT_BUILTINS    (1 << 3)
+#define TYPE_FLAG_PRINT_ALL         (1 << 4)
+#define TYPE_FLAG_PRINT_HASHED      (1 << 5)
+#define TYPE_FLAG_PATH_ONLY         (1 << 6)
+
+/* flags for the cd_flags argument of the do_cd() function */
+#define DO_CD_WITH_POPTION          (1 << 0)
+#define DO_CD_PUSH_DIRSTACK         (1 << 1)
+
+/* error printing for the unset builtin utility */
+#define UNSET_PRINT_ERROR(arg, msg) \
+    PRINT_ERROR("unset: cannot unset `%s`: %s\n", arg, msg);
+
+
+/* alias.c */
+void    init_aliases(void);
+int     valid_alias_name(char *name);
+void    run_alias_cmd(char *alias);
+void    unset_all_aliases(void);
+int     alias_list_index(char *alias);
+
 /* builtins.c */
 extern  struct builtin_s shell_builtins[];
 
@@ -61,6 +86,16 @@ struct  callframe_s *callframe_pop(void);
 void    callframe_popf(void);
 int     get_callframe_count(void);
 
+/* cd.c */
+int     do_cd(int v, int argc, char **argv, int print_dirstack, int dirstack_flags, int cd_flags);
+
+/* coproc.c */
+void    coproc_close_fds(void);
+
+/* declare.c */
+int     do_declare(int argc, char **argv, int global);
+int     purge_vars(char **args, char *utility, int funcs, int flags);
+
 /* dirstack.c */
 extern  int read_dirsfile;
 extern  int stack_count;
@@ -70,31 +105,10 @@ void    save_dirstack(char *__path);
 int     load_dirstackp(char *val);
 int     load_dirstack(char *__path);
 struct  dirstack_ent_s *get_dirstack_entryn(int n, struct dirstack_ent_s **__prev);
-struct  dirstack_ent_s *get_dirstack_entry(char *nstr, struct dirstack_ent_s **__prev);
+struct  dirstack_ent_s *get_dirstack_entry(char *nstr, struct dirstack_ent_s **__prev, int *n);
 void    purge_dirstack(int flags);
 char   *purge_dirstackp(void);
-
-/* help.c */
-extern  char shell_ver[];
-
-void    print_help(char *invokation_name, struct builtin_s *utility, int flags);
-
-/* alias.c */
-void    init_aliases(void);
-int     valid_alias_name(char *name);
-void    run_alias_cmd(char *alias);
-void    unset_all_aliases(void);
-int     alias_list_index(char *alias);
-
-/* read.c */
-#include <sys/time.h>
-int     ready_to_read(int fd, struct timeval *timeout);
-
-/* unalias.c */
-void    unalias_all(void);
-
-/* mailcheck.c */
-int     check_for_mail(void);
+int     push_cwd(char *utility);
 
 /* echo.c */
 void    do_echo(int v, int argc, char **argv, int flags);
@@ -113,30 +127,29 @@ int     hash_utility(char *utility, char *path);
 void    unhash_utility(char *utility);
 char   *get_hashed_path(char *utility);
 
+/* help.c */
+extern  char shell_ver[];
+
+void    print_help(char *invokation_name, struct builtin_s *utility, int flags);
+
+/* mailcheck.c */
+int     check_for_mail(void);
+
+/* read.c */
+#include <sys/time.h>
+int     ready_to_read(int fd, struct timeval *timeout);
+
 /* times.c */
 void    start_clock(void);
 
 /* time.c */
 double  get_cur_time(void);
 
-/* declare.c */
-int     do_declare(int argc, char **argv, int global);
-int     purge_vars(char **args, char *utility, int funcs, int flags);
-
 /* type.c */
 int     print_command_type(char *cmd, char *who, char *PATH, int flags);
 
-/* coproc.c */
-void    coproc_close_fds(void);
-
-/* flags for the print_command_type() function */
-#define TYPE_FLAG_PRINT_PATH        (1 << 0)
-#define TYPE_FLAG_PRINT_WORD        (1 << 1)
-#define TYPE_FLAG_PRINT_FUNCS       (1 << 2)
-#define TYPE_FLAG_PRINT_BUILTINS    (1 << 3)
-#define TYPE_FLAG_PRINT_ALL         (1 << 4)
-#define TYPE_FLAG_PRINT_HASHED      (1 << 5)
-#define TYPE_FLAG_PATH_ONLY         (1 << 6)
+/* unalias.c */
+void    unalias_all(void);
 
 
 /******************************************/
@@ -220,20 +233,20 @@ int     times_builtin(int argc, char *argv[]);
 
 
 /*
- * in this file, we define the 'builtin' utility, which is used to display the list
+ * In this file, we define the 'builtin' utility, which is used to display the list
  * of special and regular builtin utilities, as well as to run a builtin utility,
- * even if an external command or shell function exists with the same name..
- * we store special and regular builtins information in the following list.. each item
+ * even if an external command or shell function exists with the same name.
+ * We store special and regular builtins information in the following list. Each item
  * in the list contain the utility's name (and its length), a short description
- * on what the utility does, and the function we should call when the utility is invoked..
- * additionally, and to assist the 'help' utility in printing useful help messages for
+ * on what the utility does, and the function we should call when the utility is invoked.
+ * Additionally, and to assist the 'help' utility in printing useful help messages for
  * each utility, we store the synopsis (how to use or invoke the utility), and the number
  * of times the utility's name appears in the synopsis (so that 'help' can call printf()
- * with the right number of arguments).. we then have the help message that 'help' prints
+ * with the right number of arguments). We then have the help message that 'help' prints
  * for the utility, and the utility's flags (is the utility enabled or not, does 'help'
  * print the default help message for the -v and -h options or not, ...).
  * 
- * see the definition of 'struct builtin_s' above.
+ * See the definition of 'struct builtin_s' above.
  */
 
 #define DOT_BUILTIN                 shell_builtins[ 0]
@@ -249,68 +262,67 @@ int     times_builtin(int argc, char *argv[]);
 #define CD_BUILTIN                  shell_builtins[10]
 #define COMMAND_BUILTIN             shell_builtins[11]
 #define CONTINUE_BUILTIN            shell_builtins[12]
-#define COPROC_BUILTIN              shell_builtins[13]
-#define DECLARE_BUILTIN             shell_builtins[14]
-#define DIRS_BUILTIN                shell_builtins[15]
-#define DISOWN_BUILTIN              shell_builtins[16]
-#define DUMP_BUILTIN                shell_builtins[17]
-#define ECHO_BUILTIN                shell_builtins[18]
-#define ENABLE_BUILTIN              shell_builtins[19]
-#define EVAL_BUILTIN                shell_builtins[20]
-#define EXEC_BUILTIN                shell_builtins[21]
-#define EXIT_BUILTIN                shell_builtins[22]
-#define EXPORT_BUILTIN              shell_builtins[23]
-#define FALSE_BUILTIN               shell_builtins[24]
-#define FC_BUILTIN                  shell_builtins[25]
-#define FG_BUILTIN                  shell_builtins[26]
-#define GETOPTS_BUILTIN             shell_builtins[27]
-#define GLOB_BUILTIN                shell_builtins[28]
-#define HASH_BUILTIN                shell_builtins[29]
-#define HELP_BUILTIN                shell_builtins[30]
-#define HISTORY_BUILTIN             shell_builtins[31]
-#define HUP_BUILTIN                 shell_builtins[32]
-#define JOBS_BUILTIN                shell_builtins[33]
-#define KILL_BUILTIN                shell_builtins[34]
-#define LET_BUILTIN                 shell_builtins[35]
-#define LOCAL_BUILTIN               shell_builtins[36]
-#define LOGOUT_BUILTIN              shell_builtins[37]
-#define MAILCHECK_BUILTIN           shell_builtins[38]
-#define MEMUSAGE_BUILTIN            shell_builtins[39]
-#define NEWGRP_BUILTIN              shell_builtins[40]
-#define NICE_BUILTIN                shell_builtins[41]
-#define NOHUP_BUILTIN               shell_builtins[42]
-#define NOTIFY_BUILTIN              shell_builtins[43]
-#define POPD_BUILTIN                shell_builtins[44]
-#define PRINTENV_BUILTIN            shell_builtins[45]
-#define PUSHD_BUILTIN               shell_builtins[46]
-#define PWD_BUILTIN                 shell_builtins[47]
-#define READ_BUILTIN                shell_builtins[48]
-#define READONLY_BUILTIN            shell_builtins[49]
-#define REPEAT_BUILTIN              shell_builtins[50]
-#define RETURN_BUILTIN              shell_builtins[51]
-#define SET_BUILTIN                 shell_builtins[52]
-#define SETENV_BUILTIN              shell_builtins[53]
-#define SETX_BUILTIN                shell_builtins[54]
-#define SHIFT_BUILTIN               shell_builtins[55]
-#define SHOPT_BUILTIN               shell_builtins[56]
-#define SOURCE_BUILTIN              shell_builtins[57]
-#define STOP_BUILTIN                shell_builtins[58]
-#define SUSPEND_BUILTIN             shell_builtins[59]
-#define TEST3_BUILTIN               shell_builtins[60]
-#define TIMES_BUILTIN               shell_builtins[61]
-#define TRAP_BUILTIN                shell_builtins[62]
-#define TRUE_BUILTIN                shell_builtins[63]
-#define TYPE_BUILTIN                shell_builtins[64]
-#define TYPESET_BUILTIN             shell_builtins[65]
-#define ULIMIT_BUILTIN              shell_builtins[66]
-#define UMASK_BUILTIN               shell_builtins[67]
-#define UNALIAS_BUILTIN             shell_builtins[68]
-#define UNLIMIT_BUILTIN             shell_builtins[69]
-#define UNSET_BUILTIN               shell_builtins[70]
-#define UNSETENV_BUILTIN            shell_builtins[71]
-#define VER_BUILTIN                 shell_builtins[72]
-#define WAIT_BUILTIN                shell_builtins[73]
-#define WHENCE_BUILTIN              shell_builtins[74]
+#define DECLARE_BUILTIN             shell_builtins[13]
+#define DIRS_BUILTIN                shell_builtins[14]
+#define DISOWN_BUILTIN              shell_builtins[15]
+#define DUMP_BUILTIN                shell_builtins[16]
+#define ECHO_BUILTIN                shell_builtins[17]
+#define ENABLE_BUILTIN              shell_builtins[18]
+#define EVAL_BUILTIN                shell_builtins[19]
+#define EXEC_BUILTIN                shell_builtins[20]
+#define EXIT_BUILTIN                shell_builtins[21]
+#define EXPORT_BUILTIN              shell_builtins[22]
+#define FALSE_BUILTIN               shell_builtins[23]
+#define FC_BUILTIN                  shell_builtins[24]
+#define FG_BUILTIN                  shell_builtins[25]
+#define GETOPTS_BUILTIN             shell_builtins[26]
+#define GLOB_BUILTIN                shell_builtins[27]
+#define HASH_BUILTIN                shell_builtins[28]
+#define HELP_BUILTIN                shell_builtins[29]
+#define HISTORY_BUILTIN             shell_builtins[30]
+#define HUP_BUILTIN                 shell_builtins[31]
+#define JOBS_BUILTIN                shell_builtins[32]
+#define KILL_BUILTIN                shell_builtins[33]
+#define LET_BUILTIN                 shell_builtins[34]
+#define LOCAL_BUILTIN               shell_builtins[35]
+#define LOGOUT_BUILTIN              shell_builtins[36]
+#define MAILCHECK_BUILTIN           shell_builtins[37]
+#define MEMUSAGE_BUILTIN            shell_builtins[38]
+#define NEWGRP_BUILTIN              shell_builtins[39]
+#define NICE_BUILTIN                shell_builtins[40]
+#define NOHUP_BUILTIN               shell_builtins[41]
+#define NOTIFY_BUILTIN              shell_builtins[42]
+#define POPD_BUILTIN                shell_builtins[43]
+#define PRINTENV_BUILTIN            shell_builtins[44]
+#define PUSHD_BUILTIN               shell_builtins[45]
+#define PWD_BUILTIN                 shell_builtins[46]
+#define READ_BUILTIN                shell_builtins[47]
+#define READONLY_BUILTIN            shell_builtins[48]
+#define REPEAT_BUILTIN              shell_builtins[49]
+#define RETURN_BUILTIN              shell_builtins[50]
+#define SET_BUILTIN                 shell_builtins[51]
+#define SETENV_BUILTIN              shell_builtins[52]
+#define SETX_BUILTIN                shell_builtins[53]
+#define SHIFT_BUILTIN               shell_builtins[54]
+#define SHOPT_BUILTIN               shell_builtins[55]
+#define SOURCE_BUILTIN              shell_builtins[56]
+#define STOP_BUILTIN                shell_builtins[57]
+#define SUSPEND_BUILTIN             shell_builtins[58]
+#define TEST3_BUILTIN               shell_builtins[59]
+#define TIMES_BUILTIN               shell_builtins[60]
+#define TRAP_BUILTIN                shell_builtins[61]
+#define TRUE_BUILTIN                shell_builtins[62]
+#define TYPE_BUILTIN                shell_builtins[63]
+#define TYPESET_BUILTIN             shell_builtins[64]
+#define ULIMIT_BUILTIN              shell_builtins[65]
+#define UMASK_BUILTIN               shell_builtins[66]
+#define UNALIAS_BUILTIN             shell_builtins[67]
+#define UNLIMIT_BUILTIN             shell_builtins[68]
+#define UNSET_BUILTIN               shell_builtins[69]
+#define UNSETENV_BUILTIN            shell_builtins[70]
+#define VER_BUILTIN                 shell_builtins[71]
+#define WAIT_BUILTIN                shell_builtins[72]
+#define WHENCE_BUILTIN              shell_builtins[73]
 
 
 #endif

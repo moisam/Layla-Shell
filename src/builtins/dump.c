@@ -26,14 +26,14 @@
 #define UTILITY             "dump"
 
 /*
- * the dump builtin utility (non-POSIX).. used to dump (or print) the values of variables
+ * The dump builtin utility (non-POSIX). Used to dump (or print) the values of variables
  * and symbol table entries (can be extended to dump other things, such as the utility
  * hashtable or the string buffer, for example).
  *
- * returns 0 if the variables were defined or printed, non-zero otherwise.
+ * Returns 0 if the variables were defined or printed, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help dump` or `dump -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help dump` or `dump -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 

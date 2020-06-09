@@ -44,7 +44,6 @@ extern int prev_job;
  */
 int do_fg(struct job_s *job)
 {
-    /* fg only works if job control is enabled (the monitor '-m' option is set) */
     if(!flag_set(job->flags, JOB_FLAG_JOB_CONTROL))
     {
         PRINT_ERROR("%s: job started without job control\n", UTILITY);
@@ -78,7 +77,7 @@ int do_fg(struct job_s *job)
     {
         if(!set_tty_attr(tty, job->tty_attr))
         {
-            PRINT_ERROR("%s: failed to restore terminal attributes\n", SHELL_NAME);
+            PRINT_ERROR("%s: failed to restore terminal attributes\n", SOURCE_NAME);
         }
     }
 
@@ -101,20 +100,28 @@ int do_fg(struct job_s *job)
 
 
 /*
- * the fg builtin utility (POSIX).. used to bring a job to the foreground.
- * if more than one job is specified, brings the jobs, one at a time, to the
+ * The fg builtin utility (POSIX). Used to bring a job to the foreground.
+ * If more than one job is specified, brings the jobs, one at a time, to the
  * foreground, waiting for each to finish execution before resuming the next.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help fg` or `fg -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help fg` or `fg -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
 int fg_builtin(int argc, char **argv)
 {
     struct job_s *job;
+
+    /* fg only works if job control is enabled (the monitor '-m' option is set) */
+    if(!option_set('m'))
+    {
+        PRINT_ERROR("%s: job control is not active\n", UTILITY);
+        return 1;
+    }
+    
     /* we have no job argument.. use the current job */
     if(argc == 1)
     {
@@ -131,7 +138,7 @@ int fg_builtin(int argc, char **argv)
      * process the options
      ****************************/
     int v = 1, res = 0, c;
-    while((c = parse_args(argc, argv, "hv", &v, 0)) > 0)
+    while((c = parse_args(argc, argv, "hv", &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -148,7 +155,7 @@ int fg_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
 
     /* no job arguments */

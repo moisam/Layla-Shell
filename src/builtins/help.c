@@ -26,7 +26,7 @@
 #include "../debug.h"
 
 /* current version of the shell */
-char   shell_ver[] = "1.1-3";
+char   shell_ver[] = "1.1-4";
 
 /* useful macros for printing utilities help message */
 #define SYNOPSIS        (1 << 0)    /* print usage summary (one liner) */
@@ -39,13 +39,13 @@ void print_help_body(struct builtin_s *utility, int indent);
 
 
 /*
- * the help builtin utility (non-POSIX).. used to print useful help and how-to
+ * The help builtin utility (non-POSIX). Used to print useful help and how-to
  * messages for the shell's builtin utilities.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help help` or `help -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help help` or `help -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -57,7 +57,7 @@ int help_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "dhmsv", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "dhmsv", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -121,11 +121,11 @@ int help_builtin(int argc, char **argv)
         sprintf(arg, "%s%s", argv[v], argv[v][len-1] == '*' ? "" : "*");
         
         /*
-         * for each argument, we check if the argument is the name of a builtin 
-         * utility.. if so, we print the utility's help and move on to the next 
-         * argument.. then we check the special names : and . which refer to the 
+         * For each argument, we check if the argument is the name of a builtin 
+         * utility. If so, we print the utility's help and move on to the next 
+         * argument. Then we check the special names : and . which refer to the 
          * 'colon' and 'dot' utilities, respectively, and print the help if the 
-         * argument is one of these.. lastly, if none of the above matched, we 
+         * argument is one of these. Lastly, if none of the above matched, we 
          * print and error message and move on to the next argument.
          */
         struct builtin_s *utility = shell_builtins;
@@ -154,7 +154,7 @@ int help_builtin(int argc, char **argv)
         /* utility not found. print an error message and set the error return result */
         else
         {
-            PRINT_ERROR("%s: unknown builtin utility: %s\n", SHELL_NAME, argv[v]);
+            PRINT_ERROR("%s: unknown builtin utility: %s\n", SOURCE_NAME, argv[v]);
             res = 1;
         }
     }
@@ -163,7 +163,7 @@ int help_builtin(int argc, char **argv)
 
 
 /*
- * printing builtin utility help messages involves outputting the following:
+ * Printing builtin utility help messages involves outputting the following:
  *
  * - a header line that looks like:
  *
@@ -228,7 +228,7 @@ void print_help(char *invokation_name, struct builtin_s *utility, int flags)
 
 
 /*
- * print the given utility's synopsis by calling printf, passing it the 
+ * Print the given utility's synopsis by calling printf, passing it the 
  * correct number of arguments, depending on how many times the utility's 
  * name appears in the synopsis line.
  */
@@ -256,7 +256,7 @@ void print_synopsis(struct builtin_s *utility, char *invokation_name, char *inde
 
 
 /*
- * print the given utility's help body, preceding each line with 4 spaces
+ * Print the given utility's help body, preceding each line with 4 spaces
  * if indent is non-zero.
  */
 void print_help_body(struct builtin_s *utility, int indent)

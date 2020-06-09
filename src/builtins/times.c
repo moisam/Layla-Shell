@@ -35,7 +35,7 @@ long int CLK_TCK = 60;
 double   shell_start_time;
 
 /*
- * start the shell internal clock.. called on shell startup.
+ * Start the shell internal clock.. called on shell startup.
  */
 void start_clock(void)
 {
@@ -66,13 +66,13 @@ void start_clock(void)
 }
 
 /*
- * the times builtin utility (non-POSIX).. prints the process usage times for the
+ * The times builtin utility (non-POSIX). Prints the process usage times for the
  * shell and its children.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help times` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help times` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 

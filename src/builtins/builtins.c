@@ -27,10 +27,10 @@
 
 
 /*
- * TODO: according to POSIX, regular builtin utilities should be implemented 
+ * TODO: According to POSIX, regular builtin utilities should be implemented 
  *       such that they can be invoked through exec() or directly by env, ...
  * 
- * NOTE: the %% sequence in a utility's synopsis will be converted to the 
+ * NOTE: The %% sequence in a utility's synopsis will be converted to the 
  *       utility's name when the synopsis is printed.
  */
 
@@ -219,24 +219,6 @@ struct builtin_s shell_builtins[] =
         "n           return to the top of the n-th enclosing for, while, or until loop\n\n",
         BUILTIN_SPECIAL_BUILTIN | BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
-#if 0
-    {
-        "coproc", "execute commands in a coprocess (subshell with pipe)",
-        coproc_builtin,       /* non-POSIX */
-        "%% command [redirections]",
-        "command       the command to be executed in the subshell.\n"
-        "redirections  optional file redirections. A pipe is opened between the shell and the\n"
-        "                coprocess before any redirections are performed. Shell variable $COPROC_PID contains\n"
-        "                the PID of the coprocess. Shell variable $COPROC0 points to the reading end of the\n"
-        "                pipe (connected to command's stdout), while variable $COPROC1 points to the writing\n"
-        "                end of the pipe (connected to command's stdin).\n\n"
-        "              you can feed output to the process by invoking:\n\n"
-        "                $ cmd >&p\n\n"
-        "              similarly, you can read the process's output by invoking:\n\n"
-        "                $ cmd <&p\n\n",
-        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
-    },
-#endif
     {
         "declare", "declare variables and give them attributes",
         declare_builtin,       /* non-POSIX */
@@ -258,7 +240,7 @@ struct builtin_s shell_builtins[] =
     {
         "dirs", "display the contents of the directory stack",
         dirs_builtin,       /* non-POSIX */
-        "%% [-hclpv] [+N | -N]\n"
+        "%% [-hclpvw] [+N | -N]\n"
         "%% -S|-L [filename]",
         "+N          print the N-th directory from the top (the left side of the \n"
         "              printed list), counting from zero (which is the current working \n"
@@ -272,11 +254,11 @@ struct builtin_s shell_builtins[] =
         "  -l        print full pathnames, don't use ~ to indicate the home directory\n"
         "  -L        load the directory stack from the given filename. If no filename is\n"
         "              supplied, use $DIRSFILE or default to ~/.lshdirs\n"
-        "  -n        wrap entries before they reach edge of the screen\n"
         "  -p        print each directory on a separate line\n"
         "  -S        save the directory stack to the given filename. If no filename is\n"
         "              supplied, use $DIRSFILE or default to ~/.lshdirs\n"
-        "  -v        print each directory with its index on a separate line\n",
+        "  -v        print each directory with its index on a separate line\n"
+        "  -w        wrap entries before they reach edge of the screen\n",
         BUILTIN_PRINT_HOPTION | BUILTIN_ENABLED,  /* print only the -h option */
     },
     {
@@ -633,7 +615,7 @@ struct builtin_s shell_builtins[] =
     {
         "pushd", "push directories on the stack and cd to them",
         pushd_builtin,       /* non-POSIX */
-        "%% [-chlnpsv] [+N | -N | dir]",
+        "%% [-chlpsvw] [+N | -N | dir]",
         "+N          rotate the stack and bring the N-th directory, counting from 0 from the \n"
         "              left, to the top of the stack\n"
         "-N          rotate the stack and bring the N-th directory, counting from 0 from the \n"
@@ -643,7 +625,7 @@ struct builtin_s shell_builtins[] =
         "Options:\n"
         "  -c        manipulate the stack, but don't cd to the directory\n"
         "  -s        don't output the dirstack after pushing the directory on it\n"
-        "  -l|n|v|p  have the same meaning as for the dirs builtin (see `help dirs`)\n"
+        "  -l|p|v|w  have the same meaning as for the dirs builtin (see `help dirs`)\n"
         "  -h        show utility help (this page)\n\n"
         "Notes:\n"
         "If called without arguments, pushd exchanges the top two directories on the stack and\n"
@@ -1112,7 +1094,7 @@ struct builtin_s shell_builtins[] =
 
 
 /*
- * return 1 if the given cmd name is a defined function, 0 otherwise.
+ * Return 1 if the given cmd name is a defined function, 0 otherwise.
  */
 int is_function(char *cmd)
 {
@@ -1121,7 +1103,7 @@ int is_function(char *cmd)
 
 
 /*
- * if cmd is a builtin utility, return the utility's struct builtin_s, or
+ * If cmd is a builtin utility, return the utility's struct builtin_s, or
  * NULL otherwise.
  */
 struct builtin_s *is_builtin(char *cmd)
@@ -1144,7 +1126,7 @@ struct builtin_s *is_builtin(char *cmd)
 
 
 /*
- * return 1 if the given cmd name is an enabled special builtin utility, -1 if it
+ * Return 1 if the given cmd name is an enabled special builtin utility, -1 if it
  * is an enabled regular builtin utility, 0 otherwise.
  */
 struct builtin_s *is_enabled_builtin(char *cmd)
@@ -1161,7 +1143,7 @@ struct builtin_s *is_enabled_builtin(char *cmd)
 
 
 /*
- * return 1 if the given cmd name is a special builtin utility, 0 otherwise.
+ * Return 1 if the given cmd name is a special builtin utility, 0 otherwise.
  */
 struct builtin_s *is_special_builtin(char *cmd)
 {
@@ -1177,7 +1159,7 @@ struct builtin_s *is_special_builtin(char *cmd)
 
 
 /*
- * return 1 if the given cmd name is a regular builtin utility, 0 otherwise.
+ * Return 1 if the given cmd name is a regular builtin utility, 0 otherwise.
  */
 struct builtin_s *is_regular_builtin(char *cmd)
 {
@@ -1193,15 +1175,15 @@ struct builtin_s *is_regular_builtin(char *cmd)
 
 
 /*
- * search the list of builtin utilities looking for a utility whose name matches
- * argv[0] of the passed **argv list.. if found, we execute the builtin utility,
+ * Search the list of builtin utilities looking for a utility whose name matches
+ * argv[0] of the passed **argv list. If found, we execute the builtin utility,
  * passing it the **argv list as if we're executing an external command, then 
- * we return 1.. otherwise, we return 0 to indicate we failed in finding a 
+ * we return 1. Otherwise, we return 0 to indicate we failed in finding a 
  * builtin utility whose name matches the command we are meant to execute (that
- * is, argv[0]).. if the 'special_utility' flag is non-zero, we search for a special
+ * is, argv[0]). If the 'special_utility' flag is non-zero, we search for a special
  * builtin utility with the given name, otherwise we search for a regular one.
  * 
- * returns 1 if the builtin utility is executed, otherwise 0.
+ * Returns 1 if the builtin utility is executed, otherwise 0.
  */
 int do_builtin(int argc, char **argv, int special_utility)
 {
@@ -1222,45 +1204,49 @@ int do_builtin(int argc, char **argv, int special_utility)
 
 
 /*
- * execute a builtin utility internally from within the shell.. we first reset
- * $OPTIND, so that the builtin utility can call getopts() to parse its options..
- * we then call the utlity, and reset $OPTIND to its previous value so that user
+ * Execute a builtin utility internally from within the shell. We first reset
+ * $OPTIND, so that the builtin utility can call getopts() to parse its options.
+ * We then call the utlity, and reset $OPTIND to its previous value so that user
  * commands won't be distrubted by our execution of the utility.
  * 
- * returns the exit status of the executed utility.
+ * Returns the exit status of the executed utility.
  */
 int do_builtin_internal(int (*builtin)(int, char **), int argc, char **argv)
 {
     /*
-     * all builtins (except getopts) may change $OPTIND, so save it and reset
-     * its value to NULL.
+     * All builtins (except getopts, declare and local) may change $OPTIND, 
+     * so save it and reset its value to NULL.
      */
-    if(builtin != getopts_builtin)
+    int save = (builtin != getopts_builtin &&
+                builtin != declare_builtin &&
+                builtin != local_builtin);
+    
+    if(save)
     {
         save_OPTIND();
     }
 
-    /* execute the builtin */
+    /* Execute the builtin */
     int res = builtin(argc, argv);
 
-    /* reset $OPTIND to its previous value */
-    if(builtin != getopts_builtin)
+    /* Reset $OPTIND to its previous value */
+    if(save)
     {
         reset_OPTIND();
     }
+    
     return res;
 }
 
 
 /*
- * this function does what its name says it does.
+ * This function does what its name says it does.
  */
 void disable_nonposix_builtins(void)
 {
     BUGREPORT_BUILTIN.flags &= ~BUILTIN_ENABLED;
     BUILTIN_BUILTIN.flags   &= ~BUILTIN_ENABLED;
     CALLER_BUILTIN.flags    &= ~BUILTIN_ENABLED;
-    COPROC_BUILTIN.flags    &= ~BUILTIN_ENABLED;
     DECLARE_BUILTIN.flags   &= ~BUILTIN_ENABLED;
     DIRS_BUILTIN.flags      &= ~BUILTIN_ENABLED;
     DISOWN_BUILTIN.flags    &= ~BUILTIN_ENABLED;
@@ -1293,20 +1279,20 @@ void disable_nonposix_builtins(void)
     WHENCE_BUILTIN.flags    &= ~BUILTIN_ENABLED;
 
     /*
-     * we won't disable the 'enable' builtin so the user can selectively enable builtins
-     * when they're in the POSIX mode. if you insist on disabling ALL non-POSIX builtins,
+     * We won't disable the 'enable' builtin so the user can selectively enable builtins
+     * when they're in the POSIX mode. If you insist on disabling ALL non-POSIX builtins,
      * uncomment the next line.
      */
 
     /*
-     * the 'help' builtin should also be available, even in POSIX mode. if you want to
+     * The 'help' builtin should also be available, even in POSIX mode. If you want to
      * disable it in POSIX mode, uncomment the next line.
      */
 }
 
 
 /*
- * helper function to print the list of builtin utilities.. the function
+ * Helper function to print the list of builtin utilities. The function
  * has a 'special_list' argument, which contains 1 if the list to be printed is
  * the special builtin utilities list, 0 if its the regular builtin utilities list.
  */
@@ -1325,7 +1311,7 @@ void __list(int special_list)
 
 
 /*
- * print the list of builtins. depending on the value of the 'which' parameter,
+ * Print the list of builtins. Depending on the value of the 'which' parameter,
  * the function may print the list of special, regular, or all builtins.
  */
 void list(char which)
@@ -1353,17 +1339,17 @@ void list(char which)
 
 
 /*
- * the builtin utility (non-POSIX extension).. if called with arguments (but no options),
+ * The builtin utility (non-POSIX extension). If called with arguments (but no options),
  * treats the arguments as a builtin utility name (and its arguments), and executs the
- * builtin utility.. otherwise, prints the list of builtin utilities. which utilities are
+ * builtin utility. Otherwise, prints the list of builtin utilities. Which utilities are
  * printed depends on the passed option (-s for special, -r for regular, -a for all utilities).
  *
- * returns non-zero if passed a name for an unknown builtin utility, or if an unknown
- * option was supplied. otherwise, returns the exit status of the builtin utility it executed,
+ * Returns non-zero if passed a name for an unknown builtin utility, or if an unknown
+ * option was supplied. Otherwise, returns the exit status of the builtin utility it executed,
  * or 0 if it only printed the list of builtins without executing any.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help builtin` or `builtin -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help builtin` or `builtin -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -1373,9 +1359,9 @@ int builtin_builtin(int argc, char **argv)
     int which = 0;
 
     /****************************
-     * process the options
+     * Process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvsra", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hvsra", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -1390,12 +1376,12 @@ int builtin_builtin(int argc, char **argv)
             case 's':
                 if(which == 'r' || which == 'a')
                 {
-                    /* list all (special + regular) utilities */
+                    /* List all (special + regular) utilities */
                     which = 'a';
                 }
                 else
                 {
-                    /* list only special utilities */
+                    /* List only special utilities */
                     which = 's';
                 }
                 break;
@@ -1403,12 +1389,12 @@ int builtin_builtin(int argc, char **argv)
             case 'r':
                 if(which == 's' || which == 'a')
                 {
-                    /* list all (special + regular) utilities */
+                    /* List all (special + regular) utilities */
                     which = 'a';
                 }
                 else
                 {
-                    /* list only regular utilities */
+                    /* List only regular utilities */
                     which = 'r';
                 }
                 break;
@@ -1419,20 +1405,20 @@ int builtin_builtin(int argc, char **argv)
         }
     }
 
-    /* unknown option */
+    /* Unknown option */
     if(c == -1)
     {
         return 2;
     }
     
-    /* no arguments. print the list of all builtin utilities */
+    /* No arguments. print the list of all builtin utilities */
     if(which || v >= argc)
     {
         list(which ? which : 'a');
         return 0;
     }
     
-    /* run the shell builtin */
+    /* Run the shell builtin */
     argc -= v;
     if(!do_builtin(argc, &argv[v], 1))
     {
@@ -1442,5 +1428,6 @@ int builtin_builtin(int argc, char **argv)
             return 2;
         }
     }
+    
     return exit_status;
 }

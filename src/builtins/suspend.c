@@ -27,14 +27,14 @@
 
 
 /*
- * the suspend builtin utility (non-POSIX).. used to suspend the shell.
+ * The suspend builtin utility (non-POSIX). Used to suspend the shell.
  *
- * this utility is a tcsh/bash extension. we mimic its bash working here.
+ * This utility is a tcsh/bash extension. we mimic its bash working here.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help suspend` or `suspend -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help suspend` or `suspend -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -45,7 +45,7 @@ int suspend_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvf", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hvf", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {

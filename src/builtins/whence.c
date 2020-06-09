@@ -30,13 +30,13 @@
 
 
 /*
- * the whence builtin utility (non-POSIX).. it is a type/command-like ksh extension
+ * The whence builtin utility (non-POSIX). It is a type/command-like ksh extension
  * with a slightly different set of options than both commands.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help whence` or `whence -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help whence` or `whence -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -49,7 +49,7 @@ int whence_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "afhpv", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "afhpv", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {

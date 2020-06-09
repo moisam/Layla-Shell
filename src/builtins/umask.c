@@ -83,13 +83,13 @@ int get_who(char **str)
 
 
 /*
- * process the symbolic permission string str, which should contain
+ * Process the symbolic permission string str, which should contain
  * one or more chars (r, w, x), representing the permissions we should set.
  *
- * the result permissions field is placed in perm, and consists of a
+ * The result permissions field is placed in perm, and consists of a
  * combination of read (04), write (02), and execute (01) perm bits.
  *
- * return value can be:
+ * Return value can be:
  * - ACTION_ADD_ACTION if the permissions bits should be added to the
  *     current bits
  * - ACTION_CLEAR_ACTION if the permissions bits should cleared
@@ -110,7 +110,7 @@ int get_perm(char **str, int *perm)
 
     if(op != '+' && op != '-' && op != '=')
     {
-        PRINT_ERROR("%s: unknown operator -- %c\n", UTILITY, op);
+        PRINT_ERROR("%s: unknown operator -- `%c`\n", UTILITY, op);
         return ACTION_INVALID_ACTION;
     }
 
@@ -151,7 +151,7 @@ int get_perm(char **str, int *perm)
                         break;
                         
                     default:
-                        PRINT_ERROR("%s: unknown permission bit -- %c\n", UTILITY, *str2);
+                        PRINT_ERROR("%s: unknown permission bit -- `%c`\n", UTILITY, *str2);
                         return ACTION_INVALID_ACTION;
                 }
                 
@@ -163,7 +163,7 @@ int get_perm(char **str, int *perm)
             break;
 
         default:
-            PRINT_ERROR("%s: unknown permission bit -- %c\n", UTILITY, *str2);
+            PRINT_ERROR("%s: unknown permission bit -- `%c`\n", UTILITY, *str2);
             return ACTION_INVALID_ACTION;
     }
 
@@ -185,12 +185,12 @@ int get_perm(char **str, int *perm)
 
 
 /*
- * the umask builtin utility (POSIX).. used to print and set the shell umask.
+ * The umask builtin utility (POSIX). Used to print and set the shell umask.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help umask` or `umask -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help umask` or `umask -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -216,7 +216,7 @@ int umask_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -243,7 +243,7 @@ int umask_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
     
     /* no arguments. output the current mask and return */
@@ -343,7 +343,7 @@ int umask_builtin(int argc, char **argv)
             }
             else
             {
-                PRINT_ERROR("%s: unknown who/action -- %c\n", UTILITY, *permstr);
+                PRINT_ERROR("%s: unknown who/action -- `%c`\n", UTILITY, *permstr);
                 return 1;
             }
         

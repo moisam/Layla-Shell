@@ -32,13 +32,13 @@
 
 
 /*
- * the readonly builtin utility (POSIX).. used to set the readonly attribute to
+ * The readonly builtin utility (POSIX). Used to set the readonly attribute to
  * one or more variables.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help readonly` or `readonly -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help readonly` or `readonly -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -56,7 +56,7 @@ int readonly_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         /* parse the option */
         switch(c)

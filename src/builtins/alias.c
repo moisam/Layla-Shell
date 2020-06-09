@@ -32,59 +32,77 @@ struct  alias_s aliases[MAX_ALIASES];
 
 #define UTILITY     "alias"
 
-/* defined below */
+/* Defined below */
 int set_alias(char *name, char *val);
 int alias_list_index(char *alias);
 
 
 /*
- * initialize our predefined aliases. called on shell startup by an interactive shell.
+ * Initialize our predefined aliases. called on shell startup by an interactive shell.
  */
 void init_aliases(void)
 {
-    /* colorize the ls output */
+    /* Colorize the ls output */
     set_alias("ls", "ls --color=auto");
-    /* use long listing format */
+    
+    /* Use long listing format */
     set_alias("ll", "ls -la");
-    /* show hidden files */
+    
+    /* Show hidden files */
     set_alias("l.", "ls -d .* --color=auto");
-    /* some cd aliases */
+    
+    /* Some cd aliases */
     set_alias("cd..", "cd ..");
     set_alias("..", "cd ..");
     set_alias("...", "cd ../../../");
-    /* some grep aliases */
+    
+    /* Some grep aliases */
     set_alias("grep", "grep --color=auto");
     set_alias("egrep", "egrep --color=auto");
     set_alias("fgrep", "fgrep --color=auto");
-    /* start the calcultator with math support */
+    
+    /* Start the calcultator with math support */
     set_alias("bc", "bc -l");
-    /* vi editor */
+    
+    /* Vi editor */
     set_alias("vi", "vim");
-    /* some ksh-like aliases */
+    
+    /* Some ksh-like aliases */
     set_alias("command", "command ");
     set_alias("nohup", "nohup ");
     set_alias("stop", "kill -s STOP");
     set_alias("suspend", "kill -s STOP $$");
-    /* some bash-like aliases */
-    set_alias("which", "(alias; declare -f) | /usr/bin/which --tty-only --read-alias --read-functions --show-tilde --show-dot");
-    /* alias ksh's hist to our fc */
+    
+    /* Some bash-like aliases */
+    set_alias("which", "(alias; declare -f) | /usr/bin/which --tty-only "
+                       "--read-alias --read-functions --show-tilde --show-dot");
+    
+    /* Alias ksh's hist to our fc */
     set_alias("hist", "fc");
-    /* alias bash's shopt to our setx (we're mostly compatible!) */
+    
+    /* Alias bash's shopt to our setx (we're mostly compatible!) */
     //set_alias("shopt", "setx");
-    /* alias tcsh's builtins to our builtin */
+    
+    /* Alias tcsh's builtins to our builtin */
     set_alias("builtins", "builtin");
-    /* alias tcsh's where to our whence */
+    
+    /* Alias tcsh's where to our whence */
     set_alias("where", "whence -a");
-    /* in tcsh, some builtins are synonyms for other builtins */
+    
+    /* In tcsh, some builtins are synonyms for other builtins */
     set_alias("bye", "logout");
     set_alias("chdir", "cd");
-    /* in tcsh, rehash doesn't do exactly what we do here, but the function is similar */
+    
+    /* In tcsh, rehash doesn't do exactly what we do here, but the function is similar */
     set_alias("rehash", "hash -a");
-    /* mimic the work of tcsh's unhash builtin */
+    
+    /* Mimic the work of tcsh's unhash builtin */
     set_alias("unhash", "set +h");
-    /* uncomment the following line if you want to remove source.c */
+    
+    /* Uncomment the following line if you want to remove source.c */
     //set_alias("source", "command .");
-    /* some other useful aliases */
+    
+    /* Some other useful aliases */
     set_alias("reboot", "sudo /sbin/reboot");
     set_alias("poweroff", "sudo /sbin/poweroff");
     set_alias("halt", "sudo /sbin/halt");
@@ -97,7 +115,7 @@ void init_aliases(void)
 
 
 /*
- * unset (remove) all aliases.. called by init_subshell() when we fork a
+ * Unset (remove) all aliases. Called by init_subshell() when we fork a
  * new subshell.
  */
 void unset_all_aliases(void)
@@ -121,9 +139,10 @@ void unset_all_aliases(void)
 
 
 /*
- * print an alias definition in a form that can be reinput again to the shell to redefine
- * the same alias. if name is NULL, all defined aliases are printed.
- * returns 1 if the alias with the given name is not defined, otherwise 0.
+ * Print an alias definition in a form that can be reinput again to the shell to redefine
+ * the same alias. If name is NULL, all defined aliases are printed.
+ * 
+ * Returns 1 if the alias with the given name is not defined, otherwise 0.
  */
 void print_alias(char *name, char *val)
 {
@@ -154,7 +173,7 @@ void print_alias(char *name, char *val)
 
 
 /*
- * print the list of aliases passed in args.. if args[0] is NULL, print all aliases.
+ * Print the list of aliases passed in args. If args[0] is NULL, print all aliases.
  */
 int print_alias_list(char **args)
 {
@@ -179,7 +198,7 @@ int print_alias_list(char **args)
     }
     else
     {
-        /* search the alias list for the given name, or print all aliases if name is NULL */
+        /* Search the alias list for the given name, or print all aliases if name is NULL */
         for(i = 0; i < MAX_ALIASES; i++)
         {
             if(aliases[i].name)
@@ -194,10 +213,11 @@ int print_alias_list(char **args)
 
 
 /*
- * define an alias with the given name and assign it the given value. if an alias
+ * Define an alias with the given name and assign it the given value. If an alias
  * with the given name is already defined, the old value is removed before saving the
  * new value.
- * returns 0 if the alias was successfully defined, 1 if there is an error.
+ * 
+ * Returns 0 if the alias was successfully defined, 1 if there is an error.
  */
 int set_alias(char *name, char *val)
 {
@@ -205,10 +225,12 @@ int set_alias(char *name, char *val)
     {
         return 1;
     }
+    
     int i, index = -1, first_free = -1;
     size_t len = strlen(name);
+
     /*
-     * search the alias list for a free spot, while checking if an alias with the
+     * Search the alias list for a free spot, while checking if an alias with the
      * given name already exists.
      */
     for(i = 0; i < MAX_ALIASES; i++)
@@ -221,13 +243,15 @@ int set_alias(char *name, char *val)
             }
             continue;
         }
+        
         if(strcmp(aliases[i].name, name) == 0)
         {
             index = i;
             break;
         }
     }
-    /* full list, we can't define a new alias */
+
+    /* Full list, we can't define a new alias */
     if(index == -1)
     {
         if(first_free == -1)
@@ -238,7 +262,8 @@ int set_alias(char *name, char *val)
         index = first_free;
     }
     i = index;
-    /* save the alias name */
+    
+    /* Save the alias name */
     if(!aliases[i].name)
     {
         aliases[i].name = malloc(len+1);
@@ -246,20 +271,25 @@ int set_alias(char *name, char *val)
         {
             goto memerr;
         }
+        
         strcpy(aliases[i].name, name);
     }
-    /* remove the old value */
+    
+    /* Remove the old value */
     if(aliases[i].val)
     {
         free(aliases[i].val);
     }
-    /* save the new value */
+    
+    /* Save the new value */
     aliases[i].val = malloc(strlen(val)+1);
     if(!aliases[i].val)
     {
         goto memerr;
     }
+    
     strcpy(aliases[i].val, val);
+    
     return 0;
     
 memerr:
@@ -269,19 +299,22 @@ memerr:
 
 
 /*
- * check if the given name is a valid alias name. this function doesn't check if the
+ * Check if the given name is a valid alias name. This function doesn't check if the
  * alias is already defined or not, it just checks if the name is valid as an alias
  * name, as defined by POSIX (aliases can contain alphanumerics, underscores, and any
  * of these characters: "!%,@").
- * returns 1 if the name is a valid alias name, 0 otherwise.
+ * 
+ * Returns 1 if the name is a valid alias name, 0 otherwise.
  */
 int valid_alias_name(char *name)
 {
     char *p = name;
+    
     if(!*p)
     {
         return 0;
     }
+    
     while(*p)
     {
         if(isalnum(*p) || *p == '_' || *p == '!' || *p == '%' || *p == ',' || *p == '@')
@@ -293,14 +326,15 @@ int valid_alias_name(char *name)
             return 0;
         }
     }
+    
     return 1;
 }
 
 
 /*
- * get the index of the given alias in the aliases array.
+ * Get the index of the given alias in the aliases array.
  * 
- * returns the zero-based index, or -1 if the alias isn't found.
+ * Returns the zero-based index, or -1 if the alias isn't found.
  */
 int alias_list_index(char *alias)
 {
@@ -317,7 +351,7 @@ int alias_list_index(char *alias)
 
 
 /*
- * parse an alias name by searching the alias definition and returning
+ * Parse an alias name by searching the alias definition and returning
  * the aliased value, NULL if the alias value is NULL, or the same alias
  * name if the alias is not defined.
  */
@@ -328,20 +362,19 @@ char *get_alias_val(char *cmd)
         return cmd;
     }
 
-    /* now get the alias value */
+    /* Now get the alias value */
     int i = alias_list_index(cmd);
     return (i >= 0) ? aliases[i].val : cmd;
 }
 
 
 /*
- * run the given alias as a command. used to implement tcsh's "Special Aliases"
+ * Run the given alias as a command. used to implement tcsh's "Special Aliases"
  * functionality, where special aliases get processed and executed as commands
- * under specific conditions. only "cd" does its own thing by processing its alias
+ * under specific conditions. Only "cd" does its own thing by processing its alias
  * command "cwdcmd", as it needs to handle some gray cases which we won't bother
  * with here (see cd.c for more info).
  */
-
 void run_alias_cmd(char *alias)
 {
     char *cmd = get_alias_val(alias);
@@ -358,14 +391,14 @@ void run_alias_cmd(char *alias)
 
 
 /*
- * the alias builtin utility (POSIX). used to add and print alias definitions. returns 0
- * if all the the arguments were successfully defined or printed, non-zero otherwise.
+ * The alias builtin utility (POSIX). Used to add and print alias definitions.
+ * Returns 0 if all the the arguments were successfully defined or printed, 
+ * non-zero otherwise.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help alias` or `alias -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help alias` or `alias -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
-
 int alias_builtin(int argc, char **argv)
 {
     char *str = NULL;
@@ -375,15 +408,15 @@ int alias_builtin(int argc, char **argv)
     int  v = 1, c;
 
     /*
-     * don't recognize any options in --posix mode (POSIX defines no options),
+     * Don't recognize any options in --posix mode (POSIX defines no options),
      * or recognize all possible options if running in the regular mode.
      */
     char *opts = option_set('P') ? "" : "hvp";
     
     /****************************
-     * process the options
+     * Process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -401,26 +434,26 @@ int alias_builtin(int argc, char **argv)
         }
     }
 
-    /* unknown option */
+    /* Unknown option */
     if(c == -1)
     {
         return 2;
     }
 
-    /* no arguments, print all aliases */
+    /* No arguments, print all aliases */
     if(print || v >= argc)
     {
         print_alias_list(&argv[v]);
         return 0;
     }
 
-    /* loop on arguments, printing or defining each one in turn */
+    /* Loop on arguments, printing or defining each one in turn */
     for( ; v < argc; v++)
     {
         str = argv[v];
         eq = strchr(str, '=');
         
-        /* if the argument doesn't have =, print the alias definition */
+        /* If the argument doesn't have =, print the alias definition */
         if(!eq)
         {
             int i = alias_list_index(str);
@@ -436,14 +469,14 @@ int alias_builtin(int argc, char **argv)
         }
         else
         {
-            /* if the argument has =, get the alias name, which is the part before the = */
+            /* If the argument has =, get the alias name, which is the part before the = */
             i = eq-str;
             char tmp[i+1];
             strncpy(tmp, str, i);
             tmp[i] = '\0';
 
             /*
-             * don't allow aliasing for shell keywords. tcsh also doesn't allow aliasing
+             * Don't allow aliasing for shell keywords. tcsh also doesn't allow aliasing
              * for the words 'alias' and 'unalias' (bash doesn't seem to mind it).
              */
             if(is_keyword(tmp) >= 0 || strcmp(tmp, "alias") == 0 || strcmp(tmp, "unalias") == 0)
@@ -453,10 +486,10 @@ int alias_builtin(int argc, char **argv)
             }
             else
             {
-                /* set the alias value, which is the part after the = */
+                /* Set the alias value, which is the part after the = */
                 res3 = set_alias(tmp, eq+1);
         
-                /* if error, return an error result */
+                /* If error, return an error result */
                 if(res3)
                 {
                     res = res3;

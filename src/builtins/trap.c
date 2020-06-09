@@ -37,26 +37,26 @@
 #define UTILITY             "trap"
 
 /*
- * flag is set when we are executing a trap, to prevent exit() et al. from
- * recuresively calling traps.. the value of this flag equals the signal
+ * Flag is set when we are executing a trap, to prevent exit() et al. from
+ * recuresively calling traps. The value of this flag equals the signal
  * number plus 1, so that EXIT will set this flag to 1, SIGHUP to 2, etc.
  */
 int executing_trap = 0;
 
 /*
- * bitmap containing pending traps that result from receiving signals while
+ * Bitmap containing pending traps that result from receiving signals while
  * the shell is waiting for a foreground job, or a background job through wait().
  */
 long pending_traps = 0;
 
 /*
- * we only have 32 traps, so we don't need to implement a hashtable, as a
+ * We only have 32 traps, so we don't need to implement a hashtable, as a
  * linear array should do fine with such a small size of data.
  */
 struct trap_item_s trap_table[TRAP_COUNT];
 
 /*
- * pointers to the 'special' trap names and their table entries.
+ * Pointers to the 'special' trap names and their table entries.
  */
 struct special_trap_s
 {
@@ -83,7 +83,7 @@ void SIGQUIT_handler(int signum);
 
 
 /*
- * initialize traps by setting the default action for each trap.
+ * Initialize traps by setting the default action for each trap.
  * called on shell startup.
  */
 void init_traps(void)
@@ -98,7 +98,7 @@ void init_traps(void)
 
 
 /*
- * return the requested trap, resetting the trap action to the default action.
+ * Return the requested trap, resetting the trap action to the default action.
  */
 struct trap_item_s *save_trap(char *name)
 {
@@ -127,7 +127,7 @@ struct trap_item_s *save_trap(char *name)
 
 
 /*
- * restore a previously saved trap, freeing the saved trap's memory.
+ * Restore a previously saved trap, freeing the saved trap's memory.
  */
 void restore_trap(char *name, struct trap_item_s *saved)
 {
@@ -156,9 +156,9 @@ void restore_trap(char *name, struct trap_item_s *saved)
 
 
 /*
- * execute the trap corresponding to the given signal number.
+ * Execute the trap corresponding to the given signal number.
  *
- * this is the function that gets called when a trap condition occurs, i.e. when
+ * This is the function that gets called when a trap condition occurs, i.e. when
  * a signal is received or when the shell is exiting.
  */
 void trap_handler(int signum)
@@ -186,6 +186,13 @@ void trap_handler(int signum)
         }
         
         executing_trap = signum+1;
+        
+        /* restore the shell's standard streams if we're executing the EXIT trap */
+        if(signum == 0)
+        {
+            restore_stds(backup_fd);
+        }
+        
         /*
          * POSIX says the action argument shall be processed in a manner equivalent to
          * us calling:
@@ -200,7 +207,7 @@ void trap_handler(int signum)
 
 
 /*
- * execute any pending traps.
+ * Execute any pending traps.
  */
 void do_pending_traps(void)
 {
@@ -222,10 +229,10 @@ void do_pending_traps(void)
 
 
 /*
- * return the trap struct corresponding to the trap name given in the 'trap'
+ * Return the trap struct corresponding to the trap name given in the 'trap'
  * parameter.
  *
- * returns sthe trap struct, or NULL if 'trap' is an invalid trap name.
+ * Returns sthe trap struct, or NULL if 'trap' is an invalid trap name.
  */
 struct trap_item_s *get_trap_item(char *trap)
 {
@@ -260,42 +267,45 @@ struct trap_item_s *get_trap_item(char *trap)
 
 
 /*
- * check for signals with alternate names, with or without
- * a SIG prefix.. these alternate names are:
+ * Check for signals with alternate names, with or without
+ * a SIG prefix. These alternate names are:
  *    SIGPOLL = SIGIO
  *    SIGIOT  = SIGABRT
  *    SIGCLD  = SIGCHLD
  *
- * returns the "standard" name, which is the one on the right-side of the equal
- * sign in the above lines.. if signame is not one of the above, returns the
+ * Returns the "standard" name, which is the one on the right-side of the equal
+ * sign in the above lines. If signame is not one of the above, returns the
  * signame as-is.
  */
 char *check_alt_name(char *signame)
 {
     /* skip the SIG prefix, if any */
-    if(strncasecmp(signame, "SIG", 3) == 0)
+    char *s = signame;
+    if(strncasecmp(s, "SIG", 3) == 0)
     {
-        signame += 3;
+        s += 3;
     }
-    else if(strcasecmp(signame, "POLL") == 0)
+    
+    if(strcasecmp(s, "POLL") == 0)
     {
         return "SIGIO";
     }
-    else if(strcasecmp(signame, "IOT" ) == 0)
+    else if(strcasecmp(s, "IOT") == 0)
     {
         return "SIGABRT";
     }
-    else if(strcasecmp(signame, "CLD" ) == 0)
+    else if(strcasecmp(s, "CLD") == 0)
     {
         return "SIGCHLD";
     }
     
+    /* return the original signal name */
     return signame;
 }
 
 
 /*
- * check if the given condition represents a trap condition.
+ * Check if the given condition represents a trap condition.
  */
 static char trap_name_buf[32];
 
@@ -377,14 +387,14 @@ int check_trap_condition(char *s, int *cond_number, char **cond_str)
 
 
 /*
- * reset the traps that are not ignored by the shell to their default values.
- * called when we're executing an external command (from the command's child process).
+ * Reset the traps that are not ignored by the shell to their default values.
+ * Called when we're executing an external command (from the command's child process).
  */
 void reset_nonignored_traps(void)
 {
     /*
-     * NOTE: we don't need to reset the special traps, as this function is only
-     * called when we fork a child process.. as the child process will eventually
+     * NOTE: We don't need to reset the special traps, as this function is only
+     * called when we fork a child process. As the child process will eventually
      * exec, its memory will be overwritten and the special traps will be void
      * in all cases.
      */
@@ -406,7 +416,7 @@ void reset_nonignored_traps(void)
 
 
 /*
- * print the value of one trap.
+ * Print the value of one trap.
  */
 void print_one_trap(char *trap_name, struct trap_item_s *trap)
 {
@@ -442,7 +452,7 @@ void print_one_trap(char *trap_name, struct trap_item_s *trap)
 
 
 /*
- * print the given traps, or all traps if argv[0] is NULL.
+ * Print the given traps, or all traps if argv[0] is NULL.
  */
 int print_traps(char **argv)
 {
@@ -454,7 +464,7 @@ int print_traps(char **argv)
         {
             if(!check_trap_condition(*argv, &i, &condition))
             {
-                PRINT_ERROR("%s: unknown trap condition: %s\n", UTILITY, condition);
+                PRINT_ERROR("%s: unknown trap condition: %s\n", UTILITY, *argv);
                 return 1;
             }
 
@@ -489,12 +499,12 @@ int print_traps(char **argv)
 
 
 /*
- * the trap builtin utility (POSIX).. used to set, unset and print traps.
+ * The trap builtin utility (POSIX). Used to set, unset and print traps.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help trap` or `trap -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help trap` or `trap -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -556,7 +566,7 @@ int trap_builtin(int argc, char **argv)
                 break;
                     
             default:
-                PRINT_ERROR("%s: unknown option: %c\n", UTILITY, *p);
+                PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, *p);
                 return 2;
         }
         v++;
@@ -674,11 +684,11 @@ int trap_builtin(int argc, char **argv)
                 }
 
                 /*
-                 * if this is an interactive shell, reset the default handler 
-                 * for some important signals (bash).. this mirrors what we do 
-                 * in init_signals() in sig.c.. for example we reset SIGINT, so 
+                 * If this is an interactive shell, reset the default handler 
+                 * for some important signals (bash). This mirrors what we do 
+                 * in init_signals() in sig.c. For example we reset SIGINT, so 
                  * that when the user presses ^C it still kills the input and 
-                 * prints PS1.. this happens for all except SIGHUP, which is 
+                 * prints PS1. This happens for all except SIGHUP, which is 
                  * reset regardless of the shell's interactivity state.
                  */
                 switch(i)

@@ -35,7 +35,7 @@
 
 
 /*
- * print a one-line message indicating the status of the builtin utility (i.e. is it
+ * Print a one-line message indicating the status of the builtin utility (i.e. is it
  * enabled or disabled).
  */
 static inline void status(struct builtin_s *builtin)
@@ -47,21 +47,8 @@ static inline void status(struct builtin_s *builtin)
 
 
 /*
- * return 1 if the given builtin utility is of the given type, 0 otherwise.
- * see the enable_builtin_list() function below for the possible values of
- * the 'which' argument.
+ * Return 1 if the given builtin utility is of the given type, 0 otherwise.
  */
-#if 0
-static inline int builtin_of_type(char which, struct builtin_s *utility)
-{
-    int is_special = flag_set(utility->flags, BUILTIN_SPECIAL_BUILTIN);
-    return ((which == 's' && is_special) || (which == 'r' && !is_special) ||
-            (which == 'e' && flag_set(utility->flags, BUILTIN_ENABLED)) ||
-            (which == 'n' && !flag_set(utility->flags, BUILTIN_ENABLED)) ||
-            (which == 'a'));
-}
-#endif
-
 static inline int match_builtin(struct builtin_s *utility, int special, int regular, int disabled)
 {
     int is_special = flag_set(utility->flags, BUILTIN_SPECIAL_BUILTIN);
@@ -76,7 +63,7 @@ static inline int match_builtin(struct builtin_s *utility, int special, int regu
 
 
 /*
- * print the enabled/disabled status of builtin utilities.. the printed list depends
+ * Print the enabled/disabled status of builtin utilities. The printed list depends
  * on the value of the which parameter:
  *
  *   'a' : print the status of all builtin utilities (regular and special, enabled and
@@ -120,13 +107,13 @@ void enable_builtin_list(int which, char **names)
 
 
 /*
- * the enable builtin utility (non-POSIX).. used to enable, disable and print the
+ * The enable builtin utility (non-POSIX). Used to enable, disable and print the
  * status of different builtin utilities.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help enable` or `enable -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help enable` or `enable -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -143,7 +130,7 @@ int enable_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "ahnprsv", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "ahnprsv", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {

@@ -29,22 +29,21 @@
 #include "../symtab/symtab.h"
 #include "../sig.h"
 
-/* defined in jobs.c */
+/* Defined in jobs.c */
 extern int cur_job ;
 extern int prev_job;
 
 #define UTILITY         "bg"
 
 /*
- * helper function to send the job indicated by the passed struct job_s to
- * the background. it prints a status message to stdout, then sends
+ * Helper function to send the job indicated by the passed struct job_s to
+ * the background. It prints a status message to stdout, then sends
  * SIGCONT to the job processes and sets $! to the PGID of the job.
  * 
- * return 1 if the job is started, 0 on error.
+ * Return 1 if the job is started, 0 on error.
  */
 int do_bg(struct job_s *job)
 {
-    /* bg only works if job control is enabled (the monitor '-m' option is set) */
     if(!flag_set(job->flags, JOB_FLAG_JOB_CONTROL))
     {
         PRINT_ERROR("%s: job started without job control\n", UTILITY);
@@ -56,9 +55,10 @@ int do_bg(struct job_s *job)
 
     if(!NOT_RUNNING(job->status))
     {
-        PRINT_ERROR("%s: job %d is already running in the background\n", SHELL_NAME, job->job_num);
+        PRINT_ERROR("%s: job %d is already running in the background\n", 
+                    SOURCE_NAME, job->job_num);
         SIGNAL_UNBLOCK(sigset);
-        /* not an error (bash) */
+        /* Not an error (bash) */
         return 1;
     }
 
@@ -78,14 +78,14 @@ int do_bg(struct job_s *job)
     printf("[%d]%c %s\n", job->job_num, current, job->commandstr);
     kill(-(job->pgid), SIGCONT);
     
-    /* set the $! special parameter */
+    /* Set the $! special parameter */
     set_shell_vari("!", job->pgid);
 
-    /* unblock SIGHCHLD */
+    /* Unblock SIGHCHLD */
     SIGNAL_UNBLOCK(sigset);
 
     /*
-     * save the current job in the previous job, then set the last started job
+     * Save the current job in the previous job, then set the last started job
      * as the current job.
      */
     prev_job = cur_job;
@@ -96,26 +96,33 @@ int do_bg(struct job_s *job)
 
 
 /*
- * the bg builtin utility (POSIX).. used to resume a stopped job in the background. returns 0
- * in all cases, unless an unknown option was supplied.
+ * The bg builtin utility (POSIX). Used to resume a stopped job in the background. 
+ * Returns 0* in all cases, unless an unknown option was supplied.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help bg` or `bg -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help bg` or `bg -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
-
 int bg_builtin(int argc, char **argv)
 {
     int i;
     struct job_s *job;
-    /* if no arguments given, use the current job '%%' */
+    
+    /* bg only works if job control is enabled (the monitor '-m' option is set) */
+    if(!option_set('m'))
+    {
+        PRINT_ERROR("%s: job control is not active\n", UTILITY);
+        return 1;
+    }
+    
+    /* If no arguments given, use the current job '%%' */
     if(argc == 1)
     {
-        /* get current job */
+        /* Get current job */
         job = get_job_by_jobid(get_jobid("%%"));
         if(job)
         {
-            /* if it is stopped, continue it in the background */
+            /* If it is stopped, continue it in the background */
             if(WIFSTOPPED(job->status))
             {
                 return !do_bg(job);
@@ -126,9 +133,9 @@ int bg_builtin(int argc, char **argv)
     
     int v = 1, res = 0, c;
     /****************************
-     * process the options
+     * Process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hv", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hv", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         if(c == 'h')
         {
@@ -139,13 +146,14 @@ int bg_builtin(int argc, char **argv)
             printf("%s", shell_ver);
         }
     }
-    /* unknown option */
+
+    /* Unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
     
-    /* start all the given job ids in the background */
+    /* Start all the given job ids in the background */
     for(i = v; i < argc; i++)
     {
         job = get_job_by_jobid(get_jobid(argv[i]));
@@ -154,7 +162,8 @@ int bg_builtin(int argc, char **argv)
             PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[i]);
             continue;
         }
-        /* if the job is stopped, start it in the background */
+        
+        /* If the job is stopped, start it in the background */
         if(WIFSTOPPED(job->status))
         {
             res = !do_bg(job);

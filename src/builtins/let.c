@@ -31,10 +31,10 @@
 
 
 /*
- * the let builtin utility (non-POSIX).. used to evaluate arithmetic arguments.
+ * The let builtin utility (non-POSIX). Used to evaluate arithmetic arguments.
  *
  * let does arithmetic evaluation of its arguments in most shells (bash, ksh, ...).
- * we need to check the result of the last argument. if non-zero, return
+ * We need to check the result of the last argument. If non-zero, return
  * zero. otherwise, return 1.
  */
 

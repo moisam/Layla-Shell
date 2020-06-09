@@ -38,7 +38,7 @@
 #define UTILITY     "time"
 
 /*
- * this is the default format string used by ksh. bash uses a similar string,
+ * This is the default format string used by ksh. bash uses a similar string,
  * except that field precision is 3 digits, instead of 2.
  */
 #define DEFAULT_FMT "\nreal\t%2lR\nuser\t%2lU\nsys\t%2lS"
@@ -48,7 +48,7 @@ extern long int CLK_TCK;
 
 
 /*
- * get the current time in seconds.
+ * Get the current time in seconds.
  */
 double get_cur_time(void)
 {
@@ -59,8 +59,8 @@ double get_cur_time(void)
 
 
 /*
- * print the minutes and seconds specified in the mins and secs parameters,
- * respectively.. if l != 0 and hrs > 0, we also print the hours.. the p
+ * Print the minutes and seconds specified in the mins and secs parameters,
+ * respectively. If l != 0 and hrs > 0, we also print the hours. The p
  * parameter represents the percision, or the number of decimal places to use
  * when we print the seconds.
  */
@@ -82,12 +82,12 @@ void print_time(int l, int p, int hrs, int mins, double secs)
 
 
 /*
- * the time builtin utility (POSIX).. used to execute commands and time their execution.
+ * The time builtin utility (POSIX). Used to execute commands and time their execution.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help time` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help time` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 

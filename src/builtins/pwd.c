@@ -32,13 +32,13 @@
 
 
 /*
- * the pwd builtin utility (POSIX).. prints the current working directory,
+ * The pwd builtin utility (POSIX). Prints the current working directory,
  * as reflected in the $PWD shell variable.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help pwd` or `pwd -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help pwd` or `pwd -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -57,7 +57,7 @@ int pwd_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -82,7 +82,7 @@ int pwd_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
     
     /* go POSIX-style on PWD */

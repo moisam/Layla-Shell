@@ -40,10 +40,10 @@
 #include "../debug.h"
 
 /*
- * flag to let us know if the user has already tried to exit before.. we use this
- * when the user tries to exit while having running jobs.. in this case we print an
- * alert message and return (without exiting).. if the user re-runs `exit` immediately,
- * we kill all the jobs and continue with the exit.. if the user doesn't run `exit`
+ * Flag to let us know if the user has already tried to exit before. We use this
+ * when the user tries to exit while having running jobs. In this case we print an
+ * alert message and return (without exiting). If the user re-runs `exit` immediately,
+ * we kill all the jobs and continue with the exit. If the user doesn't run `exit`
  * immediately, but runs any other command, the flag is cleared, so that when they run
  * `exit` again, the cycle repeats.
  */
@@ -54,13 +54,13 @@ extern struct termios tty_attr_old;
 
 
 /*
- * the exit builtin utility (POSIX).. exits the shell, flusing command history to the
- * history file, and freeing used buffers.. doesn't return on success (the shell exits).
+ * The exit builtin utility (POSIX). Exits the shell, flusing command history to the
+ * history file, and freeing used buffers. Doesn't return on success (the shell exits).
  * if passed an argument, it is regarded as the numeric exit status code we will pass
  * back to our parent process.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help exit` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help exit` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -76,8 +76,8 @@ int exit_builtin(int argc, char **argv)
     }
 
     /*
-     *  if given 2 args, get the exit status code passed as argv[1] (we only need
-     *  the lower 8 bits of it).. otherwise, we will use the exit status of the
+     *  If given 2 args, get the exit status code passed as argv[1] (we only need
+     *  the lower 8 bits of it). Otherwise, we will use the exit status of the
      *  last command executed (as per POSIX).
      */
     if(argc == 2)
@@ -96,9 +96,9 @@ int exit_builtin(int argc, char **argv)
     }
 
     /*
-     * similar to bash and ksh, alert the user for the presence of running/suspended
-     * jobs. if the user insists on exiting, don't alert them the 2nd time.
-     * if we're running this utility as a foreground job in the shell's process,
+     * Similar to bash and ksh, alert the user for the presence of running/suspended
+     * jobs. If the user insists on exiting, don't alert them the 2nd time.
+     * If we're running this utility as a foreground job in the shell's process,
      * we pass the current job structure to pending_jobs(), so that it won't count
      * this job in the returned tally number.
      */
@@ -128,9 +128,9 @@ int exit_builtin(int argc, char **argv)
 
 
 /*
- * the last step in exiting the shell.
+ * The last step in exiting the shell.
  *
- * the optional *errmsg argument is an error message to be output
+ * The optional *errmsg argument is an error message to be output
  * before exiting.
  */
 void exit_gracefully(int stat, char *errmsg)
@@ -151,7 +151,7 @@ void exit_gracefully(int stat, char *errmsg)
     if(option_set('L') && !executing_subshell)
     {
         /* 
-         * don't interrupt us while we perform logout actions. this is
+         * Don't interrupt us while we perform logout actions. This is
          * what tcsh does on logout.
          */
         struct source_s src;
@@ -208,7 +208,7 @@ void exit_gracefully(int stat, char *errmsg)
     /* check if we have an error message and if so, print it. */
     if(errmsg)
     {
-        PRINT_ERROR("%s: %s\n", SHELL_NAME, errmsg);
+        PRINT_ERROR("%s: %s\n", SOURCE_NAME, errmsg);
     }
     
     /* flush any hanging messages in the output streams */
@@ -216,7 +216,7 @@ void exit_gracefully(int stat, char *errmsg)
     fflush(stderr);
 
     /* restore the terminal's canonical mode (if we're reading from it) */
-    if(read_stdin)
+    if(read_stdin && interactive_shell)
     {
         set_tty_attr(cur_tty_fd(), &tty_attr_old);
     }

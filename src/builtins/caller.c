@@ -26,12 +26,12 @@
 #define UTILITY         "caller"
 
 /*
- * in this file, we handle the call stack. we don't actually implement a
+ * In this file, we handle the call stack. we don't actually implement a
  * full-blown call stack for function calls in here, we simply store the function
  * name, the name of the file in which the function was defined, and a pointer
  * to the previous function in the call stack (see the definition of 
- * 'struct callframe_s' in ../cmd.h). the stack itself is a simple linked list.
- * the top of the stack represents the last function call (the function that is
+ * 'struct callframe_s' in ../cmd.h). The stack itself is a simple linked list.
+ * The top of the stack represents the last function call (the function that is
  * currently executing), while the bottom of the stack is always the 'main'
  * function, i.e. the shell itself.
  */
@@ -41,10 +41,10 @@ struct callframe_s *zero_callframe = NULL;      /* the very first call frame */
 
 
 /*
- * create a new callframe for a function call, given the function's name,
+ * Create a new callframe for a function call, given the function's name,
  * source file name and line number where it was declared.
  * 
- * returns a struct callframe_s pointer if the callframe is created successfully,
+ * Returns a struct callframe_s pointer if the callframe is created successfully,
  * NULL otherwise.
  */
 struct callframe_s *callframe_new(char *funcname, char *srcfile, int lineno)
@@ -63,8 +63,9 @@ struct callframe_s *callframe_new(char *funcname, char *srcfile, int lineno)
 
 
 /*
- * get a pointer to the current callframe.
- * returns the current callframe, or NULL if the stack is empty.
+ * Get a pointer to the current callframe.
+ * 
+ * Returns the current callframe, or NULL if the stack is empty.
  */
 struct callframe_s *get_cur_callframe(void)
 {
@@ -73,8 +74,9 @@ struct callframe_s *get_cur_callframe(void)
 
 
 /*
- * push a callframe on top the call stack.
- * returns 1 on success, 0 on error.
+ * Push a callframe on top the call stack.
+ * 
+ * Returns 1 on success, 0 on error.
  */
 int callframe_push(struct callframe_s *cf)
 {
@@ -99,8 +101,9 @@ int callframe_push(struct callframe_s *cf)
 
 
 /*
- * pop a callframe off the call stack.
- * returns the popped callframe, or NULL if the stack is empty.
+ * Pop a callframe off the call stack.
+ * 
+ * Returns the popped callframe, or NULL if the stack is empty.
  */
 struct callframe_s *callframe_pop(void)
 {
@@ -127,8 +130,9 @@ struct callframe_s *callframe_pop(void)
 
 
 /*
- * pop a callframe off the call stack and free its structure.
- * doesn't return anything as the popped callframe is freed.
+ * Pop a callframe off the call stack and free its structure.
+ * 
+ * Doesn't return anything as the popped callframe is freed.
  */
 void callframe_popf(void)
 {
@@ -160,7 +164,7 @@ void callframe_popf(void)
 
 
 /*
- * return the number of callframes in the stack, which equals the
+ * Return the number of callframes in the stack, which equals the
  * number of nested function calls executed by the shell.
  */
 int get_callframe_count(void)
@@ -177,9 +181,9 @@ int get_callframe_count(void)
 
 
 /*
- * the caller builtin utility (non-POSIX bash extension).
+ * The caller builtin utility (non-POSIX bash extension).
  * 
- * for usage, see the manpage, or run: `help caller` from lsh prompt to
+ * For usage, see the manpage, or run: `help caller` from lsh prompt to
  * see a short explanation on how to use this utility.
  */
 int caller_builtin(int argc, char **argv)

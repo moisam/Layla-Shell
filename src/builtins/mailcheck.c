@@ -40,7 +40,7 @@
 time_t last_check = 0;
 
 /*
- * check for unread mail.
+ * Check for unread mail.
  */
 int check_for_mail(void)
 {
@@ -77,12 +77,12 @@ int check_for_mail(void)
 
 
 /*
- * the mail builtin utility (non-POSIX).. used to check for mail.
+ * The mail builtin utility (non-POSIX). Used to check for mail.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help mail` or `mail -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help mail` or `mail -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -94,7 +94,7 @@ int mailcheck_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvq", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hvq", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -116,7 +116,7 @@ int mailcheck_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
 
     struct symtab_entry_s *entry;
@@ -165,10 +165,10 @@ int mailcheck_builtin(int argc, char **argv)
         if(stat(p2, &st) == 0)
         {
             /*
-             * if the mailpath is a directory, tcsh reports each file in the directory
+             * If the mailpath is a directory, tcsh reports each file in the directory
              * in a separate message.
              * 
-             * TODO: implement this functionality.
+             * TODO: Implement this functionality.
              */
             if(S_ISREG(st.st_mode))
             {

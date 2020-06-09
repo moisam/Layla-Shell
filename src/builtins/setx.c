@@ -28,16 +28,16 @@
 #define UTILITY     "setx"
 
 /*
- * this utility is used to set/unset different shell options, which are deemed
- * extra or optional, i.e. non-POSIX extensions. you will notice most of the list
+ * This utility is used to set/unset different shell options, which are deemed
+ * extra or optional, i.e. non-POSIX extensions. You will notice most of the list
  * contains bash-like options (which you can check in the bash manual, section 4.3.2
  * The Shopt Builtin), while a minority of options are borrowed from tcsh features.
- * in fact, setx is almost identical to bash's shopt, we added an alias shopt='setx'
- * to alias.c. you can extend the shell's capabilities by adding more options
+ * In fact, setx is almost identical to bash's shopt, we added an alias shopt='setx'
+ * to alias.c. You can extend the shell's capabilities by adding more options
  * to this list, but the maximum is sixty-four, as we are saving the options in
- * a bitmap. some options include underscores in their names. we added those,
+ * a bitmap. Some options include underscores in their names. We added those,
  * in addition to another version of each where underscores were substituted by
- * dashes (it just feels more natural) to achieve the same effect. this is only a
+ * dashes (it just feels more natural) to achieve the same effect. This is only a
  * convenience feature, it doesn't add any extra functionality to the shell.
  */
 __int64_t optionsx = 0;
@@ -79,10 +79,6 @@ optionx_list[] =
     { "histverify"                  , OPTION_HIST_VERIFY          },
     { "hostcomplete"                , OPTION_HOST_COMPLETE        },    
     { "huponexit"                   , OPTION_HUP_ON_EXIT          },
-    { "ignore_dot_res"              , OPTION_IGNORE_DOT_RES       },    /* our extension to ignore non-zero dot result */
-    { "ignore-dot-res"              , OPTION_IGNORE_DOT_RES       },
-    { "ignore_test_res"             , OPTION_IGNORE_TEST_RES      },    /* our extension to ignore non-zero test result */
-    { "ignore-test-res"             , OPTION_IGNORE_TEST_RES      },
     { "inherit_errexit"             , OPTION_INHERIT_ERREXIT      },
     { "inherit-errexit"             , OPTION_INHERIT_ERREXIT      },
     { "interactive_comments"        , OPTION_INTERACTIVE_COMMENTS },
@@ -137,7 +133,7 @@ int optionx_count = sizeof(optionx_list)/sizeof(struct optionx_s);
 
 
 /*
- * turn the extended option 'op' on or off.
+ * Turn the extended option 'op' on or off.
  */
 int set_optionx(__int64_t op, int onoff)
 {
@@ -154,10 +150,10 @@ int set_optionx(__int64_t op, int onoff)
 
 
 /*
- * get the table index of the extended shell option whose name is given in 'opname'.
- * we use this index to access the extended option in the optionx_list[] array.
+ * Get the table index of the extended shell option whose name is given in 'opname'.
+ * We use this index to access the extended option in the optionx_list[] array.
  *
- * returns the option index in the array, or -1 if the option is not found.
+ * Returns the option index in the array, or -1 if the option is not found.
  */
 __int64_t optionx_index(char *opname)
 {
@@ -174,7 +170,7 @@ __int64_t optionx_index(char *opname)
 
 
 /*
- * if the POSIX mode is on, switch off all the extended options.
+ * If the POSIX mode is on, switch off all the extended options.
  */
 void disable_extended_options(void)
 {
@@ -183,9 +179,9 @@ void disable_extended_options(void)
 
 
 /*
- * print the on/off state of the extended shell options.
- * if 'which' is 's', print only the set options.
- * if 'which' is 'u', print only the unset options.
+ * Print the on/off state of the extended shell options.
+ * If 'which' is 's', print only the set options.
+ * If 'which' is 'u', print only the unset options.
  */
 void purge_xoptions(char which, int formal)
 {
@@ -219,13 +215,13 @@ void purge_xoptions(char which, int formal)
 
 
 /*
- * the setx builtin utility (non-POSIX).. used to enable and disable extended shell
+ * The setx builtin utility (non-POSIX). Used to enable and disable extended shell
  * options in a manner similar to bash's shopt builtin utility.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help setx` or `setx -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help setx` or `setx -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -237,7 +233,7 @@ int setx_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvpsuqo", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hvpsuqo", &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -276,6 +272,13 @@ int setx_builtin(int argc, char **argv)
     {
         return 2;
     }
+    
+    /* cannot enable and disable options at the same time */
+    if(enable && disable)
+    {
+        PRINT_ERROR("%s: cannot use -s and -u together\n", UTILITY);
+        return 2;
+    }
 
     /*
      *  no arguments, we will print all options unless the quiet mode is on
@@ -304,10 +307,10 @@ int setx_builtin(int argc, char **argv)
     }
   
     /*
-     * we loop on the passed options, checking if they are set.
-     * return status is zero if all options are set, non-zero otherwise.
-     * if -q is passed, return status reflects the number of unset options.
-     * otherwise it is 2 to indicate failure.
+     * We loop on the passed options, checking if they are set.
+     * Return status is zero if all options are set, non-zero otherwise.
+     * If -q is passed, return status reflects the number of unset options.
+     * Otherwise it is 2 to indicate failure.
      */
     for( ; v < argc; v++)
     {
@@ -418,8 +421,8 @@ int setx_builtin(int argc, char **argv)
 }
 
 /*
- * this builtin is provided for compatibility with bash, as many scripts
- * expect bash nowadays.. we could've implemented this as an alias, but
+ * This builtin is provided for compatibility with bash, as many scripts
+ * expect bash nowadays. We could've implemented this as an alias, but
  * we have aliases turned off by default on non-interactive shells, so scripts
  * might fail to execute if they needed bash's shopt.
  */

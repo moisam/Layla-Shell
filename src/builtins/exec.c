@@ -39,13 +39,13 @@ struct termios tty_attr_old;
 
 
 /*
- * the exec builtin utility (POSIX).. used to execute commands in the current shell
- * execution environment.. this utility should never return.. if it doesn, it means
- * the command was not executed.. the return status will be 127 if the command
+ * The exec builtin utility (POSIX). Used to execute commands in the current shell
+ * execution environment. This utility should never return. If it doesn, it means
+ * the command was not executed. The return status will be 127 if the command
  * wasn't found, or 126 if it wasn't executable, or 1 otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help exec` or `exec -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help exec` or `exec -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -56,14 +56,14 @@ int exec_builtin(int argc, char **argv)
     char *arg0 = NULL;
 
     /*
-     * process the options.
+     * Process the options.
      *
      * POSIX exec does not accept options, so we check if we are running in the
      * --posix mode and, if so, we skip checking for options.
      */
     if(!option_set('P'))
     {
-        while((c = parse_args(argc, argv, "hvca:l", &v, 1)) > 0)
+        while((c = parse_args(argc, argv, "hvca:l", &v, FLAG_ARGS_PRINTERR)) > 0)
         {
             switch(c)
             {
@@ -188,8 +188,8 @@ int exec_builtin(int argc, char **argv)
                 }
 
                 /*
-                 * with the -c option, we clear the environment before applying variable assignments
-                 * for this command.. local variable assignments can be found in the local symbol
+                 * With the -c option, we clear the environment before applying variable assignments
+                 * for this command. Local variable assignments can be found in the local symbol
                  * table that the backend pushed on the stack before it called us.
                  */
                 if(cenv)
@@ -198,7 +198,7 @@ int exec_builtin(int argc, char **argv)
                     /*
                      * NOTE: bash doesn't export anything after clearing the environment,
                      *       (neither does zsh - according to the manpage).
-                     * TODO: should we export variables defined as part of the commandline,
+                     * TODO: Should we export variables defined as part of the commandline,
                      *       such as x in the command `x=abc exec sh`?
                      */
                 }
@@ -248,7 +248,7 @@ int exec_builtin(int argc, char **argv)
         }
 
         /* initialize the terminal */
-        if(read_stdin)
+        if(read_stdin && interactive_shell)
         {
             init_tty();
         }

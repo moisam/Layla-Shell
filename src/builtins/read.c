@@ -42,7 +42,7 @@
 #define CHECK_OPTION_HAS_ARG(c)                             \
 if(!internal_optarg || internal_optarg == INVALID_OPTARG)   \
 {                                                           \
-    PRINT_ERROR("%s: missing argument for option: -%c\n",   \
+    PRINT_ERROR("%s: missing argument to option -%c\n",     \
                 UTILITY, c);                                \
     return 2;                                               \
 }
@@ -51,7 +51,7 @@ struct stat stats;
 
 
 /*
- * check if the given file descriptor fd is a FIFO (named pipe).
+ * Check if the given file descriptor fd is a FIFO (named pipe).
  */
 int is_fifo(int fd)
 {
@@ -61,14 +61,14 @@ int is_fifo(int fd)
 
 
 /*
- * determine if input is available on stdin, which should be the terminal or
+ * Determine if input is available on stdin, which should be the terminal or
  * a FIFO (named pipe).
  *
- * we use the value of $TMOUT variable to decide whether to wait for input
+ * We use the value of $TMOUT variable to decide whether to wait for input
  * or not. if $TMOUT is set, we wait for input to arrive within $TMOUT secs.
- * if $TMOUT is not set or its value is invalid, we return immediately.
+ * If $TMOUT is not set or its value is invalid, we return immediately.
  * $TMOUT is a non-POSIX extension. this function is used by cmdline() when
- * the shell is interactive. it is also used by read and select.
+ * the shell is interactive. It is also used by read and select.
  * 
  * See http://man7.org/linux/man-pages/man2/select.2.html
  */
@@ -109,11 +109,11 @@ int ready_to_read(int fd, struct timeval *timeout)
 
 
 /*
- * add a new shell variable with the given name, and assign it the given value.
- * val_len is the length of the value string.. backslash is used as an escape
+ * Add a new shell variable with the given name, and assign it the given value.
+ * val_len is the length of the value string. backslash is used as an escape
  * character, unless suppress_esc is non-zero.
  *
- * returns 1 on success, 0 on error.
+ * Returns 1 on success, 0 on error.
  */
 int read_set_var(char *name, char *val, int val_len /* , int suppress_esc */)
 {
@@ -138,7 +138,7 @@ int read_set_var(char *name, char *val, int val_len /* , int suppress_esc */)
     /* we can't save input in a readonly variable */
     if(flag_set(entry->flags, FLAG_READONLY))
     {
-        READONLY_ASSIGN_ERROR(UTILITY, name);
+        READONLY_ASSIGN_ERROR(UTILITY, name, "variable");
         free(tmp);
         return 0;
     }
@@ -151,12 +151,12 @@ int read_set_var(char *name, char *val, int val_len /* , int suppress_esc */)
 
 
 /*
- * convert the input of the read builtin utility into separate fields.
- * this function works similar to field_split(), except it doesn't treat
+ * Convert the input of the read builtin utility into separate fields.
+ * This function works similar to field_split(), except it doesn't treat
  * quotes in any special way, and treats backslash as an escape character
  * only if the suppress_esc is zero.
  *
- * returns 0 on success, 1 on failure.
+ * Returns 0 on success, 1 on failure.
  */
 int read_field_split(char *str, int var_count, char **var_names /* , int suppress_esc */)
 {
@@ -287,13 +287,13 @@ int read_field_split(char *str, int var_count, char **var_names /* , int suppres
 
 
 /*
- * the read builtin utility (POSIX).. used to read input and store it into one
+ * The read builtin utility (POSIX). Used to read input and store it into one
  * or more shell variables.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help read` or `read -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help read` or `read -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -338,7 +338,8 @@ int read_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvrd:n:N:su:t:op:", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hvrd:n:N:su:t:op:", &v,
+                          FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -431,7 +432,17 @@ int read_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
+    }
+    
+    /* check we have valid variable names (if any) */
+    for(c = v; c < argc; c++)
+    {
+        if(!is_name(argv[c]))
+        {
+            PRINT_ERROR("%s: invalid name: %s\n", UTILITY, argv[c]);
+            return 1;
+        }
     }
     
     /* if no timeout given, check $TMOUT */
@@ -627,7 +638,7 @@ int read_builtin(int argc, char **argv)
                 /* we can't set a readonly variable */
                 if(flag_set(entry->flags, FLAG_READONLY))
                 {
-                    READONLY_ASSIGN_ERROR(UTILITY, argv[v]);
+                    READONLY_ASSIGN_ERROR(UTILITY, argv[v], "variable");
                 }
                 else
                 {

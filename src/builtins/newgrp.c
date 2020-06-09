@@ -36,7 +36,7 @@
 #define UTILITY         "newgrp"
 
 /*
- *  check if the given group id is part of the supplementary group ids.
+ * Check if the given group id is part of the supplementary group ids.
  */
 static inline int gid_in_list(gid_t gid, gid_t *supp_groups, int supp_group_count)
 {
@@ -52,7 +52,7 @@ static inline int gid_in_list(gid_t gid, gid_t *supp_groups, int supp_group_coun
 }
 
 /*
- * helper macro to print an error message and bail out.
+ * Helper macro to print an error message and bail out.
  */
 #define ERROR(msg)                          \
 do {                                        \
@@ -63,11 +63,11 @@ do {                                        \
 
 
 /*
- * get the list of supplementary group ids for the user name.
+ * Get the list of supplementary group ids for the user name.
  *
- * returns 1 if the supplementary groups are retrieved successfully from
- * the group database.. the list is saved in *_supp_groups, the group count
- * is saved in *_n.. returns 0 on error.
+ * Returns 1 if the supplementary groups are retrieved successfully from
+ * the group database. The list is saved in *_supp_groups, the group count
+ * is saved in *_n. Returns 0 on error.
  */
 int get_supp_groups(char *name, gid_t gid, gid_t **_supp_groups, int *_n)
 {
@@ -96,8 +96,8 @@ get:
 
 
 /*
- * add the group id 'new_gid' to the supplementary group list 'supp_groups',
- * which contains 'supp_group_count' items.. the list is extended and the pointer
+ * Add the group id 'new_gid' to the supplementary group list 'supp_groups',
+ * which contains 'supp_group_count' items. The list is extended and the pointer
  * to the new list is returned.
  */
 gid_t *add_supp_group(gid_t *supp_groups, int supp_group_count, gid_t new_gid)
@@ -117,13 +117,13 @@ gid_t *add_supp_group(gid_t *supp_groups, int supp_group_count, gid_t new_gid)
 
 
 /*
- * the newgrp builtin utility (POSIX).. used to start a new shell with a new group id.
+ * The newgrp builtin utility (POSIX). Used to start a new shell with a new group id.
  *
- * returns non-zero on failure, doesn't return on success (the new shell should overlay
+ * Returns non-zero on failure, doesn't return on success (the new shell should overlay
  * the currently running shell in memory).
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help newgrp` or `newgrp -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help newgrp` or `newgrp -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -143,7 +143,7 @@ int newgrp_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvl", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hvl", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -163,7 +163,7 @@ int newgrp_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
     
     /* get the supplementary groups list */

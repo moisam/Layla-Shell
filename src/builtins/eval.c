@@ -28,11 +28,13 @@
 
 
 /*
- * the eval builtin utility (POSIX).. used to evaluate arguments and run them as
- * commands. returns the exit status of the command run.
+ * The eval builtin utility (POSIX). Used to evaluate arguments and run them as
+ * commands.
+ * 
+ * Returns the exit status of the command run.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help eval` from lsh prompt to see a short explanation on
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help eval` from lsh prompt to see a short explanation on
  * how to use this utility.
  */
 

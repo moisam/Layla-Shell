@@ -33,12 +33,12 @@ int do_source_script(char *utility, char *file, int argc, char **argv);
 
 
 /*
- * the dot builtin utility (POSIX).. used to execute dot scripts.
+ * The dot builtin utility (POSIX). Used to execute dot scripts.
  *
- * returns the exit status of the last command executed.
+ * Returns the exit status of the last command executed.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help dot` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help dot` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -47,18 +47,18 @@ int dot_builtin(int argc, char **argv)
     /* first check we have exactly 2 args if we're in --posix mode */
     if(argc != 2 && option_set('P'))
     {
-        PRINT_ERROR("dot: incorrect number of arguments\n"
-                    "     usage: %s file\n", argv[0]);
+        PRINT_ERROR("%s: incorrect number of arguments\n"
+                    "usage: %s file\n", argv[0], argv[0]);
         return 1;
     }
 
     /* then check we have enough args for the ksh-like usage */
     if(argc < 2)
     {
-        PRINT_ERROR("dot: incorrect number of arguments\n"
-                    "     usage: %s file [args...]\n", argv[0]);
+        PRINT_ERROR("%s: incorrect number of arguments\n"
+                    "usage: %s file [args...]\n", argv[0], argv[0]);
         return 1;
     }
     
-    return do_source_script("dot", argv[1], argc-2, &argv[2]);
+    return do_source_script(argv[0], argv[1], argc-2, &argv[2]);
 }

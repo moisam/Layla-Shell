@@ -76,8 +76,6 @@ extern __int64_t optionsx;
 #define OPTION_PROMPT_BANG              0x800000000000l /* (1 << 47) -- zsh-like extension */
 #define OPTION_PROMPT_PERCENT           0x1000000000000l/* (1 << 48) -- zsh-like extension */
 #define OPTION_CALLER_VERBOSE           0x2000000000000l/* (1 << 49) */
-#define OPTION_IGNORE_DOT_RES           0x4000000000000l/* (1 << 50) */
-#define OPTION_IGNORE_TEST_RES          0x8000000000000l/* (1 << 51) */
 
 #define optionx_set(o)                  ((((optionsx) & (o)) == (o)) ? 1 : 0)
 

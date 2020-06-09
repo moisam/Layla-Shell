@@ -78,16 +78,17 @@ shell_options[] =
 int options_count = sizeof(shell_options)/sizeof(struct option_s);
 
 /* some important indices to the array above */
-#define OPTION_PRIVILEGED       18
-#define OPTION_POSIX            19
-#define OPTION_RESTRICTED       21
+#define OPTION_PRIVILEGED       17
+#define OPTION_POSIX            18
+#define OPTION_RESTRICTED       20
+#define OPTION_HISTORY          25
 
 
 /*
- * if long_option is the long name of an option, return the short name (one char)
- * of that option.. otherwise return 0.
+ * If long_option is the long name of an option, return the short name (one char)
+ * of that option. Otherwise return 0.
  *
- * see the manpage for an explanation of what each option does.
+ * See the manpage for an explanation of what each option does.
  */
 char short_option(char *long_option)
 {
@@ -104,10 +105,10 @@ char short_option(char *long_option)
 
 
 /*
- * if short_opt is the short name (one char) of an option, return the long name
- * of that option.. otherwise return NULL.
+ * If short_opt is the short name (one char) of an option, return the long name
+ * of that option. Otherwise return NULL.
  *
- * see the manpage for an explanation of what each option does.
+ * See the manpage for an explanation of what each option does.
  */
 char *long_option(char short_opt)
 {
@@ -124,7 +125,7 @@ char *long_option(char short_opt)
 
 
 /*
- * return 1 if 'which' is a short one-char option, 0 otherwise.
+ * Return 1 if 'which' is a short one-char option, 0 otherwise.
  */
 int is_short_option(char which)
 {
@@ -142,7 +143,7 @@ int is_short_option(char which)
 
 
 /*
- * return 1 if short-option 'which' is set, 0 if unset.
+ * Return 1 if short-option 'which' is set, 0 if unset.
  */
 int option_set(char which)
 {
@@ -159,9 +160,9 @@ int option_set(char which)
 
 
 /*
- * save all the options that are set in the $- shell variable, which will consist
+ * Save all the options that are set in the $- shell variable, which will consist
  * of a series of characters, each character representing a short option.
- * additionally, save the long option version of the set options in the $SHELLOPTS
+ * Additionally, save the long option version of the set options in the $SHELLOPTS
  * variable (bash), which will contain a colon-separated list of the set options.
  */
 void symtab_save_options(void)
@@ -222,7 +223,7 @@ void symtab_save_options(void)
 
 
 /*
- * set or unset 'option'.. if 'set' is 0, the option is unset; if it is 1,
+ * Set or unset 'option'. If 'set' is 0, the option is unset; if it is 1,
  * the option is set.
  */
 void set_option(char short_opt, int set)
@@ -240,9 +241,9 @@ void set_option(char short_opt, int set)
 
 
 /*
- * print the on/off state of shell options.. if 'onoff' is non-zero, each option
+ * Print the on/off state of shell options. If 'onoff' is non-zero, each option
  * is printed as the option's long name, followed by on or off (according to the
- * option's state).. if 'onoff' is zero, each option is printed as -o or +o,
+ * option's state). If 'onoff' is zero, each option is printed as -o or +o,
  * followed by the option's long name.
  */
 void print_options(char onoff)
@@ -265,7 +266,7 @@ void print_options(char onoff)
 
 
 /*
- * reset uid and gid if the previliged mode is off (the +p option).
+ * Reset uid and gid if the previliged mode is off (the +p option).
  */
 void do_privileged(int on)
 {
@@ -290,9 +291,9 @@ void do_privileged(int on)
 
 
 /*
- * turn the restricted mode on (the -r option) or off (the +r option).
+ * Turn the restricted mode on (the -r option) or off (the +r option).
  */
-static inline int do_restricted(int on)
+int do_restricted(int on)
 {
     /* -r mode cannot be turned off */
     if(!on && shell_options[OPTION_RESTRICTED].is_set)
@@ -307,7 +308,25 @@ static inline int do_restricted(int on)
 
 
 /*
- * if the POSIX mode is on, switch off all the non-POSIX options.
+ * Turn history on (the -w option) or off (the +w option).
+ */
+int do_history(int on)
+{
+    if(on)
+    {
+        if(hist_cmds_this_session == 0)
+        {
+            load_history_list();
+        }
+    }
+    shell_options[OPTION_HISTORY].is_set = on;
+    set_optionx(OPTION_SAVE_HIST, on);
+    return 1;
+}
+
+
+/*
+ * If the POSIX mode is on, switch off all the non-POSIX options.
  */
 void reset_non_posix_options(void)
 {
@@ -334,8 +353,8 @@ void reset_non_posix_options(void)
 
 
 /*
- * if 'on' is non-zero, enable the strict POSIX mode (done using the --posix 
- * or -p option).. otherwise disable the POSIX mode.
+ * If 'on' is non-zero, enable the strict POSIX mode (done using the --posix 
+ * or -p option). Otherwise disable the POSIX mode.
  */
 void do_posix(int on)
 {
@@ -351,13 +370,13 @@ void do_posix(int on)
 
 
 /*
- * process the 'ops' string, which is an options string we got from the command
- * line (on shell startup) or from the set builtin utility.. we process the string,
- * char by char, set or unset the option represented by each char.. if the string is
+ * Process the 'ops' string, which is an options string we got from the command
+ * line (on shell startup) or from the set builtin utility. We process the string,
+ * char by char, set or unset the option represented by each char. If the string is
  * -o or +o, we will process a long option, which is provided in the 'extra' parameter.
- * if the first char of 'ops' is '-', options are set, if it is '+', options are unset.
+ * If the first char of 'ops' is '-', options are set, if it is '+', options are unset.
  *
- * returns 0 if the ops string is parsed successfully, -1 on error.. if the ops string
+ * Returns 0 if the ops string is parsed successfully, -1 on error. If the ops string
  * is -o or +o and the 'extra' parameter is processed, returns 1 so the caller can skip
  * the 'extra' parameter while processing its command line arguments.
  */
@@ -382,14 +401,21 @@ int do_options(char *ops, char *extra)
             case 'p':
                 do_privileged(onoff);
                 break;
-
+                
             case 'r':
                 if(!do_restricted(onoff))
                 {
                     return -1;
                 }
                 break;
-
+                
+            case 'w':
+                if(!do_history(onoff))
+                {
+                    return -1;
+                }
+                break;
+                
             case 'o':
                 if(!extra || !*extra)
                 {
@@ -416,6 +442,13 @@ int do_options(char *ops, char *extra)
                 else if(strcmp(extra, "restricted") == 0)
                 {
                     if(!do_restricted(onoff))
+                    {
+                        return -1;
+                    }
+                }
+                else if(strcmp(extra, "history") == 0)
+                {
+                    if(!do_history(onoff))
                     {
                         return -1;
                     }
@@ -454,7 +487,7 @@ int do_options(char *ops, char *extra)
                 /* unrecognized option */
                 if(i == options_count)
                 {
-                    PRINT_ERROR("%s: unknown option: %c\n", UTILITY, *ops);
+                    PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, *ops);
                     return -1;
                 }
                 break;
@@ -466,13 +499,13 @@ int do_options(char *ops, char *extra)
 
 
 /*
- * the set builtin utility (POSIX).. used to set and unset shell options and
+ * The set builtin utility (POSIX). Used to set and unset shell options and
  * positional parameters.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help set` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help set` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -498,9 +531,9 @@ int set_builtin(int argc, char **argv)
             struct symtab_s *symtab = stack->symtab_list[i];
 
             /*
-             * for all but the local symbol table, we check the table lower down in the
+             * For all but the local symbol table, we check the table lower down in the
              * stack to see if there is a local variable defined with the same name as
-             * a global variable.. if that is the case, the local variable takes precedence
+             * a global variable. If that is the case, the local variable takes precedence
              * over the global variable, and we skip printing the global variable as we
              * will print the local variable when we reach the local symbol table.
              */
@@ -665,9 +698,9 @@ int set_builtin(int argc, char **argv)
 
 
 /*
- * set the value of shell variable 'name_buf' to the string 'val_buf'..
+ * Set the value of shell variable 'name_buf' to the string 'val_buf'.
  * 'set_flags' contains the flags to be set in the variable's entry, while
- * 'unset_flags' contains the flags to be turned off.. the 'flags' argument
+ * 'unset_flags' contains the flags to be turned off. The 'flags' argument
  * contains flags to control do_set(), which can be a combination of:
  * 
  *     SET_FLAG_GLOBAL:    'name_buf' is set (or added if not already defined)
@@ -676,15 +709,17 @@ int set_builtin(int argc, char **argv)
  *     SET_FLAG_FORCE_NEW: don't search for an existing entry before adding 
  *                         the variable to the local symbol table.
  *
- * returns the shell variable if its found and its flags are set, or NULL for errors.
+ * Returns the shell variable if its found and its flags are set, or NULL for errors.
  */
-struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags, int unset_flags, int flags)
+struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags, 
+                              int unset_flags, int flags)
 {
     /* the -a option automatically sets the export flag for all variables */
     int export = option_set('a');
     int set_global = flag_set(flags, SET_FLAG_GLOBAL);
     int append = flag_set(flags, SET_FLAG_APPEND);
     int force_new = flag_set(flags, SET_FLAG_FORCE_NEW);
+    char *strend;
     struct symtab_entry_s *entry1 = NULL, *entry2;
     
     if(export)
@@ -696,14 +731,16 @@ struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags, int 
     if(startup_finished && option_set('r') && is_restrict_var(name_buf))
     {
         /* r-shells can't set/unset SHELL, ENV, FPATH, or PATH */
-        PRINT_ERROR("%s: restricted shells can't set %s\n", SHELL_NAME, name_buf);
+        PRINT_ERROR("%s: restricted shells can't set %s\n", 
+                    SOURCE_NAME, name_buf);
         return NULL;
     }
     
     /* positional and special parameters can't be set like this */
     if(is_pos_param(name_buf))
     {
-        PRINT_ERROR("%s: cannot set `%s`: positional parameter\n", SHELL_NAME, name_buf);
+        PRINT_ERROR("%s: cannot set `%s`: positional parameter\n", 
+                    SOURCE_NAME, name_buf);
         return NULL;
     }
     else if(is_special_param(name_buf))
@@ -721,7 +758,8 @@ struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags, int 
             return entry2;
         }
 
-        PRINT_ERROR("%s: cannot set `%s`: special parameter\n", SHELL_NAME, name_buf);
+        PRINT_ERROR("%s: cannot set `%s`: special parameter\n", 
+                    SOURCE_NAME, name_buf);
         return NULL;
     }
     
@@ -773,7 +811,9 @@ struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags, int 
     /* can't set readonly variables (but return it so the caller can act on it) */
     if(flag_set(entry1->flags, FLAG_READONLY))
     {
-        return entry1;
+        READONLY_ASSIGN_ERROR(SOURCE_NAME, name_buf, "variable");
+        return NULL;
+        //return entry1;
     }
 
     /* set the flags */
@@ -793,7 +833,6 @@ struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags, int 
             /* do we need to perform arithmetic addition? */
             if(flag_set(entry1->flags, FLAG_INTVAL))
             {
-                char *strend;
                 char *old_val_str = arithm_expand(entry1->val);
                 long old_val = 0, new_val;
                 
@@ -840,6 +879,21 @@ struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags, int 
         {
             symtab_entry_setval(entry1, val_buf);
         }
+    }
+
+    if(strcmp(name_buf, "OPTIND") == 0)
+    {
+        /*
+        strend = NULL;
+        int val2 = entry1->val ? strtol(entry1->val, &strend, 10) : 0;
+        if(strend && !*strend)
+        {
+            internal_argi = val2;
+            internal_argsub = 0;
+            do_set("OPTSUB", "0", 0, 0, flags);
+        }
+        */
+        do_set("OPTSUB", "0", set_flags, unset_flags, flags);
     }
     
     return entry1;

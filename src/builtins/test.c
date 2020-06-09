@@ -90,7 +90,7 @@ struct stat statbuf2;
 #define FILE_OLDER_THAN 3   /* the -ot file comparison operator */
 
 /*
- * NOTE: in all of the upcoming comparisons in this file, remember that
+ * NOTE: In all of the upcoming comparisons in this file, remember that
  *       we always need to invert the result of any given test, so that 
  *       zero will indicate success and non-zero will indicate failure.
  */
@@ -98,7 +98,7 @@ struct stat statbuf2;
 
 #if 0
 /*
- * recursively call test_builtin() to perform the test on a a sub-expression.
+ * Recursively call test_builtin() to perform the test on a a sub-expression.
  */
 int test_recursive(char *str)
 {
@@ -123,11 +123,11 @@ int test_recursive(char *str)
 
 
 /*
- * compare two files, f1 and f2, using the operator op, which can be the
+ * Compare two files, f1 and f2, using the operator op, which can be the
  * newer-than operator (FILE_NEWER_THAN), the older-than operator
  * (FILE_OLDER_THAN), or the equality operator (FILE_EQUAL).
  *
- * returns "0" if the result of comparison is true, "1" if it is false.
+ * Returns "0" if the result of comparison is true, "1" if it is false.
  */
 char *compare_files(char *f1, char *f2, int op)
 {
@@ -209,11 +209,11 @@ char *compare_files(char *f1, char *f2, int op)
 
 
 /*
- * compare the two arithmetic expressions given as __e1 and __e2, using the
+ * Compare the two arithmetic expressions given as __e1 and __e2, using the
  * comparsion operator op, which can be one of the six operator we defined as
  * macros above (ARITHM_EQ et al).
  *
- * returns "0" if the result of comparison is true, "1" if it is false.
+ * Returns "0" if the result of comparison is true, "1" if it is false.
  */
 char *compare_exprs(char *__e1, char *__e2, int op)
 {
@@ -288,7 +288,7 @@ char *compare_exprs(char *__e1, char *__e2, int op)
 }
 
 /*
- * test if a1 is greater-than a2 and return "0" if true, "1" if false.
+ * Test if a1 is greater-than a2 and return "0" if true, "1" if false.
  */
 char *test_gt(char *a1, char *a2)
 {
@@ -296,7 +296,7 @@ char *test_gt(char *a1, char *a2)
 }
 
 /*
- * test if a1 is less-than a2 and return "0" if true, "1" if false.
+ * Test if a1 is less-than a2 and return "0" if true, "1" if false.
  */
 char *test_lt(char *a1, char *a2)
 {
@@ -304,7 +304,7 @@ char *test_lt(char *a1, char *a2)
 }
 
 /*
- * test if a1 is greater-than-or-equal-to a2 and return "0" if true, "1" if false.
+ * Test if a1 is greater-than-or-equal-to a2 and return "0" if true, "1" if false.
  */
 char *test_ge(char *a1, char *a2)
 {
@@ -312,7 +312,7 @@ char *test_ge(char *a1, char *a2)
 }
 
 /*
- * test if a1 is less-than-or-equal-to a2 and return "0" if true, "1" if false.
+ * Test if a1 is less-than-or-equal-to a2 and return "0" if true, "1" if false.
  */
 char *test_le(char *a1, char *a2)
 {
@@ -320,7 +320,7 @@ char *test_le(char *a1, char *a2)
 }
 
 /*
- * test if a1 is equal-to a2 and return "0" if true, "1" if false.
+ * Test if a1 is equal-to a2 and return "0" if true, "1" if false.
  */
 char *test_eq(char *a1, char *a2)
 {
@@ -328,7 +328,7 @@ char *test_eq(char *a1, char *a2)
 }
 
 /*
- * test if a1 is not-equal-to a2 and return "0" if true, "1" if false.
+ * Test if a1 is not-equal-to a2 and return "0" if true, "1" if false.
  */
 char *test_ne(char *a1, char *a2)
 {
@@ -361,14 +361,13 @@ char *str_remove_quotes(char *str, int *was_quoted)
 #define STR_EQX     3
 
 /*
- * test if string a1 is equal to a2 and return "0" if true, "1" if false.
+ * Test if string a1 is equal to a2 and return "0" if true, "1" if false.
  */
 char *do_test_str(char *a1, char *a2, int op)
 {
     int q1 = 0, q2 = 0;
     char *a3 = str_remove_quotes(a1, &q1);
     char *a4 = str_remove_quotes(a2, &q2);
-    debug ("a3 = '%s', a4 = '%s'\n", a3, a4);
     //debug ("a3 = '%s', a2 = '%s'\n", a3, a2);
     int i = 0;
     char *res = NULL;
@@ -419,12 +418,11 @@ char *do_test_str(char *a1, char *a2, int op)
             break;
     }
     
-    debug ("res = %s\n", res);
     return res;
 }
 
 /*
- * test if string a1 is equal to a2 and return "0" if true, "1" if false.
+ * Test if string a1 is equal to a2 and return "0" if true, "1" if false.
  */
 char *test_str_eq(char *a1, char *a2)
 {
@@ -432,8 +430,8 @@ char *test_str_eq(char *a1, char *a2)
 }
 
 /*
- * test if string a1 is equal to a2 using POSIX extended regex syntax.
- * returns "0" if we have a match, "1" if we don't have a match.
+ * Test if string a1 is equal to a2 using POSIX extended regex syntax.
+ * Returns "0" if we have a match, "1" if we don't have a match.
  */
 char *test_str_eq_ext(char *a1, char *a2)
 {
@@ -441,7 +439,7 @@ char *test_str_eq_ext(char *a1, char *a2)
 }
 
 /*
- * test if string a1 is not-equal-to a2 and return "0" if true, "1" if false.
+ * Test if string a1 is not-equal-to a2 and return "0" if true, "1" if false.
  */
 char *test_str_ne(char *a1, char *a2)
 {
@@ -449,7 +447,7 @@ char *test_str_ne(char *a1, char *a2)
 }
 
 /*
- * test if string a1 is less-than a2 and return "0" if true, "1" if false.
+ * Test if string a1 is less-than a2 and return "0" if true, "1" if false.
  */
 char *test_str_lt(char *a1, char *a2)
 {
@@ -457,7 +455,7 @@ char *test_str_lt(char *a1, char *a2)
 }
 
 /*
- * test if string a1 is greater-than a2 and return "0" if true, "1" if false.
+ * Test if string a1 is greater-than a2 and return "0" if true, "1" if false.
  */
 char *test_str_gt(char *a1, char *a2)
 {
@@ -469,7 +467,7 @@ char *test_str_gt(char *a1, char *a2)
  */
 
 /*
- * test if file a1 is the same as a2 and return "0" if true, "1" if false.
+ * Test if file a1 is the same as a2 and return "0" if true, "1" if false.
  */
 char *test_file_ef(char *a1, char *a2)
 {
@@ -477,7 +475,7 @@ char *test_file_ef(char *a1, char *a2)
 }
 
 /*
- * test if file a1 is newer-than a2 and return "0" if true, "1" if false.
+ * Test if file a1 is newer-than a2 and return "0" if true, "1" if false.
  */
 char *test_file_nt(char *a1, char *a2)
 {
@@ -485,7 +483,7 @@ char *test_file_nt(char *a1, char *a2)
 }
 
 /*
- * test if file a1 is older-than a2 and return "0" if true, "1" if false.
+ * Test if file a1 is older-than a2 and return "0" if true, "1" if false.
  */
 char *test_file_ot(char *a1, char *a2)
 {
@@ -493,8 +491,8 @@ char *test_file_ot(char *a1, char *a2)
 }
 
 /*
- * perform the logical NOT operation on a1 and return the result.
- * remember that [[ ! x ]] is equivalent to [[ ! -n x ]].
+ * Perform the logical NOT operation on a1 and return the result.
+ * Remember that [[ ! x ]] is equivalent to [[ ! -n x ]].
  */
 char *test_not(char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -514,7 +512,7 @@ char *test_not(char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * perform the logical AND operation on a1 and a2 and return the result
+ * Perform the logical AND operation on a1 and a2 and return the result
  * (0 for true, 1 for false).
  */
 char *test_and(char *a1, char *a2)
@@ -523,7 +521,7 @@ char *test_and(char *a1, char *a2)
 }
 
 /*
- * perform the logical OR operation on a1 and a2 and return the result
+ * Perform the logical OR operation on a1 and a2 and return the result
  * (0 for true, 1 for false).
  */
 char *test_or(char *a1, char *a2)
@@ -532,12 +530,12 @@ char *test_or(char *a1, char *a2)
 }
 
 /*
- * check if a file is readable, writeable or executable by the current process.
+ * Check if a file is readable, writeable or executable by the current process.
  *
- * if running in --posix mode, tcsh doesn't use access() call to test r/w/x
+ * If running in --posix mode, tcsh doesn't use access() call to test r/w/x
  * permissions, it uses the file permission bits.
  *
- * returns 0 if we have the requested r/w/x permission on the file, -1 otherwise.
+ * Returns 0 if we have the requested r/w/x permission on the file, -1 otherwise.
  */
 int test_file_permission(char *path, struct stat *statbuf, char which)
 {
@@ -611,9 +609,9 @@ int test_file_permission(char *path, struct stat *statbuf, char which)
 }
 
 /*
- * perform different tests on arg, which represents a filename.
+ * Perform different tests on arg, which represents a filename.
  *
- * returns "0" if the result of the test is true, "1" if it is false.
+ * Returns "0" if the result of the test is true, "1" if it is false.
  */
 char *test_file(char *arg, int op)
 {
@@ -728,7 +726,7 @@ char *test_file(char *arg, int op)
             
             /*
              * csh uses this option to report executable files from $PATH and also builtin utilities.
-             * thus '-X ls' gives true (0) result, but '-X /bin/ls' gives false (1) result. bash and ksh
+             * Thus '-X ls' gives true (0) result, but '-X /bin/ls' gives false (1) result. bash and ksh
              * don't have this option.
             */
             case 'X':
@@ -758,7 +756,7 @@ char *test_file(char *arg, int op)
 }
 
 /*
- * check if the file descriptor specified in a1 refers to a terminal device.
+ * Check if the file descriptor specified in a1 refers to a terminal device.
  */
 char *test_file_term(char *a1, char *a2 __attribute__((unused)))
 {
@@ -776,7 +774,7 @@ char *test_file_term(char *a1, char *a2 __attribute__((unused)))
 }
 
 /*
- * test if file a1 exists and return "0" if true, "1" if false.
+ * Test if file a1 exists and return "0" if true, "1" if false.
  */
 char *test_file_exist (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -784,7 +782,7 @@ char *test_file_exist (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is a block device and return "0" if true, "1" if false.
+ * Test if file a1 is a block device and return "0" if true, "1" if false.
  */
 char *test_file_blk   (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -792,7 +790,7 @@ char *test_file_blk   (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is a char device and return "0" if true, "1" if false.
+ * Test if file a1 is a char device and return "0" if true, "1" if false.
  */
 char *test_file_char  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -800,7 +798,7 @@ char *test_file_char  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is a directory and return "0" if true, "1" if false.
+ * Test if file a1 is a directory and return "0" if true, "1" if false.
  */
 char *test_file_dir   (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -808,7 +806,7 @@ char *test_file_dir   (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is a regular file and return "0" if true, "1" if false.
+ * Test if file a1 is a regular file and return "0" if true, "1" if false.
  */
 char *test_file_reg   (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -816,7 +814,7 @@ char *test_file_reg   (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 has its setgid bit set and return "0" if true, "1" if false.
+ * Test if file a1 has its setgid bit set and return "0" if true, "1" if false.
  */
 char *test_file_sgid  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -824,7 +822,7 @@ char *test_file_sgid  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is a soft link and return "0" if true, "1" if false.
+ * Test if file a1 is a soft link and return "0" if true, "1" if false.
  */
 char *test_file_link  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -832,7 +830,7 @@ char *test_file_link  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 has its sticky bit set and return "0" if true, "1" if false.
+ * Test if file a1 has its sticky bit set and return "0" if true, "1" if false.
  */
 char *test_file_sticky(char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -840,7 +838,7 @@ char *test_file_sticky(char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is a FIFO (named pipe) and return "0" if true, "1" if false.
+ * Test if file a1 is a FIFO (named pipe) and return "0" if true, "1" if false.
  */
 char *test_file_pipe  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -848,7 +846,7 @@ char *test_file_pipe  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is readable and return "0" if true, "1" if false.
+ * Test if file a1 is readable and return "0" if true, "1" if false.
  */
 char *test_file_r     (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -856,7 +854,7 @@ char *test_file_r     (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 has a size > 0 and return "0" if true, "1" if false.
+ * Test if file a1 has a size > 0 and return "0" if true, "1" if false.
  */
 char *test_file_size  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -864,7 +862,7 @@ char *test_file_size  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 has its setuid bit set and return "0" if true, "1" if false.
+ * Test if file a1 has its setuid bit set and return "0" if true, "1" if false.
  */
 char *test_file_suid  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -872,7 +870,7 @@ char *test_file_suid  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is writeable and return "0" if true, "1" if false.
+ * Test if file a1 is writeable and return "0" if true, "1" if false.
  */
 char *test_file_w     (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -880,7 +878,7 @@ char *test_file_w     (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is executable and return "0" if true, "1" if false.
+ * Test if file a1 is executable and return "0" if true, "1" if false.
  */
 char *test_file_x     (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -888,7 +886,7 @@ char *test_file_x     (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is owned by this process's group and return "0" if true, "1" if false.
+ * Test if file a1 is owned by this process's group and return "0" if true, "1" if false.
  */
 char *test_file_gown  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -896,7 +894,7 @@ char *test_file_gown  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 exists and has been modified since its creation and return "0" if true, "1" if false.
+ * Test if file a1 exists and has been modified since its creation and return "0" if true, "1" if false.
  */
 char *test_file_new   (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -904,7 +902,7 @@ char *test_file_new   (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is owned by this process's user and return "0" if true, "1" if false.
+ * Test if file a1 is owned by this process's user and return "0" if true, "1" if false.
  */
 char *test_file_uown  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -912,7 +910,7 @@ char *test_file_uown  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if file a1 is a socket and return "0" if true, "1" if false.
+ * Test if file a1 is a socket and return "0" if true, "1" if false.
  */
 char *test_file_sock  (char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -920,7 +918,7 @@ char *test_file_sock  (char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * check if an option is enabled (the -o test).
+ * Check if an option is enabled (the -o test).
  * csh uses this option (-o) to test file ownership, while ksh and bash use it to
  * test set options. we follow the latter.
  */
@@ -955,7 +953,7 @@ char *test_opt_en(char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if the length of string a1 is zero and return "0" if true, "1" if false.
+ * Test if the length of string a1 is zero and return "0" if true, "1" if false.
  */
 char *test_str_zero(char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -963,7 +961,7 @@ char *test_str_zero(char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- * test if the length of string a1 is not zero and return "0" if true, "1" if false.
+ * Test if the length of string a1 is not zero and return "0" if true, "1" if false.
  */
 char *test_str_nz(char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -971,7 +969,7 @@ char *test_str_nz(char *a1, char *a2 __attribute__ ((unused)) )
 }
 
 /*
- *  test if the shell varariable a1 has been set and has been given a value (bash).
+ * Test if the shell varariable a1 has been set and has been given a value (bash).
  */
 char *test_var_def(char *a1, char *a2 __attribute__ ((unused)) )
 {
@@ -990,7 +988,7 @@ char *test_var_def(char *a1, char *a2 __attribute__ ((unused)) )
 
 
 /*
- * extended operator list. here we need to skip the numbers referring to ASCII
+ * Extended operator list. Here we need to skip the numbers referring to ASCII
  * chars !, (, and ).
  */
 #define TEST_GT                1       /* arithm greater than */
@@ -1038,7 +1036,7 @@ char *test_var_def(char *a1, char *a2 __attribute__ ((unused)) )
 enum { ASSOC_NONE = 0, ASSOC_LEFT, ASSOC_RIGHT };
 
 /*
- * structure to represent the test operators we recognize.
+ * Structure to represent the test operators we recognize.
  */
 struct test_op_s
 {
@@ -1096,7 +1094,7 @@ struct test_op_s
 	{ TEST_STR_EQ3      , 4, ASSOC_LEFT , 0, 1, test_str_eq_ext    },
 };
 
-/* pointers to the operators' structs (see above) */
+/* Pointers to the operators' structs (see above) */
 struct test_op_s *TEST_OP_NOT         = &test_ops[0 ];
 struct test_op_s *TEST_OP_LBRACE      = &test_ops[1 ];
 struct test_op_s *TEST_OP_RBRACE      = &test_ops[2 ];
@@ -1144,7 +1142,7 @@ struct test_op_s *TEST_OP_STR_EQ3     = &test_ops[42];
 
 
 /*
- * return 1 if the operator op is a string operator, i.e. >, <, =, ==, =~, or !=.
+ * Return 1 if the operator op is a string operator, i.e. >, <, =, ==, =~, or !=.
  */
 int is_str_op(struct test_op_s *op)
 {
@@ -1163,17 +1161,17 @@ int is_str_op(struct test_op_s *op)
 
 
 /*
- * test the first chars of 'expr' to see if they represent one of the test operators
- * listed above.. if that is the case, return the operator struct representing that
- * operator.. otherwise, return NULL.
+ * Test the first chars of 'expr' to see if they represent one of the test operators
+ * listed above. If that is the case, return the operator struct representing that
+ * operator. Otherwise, return NULL.
  *
- * in the 'old' test command (invoked as either 'test' or '[', but not '[['), these operators
+ * In the 'old' test command (invoked as either 'test' or '[', but not '[['), these operators
  * work differently than when the 'new' test command (invoked as '[[') is used:
  *
  *    -a means logical AND (&&), not test if file is available.
  *    -o means logical OR  (||), not test if option is set.
  * 
- * the argument oldtest tells us if we were called using the old test command or not.
+ * The argument oldtest tells us if we were called using the old test command or not.
  */
 struct test_op_s *test_getop(char *expr, int oldtest)
 {
@@ -1367,7 +1365,7 @@ struct test_op_s *test_getop(char *expr, int oldtest)
 }
 
 /*
- * push the operator op on the operator stack.
+ * Push the operator op on the operator stack.
  */
 void test_push_opstack(struct test_op_s *op)
 {
@@ -1382,7 +1380,7 @@ void test_push_opstack(struct test_op_s *op)
 
 
 /*
- * pop the last operator off the operator stack.
+ * Pop the last operator off the operator stack.
  */
 struct test_op_s *test_pop_opstack(void)
 {
@@ -1397,7 +1395,7 @@ struct test_op_s *test_pop_opstack(void)
 
 
 /*
- * push the value val on the operands stack.
+ * Push the value val on the operands stack.
  */
 void test_push_stack(char *val)
 {
@@ -1418,7 +1416,7 @@ void test_push_stack(char *val)
 
 
 /*
- * pop the last operand off the operands stack.
+ * Pop the last operand off the operands stack.
  */
 char *test_pop_stack(void)
 {
@@ -1433,7 +1431,7 @@ char *test_pop_stack(void)
 
 
 /*
- * perform the shunt operation (see the Wikipedia link on top of this page for
+ * Perform the shunt operation (see the Wikipedia link on top of this page for
  * details on what this entails).
  */
 void test_shunt_op(struct test_op_s *op)
@@ -1604,12 +1602,12 @@ if(test_err)                                \
 
 
 /*
- * the test (or '[') builtin utility (non-POSIX).. used to test conditional expressions.
+ * The test (or '[') builtin utility (non-POSIX). Used to test conditional expressions.
  *
- * returns 0 if all conditions evaluated as true, 1 otherwise.
+ * Returns 0 if all conditions evaluated as true, 1 otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help test` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help test` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -1664,7 +1662,6 @@ int test_builtin(int argc, char **argv)
     for( ; i < argc; i++)
     {
         expr = argv[i];
-        debug ("expr = '%s'\n", expr);
 
         /* skip leading whitespaces */
         while(*expr && isspace(*expr))
@@ -1672,26 +1669,6 @@ int test_builtin(int argc, char **argv)
             expr++;
         }
         
-#if 0
-        /* special handling of braced operators */
-        size_t len = strlen(expr);
-        if(*expr == '(' && expr[len-1] == ')')
-        {
-            char *subexpr = get_malloced_strl(expr, 1, len-2);
-            int res = test_recursive(subexpr);
-            free_malloced_str(subexpr);
-            
-            char buf[16];
-            sprintf(buf, "%d", res);
-            debug ("buf = '%s'\n", buf);
-            test_push_stack(buf);
-            CHECK_ERR_FLAG();
-            tstart = NULL;
-            lastop = NULL;
-            continue;
-        }
-#endif
-
         /* get the next operand or operator */
         if(!tstart)
         {
@@ -1801,6 +1778,5 @@ int test_builtin(int argc, char **argv)
         return 2;
     }
 
-    debug (" -- %s\n", teststack[0]);
     return atoi(teststack[0]);
 }

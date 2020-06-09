@@ -23,30 +23,31 @@
 #include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
+#include "../debug.h"
 
 #define UTILITY             "local"
 
 
 /*
- * the local builtin utility (non-POSIX).. used to declare local variables.
+ * The local builtin utility (non-POSIX). Used to declare local variables.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help local` or `local -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help local` or `local -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
 int local_builtin(int argc, char **argv)
 {
     /*
-     * if we saved the passed variables straight away, they will go into our
+     * If we saved the passed variables straight away, they will go into our
      * local symbol table, which will eventually get popped off the stack when
-     * we go back to do_simple_command() in backend.c, which is useless. what
+     * we go back to do_simple_command() in backend.c, which is useless. What
      * we want is to add the variables to our caller's symbol table, e.g. a script
-     * or function that wants to declare local vars. this is why we pop off our
+     * or function that wants to declare local vars. This is why we pop off our
      * local symtab, add vars to our caller's symtab, then push back our (empty)
-     * symtab, which will be popped off when we return. this is similar to what we
+     * symtab, which will be popped off when we return. This is similar to what we
      * do in declare.c.
      */
     struct symtab_s *symtab = symtab_stack_pop();

@@ -26,12 +26,12 @@
 
 
 /*
- * the logout builtin utility (non-POSIX).. used to logout (or exit) from a login shell.
+ * The logout builtin utility (non-POSIX). Used to logout (or exit) from a login shell.
  *
- * shouldn't return unless we have pending jobs.
+ * Shouldn't return unless we have pending jobs.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help logout` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help logout` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 

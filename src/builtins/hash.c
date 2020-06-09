@@ -28,7 +28,7 @@
 #define UTILITY             "hash"
 
 /*
- * this is the hashtable where we store the names of executable utilities and
+ * This is the hashtable where we store the names of executable utilities and
  * their full pathnames, so that we can execute these utilities without having
  * to search through $PATH every time the utility is invoked.
  */
@@ -39,7 +39,7 @@ int rehash_all();
 
 
 /*
- * initialize the utility hashtable.
+ * Initialize the utility hashtable.
  */
 void init_utility_hashtable(void)
 {
@@ -48,12 +48,12 @@ void init_utility_hashtable(void)
 
 
 /*
- * remember a utility for later invocation by hashing its name
- * and adding its path to the utility hashtable.. when we call the
+ * Remember a utility for later invocation by hashing its name
+ * and adding its path to the utility hashtable. When we call the
  * utility later on, we don't need to go through $PATH to find the
  * utility, we just need to retrieve its path from the hashtable.
  *
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int hash_utility(char *utility, char *path)
 {
@@ -62,13 +62,14 @@ int hash_utility(char *utility, char *path)
     {
         return 0;
     }
+    
     /* hash the utility */
     return add_hash_item(utility_hashtable, utility, path) ? 1 : 0;
 }
 
 
 /*
- * remove a utility from the hashtable, so that when we call it again,
+ * Remove a utility from the hashtable, so that when we call it again,
  * we will need to go through $PATH in order to find the utility's path.
  */
 void unhash_utility(char *utility)
@@ -77,14 +78,15 @@ void unhash_utility(char *utility)
     {
         return;
     }
+    
     rem_hash_item(utility_hashtable, utility);
 }
 
 
 /*
- * search for a utility in the hashtable and return its path.
+ * Search for a utility in the hashtable and return its path.
  *
- * returns the path of the utility on success, NULL if the utility is
+ * Returns the path of the utility on success, NULL if the utility is
  * not found in the hashtable.
  */
 char *get_hashed_path(char *utility)
@@ -93,11 +95,13 @@ char *get_hashed_path(char *utility)
     {
         return NULL;
     }
+    
     struct hashitem_s *entry = get_hash_item(utility_hashtable, utility);
     if(!entry)
     {
         return NULL;
     }
+    
     return entry->val;
 }
 
@@ -113,14 +117,14 @@ do {                                                    \
 
 
 /*
- * the hash builtin utility (POSIX).. used to store the names and pathnames
+ * The hash builtin utility (POSIX). Used to store the names and pathnames
  * of invoked utilities, so that the shell remembers where the utilities are and
  * doesn't have to go through $PATH in order to find a utility.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help hash` or `hash -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help hash` or `hash -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -129,7 +133,7 @@ int hash_builtin(int argc, char **argv)
     /* hashing must be enabled */
     if(!option_set('h'))
     {
-        PRINT_ERROR("%s: command hashing is disabled\n", UTILITY);
+        PRINT_ERROR("%s: hashing is disabled (use `set -o hashall` to reenable it)\n", UTILITY);
         return 1;
     }
     
@@ -149,7 +153,7 @@ int hash_builtin(int argc, char **argv)
     char *format = "%s=%s\n";
 
     /*
-     * recognize the options defined by POSIX if we are running in --posix mode,
+     * Recognize the options defined by POSIX if we are running in --posix mode,
      * or all possible options if running in the regular mode.
      */
     char *opts = option_set('P') ? "r" : "adhlp:rtv";
@@ -157,15 +161,15 @@ int hash_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
             /*
-             * tcsh has a 'rehash' utility that rehashes all contents of executable dirs in path..
-             * additionally, it flushes the cache of home directories built by tilde expansion..
-             * this flag does something similar: it forces us to re-search and re-hash all of 
-             * the currently hashed utilities.. we don't rehash all executable files as there would
+             * tcsh has a 'rehash' utility that rehashes all contents of executable dirs in path.
+             * Additionally, it flushes the cache of home directories built by tilde expansion.
+             * This flag does something similar: it forces us to re-search and re-hash all of 
+             * the currently hashed utilities. We don't rehash all executable files as there would
              * probably be thousands of them.
              */
             case 'a':
@@ -206,7 +210,7 @@ int hash_builtin(int argc, char **argv)
                 }
 
                 /*
-                 * is this shell restricted?
+                 * Is this shell restricted?
                  * bash says r-shells can't specify commands with '/' in their names.
                  * zsh doesn't allow r-shells to use hash, period.
                  */
@@ -328,9 +332,9 @@ int hash_builtin(int argc, char **argv)
 
 
 /*
- * update the hashtable by rehashing all the hashed utilities.
+ * Update the hashtable by rehashing all the hashed utilities.
  *
- * returns 0 if all utilities are located and hashed, 1 otherwise.
+ * Returns 0 if all utilities are located and hashed, 1 otherwise.
  */
 int rehash_all(void)
 {

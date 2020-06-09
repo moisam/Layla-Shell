@@ -25,6 +25,7 @@
 #include <strings.h>
 #include <pwd.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include "builtins.h"
 #include "setx.h"
 #include "../cmd.h"
@@ -35,16 +36,15 @@ struct dirstack_ent_s *dirstack = NULL;     /* the directory stack */
 int    stack_count   = 0;                   /* count of stack entries */
 int    read_dirsfile = 0;                   /* flag to load dirstack from an external file */
 
-int    push_cwd();
-int    push_dir(char *dir, struct dirstack_ent_s **stack, int *count);
+int    push_dir(char *dir, struct dirstack_ent_s **stack, int *count, char *utility);
 
 
 /*
- * initialize the dirstack (called on shell startup), loading the stack from
+ * Initialize the dirstack (called on shell startup), loading the stack from
  * an external file if the read_dirsfile flag is non-zero, or pushing the current
  * working directory as the sole entry on the stack if the flag is zero.
  * 
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int init_dirstack(void)
 {
@@ -54,13 +54,13 @@ int init_dirstack(void)
     }
     else
     {
-        return push_cwd();
+        return push_cwd(SHELL_NAME);
     }
 }
 
 
 /*
- * free the memory used by a dirstack entries.
+ * Free the memory used by a dirstack entries.
  */
 void __free_dirstack(struct dirstack_ent_s *ds)
 {
@@ -78,7 +78,7 @@ void __free_dirstack(struct dirstack_ent_s *ds)
 
 
 /*
- * free the memory used by the dirstack structure entries and set the
+ * Free the memory used by the dirstack structure entries and set the
  * dirstack pointer to NULL and the stack count to zero.
  */
 void free_dirstack(void)
@@ -90,17 +90,17 @@ void free_dirstack(void)
 
 
 /*
- * called on startup by a login shell, or a shell passed the --dirsfile option,
- * or by the dirs builtin when its passed the -L option.. this function loads
- * the directory stack from the file specified in __path.. the file must contain
+ * Called on startup by a login shell, or a shell passed the --dirsfile option,
+ * or by the dirs builtin when its passed the -L option. This function loads
+ * the directory stack from the file specified in __path. The file must contain
  * a series of 'pushd' commands, optionally intermixed with comment lines (that
- * start with '#') or empty lines.. no other commands are allowed, and each line
- * must contain only one command.. generally, you don't create such a file by hand,
+ * start with '#') or empty lines. No other commands are allowed, and each line
+ * must contain only one command. Generally, you don't create such a file by hand,
  * the shell automatically creates it on shutdown if its a login shell and the
  * extended option OPTION_SAVE_DIRS is set (see the definition of the exit_gracefully()
  * function in exit.c).
  * 
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int load_dirstack(char *__path)
 {
@@ -111,42 +111,46 @@ int load_dirstack(char *__path)
         path = __path;
     }
     /*
-     * we have no path (i.e. 'dirs -L' was invoked with no path, or we're being called
-     * on shell shutdwn).. in this case, we use $DIRSFILE or, if its NULL, the default
+     * We have no path (i.e. 'dirs -L' was invoked with no path, or we're being called
+     * on shell shutdwn). In this case, we use $DIRSFILE or, if its NULL, the default
      * path: ~/.lshdirs.
      */
     else
     {
         path = get_shell_varp("DIRSFILE", DIRSTACK_FILE);
     }
+
     /* perform word expansion on the path */
     path = word_expand_to_str(path);
     if(!path)
     {
-        return push_cwd();
+        return push_cwd(SHELL_NAME);
     }
+    
     /* open the file and read the commands, line by line */
     FILE *f = fopen(path, "r");
     struct dirstack_ent_s *newstack = NULL;
     int newcount = 0;
+    
     if(f)
     {
         int  linemax = get_linemax();
         char buf[linemax];
         char *line = NULL;
+        
         /* get the next line from file */
         while((line = fgets(buf, linemax, f)))
         {
             if(*line == '\0' || *line == '#') continue;       /* don't add empty or commented lines */
             /* 
-             * dirs are saved in the file in reverse order of that of the stack.
+             * Dirs are saved in the file in reverse order of that of the stack.
              * the format of each entry is: "pushd dir\n".
              */
             char *p = strstr(line, "pushd ");
             /*
-             * NOTE: for now, we only parse 'pushd' commands when reading the dirs file,
-             *       as they are the only thing we need.. however, tcsh allows the dirs file
-             *       to contain 'cd' commands.. if you want to parse and use 'cd' commands in
+             * NOTE: For now, we only parse 'pushd' commands when reading the dirs file,
+             *       as they are the only thing we need. However, tcsh allows the dirs file
+             *       to contain 'cd' commands. If you want to parse and use 'cd' commands in
              *       the dirs file, remove the following if and endif marcos.
              */
 #if 0
@@ -162,20 +166,24 @@ int load_dirstack(char *__path)
             }
 #endif
             p += 6;     /* skip the 'pushd ' part of the line */
+
             while(*p && isspace(*p))
             {
                 p++;   /* skip spaces after the 'pushd ' part */
             }
+            
             if(!p)      /* line with 'pushd ' but no arguments. skip */
             {
                 continue;
             }
+            
             /* overwrite the '\n' so we can pass the argument to cd */
             int n = strlen(p)-1;
             if(p[n] == '\n')
             {
                 p[n] = '\0';
             }
+            
             /*
              * cd to the directory, so we can check it exists and is a directory.
              * this step is also important if the file contains pushd commands with
@@ -186,11 +194,12 @@ int load_dirstack(char *__path)
                 /*
                 * TODO: do something better than just b*^%$ing about it.
                 */
-                PRINT_ERROR("%s: failed to cd to %s\n", SHELL_NAME, path);
+                PRINT_ERROR("%s: failed to cd to %s\n", SOURCE_NAME, path);
                 goto err;
             }
+            
             /* push the directory on the stack */
-            if(!push_dir(p, &newstack, &newcount))
+            if(!push_dir(p, &newstack, &newcount, SOURCE_NAME))
             {
                 break;
             }
@@ -202,8 +211,9 @@ int load_dirstack(char *__path)
     {
         /* error opening the dirs file */
         PRINT_ERROR("%s: failed to load dirstack from %s: %s\n",
-                SHELL_NAME, path, strerror(errno));
+                SOURCE_NAME, path, strerror(errno));
     }
+    
     free(path);
     if(!newstack || !newcount)
     {
@@ -218,8 +228,9 @@ int load_dirstack(char *__path)
     stack_count = newcount;
     if(!stack_count)
     {
-        push_cwd();
+        push_cwd(SOURCE_NAME);
     }
+
     /* cd to the dir on top of the stack if its not the same as our cwd */
     if(!cwd || strcmp(dirstack->path, cwd) != 0)
     {
@@ -238,11 +249,11 @@ err:
 
 
 /*
- * load the directory stack with the values in val.. entries must be separated by
- * whitespace characters.. the stack will be cleared before assigning new entries
+ * Load the directory stack with the values in val. Entries must be separated by
+ * whitespace characters. The stack will be cleared before assigning new entries
  * and cd'ing to the directory on top of the stack.
  * 
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int load_dirstackp(char *val)
 {
@@ -251,23 +262,26 @@ int load_dirstackp(char *val)
         return 0;
     }
     /* 
-     * dirs are saved in the string in the same order they were stored in the stack, so we
+     * Dirs are saved in the string in the same order they were stored in the stack, so we
      * traverse the string and add each entry to the stack.
      */
     char *p = val, *p2;
     struct dirstack_ent_s *newstack = NULL, *last = NULL;
     int newcount = 0;
+
     while(*p)
     {
         while(*p && isspace(*p))    /* skip leading spaces */
         {
             p++;
         }
+
         if(!p)                      /* end of string */
         {
             break;
         }
         p2 = p;
+        
         while(*p2)                  /* get next word boundary */
         {
             if(isspace(*p2) && p2[-1] != '\\')
@@ -276,30 +290,34 @@ int load_dirstackp(char *val)
             }
             p2++;
         }
+        
         /* extract the next dir path from the string */
         char *path = get_malloced_strl(p, 0, p2-p);
         if(!path)
         {
             break;
         }
+        
         int n = strlen(path)-1;
         /* remove the '\n' from the dir path (happens if dir is the last entry on the line) */
         if(path[n] == '\n')
         {
             path[n] = '\0';
         }
+        
         /* cd to the directory */
         if(do_builtin_internal(cd_builtin, 2, (char *[]){ "cd", path, NULL }) != 0)
         {
             /*
              * TODO: do something better than just b*^%$ing about it.
              */
-            PRINT_ERROR("%s: failed to cd to %s\n", SHELL_NAME, path);
+            PRINT_ERROR("%s: failed to cd to %s\n", SOURCE_NAME, path);
             free_malloced_str(path);
             goto err;
         }
+        
         /*
-         * push the directory on the stack, but we can't call push_dir() as we did in
+         * Push the directory on the stack, but we can't call push_dir() as we did in
          * load_dirstack() as we need to push the entries in reverse order, so we'll do
          * it manually here.
          */
@@ -312,6 +330,7 @@ int load_dirstackp(char *val)
         ds->path = path;
         ds->next = NULL;
         ds->prev = NULL;
+
         if(!last)
         {
             newstack   = ds;
@@ -326,6 +345,7 @@ int load_dirstackp(char *val)
         newcount++;
         p = p2;
     }
+
     if(!newstack || !newcount)
     {
         goto err;
@@ -339,8 +359,9 @@ int load_dirstackp(char *val)
     stack_count = newcount;
     if(!stack_count)
     {
-        push_cwd();
+        push_cwd(SHELL_NAME);
     }
+    
     /* cd to the dir on top of the stack if its not the same as our cwd */
     if(!cwd || strcmp(dirstack->path, cwd) != 0)
     {
@@ -359,8 +380,8 @@ err:
 
 
 /*
- * save the directory stack to the external file specified in the __path parameter.
- * called on shutdown by the login shell if the extended option OPTION_SAVE_DIRS is set,
+ * Save the directory stack to the external file specified in the __path parameter.
+ * Called on shutdown by the login shell if the extended option OPTION_SAVE_DIRS is set,
  * and by the dirs builtin when its passed the -S option.
  */
 void save_dirstack(char *__path)
@@ -378,8 +399,8 @@ void save_dirstack(char *__path)
         path = __path;
     }
     /*
-     * we have no path (i.e. 'dirs -S' was invoked with no path, or we're being called
-     * on shell shutdown).. in this case, we use $DIRSFILE or, if its NULL, the default
+     * We have no path (i.e. 'dirs -S' was invoked with no path, or we're being called
+     * on shell shutdown). In this case, we use $DIRSFILE or, if its NULL, the default
      * path: ~/.lshdirs.
      */
     else
@@ -426,7 +447,8 @@ void save_dirstack(char *__path)
     else
     {
         /* error opening the file */
-        PRINT_ERROR("%s: failed to save dirstack to %s: %s\n", SHELL_NAME, path, strerror(errno));
+        PRINT_ERROR("%s: failed to save dirstack to %s: %s\n", 
+                    SOURCE_NAME, path, strerror(errno));
     }
     
     free(path);
@@ -434,79 +456,91 @@ void save_dirstack(char *__path)
 
 
 /*
- * fetch the n-th entry in the dirstack, counting is zero based.. negative counts
+ * Fetch the n-th entry in the dirstack, counting is zero based. Negative counts
  * start from the end of the list.
  * 
- * returns the dirstack entry, or NULL if n is out of bounds or the stack is empty.
+ * Returns the dirstack entry, or NULL if n is out of bounds or the stack is empty.
  */
 struct dirstack_ent_s *get_dirstack_entryn(int n, struct dirstack_ent_s **__prev)
 {
     char buf[16];
     sprintf(buf, "%d", n);
-    return get_dirstack_entry(buf, __prev);
+    return get_dirstack_entry(buf, __prev, NULL);
 }
 
 
 /*
- * fetch the n-th entry in the dirstack, counting is zero based.. negative counts
- * start from the end of the list.. n is the numeric value we get from parsing the
+ * Fetch the n-th entry in the dirstack, counting is zero based. Negative counts
+ * start from the end of the list. n is the numeric value we get from parsing the
  * nstr argument.
  * 
- * returns the dirstack entry, or NULL if n is out of bounds or the stack is empty.
+ * Returns the dirstack entry, or NULL if n is out of bounds or the stack is empty.
  */
-struct dirstack_ent_s *get_dirstack_entry(char *nstr, struct dirstack_ent_s **__prev)
+struct dirstack_ent_s *get_dirstack_entry(char *nstr, struct dirstack_ent_s **__prev, int *n)
 {
+    char *strend = NULL;
+    char c = '+';
+    
     if(!nstr)
     {
         return NULL;
     }
 
-    char *strend = NULL;
-    char c = '+';
     /* skip any leading - or + sign (and remember it) */
     if(*nstr == '-' || *nstr == '+')
     {
         c = *nstr++;
     }
 
-    int n = strtol(nstr, &strend, 10);
-    if(strend == nstr)          /* error parsing number */
+    int n2 = strtol(nstr, &strend, 10);
+    if(*strend)          /* error parsing number, or invalid digit in number */
     {
         return NULL;
     }
+
     if(c == '-')                /* count from the right, or end of list */
     {
-        if(n == 0)
+        if(n2 == 0)
         {
-            n = stack_count-1;
+            n2 = stack_count-1;
         }
         else
         {
-            n = stack_count-1-n;
+            n2 = stack_count-1-n2;
         }
     }
-    if(n >= stack_count)        /* invalid number given */
+    
+    if(n2 >= stack_count)        /* invalid number given */
     {
         return NULL;
     }
+    
+    if(n)
+    {
+        (*n) = n2;
+    }
+    
     struct dirstack_ent_s *ds   = dirstack;
     struct dirstack_ent_s *prev = NULL    ;
+    
     /* get the n-th stack entry */
-    while(n-- && ds)
+    while(n2-- && ds)
     {
         prev = ds;
         ds = ds->next;
     }
+    
     if(__prev)
     {
-        *__prev = prev;
+        (*__prev) = prev;
     }
+    
     return ds;
 }
 
 
 /*
- * print the given directory path, contracting home to ~ if needed.
+ * Print the given directory path, contracting home to ~ if needed.
  */
 void print_dir(char *path, char *home, int fullpaths)
 {
@@ -539,7 +573,7 @@ void print_dir(char *path, char *home, int fullpaths)
 
 
 /*
- * print the contents of the directory stack.
+ * Print the contents of the directory stack.
  */
 void purge_dirstack(int flags)
 {
@@ -547,8 +581,11 @@ void purge_dirstack(int flags)
     int print_separate = flag_set(flags, FLAG_DIRSTACK_SEPARATE_LINES);
     int print_index    = flag_set(flags, FLAG_DIRSTACK_PRINT_INDEX   );
     int wrap           = flag_set(flags, FLAG_DIRSTACK_WRAP_ENTRIES  );
+    int i = 0;
+    size_t n = 0;
     struct dirstack_ent_s *ds = dirstack;
-    int i = 0, n = 0;
+    char *home = get_home(1);
+
     /* as in tcsh, -v takes precedence over -n */
     if(print_index && wrap)
     {
@@ -557,21 +594,23 @@ void purge_dirstack(int flags)
 
     while(ds)
     {
-        char *home = get_home();
         /* wrap if needed */
-        int len = strlen(ds->path);
+        size_t len = strlen(ds->path);
         if(wrap && n+len >= VGA_WIDTH)
         {
             printf("\n");
             n = 0;
         }
+
         if(print_index)
         {
             printf("%3d  ", i++);
             n += 5;
         }
+        
         print_dir(ds->path, home, fullpaths);
         n += len+1;
+        
         if(print_separate)
         {
             putchar('\n');
@@ -580,9 +619,11 @@ void purge_dirstack(int flags)
         {
             putchar(' ');
         }
+        
         ds = ds->next;
     }
-    if(!print_separate)
+    
+    if(!print_separate && dirstack)
     {
         putchar('\n');
     }
@@ -590,7 +631,7 @@ void purge_dirstack(int flags)
 
 
 /*
- * same as purge_dirstack() above, but saves the output in a string, instead of
+ * Same as purge_dirstack() above, but saves the output in a string, instead of
  * sending it to stdout.
  */
 char *purge_dirstackp(void)
@@ -603,12 +644,14 @@ char *purge_dirstackp(void)
         i += strlen(ds->path)+1;    /* add 1 for the separating space */
         ds = ds->next;
     }
+
     char *p = malloc(i+1);
     if(!p)
     {
         return NULL;
     }
     p[0] = '\0';
+    
     /* now copy the entries */
     ds = dirstack;
     while(ds)
@@ -620,36 +663,64 @@ char *purge_dirstackp(void)
         }
         ds = ds->next;
     }
+    
     return p;
 }
 
 
 /*
- * push a directory on the given directory stack.
+ * Push a directory on the given directory stack.
+ * 'utility' contains the name of the calling builtin utility.
  *
- * returns 1 if the directory is pushed on the stack, 0 in case of error.
+ * Returns 1 if the directory is pushed on the stack, 0 in case of error.
  * count is incremented by 1 after the push.
  */
-int push_dir(char *dir, struct dirstack_ent_s **stack, int *count)
+int push_dir(char *dir, struct dirstack_ent_s **stack, int *count, char *utility)
 {
+    struct stat st;
+    if(stat(dir, &st) == 0)
+    {
+        /* check if the new path is a directory */
+        if(!S_ISDIR(st.st_mode))
+        {
+            PRINT_ERROR("%s: cannot push `%s`: %s\n", utility, dir, strerror(ENOTDIR));
+            return 0;
+        }
+    }
+    else
+    {
+        PRINT_ERROR("%s: cannot push `%s`: %s\n", utility, dir, strerror(ENOENT));
+        return 0;
+    }
+
     char *path = get_malloced_str(dir);
     if(!path)
     {
         return 0;
     }
+
     struct dirstack_ent_s *ds = malloc(sizeof(struct dirstack_ent_s));
     if(!ds)
     {
         free_malloced_str(path);
         return 0;
     }
+
     ds->path = path;
     ds->next = *stack;
     ds->prev = NULL;
+
     if(*stack)
     {
+        struct dirstack_ent_s *prev = (*stack)->prev;
+        if(prev)
+        {
+            prev->next = ds;
+            ds->prev = prev;
+        }
         (*stack)->prev = ds;
     }
+
     *stack = ds;
     (*count) = (*count)+1;
     return 1;
@@ -657,21 +728,22 @@ int push_dir(char *dir, struct dirstack_ent_s **stack, int *count)
 
 
 /*
- * push the current working directory on the directory stack.
+ * Push the current working directory on the directory stack.
+ * 'utility' contains the name of the calling builtin utility.
  *
- * returns 1 if the directory is pushed on the stack, 0 in case of error.
+ * Returns 1 if the directory is pushed on the stack, 0 in case of error.
  * stack_count is incremented by 1 after the push.
  */
-int push_cwd(void)
+int push_cwd(char *utility)
 {
-    return push_dir(cwd, &dirstack, &stack_count);
+    return push_dir(cwd, &dirstack, &stack_count, utility);
 }
 
 
 /*
  * cd to the directory on the top of the directory stack.
  *
- * returns 1 on success, 0 in case of error.
+ * Returns 1 on success, 0 in case of error.
  */
 int dirs_cd(void)
 {
@@ -690,12 +762,13 @@ int dirs_cd(void)
 
 
 /*
- * the dirs builtin utility (non-POSIX).. used to print, save and load the
+ * The dirs builtin utility (non-POSIX). Used to print, save and load the
  * directory stack.
- * returns 0 on success, non-zero otherwise.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help dirs` or `dirs -h` from lsh prompt to see a short
+ * Returns 0 on success, non-zero otherwise.
+ * 
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help dirs` or `dirs -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 int dirs_builtin(int argc, char **argv)
@@ -707,20 +780,17 @@ int dirs_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hclnpvL:S:", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hclpvwL:S:", &v, 0)) > 0)
     {
         switch(c)
         {
+            case 'c':
+                clear = 1;
+                break;
+                
             case 'h':
                 print_help(argv[0], &DIRS_BUILTIN, 0);
                 return 0;
-                
-            case 'v':
-                print_index = 1;
-                print_separate = 1;
-                flags |= FLAG_DIRSTACK_SEPARATE_LINES;
-                flags |= FLAG_DIRSTACK_PRINT_INDEX;
-                break;
                 
             /*
              * in tcsh, -p does nothing, unlike in ksh/bash. we follow the latter.
@@ -730,59 +800,71 @@ int dirs_builtin(int argc, char **argv)
                 flags |= FLAG_DIRSTACK_SEPARATE_LINES;
                 break;
                 
+            /*
+             * In tcsh, -n, -l and -v manipulate the output format.
+             * We use -w instead of -n because, although we don't use -n here,
+             * we use it in pushd and popd to suppress cd in order to be 
+             * bash-compatible. To keep consistency between dirs, pushd, and 
+             * popd, we use -w instead of -n for all three utilities.
+             */
             case 'l':
                 fullpaths = 1;
                 flags |= FLAG_DIRSTACK_FULL_PATHS;
                 break;
                 
-            case 'n':
+            case 'v':
+                print_index = 1;
+                print_separate = 1;
+                flags |= FLAG_DIRSTACK_SEPARATE_LINES;
+                flags |= FLAG_DIRSTACK_PRINT_INDEX;
+                break;
+                
+            case 'w':
                 wrap = 1;
                 flags |= FLAG_DIRSTACK_WRAP_ENTRIES;
                 break;
                 
-            case 'c':
-                clear = 1;
-                break;
-                
             /*
-             * in tcsh, -L loads the directory stack from a file. the default is used if
+             * In tcsh, -L loads the directory stack from a file. The default is used if
              * no argument was given to -L.
              */
             case 'L':
                 if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
-                    n = load_dirstack(NULL    );
+                    n = load_dirstack(NULL);
                 }
                 else
                 {
                     n = load_dirstack(internal_optarg);
                 }
+
                 if(n)
                 {
                     purge_dirstack(flags);
                 }
+
                 return !n;
                 
             /*
-             * in tcsh, -S saves the directory stack to a file. the default is used if
+             * In tcsh, -S saves the directory stack to a file. The default is used if
              * no argument was given to -S.
              */
             case 'S':
                 if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
-                    return save_dirstack(NULL    ), 0;
+                    save_dirstack(NULL);
                 }
                 else
                 {
-                    return save_dirstack(internal_optarg), 0;
+                    save_dirstack(internal_optarg);
                 }
+                return 0;
         }
     }
     /* we accept unknown options, as they might be -ve dirstack offsets */
-    //if(c == -1) return 2;
         
     /* clear the stack, except for the cwd (top of stack) */
-    if(clear)
+    if(clear && dirstack)
     {
         struct dirstack_ent_s *ds = dirstack->next;
         while(ds)
@@ -792,7 +874,10 @@ int dirs_builtin(int argc, char **argv)
             free(ds);
             ds = next;
         }
+        dirstack->next = NULL;
+        stack_count = 1;
     }
+
     /* no arguments. print the dirstack and return */
     if(v >= argc)
     {
@@ -800,41 +885,45 @@ int dirs_builtin(int argc, char **argv)
         return 0;
     }
   
-    char *home = get_home();
-    int chars = 0;
+    char *home = get_home(1);
+    size_t chars = 0;
+
     /* parse the arguments */
     for( ; v < argc; v++)
     {
         char *arg = argv[v];
         if(*arg == '+' || *arg == '-' || isdigit(*arg))
         {
-            struct dirstack_ent_s *ds = get_dirstack_entry(arg, NULL);
+            struct dirstack_ent_s *ds = get_dirstack_entry(arg, NULL, &n);
             if(!ds)
             {
                 PRINT_ERROR("dirs: directory stack index out of range: %s\n", arg);
                 return 2;
             }
+
             /* wrap if needed */
-            int len = strlen(ds->path);
+            size_t len = strlen(ds->path);
             if(wrap && chars+len >= VGA_WIDTH)
             {
                 printf("\n");
                 chars = 0;
             }
+
             if(print_index)
             {
-                printf("%3d  ", n++);
+                printf("%3d  ", n);
                 chars += 5;
             }
             print_dir(ds->path, home, fullpaths);
             chars += len+1;
+
             if(print_separate)
             {
                 putchar('\n');
             }
             else
             {
-                putchar(' ' );
+                putchar(' ');
             }
         }
         else
@@ -843,6 +932,7 @@ int dirs_builtin(int argc, char **argv)
             return 2;
         }
     }
+
     if(!print_separate)
     {
         putchar('\n');
@@ -852,18 +942,19 @@ int dirs_builtin(int argc, char **argv)
 
 
 /*
- * the pushd builtin utility (non-POSIX extension).. used to push a directory on
- * the directory stack. returns 0 on success, non-zero otherwise.
+ * The pushd builtin utility (non-POSIX extension). Used to push a directory on
+ * the directory stack.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help pushd` or `pushd -h` from lsh prompt to see a short
+ * Returns 0 on success, non-zero otherwise.
+ * 
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help pushd` or `pushd -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 int pushd_builtin(int argc, char **argv)
 {
     int flags = 0, silent = 0;
-    int docd = 1;
-    int v = 1;
+    int cd_to_dir = 1, v = 1, res = 0;
     
     /****************************
      * process the options
@@ -884,8 +975,16 @@ int pushd_builtin(int argc, char **argv)
                 v++;
                 break;
             }
+
             /* skip the '-' and parse the options */
             p++;
+            
+            /* negative stack offset */
+            if(isdigit(*p))
+            {
+                break;
+            }
+            
             while(*p)
             {
                 switch(*p)
@@ -894,39 +993,45 @@ int pushd_builtin(int argc, char **argv)
                         print_help(argv[0], &PUSHD_BUILTIN, 0);
                         return 0;
                         
-                    case 'c':
-                        docd = 0;
-                        break;
-                
-                    /*
-                     * in tcsh, -n, -l and -v has the same effect on pushd as on dirs.
-                     */
-                    case 'v':
-                        flags |= FLAG_DIRSTACK_SEPARATE_LINES;
-                        flags |= FLAG_DIRSTACK_PRINT_INDEX;
-                        break;
-                
-                    case 'l':
-                        flags |= FLAG_DIRSTACK_FULL_PATHS;
-                        break;
-                
                     case 'n':
-                        flags |= FLAG_DIRSTACK_WRAP_ENTRIES;
+                        cd_to_dir = 0;
                         break;
-            
+                
                     /*
-                     * in tcsh, -p overrides pushdsilent. to maintain uniformity, this flag will have the same
-                     * effect it did in dirs, which is to print entries on separate lines (borrowed from ksh/bash).
+                     * In tcsh, -p overrides 'pushdsilent'. to maintain uniformity,
+                     * this flag will have the same effect it did in dirs, which 
+                     * is to print entries on separate lines (borrowed from ksh/bash).
                      */
                     case 'p':
                         flags |= FLAG_DIRSTACK_SEPARATE_LINES;
                         break;
                 
-                    /* this is similar to setting tcsh's pushdsilent variable, which silences pushd & popd */
+                    /*
+                     * this is similar to setting tcsh's 'pushdsilent' variable, 
+                     * which silences pushd & popd.
+                     */
                     case 's':
                         silent = 1;
                         break;
                 
+                    /*
+                     * In tcsh, -n, -l and -v has the same effect on pushd as on dirs.
+                     * We use -w instead of -n, as we need -n to suppress cd in order
+                     * to be bash-compatible.
+                     */
+                    case 'l':
+                        flags |= FLAG_DIRSTACK_FULL_PATHS;
+                        break;
+                
+                    case 'v':
+                        flags |= FLAG_DIRSTACK_SEPARATE_LINES;
+                        flags |= FLAG_DIRSTACK_PRINT_INDEX;
+                        break;
+                
+                    case 'w':
+                        flags |= FLAG_DIRSTACK_WRAP_ENTRIES;
+                        break;
+            
                     default:                        
                         PRINT_ERROR("pushd: unknown option: %c\n", *p);
                         return 2;
@@ -939,12 +1044,13 @@ int pushd_builtin(int argc, char **argv)
             break;
         }
     }
+
     /* no arguments */
     if(v >= argc)
     {
         /*
-         * in tcsh, when pushd is called with no arguments and the pushdtohome variable
-         * is set, pushd pushes $HOME (similar to what happens with cd). if the variable
+         * In tcsh, when pushd is called with no arguments and the pushdtohome variable
+         * is set, pushd pushes $HOME (similar to what happens with cd). If the variable
          * is not set, pushd behaves as bash's version, which exchanges the top two dirs
          * on the stack.
          */
@@ -953,201 +1059,254 @@ int pushd_builtin(int argc, char **argv)
             char *home = get_shell_varp("HOME", NULL);
             if(!home)
             {
-                PRINT_ERROR("pushd: invalid directory name: $HOME\n");
-                return 2;
+                PRINT_ERROR("pushd: invalid directory name: %s\n", "$HOME");
+                return 1;
             }
+            
             char *cwd2 = word_expand_to_str(home);
             if(!cwd2)
             {
                 PRINT_ERROR("pushd: invalid directory name: %s\n", cwd2);
-                return 2;
+                return 1;
             }
-            if(cwd)
+            
+            /* now cd to the new directory */
+            if(cd_to_dir)
             {
-                free(cwd);
-            }
-            cwd = cwd2;
-            push_cwd();
-        }
-        else
-        {
-            /* exchange the top two directories */
-            struct dirstack_ent_s *ds1 = dirstack;
-            struct dirstack_ent_s *ds2 = ds1->next;
-            if(ds2)        /* more than one entry in stack */
-            {
-                dirstack = ds2;
-                ds1->next = ds2->next;
-                ds1->prev = ds2;
-                ds2->next = ds1;
-                ds2->prev = NULL;
-            }
-        }
-        /* now cd to the new directory */
-        if(docd && !dirs_cd())
-        {
-            return 2;
-        }
-        if(!silent)
-        {
-            purge_dirstack(flags);
-        }
-        return 0;
-    }
-    /* now parse the arguments */
-    for( ; v < argc; v++)
-    {
-        /* bring the requested item to the top of the stack */
-        char *arg = argv[v];
-        /* tcsh's pushd recognizes "-" to mean $OLDPWD, just as cd */
-        if(strcmp(arg, "-") == 0)
-        {
-            char *pwd = get_shell_varp("OLDPWD", NULL);
-            if(!pwd)
-            {
-                PRINT_ERROR("pushd: invalid directory name: %s\n", arg);
-                return 2;
-            }
-            if(cwd)
-            {
-                free(cwd);
-            }
-            cwd = __get_malloced_str(pwd);
-            push_cwd();
-        }
-        /* numeric argument */
-        else if(*arg == '+' || *arg == '-' || isdigit(*arg))
-        {
-            struct dirstack_ent_s *ds = get_dirstack_entry(arg, NULL);
-            if(!ds)
-            {
-                PRINT_ERROR("pushd: directory stack index out of range: %s\n", arg);
-                return 2;
-            }
-            /*
-             * in tcsh, if the dextract variable is set, pushd extracts the n-th directory
-             * and pushes it on top of the stack, instead of rotating the stack.
-             */
-            if(optionx_set(OPTION_DEXTRACT))
-            {
-                /* extract the directory */
-                if(ds->prev)
-                {
-                    ds->prev->next = ds->next;
-                }
-                if(ds->next)
-                {
-                    ds->next->prev = ds->prev;
-                }
-                ds->prev = NULL;
-                if(dirstack != ds)
-                {
-                    ds->next = dirstack;     /* avoid linking to self */
-                }
-                dirstack = ds;
+                res = do_cd(1, 2, (char *[]){ "pushd", cwd2 }, 0, 0, DO_CD_PUSH_DIRSTACK);
             }
             else
             {
-                /* rotate the stack. link the last item to the first */
-                struct dirstack_ent_s *ds2 = ds;
-                while(ds2->next)
-                {
-                    ds2 = ds2->next;
-                }
-                ds2->next = dirstack;
-                /* unlink the prev item to the current item */
-                ds2 = dirstack;
-                dirstack = ds;
-                while(ds2->next != ds)
-                {
-                    ds2 = ds2->next;
-                }
-                ds2->next = NULL;
+                /*
+                 * if pushing without cd'ing, push as the 2nd entry on the stack,
+                 * as the top entry must always be our cwd.
+                 */
+                res = !push_dir(cwd2, (dirstack && dirstack->next) ? 
+                                &dirstack->next : &dirstack, &stack_count, "pushd");
             }
+            
+            free(cwd2);
         }
-        /* non-numeric argument */
         else
         {
-            char *cwd2 = word_expand_to_str(arg);
-            if(!cwd2)
+            /* check for an empty stack (including stack with one entry -- the cwd) */
+            if(stack_count < 2)
             {
-                PRINT_ERROR("pushd: invalid directory name: %s\n", arg);
-                return 2;
+                PRINT_ERROR("pushd: cannot push on an empty stack\n");
+                return 1;
             }
-            /*
-             * in tcsh, if the dunique variable is set, pushd removes all instances 
-             * of dir from the stack.
-             */
-            if(optionx_set(OPTION_DUNIQUE))
+            
+            /* exchange the top two directories */
+            struct dirstack_ent_s *ds1 = dirstack;
+            struct dirstack_ent_s *ds2 = ds1->next;
+            
+            dirstack = ds2;
+            ds1->next = ds2->next;
+            ds1->prev = ds2;
+            ds2->next = ds1;
+            ds2->prev = NULL;
+        
+            /* now cd to the new directory */
+            if(cd_to_dir)
             {
-                struct dirstack_ent_s *ds1 = dirstack;
-                while(ds1)
-                {
-                    if(strcmp(ds1->path, cwd2) == 0)
-                    {
-                        struct dirstack_ent_s *ds2 = ds1->next;
-                        if(ds1->prev)
-                        {
-                            ds1->prev->next = ds1->next;
-                        }
-                        if(ds1->next)
-                        {
-                            ds1->next->prev = ds1->prev;
-                        }
-                        free_malloced_str(ds1->path);
-                        free(ds1);
-                        if(dirstack == ds1)
-                        {
-                            dirstack = NULL;
-                        }
-                        ds1 = ds2;
-                        stack_count--;
-                    }
-                    else
-                    {
-                        ds1 = ds1->next;
-                    }
-                }
+                res = do_cd(1, 2, (char *[]){ "pushd", dirstack->path }, 0, 0, 0);
             }
-            if(cwd)
-            {
-                free(cwd);
-            }
-            cwd = cwd2;
-            push_cwd();
         }
+        
+        /* only print the the stack if the push was successfuly */
+        if(!silent && !res)
+        {
+            purge_dirstack(flags);
+        }
+        
+        return res;
     }
-    /* now cd to the new directory */
-    if(docd && !dirs_cd())
+
+    /* we accept at most one directory name */
+    if(argc-v > 1)
     {
+        PRINT_ERROR("pushd: too many arguments\n");
         return 2;
     }
-    if(!silent)
+    
+    /* now parse the argument */
+    char *dir = NULL, *arg = argv[v];
+    int free_dir = 0, push_stack = DO_CD_PUSH_DIRSTACK;
+
+    /* tcsh's pushd recognizes "-" to mean $OLDPWD, just as cd does */
+    if(*arg == '-' && arg[1] == '\0')
+    {
+        dir = get_shell_varp("OLDPWD", NULL);
+        if(!dir)
+        {
+            PRINT_ERROR("pushd: invalid directory name: %s\n", arg);
+            return 1;
+        }
+    }
+    /* numeric argument */
+    else if(*arg == '+' || *arg == '-' || isdigit(*arg))
+    {
+        struct dirstack_ent_s *ds = get_dirstack_entry(arg, NULL, NULL);
+        if(!ds)
+        {
+            PRINT_ERROR("pushd: directory stack index out of range: %s\n", arg);
+            return 1;
+        }
+        
+        /* if the offset is +0, it's not an error, but don't modify the stack */
+        if(ds == dirstack)
+        {
+            return 0;
+        }
+
+        /*
+         * in tcsh, if the dextract variable is set, pushd extracts the n-th directory
+         * and pushes it on top of the stack, instead of rotating the stack.
+         */
+        if(optionx_set(OPTION_DEXTRACT))
+        {
+            /* extract the directory */
+            if(ds->prev)
+            {
+                ds->prev->next = ds->next;
+            }
+            
+            if(ds->next)
+            {
+                ds->next->prev = ds->prev;
+            }
+            ds->prev = NULL;
+            
+            if(dirstack != ds)
+            {
+                ds->next = dirstack;     /* avoid linking to self */
+            }
+            dirstack = ds;
+        }
+        else
+        {
+            /* rotate the stack. link the last item to the first */
+            struct dirstack_ent_s *ds2 = ds;
+            while(ds2->next)
+            {
+                ds2 = ds2->next;
+            }
+            ds2->next = dirstack;
+            
+            /* unlink the prev item to the current item */
+            ds2 = dirstack;
+            dirstack = ds;
+            
+            while(ds2->next != ds)
+            {
+                ds2 = ds2->next;
+            }
+            ds2->next = NULL;
+        }
+        
+        dir = dirstack->path;
+        push_stack = 0;
+    }
+    /* non-numeric argument */
+    else
+    {
+        //char *cwd2 = word_expand_to_str(arg);
+        dir = word_expand_to_str(arg);
+        if(!dir)
+        {
+            PRINT_ERROR("pushd: invalid directory name: %s\n", arg);
+            return 1;
+        }
+        free_dir = 1;
+
+        /*
+         * in tcsh, if the dunique variable is set, pushd removes all instances 
+         * of dir from the stack.
+         */
+        if(optionx_set(OPTION_DUNIQUE))
+        {
+            struct dirstack_ent_s *ds1 = dirstack;
+            while(ds1)
+            {
+                if(strcmp(ds1->path, dir) == 0)
+                {
+                    struct dirstack_ent_s *ds2 = ds1->next;
+                    if(ds1->prev)
+                    {
+                        ds1->prev->next = ds1->next;
+                    }
+                    
+                    if(ds1->next)
+                    {
+                        ds1->next->prev = ds1->prev;
+                    }
+                    free_malloced_str(ds1->path);
+                    free(ds1);
+                    
+                    if(dirstack == ds1)
+                    {
+                        dirstack = NULL;
+                    }
+                    ds1 = ds2;
+                    stack_count--;
+                }
+                else
+                {
+                    ds1 = ds1->next;
+                }
+            }
+        }
+    }
+
+    /* now cd to the new directory */
+    if(cd_to_dir)
+    {
+        res = do_cd(1, 2, (char *[]){ "pushd", dir }, 0, 0, push_stack);
+    }
+    else if(push_stack)
+    {
+        /*
+         * if pushing without cd'ing, push as the 2nd entry on the stack,
+         * as the top entry must always be our cwd.
+         */
+        res = !push_dir(dir, (dirstack && dirstack->next) ? 
+                             &dirstack->next : &dirstack, &stack_count, "pushd");
+    }
+
+    if(!silent && !res)
     {
         purge_dirstack(flags);
     }
-    return 0;
+
+    if(dir && free_dir)
+    {
+        free(dir);
+    }
+
+    return res;
 }
 
 
 /*
- * the popd builtin utility (non-POSIX extension).. used to pop a directory from
- * the directory stack. returns 0 on success, non-zero otherwise.
+ * The popd builtin utility (non-POSIX extension). Used to pop a directory from
+ * the directory stack.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help popd` or `popd -h` from lsh prompt to see a short
+ * Returns 0 on success, non-zero otherwise.
+ * 
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help popd` or `popd -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 int popd_builtin(int argc, char **argv)
 {
     int flags = 0, silent = 0;
-    int docd = 1;
+    int cd_to_dir = 1;
     int v = 1, c;
 
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hclnspv", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hlnpsvw", &v, 0)) > 0)
     {
         switch(c)
         {
@@ -1155,12 +1314,14 @@ int popd_builtin(int argc, char **argv)
                 print_help(argv[0], &POPD_BUILTIN, 0);
                 return 0;
                 
-            case 'c':
-                docd = 0;
+            case 'n':
+                cd_to_dir = 0;
                 break;
                 
             /*
-             * in tcsh, -n, -l and -v has the same effect on popd as on dirs.
+             * In tcsh, -n, -l and -v has the same effect on popd as on dirs.
+             * We use -w instead of -n, as we need -n to suppress cd in order
+             * to be bash-compatible.
              */
             case 'v':
                 flags |= FLAG_DIRSTACK_SEPARATE_LINES;
@@ -1171,7 +1332,7 @@ int popd_builtin(int argc, char **argv)
                 flags |= FLAG_DIRSTACK_FULL_PATHS;
                 break;
                 
-            case 'n':
+            case 'w':
                 flags |= FLAG_DIRSTACK_WRAP_ENTRIES;
                 break;
             
@@ -1190,82 +1351,108 @@ int popd_builtin(int argc, char **argv)
         }
     }
     /* we accept unknown options, as they might be -ve dirstack offsets */
-    //if(c == -1) return 2;
+
     /* no arguments */
     if(v >= argc)
     {
+        /* check for an empty stack (including stack with one entry -- the cwd) */
+        if(stack_count < 2)
+        {
+            PRINT_ERROR("popd: cannot pop from an empty stack\n");
+            return 1;
+        }
+            
         /* pop the top of the stack */
         struct dirstack_ent_s *ds1 = dirstack;
-        if(dirstack->next)
-        {
-            dirstack = dirstack->next;
-            if(dirstack)
-            {
-                dirstack->prev = NULL;
-            }
-            free_malloced_str(ds1->path);
-            free(ds1);
+        dirstack = dirstack->next;
+        dirstack->prev = NULL;
+        stack_count--;
+        
+        free_malloced_str(ds1->path);
+        free(ds1);
 
-            /* now cd to the new directory */
-            if(docd && !dirs_cd())
-            {
-                return 2;
-            }
+        /* now cd to the new directory */
+        if(cd_to_dir &&
+           do_cd(1, 2, (char *[]){ "popd", dirstack->path }, 0, 0, 0) != 0)
+        {
+            return 1;
         }
+
         if(!silent)
         {
             purge_dirstack(flags);
         }
+        
         return 0;
     }
-    /* now parse the arguments */
-    for( ; v < argc; v++)
+
+    /* we accept at most one directory name */
+    if(argc-v > 1)
     {
-        /* bring the requested item to the top of the stack */
-        char *arg = argv[v];
-        if(*arg == '+' || *arg == '-' || isdigit(*arg))
+        PRINT_ERROR("popd: too many arguments\n");
+        return 2;
+    }
+    
+    /* now parse the argument */
+    char *arg = argv[v];
+    if(*arg == '+' || *arg == '-' || isdigit(*arg))
+    {
+        struct dirstack_ent_s *prev = NULL;
+        struct dirstack_ent_s *ds = get_dirstack_entry(arg, &prev, NULL);
+        if(!ds)
         {
-            struct dirstack_ent_s *prev = NULL;
-            struct dirstack_ent_s *ds = get_dirstack_entry(arg, &prev);
-            if(!ds)
-            {
-                PRINT_ERROR("popd: directory stack index out of range: %s\n", arg);
-                return 2;
-            }
-            /* now remove the item */
-            if(prev)
-            {
-                prev->next = ds->next;
-                free_malloced_str(ds->path);
-                free(ds);
-                stack_count--;
-            }
-            else
-            {
-                /* don't remove the last item in the stack */
-                if(ds->next)
-                {
-                    dirstack = ds->next;
-                    free_malloced_str(ds->path);
-                    free(ds);
-                    stack_count--;
-                }
-            }
+            PRINT_ERROR("popd: directory stack index out of range: %s\n", arg);
+            return 1;
+        }
+        
+        /* check for an empty stack (including stack with one entry -- the cwd) */
+        if(stack_count < 2)
+        {
+            PRINT_ERROR("popd: cannot pop from an empty stack\n");
+            return 1;
+        }
+            
+        /* now remove the item */
+        if(prev)
+        {
+            prev->next = ds->next;
+            free_malloced_str(ds->path);
+            free(ds);
+            stack_count--;
         }
         else
         {
-            PRINT_ERROR("popd: invalid directory stack index: %s\n", arg);
-            return 2;
+            /* don't remove the last item in the stack */
+            dirstack = ds->next;
+            free_malloced_str(ds->path);
+            free(ds);
+            stack_count--;
         }
     }
-    /* now cd to the new directory */
-    if(docd && !dirs_cd())
+    else
     {
-        return 2;
+        PRINT_ERROR("popd: invalid directory stack index: %s\n", arg);
+        return 1;
     }
+
+    /* now cd to the new directory */
+    if(cd_to_dir && do_cd(1, 2, (char *[]){ "popd", dirstack->path }, 0, 0, 0) != 0)
+    {
+        return 1;
+    }
+
+    /* make sure we have a full path in the stack entry */
+    if(dirstack->path[0] != '/' && dirstack->path[0] != '~' &&
+       strcmp(dirstack->path, cwd))
+    {
+        free_malloced_str(dirstack->path);
+        dirstack->path = get_malloced_str(cwd);
+    }
+
     if(!silent)
     {
         purge_dirstack(flags);
     }
+
     return 0;
 }

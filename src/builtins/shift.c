@@ -32,13 +32,13 @@
 
 
 /*
- * the shift builtin utility (POSIX).. used to shift positional arguments by a given
+ * The shift builtin utility (POSIX). Used to shift positional arguments by a given
  * number, or by 1 if no argument is given.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help shift` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help shift` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 

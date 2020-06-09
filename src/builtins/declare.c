@@ -26,6 +26,7 @@
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
+#include "../parser/parser.h"
 #include "../debug.h"
 
 /* flags for purge_table() */
@@ -39,18 +40,19 @@ void   do_print_funcdef(struct symtab_entry_s *entry);
 
 
 /*
- * the declare builtin utility (non-POSIX).. used to define variables and print them.
- * returns 0 if the variables were defined or printed, non-zero otherwise.
+ * The declare builtin utility (non-POSIX). Used to define variables and print them.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help declare` or `declare -h` from lsh prompt to see a short
+ * Returns 0 if the variables were defined or printed, non-zero otherwise.
+ * 
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help declare` or `declare -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
 int declare_builtin(int argc, char **argv)
 {
     /*
-     * if we're called from the global scope, declare variables globally,
+     * If we're called from the global scope, declare variables globally,
      * otherwise declare them locally (similar to the local builtin).
      */
     struct symtab_s *symtab;
@@ -71,14 +73,14 @@ int declare_builtin(int argc, char **argv)
 
 
 /*
- * declare variables and functions, setting and unsetting their attributes
- * as requested.. positional parameters ($1, $2, $3, ...) and special parameters
+ * Declare variables and functions, setting and unsetting their attributes
+ * as requested. Positional parameters ($1, $2, $3, ...) and special parameters
  * ($0, $$, $?) cannot be set this way.
  * 
  * 'msg_verb' contains a verb we'll print as part of the error message, in
  * case we failed to set the given variable.
  * 
- * return value:
+ * Return value:
  *   1   if a variable is a positional parameter, a special parameter, or if
  *         any other error occurred during setting a variable's attributes 
  *         (e.g. setting a readonly variable).
@@ -86,7 +88,7 @@ int declare_builtin(int argc, char **argv)
  */
 int do_declare(int argc, char **argv, int global)
 {
-    int v = 1, c, res = 0;
+    int v = 1, res = 0;
     int print_formal = 0;
     int funcs = 0;
     /* the name we're called with (declare, typeset, or local) */
@@ -97,97 +99,142 @@ int do_declare(int argc, char **argv, int global)
     int unset_flags = 0;
     /* flags for printing values */
     int print_flags = FLAG_PRINT_FUNCDEF | (global ? 0 : FLAG_PRINT_LOCAL);
+    /* print values, unless a flag such as -i, -l, -r, -t, -u, -x is supplied */
+    int print = 1;
     
-    /****************************
-     * process the options
-     ****************************/
-    while((c = parse_args(argc, argv, "+fFghilprtuvx", &v, 1)) > 0)
+    /*
+     * Process the options manually. We don't call parse_args() because we don't
+     * want to mess with $OPTIND, which can be disasterous if the command we're
+     * executing is something like `local OPTIND`, for example (we restore the 
+     * value of $OPTIND after builtin utility calls -- see vars.c).
+     */
+    for(v = 1; v < argc; v++)
     {
-        /* check if the options string starts with '+', which 'turns off' options */
-        char plus = (argv[v][0] == '+') ? 1 : 0;
-        int *flags = plus ? &unset_flags : &set_flags;
-        switch(c)
+        char *p = argv[v];
+        /* options start with '-' or '+' */
+        if(*p == '-' || *p == '+')
         {
-            case 'f':               /* restrict output to function names and definitions */
-                funcs = !plus;
+            /* stop parsing options when we hit '-' or '--' */
+            if(strcmp(p, "-") == 0)
+            {
                 break;
-                
-            case 'F':               /* don't print function definitions */
-                if((funcs = !plus))
-                {
-                    print_flags &= ~FLAG_PRINT_FUNCDEF;
-                }
-                break;
-                
-            case 'g':               /* declare on the global level (even inside functions) */
-                global = !plus;
-                break;
-                
-            case 'h':
-                print_help(argv[0], strcmp(utility, "local") == 0 ?
-                                    &LOCAL_BUILTIN : &DECLARE_BUILTIN, 0);
-                return 0;
-                
-            case 'i':               /* assign only int values */
-                (*flags) |= FLAG_INTVAL;
-                break;
+            }
 
-            case 'l':           /* convert variable's value to lowercase on assignment */
-                (*flags) |= FLAG_ALLSMALL;
-                if(!plus)
+            if(strcmp(p, "--") == 0)
+            {
+                v++;
+                break;
+            }
+            
+            /* check if the options string starts with '+', which 'turns off' options */
+            char plus = (*p == '+') ? 1 : 0;
+            int *flags = plus ? &unset_flags : &set_flags;
+            
+            /* skip the -/+ and parse the options string */
+            p++;
+            while(*p)
+            {
+                switch(*p)
                 {
-                    unset_flags |= FLAG_ALLCAPS;
+                    case 'f':               /* restrict output to function names and definitions */
+                        funcs = !plus;
+                        print_flags |= FLAG_PRINT_FORMAL;
+                        break;
+                        
+                    case 'F':               /* don't print function definitions */
+                        if((funcs = !plus))
+                        {
+                            print_flags &= ~FLAG_PRINT_FUNCDEF;
+                            print_flags |= FLAG_PRINT_FORMAL;
+                        }
+                        break;
+                        
+                    case 'g':               /* declare on the global level (even inside functions) */
+                        global = !plus;
+                        break;
+                        
+                    case 'h':
+                        print_help(argv[0], strcmp(utility, "local") == 0 ?
+                                            &LOCAL_BUILTIN : &DECLARE_BUILTIN, 0);
+                        return 0;
+                        
+                    case 'i':               /* assign only int values */
+                        (*flags) |= FLAG_INTVAL;
+                        print = 0;
+                        break;
+
+                    case 'l':           /* convert variable's value to lowercase on assignment */
+                        (*flags) |= FLAG_ALLSMALL;
+                        if(!plus)
+                        {
+                            unset_flags |= FLAG_ALLCAPS;
+                        }
+                        print = 0;
+                        break;
+                        
+                    case 'p':               /* print variables and their attributes */
+                        if((print_formal = !plus))
+                        {
+                            print_flags |= FLAG_PRINT_FORMAL;
+                        }
+                        break;
+                        
+                    case 'r':               /* mark as readonly variables */
+                        if(plus)
+                        {
+                            PRINT_ERROR("%s: cannot use the '+r' option to remove the "
+                                        "readonly attribute\n", utility);
+                            return 2;
+                        }
+                        (*flags) |= FLAG_READONLY;
+                        print = 0;
+                        break;
+                        
+                    case 't':           /* turn function tracing on/off for the given function */
+                        (*flags) |= FLAG_FUNCTRACE;
+                        print = 0;
+                        break;
+                        
+                    case 'u':           /* convert variable's value to uppercase on assignment */
+                        (*flags) |= FLAG_ALLCAPS;
+                        if(!plus)
+                        {
+                            unset_flags |= FLAG_ALLSMALL;
+                        }
+                        print = 0;
+                        break;
+                        
+                    case 'v':
+                        printf("%s", shell_ver);
+                        return 0;
+                        
+                    case 'x':               /* mark as export variables/functions */
+                        (*flags) |= FLAG_EXPORT;
+                        print = 0;
+                        break;
+                        
+                    default:
+                        PRINT_ERROR("%s: unknown option: %c%c\n", 
+                                    utility, plus ? '+' : '-', *p);
+                        return 2;
                 }
-                break;
-                
-            case 'p':               /* print variables and their attributes */
-                if((print_formal = !plus))
-                {
-                    print_flags |= FLAG_PRINT_FORMAL;
-                }
-                break;
-                
-            case 'r':               /* mark as readonly variables */
-                if(plus)
-                {
-                    PRINT_ERROR("%s: cannot use the '+r' option to remove the "
-                                "readonly attribute\n", utility);
-                    return 2;
-                }
-                (*flags) |= FLAG_READONLY;
-                break;
-                
-            case 't':           /* turn function tracing on/off for the given function */
-                (*flags) |= FLAG_FUNCTRACE;
-                break;
-                
-            case 'u':           /* convert variable's value to uppercase on assignment */
-                (*flags) |= FLAG_ALLCAPS;
-                if(!plus)
-                {
-                    unset_flags |= FLAG_ALLSMALL;
-                }
-                break;
-                
-            case 'v':
-                printf("%s", shell_ver);
-                return 0;
-                
-            case 'x':               /* mark as export variables/functions */
-                (*flags) |= FLAG_EXPORT;
-                break;
+                p++;
+            }
+        }
+        else
+        {
+            /* first argument, stop paring options */
+            break;
         }
     }
 
-    /* unknown option */
-    if(c == -1)
-    {
-        return 2;
-    }
-
     /* no arguments. print all variables */
-    if(v >= argc || print_formal)
+    if(v >= argc || print_formal || (print && funcs))
     {
+        /*
+         * TODO: Fix this so that purge_vars() only outputs the subset of variables
+         *       or functions that have the given flags (x, r, i, u, l, t) set.
+         */
         return purge_vars(&argv[v], utility, funcs, print_flags);
     }
     
@@ -204,55 +251,73 @@ int do_declare(int argc, char **argv, int global)
     /* loop on the arguments */
     for( ; v < argc; v++)
     {
+        /* is this a "name=value" string? */
+        char *arg = argv[v];
+        char *equals = strchr(arg, '=');
+
+        /* if yes, get the value part */
+        struct symtab_entry_s *entry;
+        char *val = equals ? equals+1 : NULL;
+        int append = (equals && equals[-1] == '+');
+    
+        /* and the name part */
+        size_t name_len = equals ? (size_t)(equals-arg) : strlen(arg);
+        char name_buf[name_len+1];
+
+        strncpy(name_buf, arg, name_len);
+        name_buf[name_len] = '\0';
+
+        if(append)
+        {
+            name_buf[name_len-1] = '\0';
+        }
+        
+        if(equals == arg)
+        {
+            PRINT_ERROR("%s: empty %s name at: %s\n", utility, 
+                        funcs ? "function" : "variable", arg);
+            res = 1;
+            continue;
+        }
+        
+        if(!is_name(name_buf))
+        {
+            PRINT_ERROR("%s: cannot declare %s `%s`: invalid name\n", utility,
+                        funcs ? "function" : "variable", name_buf);
+            res = 1;
+            continue;
+        }
+
         /* cannot define functions using declare -f (bash) */
         if(funcs)
         {
-            /* bash seems to return 1 without printing any error message */
-            /*
-            PRINT_ERROR("%s: cannot use the '-f' option to define functions\n",
-                        utility);
-            */
-            res = 1;
-        }
-        else
-        {
-            /* is this a "name=value" string? */
-            char *arg = argv[v];
-            char *equals = strchr(arg, '=');
-            if(equals == arg)
+            entry = get_func(name_buf);
+            if(entry)
             {
-                PRINT_ERROR("%s: empty variable name at: %s\n", utility, arg);
-                res = 1;
-                continue;
-            }
-                
-            /* if yes, get the value part */
-            struct symtab_entry_s *entry;
-            char *val = equals ? equals+1 : NULL;
-            int flags = SET_FLAG_FORCE_NEW | (global ? SET_FLAG_GLOBAL : 0);
-            int append = (equals && equals[-1] == '+');
-    
-            /* and the name part */
-            size_t name_len = equals ? (size_t)(equals-arg) : strlen(arg);
-            char name_buf[name_len+1];
-            strncpy(name_buf, arg, name_len);
-            name_buf[name_len] = '\0';
-
-            if(append)
-            {
-                name_buf[name_len-1] = '\0';
-                flags |= SET_FLAG_APPEND;
-            }
-
-            if((entry = do_set(name_buf, val, set_flags, unset_flags, flags)))
-            {
-                /* if var is readonly, do_set returns it too */
-                if(flag_set(entry->flags, FLAG_READONLY))
+                if(equals)
                 {
-                    READONLY_ASSIGN_ERROR(utility, name_buf);
+                    PRINT_ERROR("%s: cannot use the '-f' option to define functions\n",
+                                utility);
+                    res = 1;
+                }
+                else
+                {
+                    entry->flags |= set_flags;
+                    entry->flags &= ~unset_flags;
                 }
             }
             else
+            {
+                /* bash seems to return 1 without printing any error messages */
+                res = 1;
+            }
+        }
+        else
+        {
+            int flags = SET_FLAG_FORCE_NEW | (global ? SET_FLAG_GLOBAL : 0) |
+                        (append ? SET_FLAG_APPEND : 0);
+
+            if(do_set(name_buf, val, set_flags, unset_flags, flags) == NULL)
             {
                 /* do_set() should have printed the error message */
                 res = 1;
@@ -264,7 +329,7 @@ int do_declare(int argc, char **argv, int global)
 
 
 /*
- * print the values and attributes of variables or functions, depending on the
+ * Print the values and attributes of variables or functions, depending on the
  * flags parameter.
  */
 int purge_vars(char **args, char *utility, int funcs, int flags)
@@ -279,7 +344,7 @@ int purge_vars(char **args, char *utility, int funcs, int flags)
     init_alpha_list(&list);
     
     /* 
-     * function definitions are printed straight away, while variables are
+     * Function definitions are printed straight away, while variables are
      * added to the alpha list, which we print now.
      */
     struct alpha_list_s *plist = funcs ? NULL : &list;
@@ -358,10 +423,10 @@ int purge_vars(char **args, char *utility, int funcs, int flags)
 
 
 /*
- * print the names and values of all the variables stored in the symbol
- * table pointed to by 'symtab'.. 'flags' indicate whether we should print
+ * Print the names and values of all the variables stored in the symbol
+ * table pointed to by 'symtab'. 'flags' indicate whether we should print
  * function definitions, whether to print output in a "formal" way by 
- * preceding each line with 'declare ...', etc. if 'list' is non-NULL, output
+ * preceding each line with 'declare ...', etc. If 'list' is non-NULL, output
  * is added to this alpha list, otherwise output is printed directly to stdout.
  */
 void purge_table(struct symtab_s *symtab, struct alpha_list_s *list, int flags)
@@ -375,8 +440,8 @@ void purge_table(struct symtab_s *symtab, struct alpha_list_s *list, int flags)
     }
     
     /*
-     * iterate through the symbol table entries, printing each in turn.
-     * how we iterate through the entries depends on how we implement
+     * Iterate through the symbol table entries, printing each in turn.
+     * How we iterate through the entries depends on how we implement
      * the symbol table struct (hashtables vs linked lists).
      */
     
@@ -419,8 +484,8 @@ void purge_table(struct symtab_s *symtab, struct alpha_list_s *list, int flags)
 
 
 /*
- * output the value and attributes of the symbol table entry.. if the entry
- * represents a variable, its name and value are printed.. if it represents a
+ * Output the value and attributes of the symbol table entry. If the entry
+ * represents a variable, its name and value are printed. If it represents a
  * function, its function name (and definition, if name_only == zero) is printed.
  */
 void do_print_var(struct symtab_entry_s *entry, struct alpha_list_s *list, int print_formal)
@@ -456,7 +521,7 @@ void do_print_var(struct symtab_entry_s *entry, struct alpha_list_s *list, int p
         else if(j == 0)
         {
             /*
-             * if no flags are set, add the special option '--', which tells
+             * If no flags are set, add the special option '--', which tells
              * 'declare' to end option parsing and start reading arguments 
              * (if this output is used as input to the shell).
              */
@@ -511,22 +576,22 @@ void do_print_funcdef(struct symtab_entry_s *entry)
         else
         {
             /* if by any chance the '()' are missing, add them manually */
-            printf("%s () { %s }\n", entry->name, entry->val);
+            printf("%s ()\n{\n%s\n}\n", entry->name, entry->val);
         }
     }
     else
     {
         /*
-         * if the function entry contains a nodetree of the parsed function body,
+         * If the function entry contains a nodetree of the parsed function body,
          * convert it to a string and print it.
          */
-        printf("%s () { ", entry->name);
-        char *f = cmd_nodetree_to_str(entry->func_body);
+        printf("%s ()\n{\n", entry->name);
+        char *f = cmd_nodetree_to_str(entry->func_body, 1);
         if(f)
         {
             printf("%s", f);
             free(f);
         }
-        printf(" }\n");
+        printf("\n}\n");
     }
 }

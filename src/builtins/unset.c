@@ -30,22 +30,20 @@
 #include "builtins.h"
 #include "../cmd.h"
 #include "../symtab/symtab.h"
+#include "../parser/parser.h"
 #include "setx.h"
 #include "../debug.h"
 
 #define UTILITY     "unset"
 
-#define UNSET_PRINT_ERROR(arg, msg) \
-    PRINT_ERROR("%s: unable to unset '%s': %s\n", UTILITY, arg, msg);
-
 
 /*
- * the unset builtin utility (non-POSIX).. used to unset shell variables.
+ * The unset builtin utility (non-POSIX). Used to unset shell variables.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help unset` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help unset` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -63,7 +61,7 @@ int unset_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -89,9 +87,16 @@ int unset_builtin(int argc, char **argv)
         return 2;
     }
     
+    /* cannot use -f and -v together */
+    if(funcs && vars)
+    {
+        PRINT_ERROR("%s: cannot use -f and -v together\n", UTILITY);
+        return 2;
+    }
+    
     /*
-     * pop our local symbol table, so that we will unset variables in the caller's
-     * scope.. this will give the caller the intended behaviour, as calling unset
+     * Pop our local symbol table, so that we will unset variables in the caller's
+     * scope. This will give the caller the intended behaviour, as calling unset
      * should unset variables in the caller's scope, not in the unset utility's scope.
      */
     //struct symtab_s *symtab = symtab_stack_pop();
@@ -103,6 +108,13 @@ int unset_builtin(int argc, char **argv)
         /* ignore empty arguments */
         if(!arg || !*arg)
         {
+            continue;
+        }
+        
+        if(!is_name(arg))
+        {
+            UNSET_PRINT_ERROR(arg, "invalid name");
+            res = 1;
             continue;
         }
 
@@ -126,9 +138,9 @@ int unset_builtin(int argc, char **argv)
             
             /*
              * 'localvar_unset' causes variables defined in previous scopes to be unset for the duration
-             * of the current function call.. after the call finishes, variables are unmasked, they
-             * retrieve their previous values.. we achieve this effect by simply adding a NULL-valued
-             * entry to the local symbol table, masking the global symbol table's entry.. we don't remove
+             * of the current function call. After the call finishes, variables are unmasked, they
+             * retrieve their previous values. We achieve this effect by simply adding a NULL-valued
+             * entry to the local symbol table, masking the global symbol table's entry. We don't remove
              * the variable from the local symbol table as this might unmask a global variable with the
              * same name.
              */
@@ -141,7 +153,7 @@ int unset_builtin(int argc, char **argv)
 
                 if(entry->flags & FLAG_READONLY)
                 {
-                    READONLY_ASSIGN_ERROR(UTILITY, arg);
+                    UNSET_PRINT_ERROR(arg, "readonly variable");
                     //UNSET_PRINT_ERROR(arg, "readonly variable");
                     res = 1;
                     continue;
@@ -155,15 +167,27 @@ int unset_builtin(int argc, char **argv)
                 {
                     if(flag_set(entry->flags, FLAG_READONLY))
                     {
-                        READONLY_ASSIGN_ERROR(UTILITY, arg);
-                        //UNSET_PRINT_ERROR(arg, "readonly variable");
+                        //READONLY_ASSIGN_ERROR(UTILITY, arg, "variable");
+                        UNSET_PRINT_ERROR(arg, "readonly variable");
                         res = 1;
                         continue;
                     }
-                    rem_from_any_symtab(entry);
-                
-                    /* now remove the variable/function definition from the environment */
-                    unsetenv(arg);
+                    
+                    /*
+                     * if that's a local (vs global) var, keep the symtab entry to
+                     * preserve the local flag (zsh and bash do this, zsh doesn't).
+                     */
+                    if(flag_set(entry->flags, FLAG_LOCAL))
+                    {
+                        entry->flags = FLAG_LOCAL;
+                        symtab_entry_setval(entry, NULL);
+                    }
+                    else
+                    {
+                        rem_from_any_symtab(entry);
+                        /* now remove the variable/function definition from the environment */
+                        unsetenv(arg);
+                    }
                     continue;
                 }
             }

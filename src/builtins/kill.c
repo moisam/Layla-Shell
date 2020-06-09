@@ -35,9 +35,9 @@
 
 
 /*
- * return the signal number for the given signal name.
+ * Return the signal number for the given signal name.
  *
- * returns the signal number, or -1 for invalid signal names.
+ * Returns the signal number, or -1 for invalid signal names.
  */
 int get_signum(char *signame)
 {
@@ -69,13 +69,13 @@ int get_signum(char *signame)
 
 
 /*
- * the kill builtin utility (non-POSIX).. used to send a signal to a job, process,
+ * The kill builtin utility (non-POSIX). Used to send a signal to a job, process,
  * or process group.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help kill` or `kill -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help kill` or `kill -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -89,7 +89,7 @@ int kill_builtin(int argc, char **argv)
     }
 
     int i, index = 0, res = 0;
-    int signum = SIGTERM;
+    int signum = -1;
     pid_t pid = 0;
     struct job_s *job = NULL;
     char *arg, *strend = NULL;
@@ -283,7 +283,16 @@ int kill_builtin(int argc, char **argv)
     /* end of options and beginning of arguments */
     if(index >= argc)
     {
+        if(signum != -1)
+        {
+            PRINT_ERROR("%s: missing argument (run `kill -h` to see the usage)\n", UTILITY);
+        }
         return res;
+    }
+    
+    if(signum == -1)
+    {
+        signum = SIGTERM;
     }
 
     /* process the arguments */
@@ -315,8 +324,9 @@ int kill_builtin(int argc, char **argv)
         /* (b) argument is a pid */
         else
         {
+            /* empty arg or invalid number */
             pid = strtol(arg, &strend, 10);
-            if(*strend)
+            if(!*arg || *strend)
             {
                 PRINT_ERROR("%s: invalid job id: %s\n", UTILITY, arg);
                 res = 2;

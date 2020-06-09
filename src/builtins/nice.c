@@ -39,9 +39,9 @@
 
 
 /*
- * extract the numeric nice value from the string str.
+ * Extract the numeric nice value from the string str.
  *
- * returns the default nice value if str contains an invalid value.
+ * Returns the default nice value if str contains an invalid value.
  */
 int get_niceval(char *str)
 {
@@ -63,18 +63,18 @@ int get_niceval(char *str)
 
 
 /*
- * the enable builtin utility (non-POSIX).. if called without a command, this
- * utility sets the nice value for the shell.. otherwise it runs the given
+ * The enable builtin utility (non-POSIX). If called without a command, this
+ * utility sets the nice value for the shell. Otherwise it runs the given
  * command with the passed nice value.
  *
- * the nice utility is a tcsh non-POSIX extension. bash doesn't have it,
+ * The nice utility is a tcsh non-POSIX extension. bash doesn't have it,
  * as it is part of the GNU coreutils package, not the shell itself.
  *
- * if setting the shell's nice value, returns 0 on success, non-zero otherwise.
- * if running a command, returns the result of executing the command.
+ * If setting the shell's nice value, returns 0 on success, non-zero otherwise.
+ * If running a command, returns the result of executing the command.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help nice` or `nice -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help nice` or `nice -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 

@@ -44,6 +44,16 @@ static inline void print_type(char *arg, char *type, int print_word, int print_p
 }
 
 
+/*
+ * Print a string describing the type of command cmd. The who parameter 
+ * contains the name of the calling utility (type, command, ...), which we
+ * use in printing error messages. The PATH parameter is used to search
+ * external commands. If PATH is NULL, the $PATH variable is used by
+ * default. The flags parameter indicates whether the caller wants us to
+ * print a single word describing the command, whether to write the full
+ * pathname of external commands, whether to check for functions, write
+ * hashed pathnames, or print all possible types of a command.
+ */
 int print_command_type(char *cmd, char *who, char *PATH, int flags)
 {
     int print_path = flag_set(flags, TYPE_FLAG_PRINT_PATH);
@@ -267,12 +277,12 @@ int print_command_type(char *cmd, char *who, char *PATH, int flags)
 
 
 /*
- * the type builtin utility (POSIX).. used to print the type of an argument.
+ * The type builtin utility (POSIX). Used to print the type of an argument.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help type` or `type -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help type` or `type -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -351,7 +361,7 @@ int type_builtin(int argc, char **argv)
                         if(startup_finished && option_set('r'))
                         {
                             /* r-shells can't use this option */
-                            PRINT_ERROR("%s: restricted shells can't use the -%c option\n", SHELL_NAME, *p);
+                            PRINT_ERROR("%s: restricted shells can't use the -%c option\n", SOURCE_NAME, *p);
                             return 3;
                         }
                         break;

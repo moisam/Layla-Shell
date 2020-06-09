@@ -37,10 +37,10 @@ char *COMMAND_DEFAULT_PATH = "/bin:/usr/bin";
 
 
 /*
- * follow POSIX's command search and execution, by checking first if the
+ * Follow POSIX's command search and execution, by checking first if the
  * command to be executed is a special builtin, a function, a regular builtin,
- * or an external command (in that order).. the first match is executed.
- * if the command name contains a slash '/', we treat it as the pathname of
+ * or an external command (in that order). The first match is executed.
+ * If the command name contains a slash '/', we treat it as the pathname of
  * the external command we should execute.
  */
 int search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH, int flags)
@@ -91,13 +91,14 @@ int search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH, i
 
 
 /*
- * the command builtin utility (POSIX).. used to execute a builtin or external command,
- * ignoring shell functions declared with the same name.. used also to print information
- * about the type (and path) of commands, functions and utilities.. returns 0 if the
- * command was found and executed, non-zero otherwise.
+ * The command builtin utility (POSIX). Used to execute a builtin or external command,
+ * ignoring shell functions declared with the same name. Used also to print information
+ * about the type (and path) of commands, functions and utilities.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help command` or `command -h` from lsh prompt to see a short
+ * Returns 0 if the* command was found and executed, non-zero otherwise.
+ * 
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help command` or `command -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 int command_builtin(int argc, char **argv)
@@ -146,14 +147,15 @@ int command_builtin(int argc, char **argv)
                         if(startup_finished && option_set('r'))
                         {
                             /* r-shells can't use this option */
-                            PRINT_ERROR("%s: restricted shells can't use the -p option\n", SHELL_NAME);
+                            PRINT_ERROR("%s: restricted shells cannot use the -p option\n",
+                                        SOURCE_NAME);
                             return 3;
                         }
                         use_default_path = 1;
                         break;
                         
                     default:
-                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, argv[i]);
+                        PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, *p);
                         return 2;
                 }
                 p++;
@@ -174,9 +176,9 @@ int command_builtin(int argc, char **argv)
     }
     
     /*
-     * if the caller provided a path, use it. otherwise use the default path.
+     * If the caller provided a path, use it. Otherwise use the default path.
      * we try to get the default path by using POSIX's confstr() function, if
-     * defined. otherwise we use our own default value.
+     * defined. Otherwise we use our own default value.
      */
     char *PATH = NULL;
     int res = 0;
@@ -186,7 +188,7 @@ int command_builtin(int argc, char **argv)
         PATH = get_default_path();
     }
 
-    /* one of the following two options was supplied:
+    /* One of the following two options was supplied:
      * - the -v option prints the command path
      * - the -V option prints our interpretation of the command 
      */
@@ -197,12 +199,13 @@ int command_builtin(int argc, char **argv)
     else
     {
         /*
-         * neither -v nor -V was supplied. run the command using POSIX search and
+         * Neither -v nor -V was supplied. Run the command using POSIX search and
          * execution Algorithm.
          */
         int    cargc = argc-i;
         char **cargv = &argv[i];
-        res = search_and_exec(NULL, cargc, cargv, PATH, SEARCH_AND_EXEC_DOFORK);
+        res = search_and_exec(NULL, cargc, cargv, PATH, SEARCH_AND_EXEC_DOFORK) ?
+                    exit_status : 1;
     }
     
     if(PATH && PATH != COMMAND_DEFAULT_PATH)

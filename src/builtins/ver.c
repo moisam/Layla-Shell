@@ -27,12 +27,12 @@
 
 
 /*
- * the ver builtin utility (non-POSIX).. prints the shell version.
+ * The ver builtin utility (non-POSIX). Prints the shell version.
  *
- * returns 0 on success, non-zero if an unknown option is given.
+ * Returns 0 on success, non-zero if an unknown option is given.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help ver` or `ver -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help ver` or `ver -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 

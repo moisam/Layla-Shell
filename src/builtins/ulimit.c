@@ -23,10 +23,10 @@
 #define _POSIX_C_SOURCE 200809L
 
 /*
- * fcntl.h and linux/fcntl.h are incompatible. we need the former for fcntl()
+ * fcntl.h and linux/fcntl.h are incompatible. We need the former for fcntl()
  * function, and the latter for the Linux-specific F_GETPIPE_SZ argument.
- * this is a hack, but it works.
- * NOTE: any other solution?
+ * This is a hack, but it works.
+ * NOTE: Any other solution?
  */
 #define HAVE_ARCH_STRUCT_FLOCK
 #define HAVE_ARCH_STRUCT_FLOCK64
@@ -120,7 +120,7 @@ int limits_count = sizeof(limits_table)/sizeof(struct limits_table_s);
 
 
 /*
- * struct to represent our rlimits.
+ * Struct to represent our rlimits.
  */
 struct rlim_s
 {
@@ -138,9 +138,9 @@ struct rlim_s
 #if defined(__linux__) || defined(__gnu_linux__)
 
 /*
- * we get and set some rlimits using Linux-specific system files, which are
- * part of the /proc filetree.. as we access all files in a similar way, we
- * store the pathnames corresponding to each system resource.. we associate
+ * We get and set some rlimits using Linux-specific system files, which are
+ * part of the /proc filetree. As we access all files in a similar way, we
+ * store the pathnames corresponding to each system resource. We associate
  * two files for each resource: the first one we'll use to get/set the soft
  * limit, the second one the hard limit (for some resources, we use the same
  * file for both limits).
@@ -164,7 +164,7 @@ int linux_rlimit_count = sizeof(linux_rlimits)/sizeof(struct linux_rlimit_s);
 #endif
 
 /*
- * get the size of pipes on this system in kilobytes (there is no direct and
+ * Get the size of pipes on this system in kilobytes (there is no direct and
  * portable way of getting the default pipe size - hence this hack).
  */
 long get_pipesz(void)
@@ -189,6 +189,14 @@ long get_pipesz(void)
 
 #if defined(__linux__) || defined(__gnu_linux__)
 
+/*
+ * Get a Linux-specific rlimit by reading the system-file (one that is under
+ * /proc/sys/) corresponding to the rlimit, which is given in the path parameter.
+ * The different files we read are stored in the 'struct linux_rlimit_s' array 
+ * defined above.
+ * 
+ * Returns the rlimit read from the given path.
+ */
 long read_sys_file(char *path)
 {
     char buf[strlen(path)+6];
@@ -214,6 +222,18 @@ long read_sys_file(char *path)
 }
 
 
+/*
+ * Modify a Linux-specific rlimit by writing the new value to the system-file 
+ * (one that is under /proc/sys/) corresponding to the rlimit, which is given 
+ * in the path parameter. The different files we read are stored in the 
+ * 'struct linux_rlimit_s' array defined above. The limit_str parameter is the 
+ * rlimit's name, which we use when printing error messages.
+ * 
+ * After writing the rlimit to the given path, the function reads the file to
+ * ensure the rlimit was successfully changed.
+ * 
+ * Returns the rlimit, or 0 if there is an error.
+ */
 long write_sys_file(char *path, char *new_max, char *limit_str)
 {
     char *p = new_max;
@@ -280,7 +300,7 @@ long write_sys_file(char *path, char *new_max, char *limit_str)
 
 
 /*
- * output an rlimit, printing 'unlimited' as appropriate.
+ * Output an rlimit, printing 'unlimited' as appropriate.
  */
 void print_rlimit(rlim_t limit)
 {
@@ -296,7 +316,7 @@ void print_rlimit(rlim_t limit)
 
 
 /*
- * return a string describing the rlimit given in 'which'.
+ * Return a string describing the rlimit given in 'which'.
  */
 char *rlimit_name(int which)
 {
@@ -380,16 +400,16 @@ char *rlimit_name(int which)
 
 
 /*
- * get or set the rlimit given in 'which'.. if getting, the rlimit is stored in 'rlim'..
- * if setting, 'valstr' contains the value to give to the rlimit, or one of the special
- * values 'unlimited', 'hard', or 'soft'.. the 'flags' parameter determines 
- * whether we'll manipulate the hard, soft, or both limits..
- * the 'div' parameter is a number we will divide the rlimit by (if getting the limit),
- * or multiply the rlimit by (if setting the limit).. for example, to set an rlimit to 2kb,
- * we can pass 2 as the rlimit value with a div of 1024.. to get the rlimit value back in kb,
+ * Get or set the rlimit given in 'which'. If getting, the rlimit is stored in 'rlim'.
+ * If setting, 'valstr' contains the value to give to the rlimit, or one of the special
+ * values 'unlimited', 'hard', or 'soft'. The 'flags' parameter determines 
+ * whether we'll manipulate the hard, soft, or both limits.
+ * The 'div' parameter is a number we will divide the rlimit by (if getting the limit),
+ * or multiply the rlimit by (if setting the limit). For example, to set an rlimit to 2kb,
+ * we can pass 2 as the rlimit value with a div of 1024. To get the rlimit value back in kb,
  * we will pass 1024 as the value of div when we are retrieving the rlimit value.
  *
- * returns 0 if the rlimit is got/set successfully, non-zero otherwise.
+ * Returns 0 if the rlimit is got/set successfully, non-zero otherwise.
  */
 
 #define HARD_LIMIT      (1 << 0)
@@ -558,7 +578,7 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int flag
 
 
 /*
- * print the given rlimits.
+ * Print the given rlimits.
  */
 void print_rlimits(struct rlim_s *limits, int count)
 {
@@ -575,7 +595,7 @@ void print_rlimits(struct rlim_s *limits, int count)
         printf("%s%*s(-%c)  ", name, (int)(34-strlen(name)), " ", limits[v].table_ptr->name);
 
         /*
-         * nice values are in the range 19 to -20, but the limit returned
+         * Nice values are in the range 19 to -20, but the limit returned
          * from the Linux kernel is in the range 1 to 40, so you need to subtract
          * from 20 if you wanted to get the actual nice value.
          */
@@ -593,21 +613,21 @@ void print_rlimits(struct rlim_s *limits, int count)
 
 
 /*
- * the ulimit builtin utility (POSIX).. used to set and report process resource limits.
+ * The ulimit builtin utility (POSIX). Used to set and report process resource limits.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help ulimit` or `ulimit -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help ulimit` or `ulimit -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
 int ulimit_builtin(int argc, char **argv)
 {
     /*
-     * process the arguments.. we will first collect all requested
-     * rlimits in an array, then print them out.. this is so if the
-     * caller is asking for one rlimit, we will output it.. otherwise,
+     * Process the arguments. We will first collect all requested
+     * rlimits in an array, then print them out. This is so if the
+     * caller is asking for one rlimit, we will output it. Otherwise,
      * we will print a nicely formatted multi-line result indicating
      * each rlimit and its value.
      */
@@ -644,7 +664,7 @@ int ulimit_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         newlimit = ((internal_optarg) && (internal_optarg != INVALID_OPTARG)) ?
                     internal_optarg : NULL;
@@ -698,7 +718,7 @@ int ulimit_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
 
     /*

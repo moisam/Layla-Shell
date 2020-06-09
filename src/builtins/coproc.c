@@ -34,9 +34,9 @@
 #define UTILITY             "coproc"
 
 /*
- * the coprocess uses two pipes: one for reading by the coprocess (written to
+ * The coprocess uses two pipes: one for reading by the coprocess (written to
  * by the shell), the other for writing by the coprocess (read by the shell).
- * we save each pipe's file descriptors in the following global arrays.
+ * We save each pipe's file descriptors in the following global arrays.
  */
 int rfiledes[2] = { -1, -1 };
 int wfiledes[2] = { -1, -1 };
@@ -44,13 +44,13 @@ pid_t coproc_pid = 0;
 
 
 /*
- * close the coprocess's file descriptors we have opened in the parent shell.
+ * Close the coprocess's file descriptors we have opened in the parent shell.
  */
 void coproc_close_fds(void)
 {
     /*
-     * NOTE: it doesn't seem that closes the coproc files by itself.
-     * TODO: check if the following is the right behavior.
+     * NOTE: It doesn't seem that closes the coproc files by itself.
+     * TODO: Check if the following is the right behavior.
      */
 #if 0
     close(rfiledes[1]);
@@ -64,14 +64,15 @@ void coproc_close_fds(void)
 
 
 /*
- * the coproc builtin utility (non-POSIX).. used to fork a subshell (coprocess)
- * which we can assign tasks to. the coprocess runs in the background and we interact
- * with it using two pipes: one for reading, the other for writing. this utility is
+ * The coproc builtin utility (non-POSIX). Used to fork a subshell (coprocess)
+ * which we can assign tasks to. The coprocess runs in the background and we interact
+ * with it using two pipes: one for reading, the other for writing. This utility is
  * special among the other builtin utilities in that we let it handle its own I/O
  * redirections, so that the redirections affect the coprocess only.
- * returns 0 if the coprocess was started successfully, 0 otherwise.
  * 
- * see the manpage, or run: `help coproc` from lsh prompt to see a short
+ * Returns 0 if the coprocess was started successfully, 0 otherwise.
+ * 
+ * See the manpage, or run: `help coproc` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -141,8 +142,8 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
 #endif
         
         /*
-         * reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
-         * if -o errtrace (-E) is not set. traced functions inherit both traps
+         * Reset the DEBUG trap if -o functrace (-T) is not set, and the ERR trap
+         * if -o errtrace (-E) is not set. Traced functions inherit both traps
          * from the calling shell (bash).
          */
         if(!option_set('T'))
@@ -157,7 +158,7 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
         }
         
         /*
-         * the -e (errexit) option is reset in subshells if inherit_errexit
+         * The -e (errexit) option is reset in subshells if inherit_errexit
          * is not set (bash).
          */
         if(!optionx_set(OPTION_INHERIT_ERREXIT))
@@ -170,31 +171,6 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
         
         /* execute the command */
         exit(!do_list(src, cmd, NULL));
-        
-#if 0
-        int res = search_and_exec(NULL, argc-1, &argv[1], NULL, SEARCH_AND_EXEC_DOFUNC);
-        
-        /* if we returned, the command was not executed */
-        if(errno)
-        {
-            PRINT_ERROR("%s: failed to exec '%s': %s\n", UTILITY, argv[1], strerror(errno));
-        }
-        
-        /* exit with an appropriate exit code */
-        if(errno == ENOEXEC)
-        {
-            exit(EXIT_ERROR_NOEXEC);
-        }
-        else if(errno == ENOENT)
-        {
-            exit(EXIT_ERROR_NOENT);
-        }
-        else
-        {
-            exit(res);
-        }
-#endif
-
     }
     else if(coproc_pid < 0)            /* error */
     {
@@ -204,8 +180,8 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
     else                        /* parent process */
     {
         /*
-         * save the file descriptors to the symtab.
-         * TODO: these file descriptors should not be available in subshells.
+         * Save the file descriptors to the symtab.
+         * TODO: These file descriptors should not be available in subshells.
          */
         /* $COPROC1 - command input, shell output. similar to bash's $COPROC[1] */
         sprintf(buf, "%s1", pname);
@@ -215,7 +191,7 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
         close(rfiledes[0]);                 /* close the other end, we will not use it */
         
         /*
-         * set the close-on-exec flag. we could've used pipe2() to set this flag when we
+         * Set the close-on-exec flag. We could've used pipe2() to set this flag when we
          * created the pipe, but this would have caused the coprocess to fail after fork,
          * when it calls search_and_exec(), which calls do_exec_cmd(), which eventually 
          * calls exec().
@@ -239,10 +215,9 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
         symtab_entry_setval(entry, buf);
 
         /* 
-         * add as background job.. $! and cur_job will be set in add_job().
+         * Add as background job. $! and cur_job will be set in add_job().
          */
-        char *cmdstr = get_cmdstr(cmd);
-        //char *cmdstr = list_to_str(&argv[1]);
+        char *cmdstr = cmd_nodetree_to_str(cmd, 1);
         struct job_s *job = new_job(cmdstr, 1);
         add_pid_to_job(job, coproc_pid);
         add_job(job);

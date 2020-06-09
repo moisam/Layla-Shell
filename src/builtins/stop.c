@@ -33,14 +33,14 @@
 
 
 /*
- * the stop builtin utility (non-POSIX).. used to stop background jobs.
+ * The stop builtin utility (non-POSIX). Used to stop background jobs.
  *
- * the stop utility is a tcsh non-POSIX extension. bash doesn't have it.
+ * The stop utility is a tcsh non-POSIX extension. bash doesn't have it.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help stop` or `stop -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help stop` or `stop -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -58,7 +58,7 @@ int stop_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hv", &v, 0)) > 0)
+    while((c = parse_args(argc, argv, "hv", &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -74,7 +74,7 @@ int stop_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
 
     /* missing job argument */

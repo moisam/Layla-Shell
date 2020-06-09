@@ -32,13 +32,13 @@
 
 
 /*
- * the hup/nohup builtin utilities (non-POSIX) are used to run a command, making it
+ * The hup/nohup builtin utilities (non-POSIX) are used to run a command, making it
  * ignore the SIGHUP signal (nohup utility) or not (hup utility).
  *
- * the hup/nohup utilities are tcsh non-POSIX extensions. bash doesn't have them.
+ * The hup/nohup utilities are tcsh non-POSIX extensions. bash doesn't have them.
  * nohup is part of the GNU coreutils package, not the shell itself.
  *
- * this function does the role of both utilities, depending on the name it is called
+ * This function does the role of both utilities, depending on the name it is called
  * with (to hup or to nohup, that is the question).
  */
 

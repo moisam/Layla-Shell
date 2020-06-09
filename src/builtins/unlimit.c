@@ -34,7 +34,7 @@
 char *rlim_option(char *name);
 
 /* 
- * the list of all ulimit resource limit options.. if any resources are
+ * The list of all ulimit resource limit options. If any resources are
  * added/removed in ulimit, they should be updated here also.
  */
 static char *all_rlim[] =
@@ -45,12 +45,12 @@ static char *all_rlim[] =
 
 
 /*
- * set all rlimit to 'unlimited'.. if 'ishard' is non-zero, the hard limits
- * are removed, otherwise the soft limits are removed.. if 'ignore_err' is
+ * Set all rlimit to 'unlimited'. If 'ishard' is non-zero, the hard limits
+ * are removed, otherwise the soft limits are removed. If 'ignore_err' is
  * zero, the function stops at the first error, otherwise it tries to remove
  * all limits.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  */
 int unlimit_all(int ishard, int ignore_err)
 {
@@ -72,15 +72,15 @@ int unlimit_all(int ishard, int ignore_err)
 
 
 /*
- * the unlimit builtin utility (non-POSIX).. used to set rlimits to unlimited (don't
+ * The unlimit builtin utility (non-POSIX). Used to set rlimits to unlimited (don't
  * confuse this with ulimit).
  *
- * the unlimit utility is a tcsh non-POSIX extension. bash doesn't have it.
+ * The unlimit utility is a tcsh non-POSIX extension. bash doesn't have it.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help unlimit` or `unlimit -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help unlimit` or `unlimit -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -123,7 +123,6 @@ int unlimit_builtin(int argc, char **argv)
         }
     }
     /* we accept unknown options, as they might be ulimit options passed to us */
-    //if(c == -1) return 2;
 
     /* missing arguments */
     if(v >= argc)
@@ -170,7 +169,7 @@ int unlimit_builtin(int argc, char **argv)
 
 
 /*
- * get the ulimit utility option corresponding to the given resource name.
+ * Get the ulimit utility option corresponding to the given resource name.
  */
 char *rlim_option(char *name)
 {

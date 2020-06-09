@@ -34,15 +34,15 @@
 
 
 /*
- * the repeat builtin utility (non-POSIX).. used to execute commands a number
+ * The repeat builtin utility (non-POSIX). Used to execute commands a number
  * of times.
  *
- * the repeat utility is a tcsh non-POSIX extension. bash doesn't have it.
+ * The repeat utility is a tcsh non-POSIX extension. bash doesn't have it.
  *
- * returns the exit status of the last command executed.
+ * Returns the exit status of the last command executed.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help repeat` or `repeat -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help repeat` or `repeat -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -53,7 +53,7 @@ int repeat_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hv", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "hv", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {

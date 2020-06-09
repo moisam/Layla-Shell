@@ -42,26 +42,53 @@ int   errexp = 0;
 /* defined in cmdline.c */
 extern char *incomplete_cmd;
 
-/* defined in history.c */
-extern struct histent_s cmd_history[];
+
+char *backup_cmdbuf(void)
+{
+    char *backup = malloc(cmdbuf_end+1);
+
+    if(!backup)
+    {
+        beep();
+        PRINT_ERROR("%s: history expansion failed: %s\n", SOURCE_NAME, strerror(errno));
+        return NULL;
+    }
+    
+    strcpy(backup, cmdbuf);
+    return backup;
+}
+
+
+void restore_cmdbuf(char *backup)
+{
+    if(backup)
+    {
+        /* restore the original command buffer */
+        strcpy(cmdbuf, backup);
+        
+        /* free the backup copy */
+        free(backup);
+    }
+}
 
 
 /*
- * perform history expansion on the command line, before it is passed to the
- * parser and thence the executor.. if the quotes parameter is non-zero, we are
+ * Perform history expansion on the command line, before it is passed to the
+ * parser and thence the executor. If the quotes parameter is non-zero, we are
  * expanding a command line that is part of a multiline command, and there have
- * been an open quote somewhere in the previous lines.. we use this flag to skip
+ * been an open quote somewhere in the previous lines. We use this flag to skip
  * the quoted part (if quote is ') while expanding the command line.
  *
- * returns the malloc'd history-expanded command line, or NULL in case of error.
+ * Returns the malloc'd history-expanded command line, or NULL in case of error.
  */
-char *hist_expand(int quotes)
+char *hist_expand(int quotes, int flags)
 {
     char *p = cmdbuf;
     char *p2, *p3, *p4;
     int i, j, k;
     char errmsg[128];
     int expanded = 0;
+    int do_backup = flag_set(flags, FLAG_HISTEXPAND_DO_BACKUP);
 
     /*
      * if this line is part of a multiline single-quoted string, skip the 
@@ -85,22 +112,33 @@ char *hist_expand(int quotes)
     }
 
     /*
-     * this is a backup copy of the command buffer.. we are going to restore
-     * the command buffer after we finish our history expansion.. this is done
+     * This is a backup copy of the command buffer. We are going to restore
+     * the command buffer after we finish our history expansion. This is done
      * so that cmdline() can do its own thing, like erasing the previous command
      * from the screen before outputting our expanded version, for example.
      */
+#if 0
     char *backup = malloc(cmdbuf_end+1);
     if(!backup)
     {
         beep();
-        PRINT_ERROR("%s: history expansion failed: %s\n", SHELL_NAME, strerror(errno));
+        PRINT_ERROR("%s: history expansion failed: %s\n", SOURCE_NAME, strerror(errno));
         return INVALID_HIST_EXPAND;
     }
     strcpy(backup, cmdbuf);
+#endif
+    
+    char *backup = NULL;
+    if(do_backup)
+    {
+        if((backup = backup_cmdbuf()) == NULL)
+        {
+            return INVALID_HIST_EXPAND;
+        }
+    }
 
     /*
-     *  perform history expansion, which is done as follows:
+     *  Perform history expansion, which is done as follows:
      *  - determine which command line from the history list we are going to use
      *    (bash calls this line the 'event').
      *  - determine which parts of the event line we will use (bash calls these parts
@@ -125,10 +163,12 @@ char *hist_expand(int quotes)
             case '\'':
                 /* skip single-quoted string */
                 p++;
+                
                 while(*p && *p != '\'')
                 {
                     p++;
                 }
+                
                 /*
                  * reached EOL? go back one step, so that p++ later will return p to 
                  * EOL so that the loop will end.
@@ -148,33 +188,43 @@ char *hist_expand(int quotes)
             case '^':                           /* ^string1^string2^ */
                 /* get the previous history command */
                 p2 = get_hist_cmd(-1);
+                
                 if(!p2)
                 {
-                    PRINT_ERROR("%s: history command not found: !!\n", SHELL_NAME);
-                    goto bailout;
+                    PRINT_ERROR("%s: history command not found: !!\n", SOURCE_NAME);
+                    p = INVALID_HIST_EXPAND;
+                    goto fin;
                 }
+                
                 /* convert "^string^string^" to "s/string/string/" */
                 p3 = p+1;
                 k = 2;
                 j = 0;
+                
                 while(k && *p3)
                 {
                     if(*p3 == '^' && p3[-1] != '\\')
                     {
                         k--;
                     }
+                    
                     p3++;
                     j++;
                 }
+                
                 char *modif = malloc(j+4);
                 if(!modif)
                 {
-                    PRINT_ERROR("%s: failed to expand history at '^': %s\n", SHELL_NAME, strerror(errno));
-                    goto bailout;
+                    PRINT_ERROR("%s: failed to expand history at '^': %s\n", 
+                                SOURCE_NAME, strerror(errno));
+                    p = INVALID_HIST_EXPAND;
+                    goto fin;
                 }
+                
                 strcpy(modif, ":s/");
                 p3 = p+1;
                 p4 = modif+3;
+                
                 while(j-- && *p3)
                 {
                     if(*p3 == '^' && p3[-1] != '\\')
@@ -188,14 +238,18 @@ char *hist_expand(int quotes)
                     p3++;
                     p4++;
                 }
+                
                 *p4 = '\0';                
+                
                 /* perform the "s/string/string/" expansion */
                 j = do_hist_modif(p2, modif, &p4);
                 free(modif);
                 if(errexp)
                 {
-                    goto bailout;
+                    p = INVALID_HIST_EXPAND;
+                    goto fin;
                 }
+                
                 /* insert the expanded string */
                 i = insert_hist_cmd(p, p4, j);
                 if(p4)
@@ -203,15 +257,18 @@ char *hist_expand(int quotes)
                     free(p4);
                 }
                 p2 = NULL;
+                
                 if(i)
                 {
                     p += i-1;
                 }
                 else
                 {
-                    PRINT_ERROR("%s: failed to expand history at '^'\n", SHELL_NAME);
-                    goto bailout;
+                    PRINT_ERROR("%s: failed to expand history at '^'\n", SOURCE_NAME);
+                    p = INVALID_HIST_EXPAND;
+                    goto fin;
                 }
+                
                 expanded = 1;
                 break;
 
@@ -224,11 +281,13 @@ char *hist_expand(int quotes)
                 {
                     break;
                 }
+                
                 /* '!' just before closing '"' is not considered for expansion (bash) */
                 if(p[1] == '"' && quotes == '"')
                 {
                     break;
                 }
+                
                 /*
                  * also don't consider '!' followed by whitespace, '=' or '(' (bash with
                  * extglob shopt option, csh)
@@ -237,8 +296,10 @@ char *hist_expand(int quotes)
                 {
                     break;
                 }
+                
                 p2 = NULL, p3 = NULL, p4 = NULL;
                 errmsg[0] = '\0';
+                
                 /* get the prev command we will substitute */
                 switch(p[1])
                 {
@@ -247,16 +308,22 @@ char *hist_expand(int quotes)
                         p2 = get_hist_cmd(-1);
                         if(!p2)
                         {
-                            PRINT_ERROR("%s: history command not found: !!\n", SHELL_NAME);
-                            goto bailout;
+                            PRINT_ERROR("%s: history command not found: !!\n", SOURCE_NAME);
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         j = get_hist_words(p2, p+2, &p3);
+                        
                         if(errexp)
                         {
-                            goto bailout;
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         j += 2;
-                        sprintf(errmsg, "%s: history command not found: !!", SHELL_NAME);
+                        sprintf(errmsg, "%s: history command not found: !!", SOURCE_NAME);
+                        
                         break;
                         
                     case '-':                           /* !-n */
@@ -264,26 +331,34 @@ char *hist_expand(int quotes)
                         p2 = p+2;
                         if(!*p2 || !isdigit(*p2))
                         {
-                            PRINT_ERROR("%s: missing numeric argument to !-\n", SHELL_NAME);
-                            goto bailout;
+                            PRINT_ERROR("%s: missing numeric argument to !-\n", SOURCE_NAME);
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         i = 0, j = 0;
+                        
                         while(*p2 && isdigit(*p2))
                         {
                             i = (i*10) + (*p2)-'0';
                             p2++;
                             j++;
                         }
+                        
                         k = -i;
                         p2 = get_hist_cmd(k);
                         j += 2;                     /* add 2 for the '!-' */
                         i = get_hist_words(p2, p+j, &p3);
+                        
                         if(errexp)
                         {
-                            goto bailout;
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         j += i;
-                        sprintf(errmsg, "%s: history command not found: !%d", SHELL_NAME, k);
+                        sprintf(errmsg, "%s: history command not found: !%d", SOURCE_NAME, k);
+                        
                         break;
                         
                     case '?':                           /* !?string[?] */
@@ -291,43 +366,57 @@ char *hist_expand(int quotes)
                         p2 = p+2;
                         if(!*p2 || *p2 == '?')
                         {
-                            PRINT_ERROR("%s: missing string argument to !?\n", SHELL_NAME);
-                            goto bailout;
+                            PRINT_ERROR("%s: missing string argument to !?\n", SOURCE_NAME);
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         j = 0;
+                        
                         /* find the end of the string, which is the first space char or ? */
                         while(*p2 && *p2 != '?' && !isspace(*p2))
                         {
                             p2++;
                             j++;
                         }
+                        
                         p3 = get_malloced_strl(p+2, 0, j);
                         if(!p3)
                         {
-                            PRINT_ERROR("%s: history expansion failed: %s\n", SHELL_NAME, strerror(errno));
-                            goto bailout;
+                            PRINT_ERROR("%s: history expansion failed: %s\n", SOURCE_NAME, strerror(errno));
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         k = 2;                  /* we will add 2 for the '!?' */
                         if(*p2 == '?')
                         {
                             k++;     /* and another 1 for the terminating '?' */
                         }
+                        
                         j += k;
+                        
                         /* get the history command */
                         p2 = get_hist_cmdp(p3, 0);
+                        
                         /* save the last query string */
                         if(query_str)
                         {
                             free(query_str);
                         }
                         query_str = p3;
+                        
                         i = get_hist_words(p2, p+j, &p3);
+                        
                         if(errexp)
                         {
-                            goto bailout;
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         j += i;
-                        sprintf(errmsg, "%s: history command not found: !?%s", SHELL_NAME, p3);
+                        sprintf(errmsg, "%s: history command not found: !?%s", SOURCE_NAME, p3);
+                        
                         break;
                         
                     case '#':                           /* !# */
@@ -347,17 +436,22 @@ char *hist_expand(int quotes)
                         p2 = get_hist_cmd(-1);
                         if(!p2)
                         {
-                            PRINT_ERROR("%s: history command not found: !!\n", SHELL_NAME);
-                            goto bailout;
+                            PRINT_ERROR("%s: history command not found: !!\n", SOURCE_NAME);
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         p4 = ":$";
                         j = get_hist_words(p2, p4, &p3);
+                        
                         if(errexp)
                         {
-                            goto bailout;
+                            p = INVALID_HIST_EXPAND;
+                            goto fin;
                         }
+                        
                         j = 2;
-                        sprintf(errmsg, "%s: history command not found: !!", SHELL_NAME);
+                        sprintf(errmsg, "%s: history command not found: !!", SOURCE_NAME);
                         break;
                         
                     default:
@@ -365,6 +459,7 @@ char *hist_expand(int quotes)
                         {
                             p2 = p+1;
                             i = 0, j = 0;
+                            
                             /* get n */
                             while(*p2 && isdigit(*p2))
                             {
@@ -372,49 +467,65 @@ char *hist_expand(int quotes)
                                 p2++;
                                 j++;
                             }
+                            
                             k = i;
+                            
                             /* get the history command #n */
                             p2 = get_hist_cmd(k);
                             if(!p2)
                             {
-                                PRINT_ERROR("%s: history command not found: !%d\n", SHELL_NAME, k);
-                                goto bailout;
+                                PRINT_ERROR("%s: history command not found: !%d\n", SOURCE_NAME, k);
+                                p = INVALID_HIST_EXPAND;
+                                goto fin;
                             }
+                            
                             j++;                        /* add 1 for the '!' */
                             i = get_hist_words(p2, p+j, &p3);
+                            
                             if(errexp)
                             {
-                                goto bailout;
+                                p = INVALID_HIST_EXPAND;
+                                goto fin;
                             }
+                            
                             j += i;
-                            sprintf(errmsg, "%s: history command not found: !%d", SHELL_NAME, k);
+                            sprintf(errmsg, "%s: history command not found: !%d", SOURCE_NAME, k);
                         }
                         else if(isalpha(p[1]))          /* !string */
                         {
                             p2 = p+1;
                             j = 0;
+                            
                             /* get the string */
                             while(*p2 && !isspace(*p2) && *p2 != ':')
                             {
                                 p2++;
                                 j++;
                             }
+                            
                             p3 = get_malloced_strl(p+1, 0, j);
                             if(!p3)
                             {
-                                PRINT_ERROR("%s: history expansion failed: %s\n", SHELL_NAME, strerror(errno));
-                                goto bailout;
+                                PRINT_ERROR("%s: history expansion failed: %s\n", 
+                                            SOURCE_NAME, strerror(errno));
+                                p = INVALID_HIST_EXPAND;
+                                goto fin;
                             }
+                            
                             /* get the history command containing the string */
                             p2 = get_hist_cmdp(p3, 1);
                             j++;                        /* add 1 for the '!' */
-                            sprintf(errmsg, "%s: history command not found: !%s", SHELL_NAME, p3);
+                            sprintf(errmsg, "%s: history command not found: !%s", 
+                                    SOURCE_NAME, p3);
                             free_malloced_str(p3);
                             i = get_hist_words(p2, p+j, &p3);
+                            
                             if(errexp)
                             {
-                                goto bailout;
+                                p = INVALID_HIST_EXPAND;
+                                goto fin;
                             }
+                            
                             j += i;
                         }
                         break;
@@ -425,13 +536,16 @@ char *hist_expand(int quotes)
                 {
                     break;
                 }
+                
                 if(!p3)
                 {
                     /* get a copy so we don't modify the original cmd */
                     p2 = get_malloced_str(p2);
                 }
+                
                 /* apply the modifiers (if any) */
                 j += do_hist_modif(p3 ? : p2, p+j, &p4);
+                
                 /* error applying the modifiers */
                 if(errexp)
                 {
@@ -443,8 +557,10 @@ char *hist_expand(int quotes)
                     {
                         free_malloced_str(p2);
                     }
-                    goto bailout;
+                    p = INVALID_HIST_EXPAND;
+                    goto fin;
                 }
+                
                 if(p4)
                 {
                     if(p3)
@@ -453,12 +569,15 @@ char *hist_expand(int quotes)
                     }
                     p3 = p4;
                 }
+                
                 if(p3)
                 {
                     p2 = p3;
                 }
+                
                 /* insert the expanded history command */
                 i = insert_hist_cmd(p, p2, j);
+                
                 /* free temp memory */
                 if(p3)
                 {
@@ -468,6 +587,7 @@ char *hist_expand(int quotes)
                 {
                     free_malloced_str(p2);
                 }
+                
                 if(!errexp)
                 {
                     /* no errors. skip the expanded part */
@@ -477,7 +597,8 @@ char *hist_expand(int quotes)
                 {
                     /* print error and bail out */
                     PRINT_ERROR("%s\n", errmsg);
-                    goto bailout;
+                    p = INVALID_HIST_EXPAND;
+                    goto fin;
                 }
                 expanded = 1;
                 break;
@@ -494,25 +615,61 @@ char *hist_expand(int quotes)
     {
         p = NULL;
     }
-    /* restore the original command buffer */
-    strcpy(cmdbuf, backup);
-    /* free the backup copy */
-    free(backup);
+
+fin:
+    restore_cmdbuf(backup);
+    
     /* return the expanded command line */
     return p;
+}
+
+
+int node_hist_expand(struct node_s *node)
+{
+    char *p = node->val.str;
+    int res = 0;
+    strcpy(cmdbuf, p);
+    cmdbuf_end = strlen(p);
     
-bailout:
-    /* restore the original command to buffer */
-    strcpy(cmdbuf, backup);
-    free(backup);
-    return INVALID_HIST_EXPAND;
+    /* perform history expansion on the line */
+    if((p = hist_expand(0, 0)) && (p != INVALID_HIST_EXPAND))
+    {
+        free_malloced_str(node->val.str);
+        node->val.str = p;
+        res = 1;
+    }
+    
+    return res;
+}
+
+
+int nodetree_hist_expand(struct node_s *cmd)
+{
+    if(cmd->val_type == VAL_STR && !node_hist_expand(cmd))
+    {
+        return 0;
+    }
+    
+    cmd = cmd->first_child;
+    
+    while(cmd)
+    {
+        if(cmd->val_type == VAL_STR && !node_hist_expand(cmd))
+        {
+            return 0;
+        }
+        
+        cmd = cmd->next_sibling;
+    }
+    
+    return 1;
 }
 
 
 /*
- * insert string s at the start of string p, replacing n chars from p.
+ * Insert string s at the start of string p, replacing n chars from p.
  *
- * returns the number of characters inserted, 0 means none.
+ * Returns the number of characters inserted, 0 means none.
  */
 int insert_hist_cmd(char *p, char *s, int n)
 {
@@ -528,8 +685,8 @@ int insert_hist_cmd(char *p, char *s, int n)
     int plen = strlen(p);
     int res = slen;
     /*
-     *  replacement string longer is longer than the replaced part.
-     *  we need to make room for the extra chars.
+     *  Replacement string longer is longer than the replaced part.
+     *  We need to make room for the extra chars.
      */
     if(slen > n)
     {
@@ -543,8 +700,8 @@ int insert_hist_cmd(char *p, char *s, int n)
         }
     }
     /*
-     *  replacement string longer is shorter than the replaced part.
-     *  we need to shorten the string.
+     *  Replacement string longer is shorter than the replaced part.
+     *  We need to shorten the string.
      */
     else if(slen < n)
     {
@@ -569,7 +726,7 @@ int insert_hist_cmd(char *p, char *s, int n)
 
 
 /*
- * get the history command at the given index, which is 1-based (that is, the
+ * Get the history command at the given index, which is 1-based (that is, the
  * first history command is number 1, the last is number cmd_history_end).
  */
 char *get_hist_cmd(int index)
@@ -603,9 +760,9 @@ char *get_hist_cmd(int index)
 
 
 /*
- * get the history command that contains string s.. if the anchor parameter is
+ * Get the history command that contains string s. If the anchor parameter is
  * non-zero, the history command must start with string s (which we get by using
- * the '!string' expansion).. otherwise, string s can occur anywhere in the command
+ * the '!string' expansion). Otherwise, string s can occur anywhere in the command
  * string (which we get by using the '!?string[?]' expansion).
  */
 char *get_hist_cmdp(char *s, int anchor)
@@ -656,13 +813,13 @@ char *get_hist_cmdp(char *s, int anchor)
 
 
 /*
- * get the words specified by the 'wdesig' word designator.. these typically
+ * Get the words specified by the 'wdesig' word designator. These typically
  * start with a colon, which can be omitted if the disgnator starts with
- * a ‘^’, ‘$’, ‘*’, ‘-’, or ‘%’.. words are counted from zero.. argument
- * 'cmd' contains the full command line from which we will select the words..
- * the resultant malloc'd string will be placed in the *res parameter.
+ * a ‘^’, ‘$’, ‘*’, ‘-’, or ‘%’.. words are counted from zero. Argument
+ * 'cmd' contains the full command line from which we will select the words.
+ * The resultant malloc'd string will be placed in the *res parameter.
  *
- * returns the number of characters in the word designator, with *res being 
+ * Returns the number of characters in the word designator, with *res being 
  * set to NULL if the expansion failed.
  */
 int get_hist_words(char *cmd, char *wdesig, char **res)
@@ -738,7 +895,8 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
         case '%':           /* get the word matching the last !?string[?] search */
             if(!query_str || !(p = strstr(cmd, query_str)))
             {
-                PRINT_ERROR("%s: no match found for word: %s\n", SHELL_NAME, query_str ? : "(null)");
+                PRINT_ERROR("%s: no match found for word: %s\n", SOURCE_NAME, 
+                            query_str ? : "(null)");
                 errexp = 1;
                 return i+1;
             }
@@ -760,7 +918,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
         case '-':           /* -y is a shorthand for 0-y */
             if(!isdigit(*++wdesig))
             {
-                PRINT_ERROR("%s: invalid word index: %c\n", SHELL_NAME, *wdesig);
+                PRINT_ERROR("%s: invalid word index: %c\n", SOURCE_NAME, *wdesig);
                 errexp = 1;
                 return i;
             }
@@ -782,7 +940,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
             p = get_word_start(cmd, n);     /* get the start of the second word */
             if(!p)
             {
-                PRINT_ERROR("%s: invalid word index: %d\n", SHELL_NAME, n);
+                PRINT_ERROR("%s: invalid word index: %d\n", SOURCE_NAME, n);
                 errexp = 1;
                 return i;
             }
@@ -814,7 +972,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
                 p = get_word_start(cmd, n);
                 if(!p)
                 {
-                    PRINT_ERROR("%s: invalid word index: %d\n", SHELL_NAME, n);
+                    PRINT_ERROR("%s: invalid word index: %d\n", SOURCE_NAME, n);
                     errexp = 1;
                     return j+i;
                 }
@@ -838,7 +996,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
                         p = get_word_start(cmd, n);     /* get start of 2nd word */
                         if(!p)
                         {
-                            PRINT_ERROR("%s: invalid word index: %d\n", SHELL_NAME, n);
+                            PRINT_ERROR("%s: invalid word index: %d\n", SOURCE_NAME, n);
                             errexp = 1;
                             return i;
                         }
@@ -914,16 +1072,16 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
 
 
 /*
- * perform the history expansion modifiers indicated in the 'hmod' parameter.
+ * Perform the history expansion modifiers indicated in the 'hmod' parameter.
  * modifiers start with a colon and include one letter of the following:
  *
  *     h, t, r, e, p, q, x, s, &, g, a, G.
  *
  * 'cmd' contains the command line (or words selected by a previous call to
  * get_hist_words(), on which we will apply the requested modifiers.
- * the resultant malloc'd string will be placed in the *res parameter.
+ * The resultant malloc'd string will be placed in the *res parameter.
  *
- * returns the number of characters in the modifier, with *res being 
+ * Returns the number of characters in the modifier, with *res being 
  * set to NULL if the expansion failed.
  */
 int do_hist_modif(char *cmd, char *hmod, char **res)
@@ -974,7 +1132,7 @@ loop:
     if(!*p)
     {
         errexp = 1;
-        PRINT_ERROR("%s: unknown modifier letter: %c\n", SHELL_NAME, *hmod);
+        PRINT_ERROR("%s: unknown modifier letter: %c\n", SOURCE_NAME, *hmod);
         if(cmd && cmd != origcmd)
         {
             free(cmd);
@@ -1355,7 +1513,8 @@ loop:
             if(!p)
             {
                 errexp = 1;
-                PRINT_ERROR("%s: failed to apply modifier: %s\n", SHELL_NAME, strerror(errno));
+                PRINT_ERROR("%s: failed to apply modifier: %s\n", 
+                            SOURCE_NAME, strerror(errno));
                 if(cmd && cmd != origcmd)
                 {
                     free(cmd);
@@ -1433,7 +1592,7 @@ loop:
             if(*hmod != 's')
             {
                 errexp = 1;
-                PRINT_ERROR("%s: missing 's' after modifier: %c\n", SHELL_NAME, *p);
+                PRINT_ERROR("%s: missing 's' after modifier: %c\n", SOURCE_NAME, *p);
                 if(cmd && cmd != origcmd)
                 {
                     free(cmd);
@@ -1533,7 +1692,8 @@ loop:
             if(hmod < orighmod)
             {
                 errexp = 1;
-                PRINT_ERROR("%s: invalid application of the '&' modifier\n", SHELL_NAME);
+                PRINT_ERROR("%s: invalid application of the '&' modifier\n", 
+                            SOURCE_NAME);
                 if(cmd && cmd != origcmd)
                 {
                     free(cmd);
@@ -1576,7 +1736,7 @@ loop:
     
 invalid_s:
     errexp = 1;
-    PRINT_ERROR("%s: invalid usage of the 's' modifier\n", SHELL_NAME);
+    PRINT_ERROR("%s: invalid usage of the 's' modifier\n", SOURCE_NAME);
     if(cmd && cmd != origcmd)
     {
         free(cmd);
@@ -1586,11 +1746,11 @@ invalid_s:
 
 
 /*
- * get a pointer to the first char of the n-th word of the command line 'cmd',
- * where words are 0-based.. n == 0 returns the zeroth word, n == -1 returns
+ * Get a pointer to the first char of the n-th word of the command line 'cmd',
+ * where words are 0-based. n == 0 returns the zeroth word, n == -1 returns
  * the the last word in the line.
  *
- * returns a pointer to the word, or NULL in case of error.
+ * Returns a pointer to the word, or NULL in case of error.
  */
 char *get_word_start(char *cmd, int n)
 {
@@ -1652,8 +1812,8 @@ char *get_word_start(char *cmd, int n)
 
 
 /*
- * return an malloc'd copy of the word that starts string str.
- * the word contains all characters upto the first whitespace char.
+ * Return an malloc'd copy of the word that starts string str.
+ * The word contains all characters upto the first whitespace char.
  */
 char *get_malloced_word(char *str)
 {

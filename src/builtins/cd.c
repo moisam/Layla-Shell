@@ -44,14 +44,14 @@
 char *cwd = NULL;
 
 /*
- * this function executes the 'cwdcmd' special alias, if defined.. this alias contains
- * the command(s) we should execute whenever we're changing the cwd. the reason why we
+ * This function executes the 'cwdcmd' special alias, if defined. This alias contains
+ * the command(s) we should execute whenever we're changing the cwd. The reason why we
  * don't use run_alias_cmd() of alias.c is discussed in the next paragraph.
  * 
  * tcsh's manpage says that executing the 'cwdcmd' special alias result in an
  * infinite loop if the alias contained 'cd', 'pushd' or 'popd' (which makes sense).
- * we try to detect this condition early by scanning the alias (if it is defined)
- * for these words.. of course, these words might appear in the alias AFTER it is
+ * We try to detect this condition early by scanning the alias (if it is defined)
+ * for these words. Of course, these words might appear in the alias AFTER it is
  * expanded, and so we check AFTER the word expansion is performed.
  */
 void do_cwdcmd(void)
@@ -89,13 +89,13 @@ void do_cwdcmd(void)
 
 
 /*
- * execute 'cd' when its called with the hyphen argument (as `cd -`).. according to POSIX,
- * this command shall be equivalent to changing to the previous working directory, followed
- * by printing the current working directory:
+ * Execute 'cd' when its called with the hyphen argument (as `cd -`). According 
+ * to POSIX, this command shall be equivalent to changing to the previous 
+ * working directory, followed by printing the current working directory:
  * 
  *          cd "$OLDPWD" && pwd.
  * 
- * this function returns 0 on success, non-zero if an error occurred.
+ * This function returns 0 on success, non-zero if an error occurred.
  */
 int cd_hyphen(void)
 {
@@ -104,7 +104,7 @@ int cd_hyphen(void)
     struct symtab_entry_s *entry2 = get_symtab_entry("PWD");
     if(!entry || !entry->val)
     {
-        PRINT_ERROR("%s: failed to change directory: $OLDPWD is not set\n", UTILITY);
+        PRINT_ERROR("%s: $OLDPWD is not set\n", UTILITY);
         return 3;
     }
     
@@ -112,14 +112,15 @@ int cd_hyphen(void)
     char *pwd = __get_malloced_str(entry->val);
     if(!pwd)
     {
-        PRINT_ERROR("%s: failed to change directory: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: error: %s\n", UTILITY, strerror(errno));
         return 3;
     }
     
     /* change directory to the $OLDPWD */
     if(chdir(pwd) != 0)
     {
-        PRINT_ERROR("%s: failed to change directory: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR("%s: cannot cd to `%s`: %s\n", UTILITY, pwd, strerror(errno));
+        free(pwd);
         return 3;
     }
     
@@ -141,26 +142,31 @@ int cd_hyphen(void)
     
     /* in tcsh, special alias cwdcmd is run after cd changes the directory */
     do_cwdcmd();
+
+    /* push the cd dir on top of the directory stack */
+    push_cwd("cd");
     
     return 0;
 }
 
 
 /*
- * return the value of the home directory.. if the $HOME variable is set, use its value.
- * otherwise, get the home directory from the passwd database.
- * returns the home directory of the current user, or NULL in case of error.. if the
+ * Return the value of the home directory. If the $HOME variable is set, use 
+ * its value, otherwise get the home directory from the passwd database (if
+ * no_fail is non-zero), or return NULL if no_fail is zero.
+ * 
+ * Returns the home directory of the current user, or NULL in case of error. If the
  * caller wants to do anything with the result, it should make its own copy and work
  * on it, as our return value is shared by other functions in the shell.
  */
-char *get_home(void)
+char *get_home(int no_fail)
 {
     char *home = get_shell_varp("HOME", NULL);
     /*
-     * in this case ($HOME is unset or null), the behaviour is implementation-defined,
-     * as per POSIX.. we try to read home directory from the passwd database.
+     * In this case ($HOME is unset or null), the behaviour is implementation-defined,
+     * as per POSIX. We try to read home directory from the passwd database.
      */
-    if(!home || !*home)
+    if((!home || !*home) && no_fail)
     {
         struct passwd *pw = getpwuid(geteuid());
         if(!pw)
@@ -174,8 +180,8 @@ char *get_home(void)
 
 
 /*
- * search for directory in the $CDPATH.. if directory is an absolute path, or a relative
- * path starting with dot '.' or dot-dot '..', return directory.. otherwise, search $CDPATH
+ * Search for directory in the $CDPATH. If directory is an absolute path, or a relative
+ * path starting with dot '.' or dot-dot '..', return directory. Otherwise, search $CDPATH
  * and return the absolute path of the directory.
  */
 char *search_cdpath(char *directory, int *print_cwd)
@@ -190,7 +196,7 @@ char *search_cdpath(char *directory, int *print_cwd)
     }
     
     /*
-     * check if directory is an absolute path that begins with '/', or a
+     * Check if directory is an absolute path that begins with '/', or a
      * relative path that begins with '.' or '..'.
      */
     switch(directory[0])
@@ -240,11 +246,11 @@ char *search_cdpath(char *directory, int *print_cwd)
 
 
 /*
- * convert curpath to an absolute path by removing any dot '.' and dot-dot '..'
- * components.. then remove any trailing slashes, and convert any sequence of 3 or
+ * Convert curpath to an absolute path by removing any dot '.' and dot-dot '..'
+ * components. Then remove any trailing slashes, and convert any sequence of 3 or
  * more slashes to one slash.
  * 
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int absolute_pathname(char *curpath)
 {
@@ -417,10 +423,10 @@ int absolute_pathname(char *curpath)
 
 
 /*
- * if curpath is longer than the maximum length allowed on the system,
+ * If curpath is longer than the maximum length allowed on the system,
  * convert it to a relative path by removing the leading component(s).
  * 
- * returns 1 on success, 0 on failure.
+ * Returns 1 on success, 0 on failure.
  */
 int shorten_path(char *curpath, char *pwd, size_t pwdlen)
 {
@@ -438,7 +444,7 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
         int can_do = 0;
         if(!pwd || !*pwd)
         {
-            PRINT_ERROR("%s: $PWD environment variable is not set\n", UTILITY);
+            PRINT_ERROR("%s: $PWD is not set\n", UTILITY);
             return 0;
         }
         
@@ -472,21 +478,25 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
 
 
 /*
- * the cd builtin utility (POSIX).
+ * Change the cwd and set $PWD and $OLDPWD accordingly. Called by the cd and pushd
+ * builtin utilities. argc and argv are the arguments as passed to the calling
+ * utility, while v is the index of the argument containing the name of the 
+ * directory to which we'll cd. If print_dirstack is non-zero, we print the contents
+ * of the directory stack, using the flags passed in dirstack_flags. If p_option is
+ * non-zero, we behave as if cd was called using the -P option, otherwise we do our
+ * job as if the -L option is in effect.
  * 
- * this function follows the POSIX algorithm almost to the letter.
- * you can check this by visiting this link:
- *       http://pubs.opengroup.org/onlinepubs/9699919799/utilities/cd.html
+ * Returns 0 on success, non-zero on failure.
  */
-int cd_builtin(int argc, char **argv)
+int do_cd(int v, int argc, char **argv, int print_dirstack, int dirstack_flags, int cd_flags)
 {
-    int     p_option = 0;
-    int     v;
     char   *curpath   = NULL;
     char   *directory = NULL;
+    int     print_cwd = 0;
+    int     p_option  = flag_set(cd_flags, DO_CD_WITH_POPTION);
+    char   *p         = argv[v];
     char   *pwd       = getenv("PWD");
     size_t  pwdlen    = 0;
-    int     print_cwd = 0;
     struct  symtab_entry_s *entry;
 
     if(pwd && *pwd)
@@ -494,98 +504,16 @@ int cd_builtin(int argc, char **argv)
         pwdlen = strlen(pwd);
     }
 
-    /*
-     * in tcsh, cd accepts options similar to what dirs accept, namely: p, l, n, v.
-     */
-    int print_dirstack = 0;
-    int flags = 0;
-   
-    /* is this shell restricted? */
-    if(startup_finished && option_set('r'))
-    {
-        PRINT_ERROR("%s: can't change directory in a restricted shell", UTILITY);
-        return 3;
-    }
-    
-    /* loop on the arguments and parse the options, if any */
-    for(v = 1; v < argc; v++)
-    {
-        /* options start with '-' */
-        if(argv[v][0] == '-')
-        {
-            char *p = argv[v];
-
-            /* stop parsing options when we hit '-' or '--' */
-            if(strcmp(p, "-") == 0)
-            {
-                break;
-            }
-
-            if(strcmp(p, "--") == 0)
-            {
-                v++;
-                break;
-            }
-            
-            /* skip the '-' and parse the options string */
-            p++;
-            while(*p)
-            {
-                switch(*p)
-                {
-                    case 'h':
-                        print_help(argv[0], &CD_BUILTIN, 0);
-                        return 0;
-                        
-                    case 'L':
-                        p_option = 0;
-                        break;
-                        
-                    case 'P':
-                        p_option = 1;
-                        break;
-
-                    /* tcsh extensions: -v, -p, -l, -n */
-                    case 'v':
-                        print_dirstack = 1;
-                        flags |= FLAG_DIRSTACK_SEPARATE_LINES;
-                        flags |= FLAG_DIRSTACK_PRINT_INDEX;
-                        break;
-                
-                    case 'p':
-                        print_dirstack = 1;
-                        flags |= FLAG_DIRSTACK_SEPARATE_LINES;
-                        break;
-                
-                    case 'l':
-                        print_dirstack = 1;
-                        flags |= FLAG_DIRSTACK_FULL_PATHS;
-                        break;
-                        
-                    case 'n':
-                        print_dirstack = 1;
-                        flags |= FLAG_DIRSTACK_WRAP_ENTRIES;
-                        break;
-                        
-                    default:
-                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, argv[v]);
-                        return 2;
-                }
-                p++;
-            }
-        }
-        else
-        {
-            /* first argument, stop paring options */
-            break;
-        }
-    }
-    
-    char *p = argv[v];
     if(v >= argc)
     {
         /* no dir argument. use $HOME */
-        directory = get_home();
+        directory = get_home(0);
+        if(!directory)
+        {
+            PRINT_ERROR("%s: $HOME is not set\n", argv[0]);
+            return 1;
+        }
+        
         if(directory)
         {
             curpath = __get_malloced_str(directory);
@@ -659,9 +587,9 @@ start:
     /* now change to the new directory */
     if(curpath && chdir(curpath) != 0)
     {
-        free(curpath);
         if(optionx_set(OPTION_CDABLE_VARS) && v < argc)
         {
+            free(curpath);
             /* assume the argument is a variable name whose value is our dest dir */
             entry = get_symtab_entry(argv[v]);
             if(entry && entry->val)
@@ -676,8 +604,10 @@ start:
                 goto start;
             }
         }
-        PRINT_ERROR("%s: failed to change directory: %s\n", UTILITY, strerror(errno));
-        return 3;
+
+        PRINT_ERROR("%s: cannot cd to `%s`: %s\n", argv[0], curpath, strerror(errno));
+        free(curpath);
+        return 1;
     }
 
     /* save the current working directory in $OLDPWD */
@@ -699,9 +629,15 @@ start:
     entry = add_to_symtab("PWD");
     symtab_entry_setval(entry, cwd);
 
+    /* push the cd dir on top of the directory stack */
+    if(flag_set(cd_flags, DO_CD_PUSH_DIRSTACK))
+    {
+        push_cwd("cd");
+    }
+
     if(print_dirstack)
     {
-        purge_dirstack(flags);
+        purge_dirstack(dirstack_flags);
     }
     else if(print_cwd)
     {
@@ -713,4 +649,106 @@ start:
     do_cwdcmd();
 
     return 0;
+}
+
+
+/*
+ * The cd builtin utility (POSIX).
+ * 
+ * This function follows the POSIX algorithm almost to the letter.
+ * You can check this by visiting this link:
+ *       http://pubs.opengroup.org/onlinepubs/9699919799/utilities/cd.html
+ */
+int cd_builtin(int argc, char **argv)
+{
+    /*
+     * in tcsh, cd accepts options similar to what dirs accept, namely: p, l, n, v.
+     */
+    int print_dirstack = 0;
+    int flags = 0;
+    int v, p_option = 0;
+   
+    /* is this shell restricted? */
+    if(startup_finished && option_set('r'))
+    {
+        PRINT_ERROR("%s: cannot change directory: restricted shell", UTILITY);
+        return 3;
+    }
+    
+    /* loop on the arguments and parse the options, if any */
+    for(v = 1; v < argc; v++)
+    {
+        /* options start with '-' */
+        if(argv[v][0] == '-')
+        {
+            char *p = argv[v];
+
+            /* stop parsing options when we hit '-' or '--' */
+            if(strcmp(p, "-") == 0)
+            {
+                break;
+            }
+
+            if(strcmp(p, "--") == 0)
+            {
+                v++;
+                break;
+            }
+            
+            /* skip the '-' and parse the options string */
+            p++;
+            while(*p)
+            {
+                switch(*p)
+                {
+                    case 'h':
+                        print_help(argv[0], &CD_BUILTIN, 0);
+                        return 0;
+                        
+                    case 'L':
+                        p_option = 0;
+                        break;
+                        
+                    case 'P':
+                        p_option = 1;
+                        break;
+
+                    /* tcsh extensions: -v, -p, -l, -n */
+                    case 'v':
+                        print_dirstack = 1;
+                        flags |= FLAG_DIRSTACK_SEPARATE_LINES;
+                        flags |= FLAG_DIRSTACK_PRINT_INDEX;
+                        break;
+                
+                    case 'p':
+                        print_dirstack = 1;
+                        flags |= FLAG_DIRSTACK_SEPARATE_LINES;
+                        break;
+                
+                    case 'l':
+                        print_dirstack = 1;
+                        flags |= FLAG_DIRSTACK_FULL_PATHS;
+                        break;
+                        
+                    case 'n':
+                        print_dirstack = 1;
+                        flags |= FLAG_DIRSTACK_WRAP_ENTRIES;
+                        break;
+                        
+                    default:
+                        PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, *p);
+                        return 2;
+                }
+                p++;
+            }
+        }
+        else
+        {
+            /* first argument, stop paring options */
+            break;
+        }
+    }
+
+    return do_cd(v, argc, argv, print_dirstack, flags, 
+                 DO_CD_PUSH_DIRSTACK | (p_option ? DO_CD_WITH_POPTION : 0));
 }

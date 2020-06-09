@@ -31,26 +31,26 @@ int do_source_script(char *utility, char *file, int argc, char **argv);
 
 
 /*
- * the source builtin utility (non-POSIX).. used to source (read and execute) a script file,
+ * The source builtin utility (non-POSIX). Used to source (read and execute) a script file,
  * similar to what the dot builtin utility does.
  *
- * returns the exit status of the last command executed.
+ * Returns the exit status of the last command executed.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help source` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help source` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
 int source_builtin(int argc, char **argv)
 {
     /*
-     * this utility does the same work as dot, but we have some options that we
+     * This utility does the same work as dot, but we have some options that we
      * borrowed from tcsh's source, which are not supported by dot (ksh, bash).
-     * that's why we parse our options here, then call dot to do the actual
+     * That's why we parse our options here, then call dot to do the actual
      * sourcing.
      */
     int v = 1, c;
-    while((c = parse_args(argc, argv, "h:v", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "h:v", &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -61,7 +61,7 @@ int source_builtin(int argc, char **argv)
             case 'h':
                 if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
-                    PRINT_ERROR("%s: -%c option is missing arguments\n", "source", 'h');
+                    PRINT_ERROR("%s: missing argument to option -%c\n", "source", 'h');
                     return 2;
                 }
 
@@ -80,17 +80,25 @@ int source_builtin(int argc, char **argv)
     {
         return 2;
     }
+
+    /* check we have a filename */
+    if(v >= argc)
+    {
+        PRINT_ERROR("%s: missing argument: file name\n"
+                    "usage: %s file [args...]\n", argv[0], argv[0]);
+        return 2;
+    }
     
     return do_source_script("source", argv[v], argc-(v+1), &argv[v+1]);
 }
 
 
 /*
- * load and execute the shell script given in the 'file' argument, passing it
- * the arguments indicated by 'argc' and 'argv'.. the 'utility' argument
+ * Load and execute the shell script given in the 'file' argument, passing it
+ * the arguments indicated by 'argc' and 'argv'. The 'utility' argument
  * contains the name of the calling utility (source or dot).
  * 
- * returns the exit status of the last command executed in the script, or 
+ * Returns the exit status of the last command executed in the script, or 
  * non-zero in case of error.
  */
 int do_source_script(char *utility, char *file, int argc, char **argv)
@@ -99,9 +107,9 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
     char *path  = NULL;
 
     /*
-     * strictly POSIX speaking, dot must have only two arguments.. but ksh has a
+     * Strictly POSIX speaking, dot must have only two arguments. But ksh has a
      * very useful extension where you can supply positional parameters are 
-     * additional arguments.. we use the ksh-style here.
+     * additional arguments. We use the ksh-style here.
      */
     int posix_set = option_set('P');
     
@@ -128,7 +136,7 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
     else
     {
         /*
-         *  search for the dot file using $PATH as per POSIX.. if we are not
+         *  Search for the dot file using $PATH as per POSIX. If we are not
          *  running in --posix mode, we check the 'sourcepath' extended option and
          *  only use $PATH if it is set (bash extension).
          */
@@ -138,8 +146,8 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
         }
 
         /*
-         * in case of $PATH failure, bash searches CWD (when not in --posix mode), which is 
-         * not required by POSIX.. we don't do the search if we are not running in --posix
+         * In case of $PATH failure, bash searches CWD (when not in --posix mode), which is 
+         * not required by POSIX. We don't do the search if we are not running in --posix
          * mode either.
          */
         if(!path && !posix_set)
@@ -153,19 +161,19 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
         if(!path)
         {
             PRINT_ERROR("%s: failed to find file: %s\n", utility, file);
-            return 127;
+            return EXIT_ERROR_NOENT;
         }
     }
         
     /* try to read the dot file */
     if(!read_file(path, &src))
     {
-        PRINT_ERROR("%s: failed to read '%s': %s\n", utility, file, strerror(errno));
+        PRINT_ERROR("%s: failed to read `%s`: %s\n", utility, file, strerror(errno));
         if(path != file)
         {
             free_malloced_str(path);
         }
-        return EXIT_ERROR_NOENT;    /* exit status: 127 */
+        return errno == ENOENT ? EXIT_ERROR_NOENT : EXIT_ERROR_NOEXEC;
     }
     
     /* set the input source type after we've read the dot script */
@@ -182,6 +190,7 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
     
     /* reset the OPTIND variable */
     set_shell_varp("OPTIND", "1");
+    set_shell_varp("OPTSUB", "0");
     
     /* save and reset the DEBUG trap if -T is not set (bash) */
     struct trap_item_s *debug = NULL;
@@ -204,8 +213,8 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
     callframe_popf();
     
     /*
-     * if -T is not set and the dot script changed the DEBUG trap, keep the 
-     * changes and free the old DEBUG trap.. otherwise, reset the trap (bash).
+     * If -T is not set and the dot script changed the DEBUG trap, keep the 
+     * changes and free the old DEBUG trap. Otherwise, reset the trap (bash).
      */
     struct trap_item_s *debug2 = get_trap_item("DEBUG");
     if(debug2 && debug2->action_str)

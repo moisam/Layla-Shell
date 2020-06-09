@@ -30,14 +30,15 @@
 #include "../cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
+#include "../parser/parser.h"
 #include "../debug.h"
 
 #define UTILITY             "export"
 
 
 /*
- * print all variables and functions whose flags field contains the given
- * attribute 'attr'.. if the entry refers to a variable, 'var_prefix' is
+ * Print all variables and functions whose flags field contains the given
+ * attribute 'attr'. If the entry refers to a variable, 'var_prefix' is
  * printed before the entry, otherwise 'func_prefix' is used.
  */
 void print_var_attribs(unsigned int attr, char *var_perfix, char *func_prefix)
@@ -52,9 +53,9 @@ void print_var_attribs(unsigned int attr, char *var_perfix, char *func_prefix)
     {
         struct symtab_s *symtab = stack->symtab_list[i];
         /*
-         * for all but the local symbol table, we check the table lower down in the
+         * For all but the local symbol table, we check the table lower down in the
          * stack to see if there is a local variable defined with the same name as
-         * a global variable.. if that is the case, the local variable takes precedence
+         * a global variable. If that is the case, the local variable takes precedence
          * over the global variable, and we skip printing the global variable as we
          * will print the local variable when we reach the local symbol table.
          */
@@ -127,15 +128,15 @@ void print_var_attribs(unsigned int attr, char *var_perfix, char *func_prefix)
 
 
 /*
- * process the list of arguments passed to export or readonly, setting the
+ * Process the list of arguments passed to export or readonly, setting the
  * values and attributes of variables/functions as appropriate.
- * if 'unexport' is set, we remove args from our tables (this happens when
- * export is invoked with the -n option).. if 'funcs' is set, args refer
- * to functions, otherwise they refer to variables.. 'flag' contains the
+ * If 'unexport' is set, we remove args from our tables (this happens when
+ * export is invoked with the -n option). If 'funcs' is set, args refer
+ * to functions, otherwise they refer to variables. 'flag' contains the
  * flag we'll set/remove from args, which is either the export or the 
  * readonly flag.
  * 
- * returns 0 if all variables/functions are set/removed successfully, 
+ * Returns 0 if all variables/functions are set/removed successfully, 
  * otherwise returns 1.
  */
 int process_var_attribs(char **args, int unexport, int funcs, int flag)
@@ -152,7 +153,7 @@ int process_var_attribs(char **args, int unexport, int funcs, int flag)
         char *equals  = strchr(arg, '=');
         
         /*
-         *  get the variable/function name.. if there is an equal sign, the
+         *  Get the variable/function name. If there is an equal sign, the
          *  name is the part before the equal sign, otherwise it is the whole
          *  string.
          */
@@ -167,6 +168,13 @@ int process_var_attribs(char **args, int unexport, int funcs, int flag)
             name_buf[name_len-1] = '\0';
             append = SET_FLAG_APPEND;
             name_len--;
+        }
+
+        if(!is_name(name_buf))
+        {
+            PRINT_ERROR("%s: invalid name: %s\n", utility, name_buf);
+            res = 1;
+            continue;
         }
         
         if(unexport)
@@ -231,8 +239,7 @@ int process_var_attribs(char **args, int unexport, int funcs, int flag)
             {
                 /* get the value part */
                 char *val = equals ? equals+1 : NULL;
-                struct symtab_entry_s *entry = do_set(name_buf, val, flag, 0, append);
-                if(!entry)
+                if(do_set(name_buf, val, flag, 0, append) == NULL)
                 {
                     res = 1;
                 }
@@ -244,13 +251,13 @@ int process_var_attribs(char **args, int unexport, int funcs, int flag)
 
 
 /*
- * the export builtin utility (POSIX).. exports variables and functions so that they
+ * The export builtin utility (POSIX). Exports variables and functions so that they
  * are accessible from the environment of invoked commands and subshells.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help export` or `export -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help export` or `export -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -268,7 +275,7 @@ int export_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         /* parse the option */
         switch(c)
@@ -324,13 +331,13 @@ int export_builtin(int argc, char **argv)
 
 
 /*
- * export the contents of the given symbol table to the enviroment of a newly
- * forked process.. we export only the variables and functions that have the
+ * Export the contents of the given symbol table to the enviroment of a newly
+ * forked process. We export only the variables and functions that have the
  * export flag on, or those which are declared locally (if the command is run
  * from inside a function), or variables declared as part of the command prefix.
  *
- * the force_export_all flag, if non-zero, forces export of all variables and
- * functions, even if they are not marked for export.. this flag is set when we
+ * The force_export_all flag, if non-zero, forces export of all variables and
+ * functions, even if they are not marked for export. This flag is set when we
  * fork a subshell, so that the new process has a replica of all variables and
  * functions, local and global.
  */
@@ -378,7 +385,7 @@ void do_export_table(struct symtab_s *symtab, int force_export_all)
                         /* entry is an exported function */
                         if(entry->val_type == SYM_FUNC)
                         {
-                            char *f = cmd_nodetree_to_str(entry->func_body);
+                            char *f = cmd_nodetree_to_str(entry->func_body, 1);
                             if(f)
                             {
                                 char *s = malloc(strlen(f)+10);
@@ -388,7 +395,7 @@ void do_export_table(struct symtab_s *symtab, int force_export_all)
                                 }
                                 else
                                 {
-                                    sprintf(s, "() {\n%s\n}", f);
+                                    sprintf(s, "()\n{\n%s\n}", f);
                                     setenv(entry->name, s, 1);
                                     //exit_gracefully(0, 0);
                                     free(s);
@@ -418,11 +425,11 @@ void do_export_table(struct symtab_s *symtab, int force_export_all)
 
 
 /*
- * this function is called after a new command process is forked, right before
+ * This function is called after a new command process is forked, right before
  * it exec's, to save all export variables to the environment of the new
- * command.. in this case, the 'force_export_all' flag will be zero.
+ * command. In this case, the 'force_export_all' flag will be zero.
  *
- * the function is also called when we fork a subshell, in which case
+ * The function is also called when we fork a subshell, in which case
  * 'force_export_all' will be non-zero.
  */
 void do_export_vars(int force_export_all)

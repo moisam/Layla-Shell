@@ -35,12 +35,13 @@ void disown_job(struct job_s *job, int nohup);
 
 
 /*
- * the disown builtin utility (non-POSIX).. used to disown a job, so it is not sent
+ * The disown builtin utility (non-POSIX). Used to disown a job, so it is not sent
  * a SIGHUP when the shell exits.
- * returns 0 on success, non-zero otherwise.
  * 
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help disown` from lsh prompt to see a short
+ * Returns 0 on success, non-zero otherwise.
+ * 
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help disown` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -56,7 +57,7 @@ int disown_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "ahrsv", &v, 1)) > 0)
+    while((c = parse_args(argc, argv, "ahrsv", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -86,8 +87,12 @@ int disown_builtin(int argc, char **argv)
                 break;
         }
     }
+    
     /* unknown option */
-    if(c == -1) return 2;
+    if(c == -1)
+    {
+        return 2;
+    }
     
     /* 
      * ksh : if no job ids given, disown all jobs.
@@ -120,6 +125,7 @@ int disown_builtin(int argc, char **argv)
                 {
                     continue;
                 }
+                
                 /* disown only stopped jobs */
                 if(stopped_only && !WIFSTOPPED(job->status))
                 {
@@ -128,13 +134,16 @@ int disown_builtin(int argc, char **argv)
                 disown_job(job, nohup);
             }
         }
+        
         return 0;
     }
+    
     /* process the arguments */
     for( ; v < argc; v++)
     {
         /* first try POSIX-style job ids */
         job = get_job_by_jobid(get_jobid(argv[v]));
+
         /* maybe we have a process pid? */
         if(!job)
         {
@@ -145,17 +154,20 @@ int disown_builtin(int argc, char **argv)
                 job = get_job_by_any_pid(pgid);
             }
         }
+
         /* still nothing? */
         if(!job)
         {
             PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
             return 1;
         }
+        
         /* disown only running jobs */
         if(running_only && NOT_RUNNING(job->status))
         {
             continue;
         }
+        
         /* disown only stopped jobs */
         if(stopped_only && !WIFSTOPPED(job->status))
         {
@@ -163,12 +175,13 @@ int disown_builtin(int argc, char **argv)
         }
         disown_job(job, nohup);
     }
+    
     return 1;
 }
 
 
 /*
- * disown the given job.
+ * Disown the given job.
  */
 void disown_job(struct job_s *job, int nohup)
 {

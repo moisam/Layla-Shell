@@ -27,7 +27,7 @@
 
 
 /*
- * forget all defined aliases.
+ * Forget all defined aliases.
  */
 void unalias_all(void)
 {
@@ -50,12 +50,12 @@ void unalias_all(void)
 
 
 /*
- * the unalias builtin utility (POSIX).. used to remove aliases.
+ * The unalias builtin utility (POSIX). Used to remove aliases.
  *
- * returns 0 on success, non-zero otherwise.
+ * Returns 0 on success, non-zero otherwise.
  *
- * see the manpage for the list of options and an explanation of what each option does.
- * you can also run: `help unalias` or `unalias -h` from lsh prompt to see a short
+ * See the manpage for the list of options and an explanation of what each option does.
+ * You can also run: `help unalias` or `unalias -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
@@ -75,7 +75,7 @@ int unalias_builtin(int argc, char **argv)
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, opts, &v, 1)) > 0)
+    while((c = parse_args(argc, argv, opts, &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -96,7 +96,7 @@ int unalias_builtin(int argc, char **argv)
     /* unknown option */
     if(c == -1)
     {
-        return 1;
+        return 2;
     }
 
     /* the -a option removes all aliases */

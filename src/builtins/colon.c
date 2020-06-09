@@ -22,9 +22,9 @@
 #include "../cmd.h"
 
 /*
- * the colon ':' builtin utility (POSIX). returns 0 in all cases.
+ * The colon ':' builtin utility (POSIX). returns 0 in all cases.
  * 
- * you can run: `help bg` or `bg -h` from lsh prompt to see a short
+ * You can run: `help bg` or `bg -h` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
