@@ -30,10 +30,7 @@ bug report, or you want to suggest adding some feature or fixing something
 with the shell, feel free to email me directly at my email address, the one
 you will find in the beginning of this file. If you have any bugfixes, patches
 or feature improvements you want to add to the code, feel free to send me your
-code at the email address above, or through the Linux Shell Internals
-repository at GitHub:
-
-https://github.com/moisam/Linux-Shell-Internals-book/
+code.
 
 
 # Package dependencies
