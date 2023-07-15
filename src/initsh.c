@@ -67,7 +67,7 @@ int   startup_finished = 0;     /*
                                  */
 
 /* defined in kbdevent2.c */
-struct termios tty_attr_old;
+extern struct termios tty_attr_old;
 
 
 /*

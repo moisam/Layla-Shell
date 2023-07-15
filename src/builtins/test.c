@@ -82,7 +82,7 @@ int    test_err       = 0;
 // static int flags = FNM_NOESCAPE | FNM_PATHNAME | FNM_PERIOD;
 
 /* buffers we will use to stat files when comparing their status */
-struct stat statbuf ;
+static struct stat statbuf ;
 struct stat statbuf2;
 
 #define FILES_EQUAL     1   /* the -eq file comparison operator */
