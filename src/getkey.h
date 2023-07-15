@@ -22,11 +22,11 @@
 #ifndef GETKEY_H
 #define GETKEY_H
 
-char ALT_MASK;
-char CTRL_MASK;
-char SHIFT_MASK;
-char CAPS_MASK;
-char INSERT_MASK;
+extern char ALT_MASK;
+extern char CTRL_MASK;
+extern char SHIFT_MASK;
+extern char CAPS_MASK;
+extern char INSERT_MASK;
 
 /* Control and Function key definitions */
 #define CAPS_KEY	1
