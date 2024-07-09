@@ -383,7 +383,7 @@ static int one(const struct dirent *unused __attribute__((unused)))
     return 1;
 }
 
-struct stat   statbuf;
+static struct stat   statbuf;
 struct dirent **eps;
 
 /*
