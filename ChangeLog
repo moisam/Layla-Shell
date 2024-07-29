@@ -1,3 +1,14 @@
+* Sun Jul 28 2024 Mohammed Isam <mohammed_isam1984@yahoo.com> 1.2-1
+- Bugfixes
+
+* Tue Aug 18 2020 Mohammed Isam <mohammed_isam1984@yahoo.com> 1.1-4
+- Fixed the pattern matching functions
+- Fixed the following builtins: jobs, wait, kill, fg, bg, disown
+- Moved header files to the include/ directory
+
+* Sun Jan 12 2020 Mohammed Isam <mohammed_isam1984@yahoo.com> 1.1-3
+- Bugfixes
+
 * Mon Dec 02 2019 Mohammed Isam <mohammed_isam1984@yahoo.com> 1.1-2
 - Bugfixes
 
@@ -16,7 +27,7 @@
 - Alpha version
 
 # 
-#    Copyright 2016, 2017, 2018, 2019 (c)
+#    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
 #    Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
 # 
 #    file: ChangeLog
