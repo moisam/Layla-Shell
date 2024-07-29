@@ -22,9 +22,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "string_hash.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 /* defined in ../strbuf.c */
 char *__get_malloced_str(char *str);
@@ -99,8 +99,7 @@ struct hashtab_s *new_hashtable_sz(int size)
     struct hashtab_s *table = malloc(sizeof(struct hashtab_s));
     if(!table)
     {
-        PRINT_ERROR("%s: insufficient memory for creating hash table\n", 
-                    SOURCE_NAME);
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "creating hash table");
         return NULL;
     }
     table->size   = size;               /* use the given size */
@@ -110,8 +109,7 @@ struct hashtab_s *new_hashtable_sz(int size)
     if(!table->items)
     {
         free(table);
-        PRINT_ERROR("%s: insufficient memory for creating hash table\n", 
-                    SOURCE_NAME);
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "creating hash table");
         return NULL;
     }
     memset(table->items, 0, itemsz);    /* init buckets list */
@@ -283,7 +281,7 @@ struct hashitem_s *add_hash_item(struct hashtab_s *table, char *key, char *value
     entry = malloc(sizeof(struct hashitem_s));
     if(!entry)
     {
-        PRINT_ERROR("%s: failed to malloc hashtable item\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "failed to malloc hashtable item");
         return NULL;
     }
     /* initialize it */
@@ -332,7 +330,7 @@ struct hashitem_s *add_hash_itemb(struct hashtab_s *table, char *key, long value
     entry = malloc(sizeof(struct hashitem_s));
     if(!entry)
     {
-        PRINT_ERROR("%s: failed to malloc hashtable item\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "failed to malloc hashtable item");
         return NULL;
     }
     /* initialize it */

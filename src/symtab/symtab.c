@@ -22,11 +22,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../parser/node.h"
 #include "../parser/parser.h"
 #include "../builtins/setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 #include "symtab.h"
 
 struct symtab_stack_s symtab_stack;     /* the symbol tables stack */
