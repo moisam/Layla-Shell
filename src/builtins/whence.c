@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../parser/parser.h"
 
 #define UTILITY         "whence"
@@ -85,7 +85,7 @@ int whence_builtin(int argc, char **argv)
     /* missing arguments */
     if(v >= argc)
     {
-        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "command name");
         return 2;
     }
     

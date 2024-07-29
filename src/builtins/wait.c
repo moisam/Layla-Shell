@@ -19,19 +19,27 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
+/* required macro definition for sig*() functions */
+#define _POSIX_C_SOURCE 200809L
+
+#include <ctype.h>
+#include <signal.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/wait.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
+#include "../include/sig.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "wait"
 
+/* special flag for wait_for_pid() */
+#define WAIT_ANY        -1
+
 /* defined in jobs.c */
-int rip_dead(pid_t pid);
 extern struct job_s jobs_table[];
 
 
@@ -57,90 +65,319 @@ int wait_interrupted(void)
 
 
 /*
+ * Wait for the child process with the given pid until it changes state. If pid
+ * is WAIT_ANY, waits for any child process. In this case, job should be NULL.
+ * If force is non-zero, SIGCONT is sent to the process to wake it up before waiting.
+ * 
+ * Returns 0 in case of success, 1 in error. The exit status of the child process 
+ * waited for is stored in the global exit_status variable.
+ */
+int wait_for_pid(struct job_s *job, pid_t pid, int force)
+{
+    int res, res2;
+    int mark_notified = 1;
+    
+    if(force)
+    {
+        kill(pid, SIGCONT);
+        kill(pid, SIGKILL);
+    }
+    
+    waiting_pid = pid;
+    debug ("pid = %d\n", pid);
+    
+wait:
+    if((res2 = waitpid(pid, &res, 0)) < 0)
+    {
+        debug (NULL);
+        if(errno == ECHILD)
+        {
+            /*
+             * ECHILD means pid is not our child (or we have no children). 
+             * Maybe pid was our child but it exited and we've collected 
+             * its exit status. Check with rip_dead() and get the status if 
+             * that is the case.
+             */
+            if(pid == WAIT_ANY)
+            {
+                PRINT_ERROR(UTILITY, "no children to wait for");
+                set_internal_exit_status(127);
+                return 1;
+            }
+            
+            if((res = rip_dead(pid)) == -1)
+            {
+                PRINT_ERROR(UTILITY, "process %d is not a child of this shell", pid);
+                set_internal_exit_status(127);
+                return 1;
+            }
+        }
+        else if(errno == EINTR)
+        {
+            if(signal_received && signal_received != SIGCHLD)
+            {
+                set_internal_exit_status(wait_interrupted());
+                return 1;
+            }
+            
+            /*
+             * We were interrupted by the death of a child, but not the one we
+             * want. Continue waiting.
+             */
+            if((res = rip_dead(pid)) == -1)
+            {
+                goto wait;
+            }
+        }
+    }
+    else if(pid == WAIT_ANY)
+    {
+        debug ("res2 = %d\n", res2);
+        job = get_job_by_any_pid(res2);
+        pid = res2;
+        /* Don't mark the job as notified, wait_for_any() should do this */
+        mark_notified = 0;
+    }
+    debug ("res = %d, pid = %d\n", res, pid);
+    
+    waiting_pid = 0;
+    
+    if(job)
+    {
+        set_pid_exit_status(job, pid, res);
+        set_job_exit_status(job, pid, res);
+        res = job->status;
+        
+        if(mark_notified)
+        {
+            job->flags |= JOB_FLAG_NOTIFIED;
+        }
+    }
+    
+    set_exit_status(res);
+    
+    remove_dead_jobs();
+    
+    return 0;
+}
+
+
+int wait_for_job(struct job_s *job, int force, int tty)
+{
+    /* save the terminal's attributes (bash, zsh) */
+    struct termios *attr = save_tty_attr();
+
+    /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
+    if(job->tty_attr)
+    {
+        set_tty_attr(tty, job->tty_attr);
+    }
+    
+    /* wait for all processes in job to exit */
+    int i, j = 1;
+    int res;
+    pid_t pid;
+    
+    for(i = 0; i < job->proc_count; i++, j <<= 1)
+    {
+        if(job->child_exitbits & j)
+        {
+            continue;
+        }
+
+        pid = job->pids[i];
+        res = wait_for_pid(job, pid, force);
+        
+        /* wait interrupted or an error occurred */
+        if(res != 0)
+        {
+            /* restore the terminal's attributes */
+            set_tty_attr(tty, attr);
+            return res;
+        }
+    }
+    
+    res = job->status;
+    set_exit_status(res);
+    debug ("res = %d\n", res);
+    
+    /* restore the terminal's attributes */
+    if(job->tty_attr)
+    {
+        set_tty_attr(tty, attr);
+    }
+    
+#if 0
+    int saveb = option_set('b');
+    set_option('b', 1);
+    notice_termination(pid, res, 0);
+    set_option('b', saveb);
+#endif
+    
+    return res;
+}
+
+
+/*
  * Wait for any child process and return it's exit status, or 0 if no child
  * processes are running. If wait_jobs is non-zero, wait for any job and return
  * it's exit status. If wait_jobs is zero, wait for all child processes and
  * return 0.
  */
-int wait_for_any(int wait_jobs, int force)
+int wait_for_any(int force)
 {
     int    res = 0;
-    pid_t  pid = 0;
-    int    tty = cur_tty_fd();
-    int    i, j;
     struct job_s *job;
+    sigset_t sigset;
+    
     force = force && option_set('m');
-
-    /* if no job control, wait for any child process */
-    if(wait_jobs)
+    SIGNAL_BLOCK(SIGCHLD, sigset);
+    
+    /* Check for unreported dead jobs */
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
     {
-        for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
+        if(job->job_num != 0 && job->child_exits == job->proc_count)
         {
-            if(job->job_num != 0)
+            if(!NOTIFIED_JOB(job))
             {
-                if(WIFEXITED(job->status) || WIFSTOPPED(job->status))
-                {
-                    continue;
-                }
-                
-                /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-                if(job->tty_attr)
-                {
-                    set_tty_attr(tty, job->tty_attr);
-                }
-                
-                /* wait for all processes in job to exit */
-                j = 1;
-                for(i = 0; i < job->proc_count; i++, j <<= 1)
-                {
-                    if(job->child_exitbits & j)
-                    {
-                        continue;
-                    }
-                    pid = job->pids[i];
-                    waiting_pid = pid;
-
-                    if(force)
-                    {
-                        kill(pid, SIGCONT);
-                        kill(pid, SIGKILL);
-                    }
-                
-                    if(waitpid(pid, &res, 0) < 0)
-                    {
-                        if(errno == EINTR)
-                        {
-                            return wait_interrupted();
-                        }
-                        res = rip_dead(pid);
-                    }
-
-                    waiting_pid = 0;
-                    set_pid_exit_status(job, pid, res);
-                }
-                
-                set_job_exit_status(job, job->pgid, job->status);
-                set_exit_status(res);
-
-                int saveb = option_set('b');
-                set_option('b', 1);
-                notice_termination(pid, res, 0);
-                set_option('b', saveb);
-                
-                return job->status;
+                goto fin;
             }
         }
     }
-    else
+    
+    SIGNAL_UNBLOCK(sigset);
+    
+    /* Wait for any child process */
+    for( ; ; )
     {
-        while((pid = waitpid(-1, &res, 0)) > 0)
+        SIGNAL_BLOCK(SIGCHLD, sigset);
+        
+        /* Check there is a background job to wait for */
+        for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
         {
-            rip_dead(pid);
+            if(job->job_num != 0 && job->child_exits != job->proc_count && !FOREGROUND_JOB(job))
+            {
+                break;
+            }
         }
-
+        
+        /* No job available to wait for */
+        if(job == &jobs_table[MAX_JOBS])
+        {
+            SIGNAL_UNBLOCK(sigset);
+            return 127;
+        }
+        
+        SIGNAL_UNBLOCK(sigset);
+        
+        /* Wait for any child process to terminate */
+        errno = 0;
+        res = wait_for_pid(NULL, WAIT_ANY, force);
+        
+        if(errno == ECHILD)
+        {
+            return res;
+        }
+        
+#if 0
+        errno = 0;
+        if((pid = waitpid(-1, &res, 0)) < 0)
+        {
+            if(errno == EINTR)
+            {
+                if(signal_received != SIGCHLD)
+                {
+                    return wait_interrupted();
+                }
+            }
+        }
+        else
+        {
+            if((job = get_job_by_jobid(pid)))
+            {
+                set_pid_exit_status(job, pid, res);
+                set_job_exit_status(job, pid, res);
+            }
+        }
+#endif
+        
+        SIGNAL_BLOCK(SIGCHLD, sigset);
+        
+        /* Check if there is any finished job */
+        for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
+        {
+            debug ("job->child_exits = %d, job->proc_count = %d\n", job->child_exits, job->proc_count);
+            if(job->job_num != 0 && job->child_exits == job->proc_count)
+            {
+                goto fin;
+            }
+        }
+        
+        SIGNAL_UNBLOCK(sigset);
     }
     
-    return 0;
+fin:
+    res = job->status;
+    set_exit_status(res);
+    remove_job(job);
+    SIGNAL_UNBLOCK(sigset);
+    return res;
+}
+
+
+void wait_for_bg(int force)
+{
+    int    tty = cur_tty_fd();
+    struct job_s *job;
+    sigset_t sigset;
+    
+    force = force && option_set('m');
+    
+    /* Wait for any child process */
+    for( ; ; )
+    {
+        SIGNAL_BLOCK(SIGCHLD, sigset);
+        
+        /* Check there is a background job to wait for */
+        for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
+        {
+            if(job->job_num != 0 && job->child_exits != job->proc_count && !FOREGROUND_JOB(job))
+            {
+                break;
+            }
+        }
+        
+        /* No job available to wait for */
+        if(job == &jobs_table[MAX_JOBS])
+        {
+            SIGNAL_UNBLOCK(sigset);
+            break;
+        }
+        
+        SIGNAL_UNBLOCK(sigset);
+        
+        /* Wait for this job to finish */
+        wait_for_job(job, force, tty);
+    }
+    
+    /* Mark all dead jobs as notified */
+    pid_t last_async_job = get_shell_varl("!", 0);
+    
+    SIGNAL_BLOCK(SIGCHLD, sigset);
+    
+    for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
+    {
+        if(job->job_num != 0 && job->child_exits == job->proc_count && 
+            (interactive_shell || job->pgid != last_async_job))
+        {
+            job->flags |= JOB_FLAG_NOTIFIED;
+        }
+    }
+    
+    SIGNAL_UNBLOCK(sigset);
+    
+    remove_dead_jobs();
+    clear_deadlist();
 }
 
 
@@ -161,13 +398,13 @@ int wait_builtin(int argc, char **argv)
     int    force    = 0;
     struct job_s *job;
     int    v = 1, c;
-    int    i, j;
     int    tty = cur_tty_fd();
+    sigset_t sigset;
     
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "hvnf", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
+    while((c = parse_args(argc, argv, "hvnf", &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -195,137 +432,98 @@ int wait_builtin(int argc, char **argv)
         return 2;
     }
     
-    /* no pid operands -- wait for all children */
-    if(v >= argc)
-    {
-        return wait_for_any(wait_any, force);
-    }    
+    /* First make sure we do receive SIGCHLD in our signal handler */
+    struct sigaction sigact, old_sigact;
+    sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = 0;
+    sigact.sa_handler = SIGCHLD_handler;
+    sigaction(SIGCHLD, &sigact, &old_sigact);
 
-    v--;
-
-    int saveb = option_set('b');
-    set_option('b', 1);
-    
-read_next2:
-    
-    if(++v >= argc)
-    {
-        set_option('b', saveb);
-        return res;
-    }
-    arg = argv[v];
-    
-    /* (a) argument is a job ID number */
-    if(*arg == '%')
-    {
-        /* bash says we can't wait on jobs if job control is not active, which makes sense */
-        if(!option_set('m'))
-        {
-            PRINT_ERROR("%s: can't kill job %s: job control is not active\n", UTILITY, arg);
-            return 2;
-        }
-
-        pid = get_jobid(arg);
-        job = get_job_by_jobid(pid);
-        if(pid == 0 || !job)
-        {
-            PRINT_ERROR("%s: invalid job id: %s\n", UTILITY, arg);
-            res = 127;
-            goto read_next2;
-        }
-        
-        /* wait for all processes in job to exit */
-        j = 1;
-        
-        /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(job->tty_attr)
-        {
-            set_tty_attr(tty, job->tty_attr);
-        }
-        
-        if(force)
-        {
-            kill(-job->pgid, SIGCONT);
-            kill(-job->pgid, SIGKILL);
-        }
-        
-        for(i = 0; i < job->proc_count; i++, j <<= 1)
-        {
-            if(job->child_exitbits & j)
-            {
-                continue;
-            }
-            pid = job->pids[i];
-            waiting_pid = pid;
-            
-            if(waitpid(pid, &res, 0) < 0)
-            {
-                if(errno == EINTR)
-                {
-                    return wait_interrupted();
-                }
-                res = rip_dead(pid);
-            }
-
-            waiting_pid = 0;
-            set_pid_exit_status(job, pid, res);
-        }
-        set_job_exit_status(job, job->pgid, job->status);
-        res = job->status;
-
-        notice_termination(pid, res, 0);
-    }
-    /* (b) argument is a pid */
-    else
-    {
-        char *strend = NULL;
-        pid = strtol(arg, &strend, 10);
-        
-        /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
-        if(*strend || pid == 0)
-        {
-            PRINT_ERROR("%s: invalid pid: %s\n", UTILITY, arg);
-            res = 127;
-            goto read_next2;
-        }
-        
-        job = get_job_by_any_pid(pid);
-        if(job && job->tty_attr)
-        {
-            set_tty_attr(tty, job->tty_attr);
-        }
-        
-        if(force)
-        {
-            kill(pid, SIGCONT);
-            kill(pid, SIGKILL);
-        }
-        
-        waiting_pid = pid;
-        if(waitpid(pid, &res, 0) < 0)
-        {
-            /*
-             * Error fetching child exit status. of all the possible causes,
-             * most probably is the fact that there is no children (in our case).
-             * Which probably means that the exit status was collected
-             * in the SIGCHLD_handler() function in main.c.
-             */
-            if(errno == EINTR)
-            {
-                return wait_interrupted();
-            }
-            res = rip_dead(pid);
-        }
-        waiting_pid = 0;
-        print_status_message(NULL, pid, res, 1, stderr);
-    }
-
-    set_exit_status(res);
-    
+    /* The -n flag is used. Wait for any job */
     if(wait_any)
     {
-        return res;
+        wait_for_any(force);
+        sigaction(SIGCHLD, &old_sigact, NULL);
+        return exit_status;
     }
     
-    goto read_next2;
+    /* No pid operands. Wait for all children */
+    if(v >= argc)
+    {
+        wait_for_bg(force);
+        sigaction(SIGCHLD, &old_sigact, NULL);
+        return 0;
+    }
+
+    /* Wait for the given pids and/or job specs */
+    for( ; v < argc; v++)
+    {
+        arg = argv[v];
+        
+        /* (a) argument is a job ID number */
+        if(*arg == '%')
+        {
+            SIGNAL_BLOCK(SIGCHLD, sigset);
+
+            pid = get_jobid(arg);
+            job = get_job_by_jobid(pid);
+            
+            SIGNAL_UNBLOCK(sigset);
+
+            if(pid == 0 || !job)
+            {
+                INVALID_JOB_ERROR(UTILITY, arg);
+                res = 127;
+                continue;
+            }
+            
+            /* wait for all processes in job to exit */
+            debug ("pid = %d\n", pid);
+            wait_for_job(job, force, tty);
+            res = exit_status;
+            debug ("exit_status = %d\n", exit_status);
+        }
+        /* (b) argument is a pid */
+        else if(isdigit(*arg))
+        {
+            /* Save the terminal's attributes */
+            struct termios *attr = NULL;
+            char *strend = NULL;
+            pid = strtol(arg, &strend, 10);
+            
+            if(*strend || pid == 0)
+            {
+                /* bash returns immediately in this case */
+                PRINT_ERROR(UTILITY, "invalid pid: %s", arg);
+                res = 127;
+                continue;
+            }
+            
+            job = get_job_by_any_pid(pid);
+
+            /* restore the terminal attributes to what it was when the job was suspended, as zsh does */
+            if(job && job->tty_attr)
+            {
+                attr = save_tty_attr();
+                set_tty_attr(tty, job->tty_attr);
+            }
+            
+            res = wait_for_pid(job, pid, force);
+            res = exit_status;
+            
+            if(attr)
+            {
+                set_tty_attr(tty, attr);
+            }
+        }
+        else
+        {
+            PRINT_ERROR(UTILITY, "invalid pid: %s", arg);
+            res = 1;
+        }
+    }
+
+    /* Restore SIGCHLD signal handler to what it was before */
+    sigaction(SIGCHLD, &old_sigact, NULL);
+    return res;
 }

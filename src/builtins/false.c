@@ -19,7 +19,7 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-#include "../cmd.h"
+#include "../include/cmd.h"
 
 #define UTILITY             "false"
 

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
  * 
  *    file: help.c
  *    This file is part of the Layla Shell project.
@@ -22,11 +22,11 @@
 #include <stdio.h>
 #include <fnmatch.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/debug.h"
 
 /* current version of the shell */
-char   shell_ver[] = "1.1-4";
+char   shell_ver[] = "1.2-1";
 
 /* useful macros for printing utilities help message */
 #define SYNOPSIS        (1 << 0)    /* print usage summary (one liner) */
@@ -154,7 +154,7 @@ int help_builtin(int argc, char **argv)
         /* utility not found. print an error message and set the error return result */
         else
         {
-            PRINT_ERROR("%s: unknown builtin utility: %s\n", SOURCE_NAME, argv[v]);
+            PRINT_ERROR("help", "unknown builtin utility: %s", argv[v]);
             res = 1;
         }
     }

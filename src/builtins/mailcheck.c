@@ -26,10 +26,10 @@
 #include <time.h>
 #include <sys/stat.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "setx.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY     "mail"
 
@@ -135,7 +135,7 @@ int mailcheck_builtin(int argc, char **argv)
         /* output error message if not in the quiet mode */
         if(!quiet)
         {
-            PRINT_ERROR("%s: cannot check mail: you have to set MAIL or MAILPATH\n", UTILITY);
+            PRINT_ERROR(UTILITY, "cannot check mail: you have to set MAIL or MAILPATH");
         }
         return 2;
     }
@@ -183,7 +183,7 @@ int mailcheck_builtin(int argc, char **argv)
                             symtab_entry_setval(entry, p2);
                         }
                         
-                        char *m = word_expand_to_str(msg);
+                        char *m = word_expand_to_str(msg, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
                         if(m)
                         {
                             printf(m, p2);

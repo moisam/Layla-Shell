@@ -27,9 +27,9 @@
 #include <unistd.h>
 #include <string.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 #include "setx.h"
 
 #define UTILITY     "set"
@@ -298,8 +298,7 @@ int do_restricted(int on)
     /* -r mode cannot be turned off */
     if(!on && shell_options[OPTION_RESTRICTED].is_set)
     {
-        PRINT_ERROR("%s: restricted flag cannot be unset after being set\n",
-                    UTILITY);
+        PRINT_ERROR(UTILITY, "restricted flag cannot be unset after being set");
         return 0;
     }
     shell_options[OPTION_RESTRICTED].is_set = on;
@@ -467,7 +466,7 @@ int do_options(char *ops, char *extra)
                     /* unrecognized option */
                     if(i == options_count)
                     {
-                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, extra);
+                        OPTION_UNKNOWN_STR_ERROR(UTILITY, extra);
                         return -1;
                     }
                 }
@@ -487,7 +486,7 @@ int do_options(char *ops, char *extra)
                 /* unrecognized option */
                 if(i == options_count)
                 {
-                    PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, *ops);
+                    OPTION_UNKNOWN_ERROR(UTILITY, *ops);
                     return -1;
                 }
                 break;
@@ -666,6 +665,16 @@ int set_builtin(int argc, char **argv)
         entry->flags &= ~FLAG_LOCAL;
     }
     
+    /* set the positional parameters count */
+    if(params)
+    {
+        entry = get_symtab_entry("#");
+        sprintf(buf, "%d", params);
+        symtab_entry_setval(entry, buf);
+        /* ditto */
+        entry->flags &= ~FLAG_LOCAL;
+    }
+    
     /* set the rest of parameters to NULL */
     if(old_count >= 0)
     {
@@ -682,17 +691,9 @@ int set_builtin(int argc, char **argv)
         }
     }
   
-    /* set the positional parameters count */
-    if(params)
-    {
-        entry = get_symtab_entry("#");
-        sprintf(buf, "%d", params);
-        symtab_entry_setval(entry, buf);
-        /* ditto */
-        entry->flags &= ~FLAG_LOCAL;
-    }
     //__asm__("xchg %%bx, %%bx"::);
     symtab_save_options();
+
     return 0;
 }
 
@@ -731,16 +732,14 @@ struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags,
     if(startup_finished && option_set('r') && is_restrict_var(name_buf))
     {
         /* r-shells can't set/unset SHELL, ENV, FPATH, or PATH */
-        PRINT_ERROR("%s: restricted shells can't set %s\n", 
-                    SOURCE_NAME, name_buf);
+        PRINT_ERROR(SHELL_NAME, "restricted shells can't set %s", name_buf);
         return NULL;
     }
     
     /* positional and special parameters can't be set like this */
     if(is_pos_param(name_buf))
     {
-        PRINT_ERROR("%s: cannot set `%s`: positional parameter\n", 
-                    SOURCE_NAME, name_buf);
+        PRINT_ERROR(SHELL_NAME, "cannot set `%s`: positional parameter", name_buf);
         return NULL;
     }
     else if(is_special_param(name_buf))
@@ -758,8 +757,7 @@ struct symtab_entry_s *do_set(char *name_buf, char *val_buf, int set_flags,
             return entry2;
         }
 
-        PRINT_ERROR("%s: cannot set `%s`: special parameter\n", 
-                    SOURCE_NAME, name_buf);
+        PRINT_ERROR(SHELL_NAME, "cannot set `%s`: special parameter", name_buf);
         return NULL;
     }
     

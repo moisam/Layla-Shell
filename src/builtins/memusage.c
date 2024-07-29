@@ -23,11 +23,11 @@
 #include <stdio.h>
 #include <sys/resource.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../symtab/string_hash.h"
 #include "../parser/node.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "memusage"
 

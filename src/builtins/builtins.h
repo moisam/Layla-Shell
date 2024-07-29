@@ -56,7 +56,7 @@ struct builtin_s
 
 /* error printing for the unset builtin utility */
 #define UNSET_PRINT_ERROR(arg, msg) \
-    PRINT_ERROR("unset: cannot unset `%s`: %s\n", arg, msg);
+    PRINT_ERROR("unset", "cannot unset `%s`: %s", arg, msg);
 
 
 /* alias.c */
@@ -156,14 +156,13 @@ void    unalias_all(void);
 /* BUILTIN UTILITIES                      */
 /******************************************/
 int     alias_builtin(int argc, char **argv);
-int     bg_builtin(int argc, char **argv);
 int     bugreport_builtin(int argc, char **argv);
 int     builtin_builtin(int argc, char **argv);
 int     caller_builtin(int argc, char **argv);
 int     cd_builtin(int argc, char **argv);
 int     colon_builtin(int argc, char **argv);
 int     command_builtin(int argc, char **argv);
-#include "../cmd.h"             /* struct io_file_s */
+#include "../include/cmd.h"             /* struct io_file_s */
 //int     coproc_builtin(int argc, char **argv, struct io_file_s *io_files);
 int     coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *coproc_name);
 int     declare_builtin(int argc, char **argv);
@@ -205,6 +204,7 @@ int     pwd_builtin(int argc, char **argv);
 int     read_builtin(int argc, char **argv);
 // int    reboot(void);
 int     readonly_builtin(int argc, char **argv);
+int     recho_builtin(int argc, char **argv);
 int     repeat_builtin(int argc, char **argv);
 int     return_builtin(int argc, char **argv);
 int     set_builtin(int argc, char **argv);

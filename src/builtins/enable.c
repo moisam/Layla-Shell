@@ -23,9 +23,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "enable"
 
@@ -213,7 +213,7 @@ int enable_builtin(int argc, char **argv)
         /* argument is neither a special nor a regular builtin utility */
         if(!utility)
         {
-            PRINT_ERROR("%s: cannot find %s: not a shell builtin\n", UTILITY, arg);
+            PRINT_ERROR(UTILITY, "cannot find %s: not a shell builtin", arg);
             res = 2;
             continue;
         }
@@ -223,7 +223,7 @@ int enable_builtin(int argc, char **argv)
         /* first check if the argument matches the given criteria */
         if((spec_only && !is_special) || (reg_only && is_special))
         {
-            PRINT_ERROR("%s: not a %s shell builtin: %s\n", UTILITY, 
+            PRINT_ERROR(UTILITY, "not a %s shell builtin: %s", 
                         spec_only ? "special" : "regular", arg);
             res = 2;
             continue;
@@ -240,7 +240,7 @@ int enable_builtin(int argc, char **argv)
             if(restrict_shell)
             {
                 /* bash says r-shells can't enable disabled builtins */
-                PRINT_ERROR("%s: can't enable builtin: restricted shell\n", UTILITY);
+                PRINT_ERROR(UTILITY, "can't enable builtin: restricted shell");
                 return 2;
             }
             

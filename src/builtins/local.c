@@ -21,9 +21,9 @@
 
 #include <stdio.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "local"
 
@@ -53,7 +53,7 @@ int local_builtin(int argc, char **argv)
     struct symtab_s *symtab = symtab_stack_pop();
     if(get_local_symtab()->level == 0)
     {
-        PRINT_ERROR("%s: cannot declare local variables at the global scope\n", UTILITY);
+        PRINT_ERROR(UTILITY, "cannot declare local variables at the global scope");
         symtab_stack_add(symtab);
         return 2;
     }

@@ -27,9 +27,9 @@
 #include <errno.h>
 #include <wait.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../sig.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/sig.h"
+#include "../include/debug.h"
 
 #define UTILITY     "kill"
 
@@ -43,28 +43,137 @@ int get_signum(char *signame)
 {
     int i;
     char signame2[16];
-    if(strncmp(signame, "SIG", 3) == 0)
+    char *strend;
+    
+    if(isalpha(*signame))
     {
-        /* signal name has the SIG prefix */
-        strcpy(signame2, signame);
+        if(strncmp(signame, "SIG", 3) == 0)
+        {
+            /* signal name has the SIG prefix */
+            strcpy(signame2, signame);
+        }
+        else
+        {
+            /* signal name with no SIG prefix. add the prefix */
+            sprintf(signame2, "SIG%s", signame);
+        }
+        
+        /* get the signal number */
+        for(i = 0; i < SIGNAL_COUNT; i++)
+        {
+            if(strcasecmp(signames[i], signame2) == 0)
+            {
+                return i;
+            }
+        }
+
+        /* invalid signal name */
+        return -1;
+    }
+    else if(isdigit(*signame))
+    {
+        i = strtol(signame, &strend, 10);
+
+        if(*strend /* || i < 0 || i > SIGNAL_COUNT */ )
+        {
+            return -1;
+        }
+        
+        return i;
+    }
+    
+    return -1;
+}
+
+
+/*
+ * Send a signal to the given pid. If pid is negative, the signal is sent to
+ * all processes in the process group whose pgid equals the given pid.
+ * 
+ * Returns 0 on success, -1 on failure.
+ */
+int do_kill(pid_t pid, int signum, struct job_s *job)
+{
+    int res = 0;
+
+    /* Negative pid is actually a pgid */
+    if(pid < 0)
+    {
+        sigset_t sigset;
+        SIGNAL_BLOCK(SIGCHLD, sigset);
+        
+        if(job)
+        {
+            job->flags &= ~JOB_FLAG_NOTIFIED;
+            
+            /* 
+             * Jobs whose pgid == the shell's pgid are usually started in the 
+             * background. We can't simply send the signal to the pgid, as this
+             * will affect the shell too, so we need to manually send the signal
+             * to all processes in the job.
+             */
+            if(job->pgid == shell_pid)
+            {
+                int i, j = 1;
+                for(i = 0; i < job->proc_count; i++, j <<= 1)
+                {
+                    if(job->child_exitbits & j)
+                    {
+                        continue;
+                    }
+                    
+                    /* 
+                     * we need to make sure the target process is running, so that
+                     * it will receive our signal (tcsh, bash).
+                     */
+                    if(signum == SIGTERM || signum == SIGHUP)
+                    {
+                        kill(pid, SIGCONT);
+                    }
+                    
+                    res = kill(job->pids[i], signum);
+                }
+            }
+            else
+            {
+                /* 
+                 * we need to make sure the target process is running, so that
+                 * it will receive our signal (tcsh, bash).
+                 */
+                pid = -(job->pgid);
+                
+                if(signum == SIGTERM || signum == SIGHUP)
+                {
+                    kill(pid, SIGCONT);
+                }
+                
+                res = kill(pid, signum);
+                
+                /*
+                 * Act as if the job was resumed using bg (bash).
+                 * bash also sets the job to the running state here.
+                 */
+                if(STOPPED(job->status) && signum == SIGCONT)
+                {
+                    job->flags &= ~(JOB_FLAG_FORGROUND|JOB_FLAG_NOTIFIED);
+                }
+            }
+        }
+        else
+        {
+            /* No job. Just kill the process group */
+            res = kill(pid, signum);
+        }
+        
+        SIGNAL_UNBLOCK(sigset);
     }
     else
     {
-        /* signal name with no SIG prefix. add the prefix */
-        sprintf(signame2, "SIG%s", signame);
+        /* Kill the process with the given pid */
+        res = kill(pid, signum);
     }
     
-    /* get the signal number */
-    for(i = 0; i < SIGNAL_COUNT; i++)
-    {
-        if(strcasecmp(signames[i], signame2) == 0)
-        {
-            return i;
-        }
-    }
-
-    /* invalid signal name */
-    return -1;
+    return res;
 }
 
 
@@ -84,7 +193,7 @@ int kill_builtin(int argc, char **argv)
     /* we should have at least one option/argument */
     if(argc == 1)
     {
-        PRINT_ERROR("%s: missing operand(s)\n", UTILITY);
+        PRINT_ERROR(UTILITY, "missing operand(s)");
         return 1;
     }
 
@@ -101,6 +210,12 @@ int kill_builtin(int argc, char **argv)
         /* options start with '-' */
         if(*arg == '-')
         {
+            if(arg[1] == '\0')      /* - or end of options */
+            {
+                index++;
+                break;
+            }
+            
             if(strcmp(arg, "-h") == 0)
             {
                 print_help(argv[0], &KILL_BUILTIN, 0);
@@ -115,62 +230,30 @@ int kill_builtin(int argc, char **argv)
             {
                 break;
             }
-            /* get the signal number */
-            else if(strcmp(arg, "-n") == 0)
+            /* get the signal number or name */
+            else if(strcmp(arg, "-n") == 0 || strcmp(arg, "-s") == 0)
             {
                 if(++index >= argc)
                 {
-                    PRINT_ERROR("%s: missing argument: signal number\n", UTILITY);
+                    OPTION_REQUIRES_ARG_ERROR(UTILITY, arg[1]);
                     return 1;
                 }
-                
+
                 arg = argv[index];
-                if(isdigit(*arg))
-                {
-                    signum = strtol(arg, &strend, 10);
-                    if(*strend || signum == 0 || signum > SIGNAL_COUNT)
-                    {
-                        goto invalid_signame;
-                    }
-                    continue;
-                }
-                else
-                {
-                    goto invalid_signame;
-                }
-            }
-            /* get the symbolic signal name */
-            else if(strcmp(arg, "-s") == 0)
-            {
-                if(++index >= argc)
-                {
-                    PRINT_ERROR("%s: missing argument: signal name\n", UTILITY);
-                    return 1;
-                }
-                
-                arg = argv[index];
-                if(strcmp(arg, "0") == 0)
-                {
-                    signum = 0;
-                }
-                else
-                {
-                    signum = get_signum(arg);
-                }
+                signum = get_signum(arg);
                 
                 /* check the validity of the signal name */
-                if(signum == -1)
+                if(signum < 0 || signum > SIGNAL_COUNT)
                 {
                     goto invalid_signame;
                 }
-                continue;
             }
             /* list all signal names, or the number of the given name */
             else if(strcmp(arg, "-l") == 0 || strcmp(arg, "-L") == 0)
             {
-                /* no option-argument. list all signals */
+                /* No option-argument. List all signals */
                 arg = argv[++index];
-                if(index >= argc || !arg || *arg == '\0')
+                if(!arg || *arg == '\0')
                 {
                     /* list all signal names */
                     for(i = 0; i < SIGNAL_COUNT; i++)
@@ -186,50 +269,34 @@ int kill_builtin(int argc, char **argv)
                     {
                         printf("\n");
                     }
+
                     return 0;
                 }
                 
-                /* we have an option-argument, which is a signal number (or name) */
-                int j;
+                /* We have an option-argument, which is a signal number (or name) */
+                signum = get_signum(arg);
                 
-                if(isalpha(*arg))
-                {
-                    j = get_signum(arg);
-                    if(j == -1)
-                    {
-                        PRINT_ERROR("%s: invalid signal specification: %s\n", UTILITY, arg);
-                        return 2;
-                    }
-                }
-                else
-                {
-                    j = strtol(arg, &strend, 10);
-                    if(*strend)
-                    {
-                        PRINT_ERROR("%s: invalid signal specification: %s\n", UTILITY, arg);
-                        return 2;
-                    }
-                }
-                
-                if(j >= 0 && j < SIGNAL_COUNT)
+                if(signum >= 0 && signum < SIGNAL_COUNT)
                 {
                     if(isalpha(*arg))
                     {
                         /* print signal number */
-                        printf("%d\n", j);
+                        printf("%d\n", signum);
                     }
                     else
                     {
                         /* print without the SIG prefix */
-                        printf("%s\n", j ? &signames[j][3] : "NULL");
+                        printf("%s\n", signum ? &signames[signum][3] : "NULL");
                     }
+
                     return 0;
                 }
                 
                 /* we have an exit status of a process terminated by a signal */
-                if(WIFSIGNALED(j))
+                if(WIFSIGNALED(signum))
                 {
-                    int sig = WTERMSIG(j);
+                    int sig = WTERMSIG(signum);
+
                     if(sig < 0 || sig >= SIGNAL_COUNT)
                     {
                         printf("%d\n", sig);
@@ -238,46 +305,28 @@ int kill_builtin(int argc, char **argv)
                     {
                         printf("%s\n", signames[sig]);
                     }
+
                     return 0;
                 }
-                PRINT_ERROR("%s: invalid signal specification: %s\n", UTILITY, arg);
-                return 2;
-            }
-            
-            /* try parsing as a -signal_name or -signal_number option */
-            arg++;
-            if(isalpha(*arg))
-            {
-                if(strcmp(arg, "0") == 0)
-                {
-                    signum = 0;
-                }
-                else
-                {
-                    signum = get_signum(arg);
-                }
 
-                /* check the validity of the signal name */
-                if(signum == -1)
+                goto invalid_signame;
+            }
+            else
+            {
+                /* try parsing as a -signal_name or -signal_number option */
+                signum = get_signum(++arg);
+
+                if(signum < 0 || signum > SIGNAL_COUNT)
                 {
                     goto invalid_signame;
                 }
-                continue;
             }
-            else if(isdigit(*arg))
-            {
-                signum = strtol(arg, &strend, 10);
-                if(*strend || signum == 0 || signum > SIGNAL_COUNT)
-                {
-                    goto invalid_signame;
-                }
-                continue;
-            }
-
-            PRINT_ERROR("%s: unknown option: %s\n", UTILITY, arg);
-            return 2;
         }
-        break;
+        else
+        {
+            /* no more options */
+            break;
+        }
     }
 
     /* end of options and beginning of arguments */
@@ -285,8 +334,9 @@ int kill_builtin(int argc, char **argv)
     {
         if(signum != -1)
         {
-            PRINT_ERROR("%s: missing argument (run `kill -h` to see the usage)\n", UTILITY);
+            PRINT_ERROR(UTILITY, "missing argument (run `kill -h` to see usage)");
         }
+
         return res;
     }
     
@@ -298,27 +348,27 @@ int kill_builtin(int argc, char **argv)
     /* process the arguments */
     do
     {
+        job = NULL;
         arg = argv[index];
 
         /* (a) argument is a job ID number */
         if(*arg == '%')
         {
-            /* bash says we can't kill jobs if job control is not active, which makes sense */
-            if(!option_set('m'))
-            {
-                PRINT_ERROR("%s: can't kill job %s: job control is not active\n", UTILITY, arg);
-                return 2;
-            }
-            
+            sigset_t sigset;
+            SIGNAL_BLOCK(SIGCHLD, sigset);
+
             pid = get_jobid(arg);
             job = get_job_by_jobid(pid);
+
+            SIGNAL_UNBLOCK(sigset);
             
             if(pid == 0 || !job)
             {
-                PRINT_ERROR("%s: invalid job id: %s\n", UTILITY, arg);
+                INVALID_JOB_ERROR(UTILITY, arg);
                 res = 2;
                 continue;
             }
+
             pid = -(job->pgid);
         }
         /* (b) argument is a pid */
@@ -326,50 +376,26 @@ int kill_builtin(int argc, char **argv)
         {
             /* empty arg or invalid number */
             pid = strtol(arg, &strend, 10);
+            
             if(!*arg || *strend)
             {
-                PRINT_ERROR("%s: invalid job id: %s\n", UTILITY, arg);
+                INVALID_JOB_ERROR(UTILITY, arg);
                 res = 2;
                 continue;
             }
         }
 
-        /* 
-         * we need to make sure the target process is running, so that
-         * it will receive our signal (tcsh does this).
-         */
-        if(signum == SIGTERM || signum == SIGHUP)
+        /* send the signal */
+        if(do_kill(pid, signum, job) != 0)
         {
-            kill(pid, SIGCONT);
+            res = 1;
         }
 
-        /* send the signal */
-        if(kill(pid, signum) != 0)
-        {
-            if(signum < 0 || signum >= SIGNAL_COUNT)
-            {
-                PRINT_ERROR("%s: failed to send signal %d to process %d: %s\n",
-                        UTILITY, signum, pid, strerror(errno));
-            }
-            else
-            {
-                PRINT_ERROR("%s: failed to send signal %s to process %d: %s\n", 
-                        UTILITY, signames[signum], pid, strerror(errno));
-            }
-            res = 2;
-        }
-        else if(job)
-        {
-            if(signum == SIGTERM || signum == SIGKILL || signum == SIGHUP)
-            {
-                remove_job(job);
-                job = NULL;
-            }
-        }
     } while(++index < argc);
+
     return res;
     
 invalid_signame:
-    PRINT_ERROR("%s: invalid signal name: %s\n", UTILITY, arg);
+    PRINT_ERROR(UTILITY, "invalid signal name: %s", arg);
     return 2;
 }

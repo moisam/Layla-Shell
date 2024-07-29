@@ -24,16 +24,15 @@
 #include <linux/input.h>
 #include <linux/kd.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/debug.h"
 #include "../symtab/symtab.h"
-#include "../sig.h"
+#include "../include/sig.h"
 
 /* Defined in jobs.c */
 extern int cur_job ;
 extern int prev_job;
 
-#define UTILITY         "bg"
 
 /*
  * Helper function to send the job indicated by the passed struct job_s to
@@ -46,18 +45,15 @@ int do_bg(struct job_s *job)
 {
     if(!flag_set(job->flags, JOB_FLAG_JOB_CONTROL))
     {
-        PRINT_ERROR("%s: job started without job control\n", UTILITY);
+        PRINT_ERROR("bg", "job started without job control");
         return 0;
     }
     
-    sigset_t sigset;
-    SIGNAL_BLOCK(SIGCHLD, sigset);
 
-    if(!NOT_RUNNING(job->status))
+    if(RUNNING(job->status))
     {
-        PRINT_ERROR("%s: job %d is already running in the background\n", 
-                    SOURCE_NAME, job->job_num);
-        SIGNAL_UNBLOCK(sigset);
+        PRINT_ERROR("bg", "job %d is already running in the background", 
+                    job->job_num);
         /* Not an error (bash) */
         return 1;
     }
@@ -70,104 +66,32 @@ int do_bg(struct job_s *job)
      * 
      */
     char current = ' ';
+    char *cmd = job->commandstr;
+    
     if(!option_set('P'))
     {
         current = (job->job_num == cur_job ) ? '+' :
                   (job->job_num == prev_job) ? '-' : ' ';
     }
-    printf("[%d]%c %s\n", job->job_num, current, job->commandstr);
-    kill(-(job->pgid), SIGCONT);
+    
+
+    printf("[%d]%c %s\n", job->job_num, current, cmd);
+    do_kill(-(job->pgid), SIGCONT, job);
     
     /* Set the $! special parameter */
     set_shell_vari("!", job->pgid);
 
-    /* Unblock SIGHCHLD */
-    SIGNAL_UNBLOCK(sigset);
 
     /*
      * Save the current job in the previous job, then set the last started job
      * as the current job.
      */
+    reset_cur_job();
+    
+#if 0
     prev_job = cur_job;
     cur_job  = job->job_num;
+#endif
     
     return 1;
-}
-
-
-/*
- * The bg builtin utility (POSIX). Used to resume a stopped job in the background. 
- * Returns 0* in all cases, unless an unknown option was supplied.
- * 
- * See the manpage for the list of options and an explanation of what each option does.
- * You can also run: `help bg` or `bg -h` from lsh prompt to see a short
- * explanation on how to use this utility.
- */
-int bg_builtin(int argc, char **argv)
-{
-    int i;
-    struct job_s *job;
-    
-    /* bg only works if job control is enabled (the monitor '-m' option is set) */
-    if(!option_set('m'))
-    {
-        PRINT_ERROR("%s: job control is not active\n", UTILITY);
-        return 1;
-    }
-    
-    /* If no arguments given, use the current job '%%' */
-    if(argc == 1)
-    {
-        /* Get current job */
-        job = get_job_by_jobid(get_jobid("%%"));
-        if(job)
-        {
-            /* If it is stopped, continue it in the background */
-            if(WIFSTOPPED(job->status))
-            {
-                return !do_bg(job);
-            }
-        }
-        return 0;
-    }
-    
-    int v = 1, res = 0, c;
-    /****************************
-     * Process the options
-     ****************************/
-    while((c = parse_args(argc, argv, "hv", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
-    {
-        if(c == 'h')
-        {
-            print_help(argv[0], &BG_BUILTIN, 0);
-        }
-        else if(c == 'v')
-        {
-            printf("%s", shell_ver);
-        }
-    }
-
-    /* Unknown option */
-    if(c == -1)
-    {
-        return 2;
-    }
-    
-    /* Start all the given job ids in the background */
-    for(i = v; i < argc; i++)
-    {
-        job = get_job_by_jobid(get_jobid(argv[i]));
-        if(!job)
-        {
-            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[i]);
-            continue;
-        }
-        
-        /* If the job is stopped, start it in the background */
-        if(WIFSTOPPED(job->status))
-        {
-            res = !do_bg(job);
-        }
-    }
-    return res;
 }

@@ -23,9 +23,9 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "let"
 
@@ -52,7 +52,7 @@ int let_builtin(int argc, char **argv)
     /* no arguments */
     if(i >= argc)
     {
-        PRINT_ERROR("%s: missing expression\n", UTILITY);
+        PRINT_ERROR(UTILITY, "missing expression");
         return 1;
     }
     

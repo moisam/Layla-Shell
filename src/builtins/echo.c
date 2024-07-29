@@ -28,9 +28,9 @@
 #include <unistd.h>
 #include <ctype.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "echo"
 

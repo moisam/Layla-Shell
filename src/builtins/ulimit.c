@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019, 2020 (c)
+ *    Copyright 2019, 2020, 2024 (c)
  * 
  *    file: ulimit.c
  *    This file is part of the Layla Shell project.
@@ -43,8 +43,8 @@
 #include <sys/stat.h>
 #include <sys/resource.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/debug.h"
 
 /*
  * See the manpage at http://man7.org/linux/man-pages/man2/prlimit.2.html
@@ -170,7 +170,11 @@ int linux_rlimit_count = sizeof(linux_rlimits)/sizeof(struct linux_rlimit_s);
 long get_pipesz(void)
 {
     int pipefd[2];
-    pipe(pipefd);
+
+    if(pipe(pipefd) < 0)
+    {
+        return 0;
+    }
 
     long sz = ((long)fcntl(pipefd[0], F_GETPIPE_SZ));
     close(pipefd[0]);
@@ -205,7 +209,7 @@ long read_sys_file(char *path)
     char *s = command_substitute(buf);
     if(!s)
     {
-        PRINT_ERROR("%s: failed to read file: %s\n", UTILITY, path);
+        PRINT_ERROR(UTILITY, "failed to read file: %s", path);
         return 0;
     }
     
@@ -213,7 +217,7 @@ long read_sys_file(char *path)
     long t = strtol(s, &strend, 10);
     if(*strend)
     {
-        PRINT_ERROR("%s: invalid limit value: %s\n", UTILITY, s);
+        PRINT_ERROR(UTILITY, "invalid limit value: %s", s);
         t = 0;
     }
     
@@ -256,20 +260,20 @@ long write_sys_file(char *path, char *new_max, char *limit_str)
     if(*p)
     {
         /* invalid value */
-        PRINT_ERROR("%s: invalid limit value: %s\n", UTILITY, new_max);
+        PRINT_ERROR(UTILITY, "invalid limit value: %s", new_max);
         return 0;
     }
 
     /* check the system file exists and we can write to it */
     if(!file_exists(path))
     {
-        PRINT_ERROR("%s: failed to set limit: %s\n", UTILITY, "system file does not exist");
+        PRINT_ERROR(UTILITY, "failed to set limit: %s", "system file does not exist");
         return 0;
     }
     
     if(access(path, W_OK) != 0)
     {
-        PRINT_ERROR("%s: failed to set limit: %s\n", UTILITY, "insufficient permissions");
+        PRINT_ERROR(UTILITY, "failed to set limit: %s", "insufficient permissions");
         return 0;
     }
     
@@ -280,7 +284,7 @@ long write_sys_file(char *path, char *new_max, char *limit_str)
     char *s = command_substitute(buf);
     if(!s)
     {
-        PRINT_ERROR("%s: failed to write file: %s\n", UTILITY, path);
+        PRINT_ERROR(UTILITY, "failed to write file: %s", path);
         return 0;
     }
     free(s);
@@ -289,7 +293,7 @@ long write_sys_file(char *path, char *new_max, char *limit_str)
     sprintf(buf, "%ld", t);
     if(strcmp(buf, new_max))
     {
-        PRINT_ERROR("%s: failed to set limit: %s\n", UTILITY, limit_str);
+        PRINT_ERROR(UTILITY, "failed to set limit: %s", limit_str);
         t = 0;
     }
     
@@ -424,7 +428,7 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int flag
             /* can't set the pipe file size rlimit */
             if(valstr)
             {
-                PRINT_ERROR("%s: pipe buffer size: cannot modify a readonly limit\n", UTILITY);
+                PRINT_ERROR(UTILITY, "pipe buffer size: cannot modify a readonly limit");
                 return 2;
             }
             else
@@ -518,7 +522,7 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int flag
                 else
                 {
                     /* invalid value */
-                    PRINT_ERROR("%s: invalid limit value: %s\n", UTILITY, valstr);
+                    PRINT_ERROR(UTILITY, "invalid limit value: %s", valstr);
                     return 2;
                 }
             }
@@ -544,7 +548,7 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int flag
             
             if(setrlimit(which, &limit) != 0)
             {
-                PRINT_ERROR("%s: failed to set rlimit: %s\n", UTILITY, strerror(errno));
+                PRINT_ERROR(UTILITY, "failed to set rlimit: %s", strerror(errno));
                 return 3;
             }
         }
@@ -570,7 +574,7 @@ int parse_rlimit(struct rlim_s *rlim, int which, char *valstr, int div, int flag
     else
     {
         /* failed to get the rlimit */
-        PRINT_ERROR("%s: failed to get rlimit: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to get rlimit: %s", strerror(errno));
         return 3;
     }
     return 0;

@@ -24,10 +24,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/parser.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "getopts"
 
@@ -67,7 +67,7 @@ int getopts_builtin(int argc, char **argv)
     /* we need at least 3 args */
     if(argc < 3)
     {
-        PRINT_ERROR("%s: missing argument(s)\n", UTILITY);
+        MISSING_ARGS_ERROR(UTILITY);
         print_help(argv[0], &GETOPTS_BUILTIN, SYNOPSIS);
         return 2;
     }
@@ -82,7 +82,7 @@ int getopts_builtin(int argc, char **argv)
             break;
         }
         
-        PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, arg[1] ? arg[1] : '-');
+        OPTION_UNKNOWN_ERROR(UTILITY, arg[1] ? arg[1] : '-');
         return 2;
     }
     
@@ -98,7 +98,7 @@ int getopts_builtin(int argc, char **argv)
     /* sanity check for the given variable name */
     if(!is_name(name))
     {
-        PRINT_ERROR("%s: invalid name: %s\n", UTILITY, name);
+        PRINT_ERROR(UTILITY, "invalid name: %s", name);
         return 2;
     }
     
@@ -139,7 +139,7 @@ int getopts_builtin(int argc, char **argv)
         args = malloc((count+2) * sizeof(char *));
         if(!args)
         {
-            PRINT_ERROR("%s: insufficient memory to load args\n", UTILITY);
+            INSUFFICIENT_MEMORY_ERROR(UTILITY, "load args");
             return 1;
         }
         
@@ -212,8 +212,7 @@ int getopts_builtin(int argc, char **argv)
                     /* print an error message */
                     if(opterr)
                     {
-                        PRINT_ERROR("%s: option requires an argument -- %c\n", 
-                                    invoking_prog, internal_opterr);
+                        OPTION_REQUIRES_ARG_ERROR(invoking_prog, internal_opterr);
                     }
                 }
             }
@@ -245,7 +244,7 @@ int getopts_builtin(int argc, char **argv)
             else
             {
                 /* print the error-causing option */
-                PRINT_ERROR("%s: unknown option: -%c\n", invoking_prog, internal_opterr);
+                OPTION_UNKNOWN_ERROR(invoking_prog, internal_opterr);
                 res = do_set("OPTARG", NULL, 0, 0, 0) ? 0 : 1;
             }
         }

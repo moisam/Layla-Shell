@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019, 2020 (c)
+ *    Copyright 2019, 2020, 2024 (c)
  * 
  *    file: dirstack.c
  *    This file is part of the Layla Shell project.
@@ -28,9 +28,9 @@
 #include <sys/stat.h>
 #include "builtins.h"
 #include "setx.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 struct dirstack_ent_s *dirstack = NULL;     /* the directory stack */
 int    stack_count   = 0;                   /* count of stack entries */
@@ -121,7 +121,7 @@ int load_dirstack(char *__path)
     }
 
     /* perform word expansion on the path */
-    path = word_expand_to_str(path);
+    path = word_expand_to_str(path, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
     if(!path)
     {
         return push_cwd(SHELL_NAME);
@@ -194,7 +194,7 @@ int load_dirstack(char *__path)
                 /*
                 * TODO: do something better than just b*^%$ing about it.
                 */
-                PRINT_ERROR("%s: failed to cd to %s\n", SOURCE_NAME, path);
+                PRINT_ERROR(SHELL_NAME, "failed to cd to %s", path);
                 goto err;
             }
             
@@ -210,8 +210,8 @@ int load_dirstack(char *__path)
     else
     {
         /* error opening the dirs file */
-        PRINT_ERROR("%s: failed to load dirstack from %s: %s\n",
-                SOURCE_NAME, path, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to load dirstack from %s: %s",
+                path, strerror(errno));
     }
     
     free(path);
@@ -311,7 +311,7 @@ int load_dirstackp(char *val)
             /*
              * TODO: do something better than just b*^%$ing about it.
              */
-            PRINT_ERROR("%s: failed to cd to %s\n", SOURCE_NAME, path);
+            PRINT_ERROR(SHELL_NAME, "failed to cd to %s", path);
             free_malloced_str(path);
             goto err;
         }
@@ -413,7 +413,7 @@ void save_dirstack(char *__path)
     }
 
     /* perform word expansion on the path */
-    path = word_expand_to_str(path);
+    path = word_expand_to_str(path, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
 
     /* empty path */
     if(!path)
@@ -447,8 +447,8 @@ void save_dirstack(char *__path)
     else
     {
         /* error opening the file */
-        PRINT_ERROR("%s: failed to save dirstack to %s: %s\n", 
-                    SOURCE_NAME, path, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to save dirstack to %s: %s", 
+                    path, strerror(errno));
     }
     
     free(path);
@@ -683,13 +683,13 @@ int push_dir(char *dir, struct dirstack_ent_s **stack, int *count, char *utility
         /* check if the new path is a directory */
         if(!S_ISDIR(st.st_mode))
         {
-            PRINT_ERROR("%s: cannot push `%s`: %s\n", utility, dir, strerror(ENOTDIR));
+            PRINT_ERROR(utility, "cannot push `%s`: %s", dir, strerror(ENOTDIR));
             return 0;
         }
     }
     else
     {
-        PRINT_ERROR("%s: cannot push `%s`: %s\n", utility, dir, strerror(ENOENT));
+        PRINT_ERROR(utility, "cannot push `%s`: %s", dir, strerror(ENOENT));
         return 0;
     }
 
@@ -897,7 +897,7 @@ int dirs_builtin(int argc, char **argv)
             struct dirstack_ent_s *ds = get_dirstack_entry(arg, NULL, &n);
             if(!ds)
             {
-                PRINT_ERROR("dirs: directory stack index out of range: %s\n", arg);
+                PRINT_ERROR("dirs", "directory stack index out of range: %s", arg);
                 return 2;
             }
 
@@ -928,7 +928,7 @@ int dirs_builtin(int argc, char **argv)
         }
         else
         {
-            PRINT_ERROR("dirs: unknown option: %s\n", arg);
+            OPTION_UNKNOWN_STR_ERROR("dirs", arg);
             return 2;
         }
     }
@@ -1032,8 +1032,8 @@ int pushd_builtin(int argc, char **argv)
                         flags |= FLAG_DIRSTACK_WRAP_ENTRIES;
                         break;
             
-                    default:                        
-                        PRINT_ERROR("pushd: unknown option: %c\n", *p);
+                    default:
+                        OPTION_UNKNOWN_ERROR("pushd", *p);
                         return 2;
                 }
                 p++;
@@ -1059,14 +1059,14 @@ int pushd_builtin(int argc, char **argv)
             char *home = get_shell_varp("HOME", NULL);
             if(!home)
             {
-                PRINT_ERROR("pushd: invalid directory name: %s\n", "$HOME");
+                PRINT_ERROR("pushd", "invalid directory name: %s", "$HOME");
                 return 1;
             }
             
-            char *cwd2 = word_expand_to_str(home);
+            char *cwd2 = word_expand_to_str(home, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
             if(!cwd2)
             {
-                PRINT_ERROR("pushd: invalid directory name: %s\n", cwd2);
+                PRINT_ERROR("pushd", "invalid directory name: %s", home);
                 return 1;
             }
             
@@ -1092,7 +1092,7 @@ int pushd_builtin(int argc, char **argv)
             /* check for an empty stack (including stack with one entry -- the cwd) */
             if(stack_count < 2)
             {
-                PRINT_ERROR("pushd: cannot push on an empty stack\n");
+                PRINT_ERROR("pushd", "cannot push on an empty stack");
                 return 1;
             }
             
@@ -1125,7 +1125,7 @@ int pushd_builtin(int argc, char **argv)
     /* we accept at most one directory name */
     if(argc-v > 1)
     {
-        PRINT_ERROR("pushd: too many arguments\n");
+        PRINT_ERROR("pushd", "too many arguments");
         return 2;
     }
     
@@ -1139,7 +1139,7 @@ int pushd_builtin(int argc, char **argv)
         dir = get_shell_varp("OLDPWD", NULL);
         if(!dir)
         {
-            PRINT_ERROR("pushd: invalid directory name: %s\n", arg);
+            PRINT_ERROR("pushd", "invalid directory name: %s", arg);
             return 1;
         }
     }
@@ -1149,7 +1149,7 @@ int pushd_builtin(int argc, char **argv)
         struct dirstack_ent_s *ds = get_dirstack_entry(arg, NULL, NULL);
         if(!ds)
         {
-            PRINT_ERROR("pushd: directory stack index out of range: %s\n", arg);
+            PRINT_ERROR("pushd", "directory stack index out of range: %s", arg);
             return 1;
         }
         
@@ -1211,10 +1211,10 @@ int pushd_builtin(int argc, char **argv)
     else
     {
         //char *cwd2 = word_expand_to_str(arg);
-        dir = word_expand_to_str(arg);
+        dir = word_expand_to_str(arg, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
         if(!dir)
         {
-            PRINT_ERROR("pushd: invalid directory name: %s\n", arg);
+            PRINT_ERROR("pushd", "invalid directory name: %s", arg);
             return 1;
         }
         free_dir = 1;
@@ -1358,7 +1358,7 @@ int popd_builtin(int argc, char **argv)
         /* check for an empty stack (including stack with one entry -- the cwd) */
         if(stack_count < 2)
         {
-            PRINT_ERROR("popd: cannot pop from an empty stack\n");
+            PRINT_ERROR("popd", "cannot pop from an empty stack");
             return 1;
         }
             
@@ -1389,7 +1389,7 @@ int popd_builtin(int argc, char **argv)
     /* we accept at most one directory name */
     if(argc-v > 1)
     {
-        PRINT_ERROR("popd: too many arguments\n");
+        PRINT_ERROR("popd", "too many arguments");
         return 2;
     }
     
@@ -1401,14 +1401,14 @@ int popd_builtin(int argc, char **argv)
         struct dirstack_ent_s *ds = get_dirstack_entry(arg, &prev, NULL);
         if(!ds)
         {
-            PRINT_ERROR("popd: directory stack index out of range: %s\n", arg);
+            PRINT_ERROR("popd", "directory stack index out of range: %s", arg);
             return 1;
         }
         
         /* check for an empty stack (including stack with one entry -- the cwd) */
         if(stack_count < 2)
         {
-            PRINT_ERROR("popd: cannot pop from an empty stack\n");
+            PRINT_ERROR("popd", "cannot pop from an empty stack");
             return 1;
         }
             
@@ -1431,7 +1431,7 @@ int popd_builtin(int argc, char **argv)
     }
     else
     {
-        PRINT_ERROR("popd: invalid directory stack index: %s\n", arg);
+        PRINT_ERROR("popd", "invalid directory stack index: %s", arg);
         return 1;
     }
 

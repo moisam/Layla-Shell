@@ -24,8 +24,8 @@
 #include <signal.h>
 #include <sys/types.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/debug.h"
 
 #define UTILITY         "notify"
 
@@ -45,7 +45,7 @@ int notify_builtin(int argc, char **argv)
     /* job control must be on */
     if(!option_set('m'))
     {
-        PRINT_ERROR("%s: job control is not enabled\n", UTILITY);
+        PRINT_ERROR(UTILITY, "job control is not enabled");
         return 2;
     }
     
@@ -56,7 +56,7 @@ int notify_builtin(int argc, char **argv)
         job = get_job_by_jobid(get_jobid("%%"));
         if(!job)
         {
-            PRINT_ERROR("%s: unknown job: %%%%\n", UTILITY);
+            INVALID_JOB_ERROR(UTILITY, "%%%%");
             return 3;
         }
         /* mark the job as notified */
@@ -96,7 +96,7 @@ int notify_builtin(int argc, char **argv)
         job = get_job_by_jobid(get_jobid(argv[v]));
         if(!job)
         {
-            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
+            INVALID_JOB_ERROR(UTILITY, argv[v]);
             return 3;
         }
         /* mark the job as notified */

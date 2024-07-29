@@ -27,11 +27,11 @@
 #include <unistd.h>
 #include <string.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
 #include "../parser/parser.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "export"
 
@@ -172,7 +172,7 @@ int process_var_attribs(char **args, int unexport, int funcs, int flag)
 
         if(!is_name(name_buf))
         {
-            PRINT_ERROR("%s: invalid name: %s\n", utility, name_buf);
+            PRINT_ERROR(utility, "invalid name: %s", name_buf);
             res = 1;
             continue;
         }
@@ -213,8 +213,7 @@ int process_var_attribs(char **args, int unexport, int funcs, int flag)
                 /* can't define functions this way */
                 if(equals)
                 {
-                    PRINT_ERROR("%s: cannot use the '-f' option to define functions\n",
-                                utility);
+                    PRINT_ERROR(utility, "cannot use the '-f' option to define functions");
                     res = 2;
                 }
                 else
@@ -223,8 +222,7 @@ int process_var_attribs(char **args, int unexport, int funcs, int flag)
                     if(!entry)
                     {
                         /* can't export an undefined function */
-                        PRINT_ERROR("%s: unknown function name: %s\n",
-                                    utility, name_buf);
+                        PRINT_ERROR(utility, "unknown function name: %s", name_buf);
                         res = 2;
                     }
                     else

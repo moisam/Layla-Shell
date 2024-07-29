@@ -26,9 +26,9 @@
 #include <errno.h>
 #include <sys/resource.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 
 /*
@@ -78,7 +78,7 @@ int hup_builtin(int argc, char **argv)
                         return 0;
                         
                     default:
-                        PRINT_ERROR("%s: invalid option: -%c\n", UTILITY, *p);
+                        OPTION_UNKNOWN_ERROR(UTILITY, *p);
                         return 2;
                 }
                 p++;
@@ -94,7 +94,7 @@ int hup_builtin(int argc, char **argv)
     /* we should have at least one argument */
     if(i >= argc)
     {
-        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "command name");
         return 2;
     }
     

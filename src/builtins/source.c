@@ -23,9 +23,9 @@
 #include <stdio.h>
 #include <errno.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 int do_source_script(char *utility, char *file, int argc, char **argv);
 
@@ -61,7 +61,7 @@ int source_builtin(int argc, char **argv)
             case 'h':
                 if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                 {
-                    PRINT_ERROR("%s: missing argument to option -%c\n", "source", 'h');
+                    OPTION_REQUIRES_ARG_ERROR("source", 'h');
                     return 2;
                 }
 
@@ -84,8 +84,8 @@ int source_builtin(int argc, char **argv)
     /* check we have a filename */
     if(v >= argc)
     {
-        PRINT_ERROR("%s: missing argument: file name\n"
-                    "usage: %s file [args...]\n", argv[0], argv[0]);
+        PRINT_ERROR(argv[0], "missing argument: file name\n"
+                    "usage: %s file [args...]", argv[0]);
         return 2;
     }
     
@@ -127,7 +127,7 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
         if(startup_finished && option_set('r'))
         {
             /* bash says r-shells can't specify commands with '/' in their names */
-            PRINT_ERROR("%s: can't execute dot script: restricted shell\n", utility);
+            PRINT_ERROR(utility, "can't execute dot script: restricted shell");
             return 2;
         }
         path = file;
@@ -160,7 +160,7 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
         /* still no luck? */
         if(!path)
         {
-            PRINT_ERROR("%s: failed to find file: %s\n", utility, file);
+            PRINT_ERROR(utility, "failed to find file: %s", file);
             return EXIT_ERROR_NOENT;
         }
     }
@@ -168,7 +168,7 @@ int do_source_script(char *utility, char *file, int argc, char **argv)
     /* try to read the dot file */
     if(!read_file(path, &src))
     {
-        PRINT_ERROR("%s: failed to read `%s`: %s\n", utility, file, strerror(errno));
+        PRINT_ERROR(utility, "failed to read `%s`: %s", file, strerror(errno));
         if(path != file)
         {
             free_malloced_str(path);

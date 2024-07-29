@@ -21,7 +21,7 @@
 
 #include <signal.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 
 #define UTILITY             "suspend"
 
@@ -78,7 +78,7 @@ int suspend_builtin(int argc, char **argv)
         /* login shells can't be suspended without the -f option (bash) */
         if(option_set('L'))
         {
-            PRINT_ERROR("%s: failed to suspend: login shell\n", UTILITY);
+            PRINT_ERROR(UTILITY, "failed to suspend: login shell");
             return 2;
         }
         raise(SIGSTOP);

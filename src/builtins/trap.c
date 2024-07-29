@@ -28,11 +28,11 @@
 #include <errno.h>
 #include <ctype.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../sig.h"
+#include "../include/cmd.h"
+#include "../include/sig.h"
 #include "../symtab/string_hash.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "trap"
 
@@ -123,6 +123,35 @@ struct trap_item_s *save_trap(char *name)
     
     /* return the copy */
     return trap2;
+}
+
+
+/*
+ * Reset the requested trap to default action.
+ * 
+ * Returns 1 on success, 0 on error.
+ */
+int reset_trap(char *name)
+{
+    /* get the trap struct */
+    struct trap_item_s *trap = get_trap_item(name);
+    if(!trap)
+    {
+        return 0;
+    }
+    
+    /* free the old action string */
+    if(trap->action_str)
+    {
+        free_malloced_str(trap->action_str);
+    }
+    
+    /* reset trap to default action */
+    trap->action = ACTION_DEFAULT;
+    trap->action_str = NULL;
+    
+    /* return the copy */
+    return 1;
 }
 
 
@@ -464,7 +493,7 @@ int print_traps(char **argv)
         {
             if(!check_trap_condition(*argv, &i, &condition))
             {
-                PRINT_ERROR("%s: unknown trap condition: %s\n", UTILITY, *argv);
+                PRINT_ERROR(UTILITY, "unknown trap condition: %s", *argv);
                 return 1;
             }
 
@@ -472,7 +501,7 @@ int print_traps(char **argv)
             struct trap_item_s *trap = get_trap_item(condition);
             if(!trap)
             {
-                PRINT_ERROR("%s: unknown trap condition: %s\n", UTILITY, condition);
+                PRINT_ERROR(UTILITY, "unknown trap condition: %s", condition);
                 return 1;
             }
             
@@ -535,7 +564,7 @@ int trap_builtin(int argc, char **argv)
          */
         if(option_set('P'))
         {
-            PRINT_ERROR("%s: unknown option: %s\n", UTILITY, p);
+            OPTION_UNKNOWN_STR_ERROR(UTILITY, p);
             return 2;
         }
 
@@ -566,7 +595,7 @@ int trap_builtin(int argc, char **argv)
                 break;
                     
             default:
-                PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, *p);
+                OPTION_UNKNOWN_ERROR(UTILITY, *p);
                 return 2;
         }
         v++;
@@ -675,7 +704,7 @@ int trap_builtin(int argc, char **argv)
                 sigact.sa_sigaction = default_sigact->sa_sigaction;
                 if(sigaction(i, &sigact, NULL) != 0)
                 {
-                    PRINT_ERROR("%s: failed to reset trap to default: %s\n", UTILITY, strerror(errno));
+                    PRINT_ERROR(UTILITY, "failed to reset trap to default: %s", strerror(errno));
                     res = 1;
                 }
                 else
@@ -754,7 +783,7 @@ int trap_builtin(int argc, char **argv)
                 sigact.sa_handler = SIG_IGN;
                 if(sigaction(i, &sigact, NULL) != 0)
                 {
-                    PRINT_ERROR("%s: failed to ignore trap: %s\n", UTILITY, strerror(errno));
+                    PRINT_ERROR(UTILITY, "failed to ignore trap: %s", strerror(errno));
                     res = 1;
                 }
                 else
@@ -777,7 +806,7 @@ int trap_builtin(int argc, char **argv)
                 sigact.sa_handler = trap_handler;
                 if(sigaction(i, &sigact, NULL) != 0)
                 {
-                    PRINT_ERROR("%s: failed to set trap: %s\n", UTILITY, strerror(errno));
+                    PRINT_ERROR(UTILITY, "failed to set trap: %s", strerror(errno));
                     res = 1;
                 }
                 else
@@ -792,6 +821,6 @@ int trap_builtin(int argc, char **argv)
     return res;
 
 invalid_trap:
-    PRINT_ERROR("%s: unknown trap condition: %s\n", UTILITY, condition);
+    PRINT_ERROR(UTILITY, "unknown trap condition: %s", condition);
     return 1;
 }

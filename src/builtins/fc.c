@@ -29,9 +29,9 @@
 #include <errno.h>
 #include <wait.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "fc"
 
@@ -54,7 +54,7 @@ void add_replacement_str(struct replace_str_s **replace_str,
     struct replace_str_s *rep = malloc(sizeof(struct replace_str_s));
     if(!rep)
     {
-        PRINT_ERROR("%s: insufficient memory\n", UTILITY);
+        INSUFFICIENT_MEMORY_ERROR(UTILITY, "replacement string");
         return;
     }
     
@@ -228,26 +228,20 @@ void output_multi(char *cmd)
 
 
 /* get an index out of a string */
-void fc_get_index(char *str, int *index)
+int fc_get_index(char *str, int *index)
 {
     int i, j;
-    char *strend;
+    char *strend = NULL;
+
+    /* try to parse as numeric argument first */
+    i = strtol(str , &strend, 10);
     
-    /* check if the argument is numeric: -n, +n or n */
-    if(*str == '-' || *str == '+' || isdigit(*str))
+    /*
+     * if non-numeric argument, use it as a string to search for in the
+     * history list.
+     */
+    if(strend && *strend)
     {
-        i = strtol(str , &strend, 10);
-        if(*strend)
-        {
-            i = 0;
-        }
-    }
-    else
-    {
-        /*
-         * if non-numeric argument, use it as a string to search for in the
-         * history list.
-         */
         for(j = cmd_history_end-1; j >= 0; j--)
         {
             if(strstr(cmd_history[j].cmd, str) == cmd_history[j].cmd)
@@ -255,6 +249,13 @@ void fc_get_index(char *str, int *index)
                 i = j;
                 break;
             }
+        }
+        
+        /* not found */
+        if(j < 0)
+        {
+            PRINT_ERROR(UTILITY, "cannot find command: %s", str);
+            return 0;
         }
     }
     
@@ -265,6 +266,7 @@ void fc_get_index(char *str, int *index)
     }
     
     (*index) = i;
+    return 1;
 }
 
 
@@ -338,7 +340,7 @@ int fc_builtin(int argc, char **argv)
      * process the options
      ****************************/
     int c /* , i */;
-    while((c = parse_args(argc, argv, "hvelnrs", &v, FLAG_ARGS_PRINTERR)) > 0)
+    while((c = parse_args(argc, argv, "hve:lnrs", &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -352,7 +354,8 @@ int fc_builtin(int argc, char **argv)
                 
             /* -e specifies the editor to use to edit commands */
             case 'e':
-                if(!argv[v] || !argv[v][0])
+                if(!internal_optarg || internal_optarg == INVALID_OPTARG)
+                //if(!argv[v] || !argv[v][0])
                 {
                     /*
                      * bash uses the default value of the expansion:
@@ -365,13 +368,15 @@ int fc_builtin(int argc, char **argv)
                 }
                 else
                 {
-                    editor = search_path(argv[v], NULL, 1);
+                    editor = search_path(internal_optarg, NULL, 1);
+                    //editor = search_path(argv[v], NULL, 1);
+
                     /* remember we malloc'd the editor name so we can free it later */
                     if(editor)
                     {
                         edit_malloc = 1;
                     }
-                    v++;
+                    //v++;
                 }
                 break;
                 
@@ -417,7 +422,10 @@ int fc_builtin(int argc, char **argv)
     /* get the 'first' operand */
     if(v < argc)
     {
-        fc_get_index(argv[v++], &first);
+        if(!fc_get_index(argv[v++], &first))
+        {
+            return 2;
+        }
     }
 
     /* get the 'last' operand */
@@ -435,7 +443,10 @@ int fc_builtin(int argc, char **argv)
         }
 #endif
         
-        fc_get_index(argv[v++], &last);
+        if(!fc_get_index(argv[v++], &last))
+        {
+            return 2;
+        }
     }
     
 //check_bounds:
@@ -501,7 +512,7 @@ int fc_builtin(int argc, char **argv)
     if(first < 1 || first > cmd_history_end)
     {
         //first = 1;
-        PRINT_ERROR("%s: index out of range: %d\n", UTILITY, first);
+        PRINT_ERROR(UTILITY, "index out of range: %d", first);
         free_replacement_strs(replace_str);
         return 2;
     }
@@ -509,7 +520,7 @@ int fc_builtin(int argc, char **argv)
     if(last < 1 || last > cmd_history_end)
     {
         //last = 1;
-        PRINT_ERROR("%s: index out of range: %d\n", UTILITY, last);
+        PRINT_ERROR(UTILITY, "index out of range: %d", last);
         free_replacement_strs(replace_str);
         return 2;
     }
@@ -628,7 +639,7 @@ int fc_builtin(int argc, char **argv)
         else
         {
             /* word-expand the editor name */
-            editor = word_expand_to_str(fcedit);
+            editor = word_expand_to_str(fcedit, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
             if(!editor)
             {
                 editor = get_malloced_str("/bin/ed");
@@ -651,7 +662,7 @@ int fc_builtin(int argc, char **argv)
 
     if(!tmpname || tmp < 0)
     {
-        PRINT_ERROR("%s: error creating temp file: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "error creating temp file: %s", strerror(errno));
         free_editor_name(edit_malloc, editor);
         free_replacement_strs(replace_str);
         return 4;

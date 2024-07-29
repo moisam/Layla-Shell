@@ -23,10 +23,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "setx.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY     "shift"
 
@@ -47,7 +47,7 @@ int shift_builtin(int argc, char **argv)
     /* extra arguments produce an error in --posix mode */
     if(option_set('P') && argc > 2)
     {
-        PRINT_ERROR("%s: too many arguments\n", UTILITY);
+        PRINT_ERROR(UTILITY, "too many arguments");
         return 1;
     }
     
@@ -61,7 +61,7 @@ int shift_builtin(int argc, char **argv)
         {
             if(optionx_set(OPTION_SHIFT_VERBOSE))
             {
-                PRINT_ERROR("%s: invalid shift number: %s\n", UTILITY, argv[1]);
+                PRINT_ERROR(UTILITY, "invalid shift number: %s", argv[1]);
             }
             return 2;
         }

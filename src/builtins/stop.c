@@ -26,8 +26,8 @@
 #include <errno.h>
 #include <sys/types.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/debug.h"
 
 #define UTILITY         "stop"
 
@@ -49,7 +49,7 @@ int stop_builtin(int argc, char **argv)
     /* job control must be on */
     if(!option_set('m'))
     {
-        PRINT_ERROR("%s: job control is not enabled\n", UTILITY);
+        PRINT_ERROR(UTILITY, "job control is not enabled");
         return 2;
     }
     
@@ -80,7 +80,7 @@ int stop_builtin(int argc, char **argv)
     /* missing job argument */
     if(v >= argc)
     {
-        PRINT_ERROR("%s: missing argument: job id\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "job id");
         return 2;
     }
     
@@ -103,13 +103,13 @@ int stop_builtin(int argc, char **argv)
         /* still nothing? */
         if(!job)
         {
-            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
+            INVALID_JOB_ERROR(UTILITY, argv[v]);
             return 3;
         }
         /* make sure it is a background job */
         if(flag_set(job->flags, JOB_FLAG_FORGROUND))
         {
-            PRINT_ERROR("%s: not a background job: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR(UTILITY, "not a background job: %s", argv[v]);
             c = 3;
             continue;
         }
@@ -122,8 +122,8 @@ int stop_builtin(int argc, char **argv)
         kill(pid, SIGCONT);
         if(kill(pid, SIGSTOP) != 0)
         {
-            PRINT_ERROR("%s: failed to send signal %s to process %d: %s\n",
-                    UTILITY, "SIGSTOP", pid, strerror(errno));
+            PRINT_ERROR(UTILITY, "failed to send signal %s to process %d: %s",
+                    "SIGSTOP", pid, strerror(errno));
             c = 3;
         }
     }

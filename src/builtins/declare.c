@@ -23,11 +23,11 @@
 #include <stdio.h>
 #include <errno.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
 #include "../parser/parser.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 /* flags for purge_table() */
 #define FLAG_PRINT_FUNCDEF  (1 << 0)
@@ -182,8 +182,8 @@ int do_declare(int argc, char **argv, int global)
                     case 'r':               /* mark as readonly variables */
                         if(plus)
                         {
-                            PRINT_ERROR("%s: cannot use the '+r' option to remove the "
-                                        "readonly attribute\n", utility);
+                            PRINT_ERROR(utility, "cannot use the '+r' option to remove the "
+                                        "readonly attribute");
                             return 2;
                         }
                         (*flags) |= FLAG_READONLY;
@@ -214,8 +214,7 @@ int do_declare(int argc, char **argv, int global)
                         break;
                         
                     default:
-                        PRINT_ERROR("%s: unknown option: %c%c\n", 
-                                    utility, plus ? '+' : '-', *p);
+                        OPTION_UNKNOWN_ERROR2(utility, plus ? '+' : '-', *p);
                         return 2;
                 }
                 p++;
@@ -274,7 +273,7 @@ int do_declare(int argc, char **argv, int global)
         
         if(equals == arg)
         {
-            PRINT_ERROR("%s: empty %s name at: %s\n", utility, 
+            PRINT_ERROR(utility, "empty %s name at: %s", 
                         funcs ? "function" : "variable", arg);
             res = 1;
             continue;
@@ -282,7 +281,7 @@ int do_declare(int argc, char **argv, int global)
         
         if(!is_name(name_buf))
         {
-            PRINT_ERROR("%s: cannot declare %s `%s`: invalid name\n", utility,
+            PRINT_ERROR(utility, "cannot declare %s `%s`: invalid name", 
                         funcs ? "function" : "variable", name_buf);
             res = 1;
             continue;
@@ -296,8 +295,7 @@ int do_declare(int argc, char **argv, int global)
             {
                 if(equals)
                 {
-                    PRINT_ERROR("%s: cannot use the '-f' option to define functions\n",
-                                utility);
+                    PRINT_ERROR(utility, "cannot use the '-f' option to define functions");
                     res = 1;
                 }
                 else
@@ -366,7 +364,7 @@ int purge_vars(char **args, char *utility, int funcs, int flags)
             {
                 /* variable/function not found */
                 char *word = funcs ? "function" : "variable";
-                PRINT_ERROR("%s: unknown %s name: %s\n", utility, word, arg);
+                PRINT_ERROR(utility, "unknown %s name: %s", word, arg);
                 res = 1;
             }
             else

@@ -32,12 +32,12 @@
 #include <sys/ioctl.h>
 #include <linux/kd.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../kbdevent.h"
+#include "../include/cmd.h"
+#include "../include/kbdevent.h"
 #include "../symtab/symtab.h"
 #include "setx.h"
 #include "../symtab/string_hash.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 /*
  * Flag to let us know if the user has already tried to exit before. We use this
@@ -71,7 +71,7 @@ int exit_builtin(int argc, char **argv)
     /* more than 2 args is an error */
     if(argc > 2)
     {
-        PRINT_ERROR("%s: too many arguments\n", argv[0]);
+        PRINT_ERROR(argv[0], "too many arguments");
         return 1;
     }
 
@@ -86,7 +86,7 @@ int exit_builtin(int argc, char **argv)
         i = strtol(argv[1], &strend, 10);
         if(*strend)
         {
-            PRINT_ERROR("%s: invalid exit status: %s\n", argv[0], argv[1]);
+            PRINT_ERROR(argv[0], "invalid exit status: %s", argv[1]);
             return 2;
         }
         else
@@ -208,7 +208,7 @@ void exit_gracefully(int stat, char *errmsg)
     /* check if we have an error message and if so, print it. */
     if(errmsg)
     {
-        PRINT_ERROR("%s: %s\n", SOURCE_NAME, errmsg);
+        PRINT_ERROR(SHELL_NAME, "%s", errmsg);
     }
     
     /* flush any hanging messages in the output streams */
@@ -220,6 +220,18 @@ void exit_gracefully(int stat, char *errmsg)
     {
         set_tty_attr(cur_tty_fd(), &tty_attr_old);
     }
+
+    /* free the symbol table stack */
+    struct symtab_stack_s *stack = get_symtab_stack();
+    int i = stack->symtab_count-1;
+
+    do
+    {
+        /*
+         * starting with the local symtab, remove entries until nothing is left.
+         */
+    	free_symtab(stack->symtab_list[i]);
+    } while(--i >= 0);      /* move up one level */
     
     /* say bye bye! */
     exit(stat);

@@ -23,10 +23,10 @@
 #include <stdio.h>
 #include <errno.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 /* defined in source.c */
 int do_source_script(char *utility, char *file, int argc, char **argv);
@@ -47,16 +47,16 @@ int dot_builtin(int argc, char **argv)
     /* first check we have exactly 2 args if we're in --posix mode */
     if(argc != 2 && option_set('P'))
     {
-        PRINT_ERROR("%s: incorrect number of arguments\n"
-                    "usage: %s file\n", argv[0], argv[0]);
+        PRINT_ERROR(argv[0], "incorrect number of arguments\n"
+                    "usage: %s file", argv[0]);
         return 1;
     }
 
     /* then check we have enough args for the ksh-like usage */
     if(argc < 2)
     {
-        PRINT_ERROR("%s: incorrect number of arguments\n"
-                    "usage: %s file [args...]\n", argv[0], argv[0]);
+        PRINT_ERROR(argv[0], "incorrect number of arguments\n"
+                    "usage: %s file [args...]", argv[0]);
         return 1;
     }
     

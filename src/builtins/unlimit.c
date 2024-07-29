@@ -26,8 +26,8 @@
 #include <errno.h>
 #include <sys/types.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/debug.h"
 
 #define UTILITY         "unlimit"
 
@@ -127,7 +127,7 @@ int unlimit_builtin(int argc, char **argv)
     /* missing arguments */
     if(v >= argc)
     {
-        PRINT_ERROR("%s: missing argument: resource name\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "resource name");
         return 2;
     }
 
@@ -139,7 +139,7 @@ int unlimit_builtin(int argc, char **argv)
         char *op2 = rlim_option(argv[v]);
         if(!op2)
         {
-            PRINT_ERROR("%s: unknown resource name: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR(UTILITY, "unknown resource name: %s", argv[v]);
             if(ignore_err)
             {
                 continue;

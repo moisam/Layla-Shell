@@ -26,10 +26,10 @@
 #include <stdio.h>
 #include <sys/utsname.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../cpu.h"
-#include "../ostype.h"
-#include "../comptype.h"
+#include "../include/cmd.h"
+#include "../include/cpu.h"
+#include "../include/ostype.h"
+#include "../include/comptype.h"
 #include "../symtab/symtab.h"
 
 #define UTILITY             "bugreport"

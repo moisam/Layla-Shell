@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
 
 
@@ -53,7 +53,7 @@ int eval_builtin(int argc, char **argv)
     char *cmd = list_to_str(&argv[1]);
     if(!cmd)
     {
-        PRINT_ERROR("eval: insufficient memory\n");
+        INSUFFICIENT_MEMORY_ERROR("eval", "eval");
         return 1;
     }
 

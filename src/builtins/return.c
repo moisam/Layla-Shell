@@ -20,7 +20,7 @@
  */    
 
 #include <stdlib.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
 
 int return_set = 0;
@@ -46,7 +46,7 @@ int return_builtin(int argc, char **argv)
     
     if(option_set('P') && argc > 2)
     {
-        PRINT_ERROR("return: too many arguments\n");
+        PRINT_ERROR("return", "too many arguments");
         return_set = 1;
         return 2;
     }
@@ -58,7 +58,7 @@ int return_builtin(int argc, char **argv)
         res = strtol(argv[1], &strend, 10);
         if(strend == argv[1])
         {
-            PRINT_ERROR("return: invalid return code: %s\n", argv[1]);
+            PRINT_ERROR("return", "invalid return code: %s", argv[1]);
             res = 2;
         }
         else

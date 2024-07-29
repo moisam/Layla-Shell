@@ -21,9 +21,9 @@
 
 #include <strings.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY     "setx"
 
@@ -276,7 +276,7 @@ int setx_builtin(int argc, char **argv)
     /* cannot enable and disable options at the same time */
     if(enable && disable)
     {
-        PRINT_ERROR("%s: cannot use -s and -u together\n", UTILITY);
+        PRINT_ERROR(UTILITY, "cannot use -s and -u together");
         return 2;
     }
 
@@ -345,7 +345,7 @@ int setx_builtin(int argc, char **argv)
                     }
                     else
                     {
-                        PRINT_ERROR("%s: invalid option: %s\n", UTILITY, arg);
+                        OPTION_UNKNOWN_STR_ERROR(UTILITY, arg);
                         res = 2;
                     }
                 }
@@ -377,7 +377,7 @@ int setx_builtin(int argc, char **argv)
                 res++;
                 continue;
             }
-            PRINT_ERROR("%s: invalid option: %s\n", UTILITY, arg);
+            OPTION_UNKNOWN_STR_ERROR(UTILITY, arg);
             return 2;
         }
         
@@ -385,13 +385,13 @@ int setx_builtin(int argc, char **argv)
         {
             if(c2 == OPTION_LOGIN_SHELL || c2 == OPTION_RESTRICTED_SHELL)
             {
-                PRINT_ERROR("%s: error setting %s: readonly option\n", UTILITY, arg);
+                PRINT_ERROR(UTILITY, "error setting %s: readonly option", arg);
                 return 2;
             }
 
             if(!set_optionx(c2, enable ? 1 : 0))
             {
-                PRINT_ERROR("%s: error setting: %s\n", UTILITY, arg);
+                PRINT_ERROR(UTILITY, "error setting: %s", arg);
                 return 2;
             }
             continue;

@@ -24,9 +24,9 @@
 #include <unistd.h>
 #include <string.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY     "readonly"
 

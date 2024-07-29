@@ -28,11 +28,11 @@
 #include <string.h>
 #include <errno.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/parser.h"
 #include "setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY     "unset"
 
@@ -90,7 +90,7 @@ int unset_builtin(int argc, char **argv)
     /* cannot use -f and -v together */
     if(funcs && vars)
     {
-        PRINT_ERROR("%s: cannot use -f and -v together\n", UTILITY);
+        PRINT_ERROR(UTILITY, "cannot use -f and -v together");
         return 2;
     }
     

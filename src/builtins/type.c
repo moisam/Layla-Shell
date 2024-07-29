@@ -24,9 +24,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../parser/parser.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "type"
 
@@ -361,7 +361,7 @@ int type_builtin(int argc, char **argv)
                         if(startup_finished && option_set('r'))
                         {
                             /* r-shells can't use this option */
-                            PRINT_ERROR("%s: restricted shells can't use the -%c option\n", SOURCE_NAME, *p);
+                            PRINT_ERROR(UTILITY, "restricted shells can't use the -%c option", *p);
                             return 3;
                         }
                         break;
@@ -377,7 +377,7 @@ int type_builtin(int argc, char **argv)
                         break;
                         
                     default:                        
-                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, argv[i]);
+                        OPTION_UNKNOWN_STR_ERROR(UTILITY, argv[i]);
                         return 2;
                 }
                 p++;
@@ -392,7 +392,7 @@ int type_builtin(int argc, char **argv)
     /* missing arguments */
     if(i >= argc)
     {
-        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "command name");
         return 2;
     }
 

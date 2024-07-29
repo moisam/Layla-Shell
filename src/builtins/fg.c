@@ -27,16 +27,17 @@
 #include <linux/input.h>
 #include <linux/kd.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../sig.h"
+#include "../include/cmd.h"
+#include "../include/sig.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 /* defined in jobs.c */
 extern int cur_job ;
 extern int prev_job;
 
-#define UTILITY         "fg"
+/* defined in bg.c */
+extern int do_bg(struct job_s *job);
 
 
 /*
@@ -46,15 +47,14 @@ int do_fg(struct job_s *job)
 {
     if(!flag_set(job->flags, JOB_FLAG_JOB_CONTROL))
     {
-        PRINT_ERROR("%s: job started without job control\n", UTILITY);
+        PRINT_ERROR("fg", "job started without job control");
         return 0;
     }
     
-    sigset_t sigset;
-    SIGNAL_BLOCK(SIGCHLD, sigset);
 
     job->flags |= JOB_FLAG_FORGROUND;
     job->flags &= ~JOB_FLAG_NOTIFIED;
+    set_cur_job(job);
     
     /*
      * in tcsh, special alias jobcmd is run before running commands and when jobs
@@ -67,8 +67,10 @@ int do_fg(struct job_s *job)
      * otherwise this function would have never been called.
      */
     int tty = cur_tty_fd();
+    pid_t fg_pgid = tcgetpgrp(tty);
     printf("%s\n", job->commandstr);
 
+#if 0
     /* save the terminal's attributes (bash, zsh) */
     struct termios *attr = save_tty_attr();
     
@@ -80,20 +82,27 @@ int do_fg(struct job_s *job)
             PRINT_ERROR("%s: failed to restore terminal attributes\n", SOURCE_NAME);
         }
     }
+#endif
 
     /* tell the terminal about the new foreground pgid */
-    tcsetpgrp(tty, job->pgid);
+    set_term_pgid(tty, job->pgid);
+    //tcsetpgrp(tty, job->pgid);
 
     /* continue the job and wait for it */
-    kill(-(job->pgid), SIGCONT);
-    SIGNAL_UNBLOCK(sigset);
-    wait_on_child(job->pgid, NULL, job);
+    do_kill(-(job->pgid), SIGCONT, job);
+    wait_for_job(job, 0, tty);
+    debug ("FINISHED...\n");
     
+    /* restore the terminal's foreground pgid */
+    set_term_pgid(tty, fg_pgid);
+    
+#if 0
     /* restore our foreground pgid */
     tcsetpgrp(tty, shell_pid);
 
     /* restore the terminal's attributes */
     set_tty_attr(tty, attr);
+#endif
     
     return 1;
 }
@@ -113,37 +122,47 @@ int do_fg(struct job_s *job)
 
 int fg_builtin(int argc, char **argv)
 {
+    /*
+     * Select the appropriate utility name and function, according to how we
+     * were called, i.e. whether we want fg or bg to run.
+     */
+    int fg_utility = (strcmp(argv[0], "fg") == 0);
+    char *utility_name = fg_utility ? "fg" : "bg";
+    int (*utility_func)(struct job_s *) = fg_utility ? do_fg : do_bg;
     struct job_s *job;
-
+    
     /* fg only works if job control is enabled (the monitor '-m' option is set) */
     if(!option_set('m'))
     {
-        PRINT_ERROR("%s: job control is not active\n", UTILITY);
+        PRINT_ERROR(utility_name, "job control is not active");
         return 1;
     }
     
-    /* we have no job argument.. use the current job */
+    /* We have no job argument. Use the current job */
     if(argc == 1)
     {
         job = get_job_by_jobid(get_jobid("%%"));
+
         if(!job)
         {
-            PRINT_ERROR("%s: unknown job: %%%%\n", UTILITY);
-            return 3;
+            INVALID_JOB_ERROR(utility_name, "%%%%");
+            return 1;
         }
-        return !do_fg(job);
+
+        return !utility_func(job);
     }
 
     /****************************
      * process the options
      ****************************/
     int v = 1, res = 0, c;
+
     while((c = parse_args(argc, argv, "hv", &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
             case 'h':
-                print_help(argv[0], &FG_BUILTIN, 0);
+                print_help(argv[0], fg_utility ? &FG_BUILTIN : &BG_BUILTIN, 0);
                 return 0;
 
             case 'v':
@@ -167,13 +186,19 @@ int fg_builtin(int argc, char **argv)
     /* process the job arguments */
     for( ; v < argc; v++)
     {
+        debug ("jobid %d\n", get_jobid(argv[v]));
         job = get_job_by_jobid(get_jobid(argv[v]));
+
         if(!job)
         {
-            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
-            return 3;
+            INVALID_JOB_ERROR(utility_name, argv[v]);
+            res = 1;
         }
-        res = !do_fg(job);
+        else
+        {
+            res = !utility_func(job);
+        }
     }
+    
     return res;
 }

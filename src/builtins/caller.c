@@ -20,7 +20,7 @@
  */    
 
 #include <stdlib.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../builtins/setx.h"
 
 #define UTILITY         "caller"
@@ -198,7 +198,7 @@ int caller_builtin(int argc, char **argv)
         {
             if(optionx_set(OPTION_CALLER_VERBOSE))
             {
-                PRINT_ERROR("%s: invalid callframe number: %s\n", UTILITY, argv[1]);
+                PRINT_ERROR(UTILITY, "invalid callframe number: %s", argv[1]);
             }
             return 2;
         }
@@ -232,7 +232,7 @@ int caller_builtin(int argc, char **argv)
         {
             if(optionx_set(OPTION_CALLER_VERBOSE))
             {
-                PRINT_ERROR("%s: invalid callframe number: %s\n", UTILITY, argv[1]);
+                PRINT_ERROR(UTILITY, "invalid callframe number: %s", argv[1]);
             }
             return 2;
         }

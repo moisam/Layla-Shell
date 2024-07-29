@@ -31,23 +31,26 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/dstring.h"
+#include "../include/debug.h"
 
 #define UTILITY             "read"
 
 
-#define CHECK_OPTION_HAS_ARG(c)                             \
-if(!internal_optarg || internal_optarg == INVALID_OPTARG)   \
-{                                                           \
-    PRINT_ERROR("%s: missing argument to option -%c\n",     \
-                UTILITY, c);                                \
-    return 2;                                               \
+#define CHECK_OPTION_HAS_ARG(c)                                 \
+if(!internal_optarg || internal_optarg == INVALID_OPTARG)       \
+{                                                               \
+    OPTION_REQUIRES_ARG_ERROR(UTILITY, c);                      \
+    return 2;                                                   \
 }
 
 struct stat stats;
+
+/* define in ../wordexp.c */
+extern void get_IFS_spaces_and_delims(char *IFS, char *IFS_space, char *IFS_delim);
 
 
 /*
@@ -121,7 +124,7 @@ int read_set_var(char *name, char *val, int val_len /* , int suppress_esc */)
     /* TODO: do something better than bailing out here */
     if(!tmp)
     {
-        PRINT_ERROR("%s: insufficient memory for field splitting\n", UTILITY);
+        INSUFFICIENT_MEMORY_ERROR(UTILITY, "field splitting");
         return 0;
     }
 
@@ -178,57 +181,34 @@ int read_field_split(char *str, int var_count, char **var_names /* , int suppres
     /* get the IFS spaces and delimiters separately */
     char IFS_space[64];
     char IFS_delim[64];
-    if(strcmp(IFS, " \t\n") == 0)   /* "standard" IFS */
-    {
-        IFS_space[0] = ' ' ;
-        IFS_space[1] = '\t';
-        IFS_space[2] = '\n';
-        IFS_space[3] = '\0';
-        IFS_delim[0] = '\0';
-    }
-    else                            /* "custom" IFS */
-    {
-        char *p  = IFS;
-        char *sp = IFS_space;
-        char *dp = IFS_delim;
-        do
-        {
-            if(isspace(*p))
-            {
-                *sp++ = *p++;
-            }
-            else
-            {
-                *dp++ = *p++;
-            }
-        } while(*p);
-        
-        *sp = '\0';
-        *dp = '\0';
-    }
 
-    size_t len = strlen(str);
-    int i = 0;
-    var_count--;
+    get_IFS_spaces_and_delims(IFS, IFS_space, IFS_delim);
 
     /* skip any leading whitespaces in the string */
-    skip_IFS_whitespace(&str, IFS_space);
-
-    /* create the fields */
+    str = skip_IFS_whitespace(str, IFS_space);
+    
+    size_t len = strlen(str);
     char *p1 = str, *p2 = str;
+    char *last_delim = NULL;
+    int i = 0;
+    
+    
+    /* create the fields */
     while(*p2)
     {
+#if 0
         /* stop parsing if we reached the penultimate variable */
         if(i == var_count)
         {
             break;
         }
-
+#endif
+        
         /*
          * delimit the field if we have an IFS space or delimiter char, or if
          * we reached the end of the input string.
          */
-        if(!*p2 || is_IFS_char(*p2, IFS_space) || is_IFS_char(*p2, IFS_delim))
+        if(chrcmp(*p2, IFS_space) || chrcmp(*p2, IFS_delim))
         {
             /* copy the field text */
             size_t len2 = p2-p1;
@@ -237,7 +217,11 @@ int read_field_split(char *str, int var_count, char **var_names /* , int suppres
                 return 1;
             }
 
+            last_delim = p2;
+
             /* skip trailing IFS spaces/delimiters */
+            p2 = skip_IFS_delim(p2, IFS_space, IFS_delim);
+#if 0
             while(*p2 && is_IFS_char(*p2, IFS_space))
             {
                 p2++;
@@ -255,7 +239,14 @@ int read_field_split(char *str, int var_count, char **var_names /* , int suppres
 
             /* prepare for the next field */
             i++;
+#endif
             p1 = p2;
+
+            /* stop parsing if we reached the last variable */
+            if(++i == var_count)
+            {
+                break;
+            }
         }
         else
         {
@@ -269,15 +260,50 @@ int read_field_split(char *str, int var_count, char **var_names /* , int suppres
      */
     if(*p1)
     {
-        len -= (p1-str);
-        if(!read_set_var(var_names[i++], p1, len /* , suppress_esc */))
+        debug ("p1 = '%s', p2 = '%s'\n", p1, p2);
+        /* Make sure to remove any trailing $IFS spaces/delimiters */
+        p2 = str+len-1;
+        debug ("p2 = '%s', str = '%s', len = %d\n", p2, str, len);
+        
+        if(i == var_count)
         {
-            return 1;
+            p1 = last_delim;
+        }
+        
+        p2 = skip_trailing_IFS_whitespace(p1, p2, IFS_space);
+        debug ("p1 = '%s', p2 = '%s'\n", p1, p2);
+        len = p2-p1+1;
+        
+        if(i == var_count)
+        {
+            struct symtab_entry_s *entry = get_symtab_entry(var_names[i-1]);
+            struct dstring_s last = { NULL, NULL, 0, 0 };
+
+            if(!str_append(&last, entry->val, strlen(entry->val)))
+            {
+                return 1;
+            }
+            
+            if(!str_append(&last, p1, len))
+            {
+                free_str(&last);
+                return 1;
+            }
+            
+            symtab_entry_setval(entry, last.buf_base);
+            free_str(&last);
+        }
+        else
+        {
+            if(!read_set_var(var_names[i++], p1, len /* , suppress_esc */))
+            {
+                return 1;
+            }
         }
     }
 
     /* set the remaining variables to empty strings */
-    for( ; i <= var_count; i++)
+    for( ; i < var_count; i++)
     {
         read_set_var(var_names[i], "", 0 /* , suppress_esc */);
     }
@@ -308,7 +334,7 @@ int read_builtin(int argc, char **argv)
     
     if(option_set('P') && argc == 1)
     {
-        PRINT_ERROR("%s: missing argument: variable name\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "variable name");
         return 2;
     }
     
@@ -386,7 +412,7 @@ int read_builtin(int argc, char **argv)
                 max = strtol(internal_optarg, &strend, 10);
                 if(*strend || max < 0)
                 {
-                    PRINT_ERROR("%s: invalid count: %s\n", UTILITY, internal_optarg);
+                    PRINT_ERROR(UTILITY, "invalid count: %s", internal_optarg);
                     return 2;
                 }
                 break;
@@ -402,7 +428,7 @@ int read_builtin(int argc, char **argv)
                 infd = strtol(internal_optarg, &strend, 10);
                 if(*strend || fcntl(infd, F_GETFD, 0) == -1)
                 {
-                    PRINT_ERROR("%s: invalid file descriptor: %s\n", UTILITY, internal_optarg);
+                    PRINT_ERROR(UTILITY, "invalid file descriptor: %s", internal_optarg);
                     return 2;
                 }
                 break;
@@ -412,7 +438,7 @@ int read_builtin(int argc, char **argv)
                 CHECK_OPTION_HAS_ARG(c);
                 if(!get_secs_usecs(internal_optarg, &timeout))
                 {
-                    PRINT_ERROR("%s: invalid timeout: %s\n", UTILITY, internal_optarg);
+                    PRINT_ERROR(UTILITY, "invalid timeout: %s", internal_optarg);
                     return 2;
                 }
                 
@@ -440,7 +466,7 @@ int read_builtin(int argc, char **argv)
     {
         if(!is_name(argv[c]))
         {
-            PRINT_ERROR("%s: invalid name: %s\n", UTILITY, argv[c]);
+            PRINT_ERROR(UTILITY, "invalid name: %s", argv[c]);
             return 1;
         }
     }
@@ -490,8 +516,8 @@ int read_builtin(int argc, char **argv)
         /* get terminal attribs */
         if(tcgetattr(infd, &attr) == -1)
         {
-            PRINT_ERROR("%s: failed to get terminal attributes: %s\n", 
-                        UTILITY, strerror(errno));
+            PRINT_ERROR(UTILITY, "failed to get terminal attributes: %s", 
+                        strerror(errno));
             return 1;
         }
     
@@ -543,7 +569,7 @@ int read_builtin(int argc, char **argv)
     char *buf = alloc_string_buf(buf_size);
     if(!buf)
     {
-        PRINT_ERROR("%s: failed to allocate buffer: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to allocate buffer: %s", strerror(errno));
         return 1;
     }
 
@@ -562,8 +588,7 @@ int read_builtin(int argc, char **argv)
         /* if buffer is full, extend it */
         if(!may_extend_string_buf(&buf, &bend, &b, &buf_size))
         {
-            PRINT_ERROR("%s: failed to allocate buffer: %s\n", 
-                        UTILITY, strerror(errno));
+            PRINT_ERROR(UTILITY, "failed to allocate buffer: %s", strerror(errno));
             buf = NULL;
             b = NULL;
             break;
@@ -627,7 +652,7 @@ int read_builtin(int argc, char **argv)
         
         if(c < 0 && errno != EINTR)
         {
-            PRINT_ERROR("%s: failed to read: %s\n", UTILITY, strerror(errno));
+            PRINT_ERROR(UTILITY, "failed to read: %s", strerror(errno));
         }
 
         for( ; v < argc; v++)

@@ -25,7 +25,7 @@
  * Retrieved from: http://en.literateprograms.org/Shunting_yard_algorithm_(C)?oldid=12454
  * 
  * 
- * Copyright (c) 2019 Mohammed Isam [mohammed_isam1984@yahoo.com]
+ * Copyright (c) 2019, 2024 Mohammed Isam [mohammed_isam1984@yahoo.com]
  * 
  * Extensive modifications have been applied to this file to include most of the C
  * language operators and to make this file usable as part of the Layla shell.
@@ -50,10 +50,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"     /* match_pattern() */
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "test"
 
@@ -235,7 +235,7 @@ char *compare_exprs(char *__e1, char *__e2, int op)
     long res1 = strtol(e1, &strend, 10);
     if(*strend)
     {
-        PRINT_ERROR("%s: invalid arithmetic expression: %s\n", UTILITY, __e1);
+        PRINT_ERROR(UTILITY, "invalid arithmetic expression: %s", __e1);
         if(e1 && e1 != zero)
         {
             free(e1);
@@ -254,7 +254,7 @@ char *compare_exprs(char *__e1, char *__e2, int op)
     long res2 = strtol(e2, &strend, 10);
     if(*strend)
     {
-        PRINT_ERROR("%s: invalid arithmetic expression: %s\n", UTILITY, __e2);
+        PRINT_ERROR(UTILITY, "invalid arithmetic expression: %s", __e2);
         if(e2 && e2 != zero)
         {
             free(e2);
@@ -543,7 +543,8 @@ int test_file_permission(char *path, struct stat *statbuf, char which)
     if(option_set('P'))
     {
         /* determine the permission argument we will pass to access() */
-        int uperm, gperm, operm;
+        int uperm = 0, gperm = 0, operm = 0;
+
         switch(which)
         {
             case 'r':
@@ -589,7 +590,8 @@ int test_file_permission(char *path, struct stat *statbuf, char which)
     else
     {
         /* determine the permission argument we will pass to access() */
-        int perm;
+        int perm = 0;
+
         switch(which)
         {
             case 'r':
@@ -1371,7 +1373,7 @@ void test_push_opstack(struct test_op_s *op)
 {
     if(test_nopstack > MAXOPSTACK-1)
     {
-        PRINT_ERROR("%s: operator stack overflow\n", UTILITY);
+        PRINT_ERROR(UTILITY, "operator stack overflow");
         test_err = 1;
         return;
     }
@@ -1386,7 +1388,7 @@ struct test_op_s *test_pop_opstack(void)
 {
     if(!test_nopstack)
     {
-        PRINT_ERROR("%s: operator stack empty\n", UTILITY);
+        PRINT_ERROR(UTILITY, "operator stack empty");
         test_err = 1;
         return NULL;
     }
@@ -1407,7 +1409,7 @@ void test_push_stack(char *val)
 
     if(nteststack > MAXTESTSTACK-1)
     {
-        PRINT_ERROR("%s: test stack overflow\n", UTILITY);
+        PRINT_ERROR(UTILITY, "test stack overflow");
         test_err = 1;
         return;
     }
@@ -1422,7 +1424,7 @@ char *test_pop_stack(void)
 {
     if(!nteststack)
     {
-        PRINT_ERROR("%s: test stack empty\n", UTILITY);
+        PRINT_ERROR(UTILITY, "test stack empty");
         test_err = 1;
         return "";
     }
@@ -1489,7 +1491,7 @@ void test_shunt_op(struct test_op_s *op)
         
         if(!(pop = test_pop_opstack()) || pop->op != '(')
         {
-            PRINT_ERROR("%s: test stack error: no matching \'(\'\n", UTILITY);
+            PRINT_ERROR(UTILITY, "test stack error: no matching \'(\'");
             test_err = 1;
         }
         return;
@@ -1642,7 +1644,7 @@ int test_builtin(int argc, char **argv)
     {
         if(strcmp(argv[argc-1], "]"))
         {
-            PRINT_ERROR("%s: missing closing bracket: ']'\n", UTILITY);
+            PRINT_ERROR(UTILITY, "missing closing bracket: ']'");
             return 2;
         }
         argc--;
@@ -1651,7 +1653,7 @@ int test_builtin(int argc, char **argv)
     {
         if(strcmp(argv[argc-1], "]]"))
         {
-            PRINT_ERROR("%s: missing closing bracket: ']]'\n", UTILITY);
+            PRINT_ERROR(UTILITY, "missing closing bracket: ']]'");
             return 2;
         }
         argc--;
@@ -1684,7 +1686,7 @@ int test_builtin(int argc, char **argv)
                         }
                         else
                         {
-                            PRINT_ERROR("%s: illegal use of binary operator (%c)\n", UTILITY, op->op);
+                            PRINT_ERROR(UTILITY, "illegal use of binary operator (%c)", op->op);
                             TEST_ERR_RETURN(2);
                         }
                     }
@@ -1774,7 +1776,7 @@ int test_builtin(int argc, char **argv)
     /* at the end, we should have only one value remaining on the operands stack */
     if(nteststack != 1)
     {
-        PRINT_ERROR("%s: test stack has %d elements after evaluation (should be 1)\n", UTILITY, nteststack);
+        PRINT_ERROR(UTILITY, "test stack has %d elements after evaluation (should be 1)", nteststack);
         return 2;
     }
 

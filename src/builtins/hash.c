@@ -21,9 +21,9 @@
 
 #include <stdlib.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/string_hash.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "hash"
 
@@ -133,7 +133,7 @@ int hash_builtin(int argc, char **argv)
     /* hashing must be enabled */
     if(!option_set('h'))
     {
-        PRINT_ERROR("%s: hashing is disabled (use `set -o hashall` to reenable it)\n", UTILITY);
+        PRINT_ERROR(UTILITY, "hashing is disabled (use `set -o hashall` to reenable it)");
         return 1;
     }
     
@@ -205,7 +205,7 @@ int hash_builtin(int argc, char **argv)
                 usepath = internal_optarg;
                 if(!usepath || usepath == INVALID_OPTARG)
                 {
-                    PRINT_ERROR("%s: missing argument to option -%c\n", UTILITY, c);
+                    OPTION_REQUIRES_ARG_ERROR(UTILITY, c);
                     return 2;
                 }
 
@@ -216,8 +216,8 @@ int hash_builtin(int argc, char **argv)
                  */
                 if(is_restirected && strchr(usepath, '/'))
                 {
-                    PRINT_ERROR("%s: cannot hash command containing '/': "
-                                "restricted shell\n", UTILITY);
+                    PRINT_ERROR(UTILITY, "cannot hash command containing '/': "
+                                "restricted shell");
                     return 2;
                 }
                 break;                
@@ -242,7 +242,7 @@ int hash_builtin(int argc, char **argv)
         if(list_only)
         {
             /* -t was specified, which needs at least one argument */
-            PRINT_ERROR("%s: option needs argument: -%c\n", UTILITY, 't');
+            OPTION_REQUIRES_ARG_ERROR(UTILITY, 't');
             return 2;
         }
         else
@@ -256,7 +256,7 @@ int hash_builtin(int argc, char **argv)
     /* check for a restricted shell (can't hash in r-shells) */
     if(is_restirected)
     {
-        PRINT_ERROR("%s: cannot use the hash utility: restricted shell\n", UTILITY);
+        PRINT_ERROR(UTILITY, "cannot use the hash utility: restricted shell");
         return 2;
     }
     
@@ -274,7 +274,7 @@ int hash_builtin(int argc, char **argv)
             }
             else
             {
-                PRINT_ERROR("%s: cannot find hashed utility: %s\n", UTILITY, arg);
+                PRINT_ERROR(UTILITY, "cannot find hashed utility: %s", arg);
                 res = 1;
             }
         }
@@ -290,14 +290,14 @@ int hash_builtin(int argc, char **argv)
             {
                 if(!hash_utility(arg, usepath))
                 {
-                    PRINT_ERROR("%s: failed to hash utility: %s\n", UTILITY, arg);
+                    PRINT_ERROR(UTILITY, "failed to hash utility: %s", arg);
                     res = 1;
                 }
             }
             else
             {
-                PRINT_ERROR("%s: file doesn't exist or is not a regular file: "
-                            "%s\n", UTILITY, usepath);
+                PRINT_ERROR(UTILITY, 
+                            "file doesn't exist or is not a regular file: %s", usepath);
                 res = 1;
             }
         }
@@ -313,14 +313,14 @@ int hash_builtin(int argc, char **argv)
             char *p = search_path(arg, NULL, 1);
             if(!p)
             {
-                PRINT_ERROR("%s: failed to locate utility: %s\n", UTILITY, arg);
+                PRINT_ERROR(UTILITY, "failed to locate utility: %s", arg);
                 res = 1;
             }
             else
             {
                 if(!hash_utility(arg, p))
                 {
-                    PRINT_ERROR("%s: failed to hash utility: %s\n", UTILITY, arg);
+                    PRINT_ERROR(UTILITY, "failed to hash utility: %s", arg);
                     res = 1;
                 }
                 free_malloced_str(p);
@@ -352,7 +352,7 @@ int rehash_all(void)
                 char *p = search_path(entry->name, NULL, 1);
                 if(!p)
                 {
-                    PRINT_ERROR("%s: failed to locate utility '%s'\n", UTILITY, entry->name);
+                    PRINT_ERROR(UTILITY, "failed to locate utility: %s", entry->name);
                     res = 1;
                 }
                 else

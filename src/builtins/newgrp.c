@@ -29,9 +29,9 @@
 #include <errno.h>
 #include <termios.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "newgrp"
 
@@ -210,7 +210,7 @@ int newgrp_builtin(int argc, char **argv)
         new_gid = strtol(group, &strend, 10);
         if(*strend)
         {
-            PRINT_ERROR("%s: invalid group id: %s\n", UTILITY, group);
+            PRINT_ERROR(UTILITY, "invalid group id: %s", group);
             goto fin;
         }
         
@@ -255,8 +255,8 @@ int newgrp_builtin(int argc, char **argv)
                 char *pass = ...;
             }
             */
-            PRINT_ERROR("%s: user %s is not a member of group %s",
-                        UTILITY, pw->pw_name, grp->gr_name);
+            PRINT_ERROR(UTILITY, "user %s is not a member of group %s",
+                        pw->pw_name, grp->gr_name);
             goto fin;
         }
     }
@@ -371,13 +371,13 @@ fin:
         char *arg = malloc(strlen(shell_path)+2);
         if(!arg)
         {
-            PRINT_ERROR("%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
+            PRINT_ERROR(UTILITY, "failed to exec shell: %s", strerror(errno));
             return 3;
         }
         sprintf(arg, "-%s", shell_path);
         shell_argv[0] = arg;
         execvp(shell_path, shell_argv);
-        PRINT_ERROR("%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to exec shell: %s", strerror(errno));
         shell_argv[0] = old_arg0;
         return 3;
     }
@@ -385,7 +385,7 @@ fin:
     {
         shell_argv[0] = shell_path;
         execvp(shell_path, shell_argv);
-        PRINT_ERROR("%s: failed to exec shell: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to exec shell: %s", strerror(errno));
         shell_argv[0] = old_arg0;
         return 3;
     }

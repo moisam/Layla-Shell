@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
  * 
  *    file: command.c
  *    This file is part of the Layla Shell project.
@@ -25,9 +25,9 @@
 #include <errno.h>
 #include <wait.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY            "command"
 
@@ -65,6 +65,11 @@ int search_and_exec(struct source_s *src, int cargc, char **cargv, char *PATH, i
             struct symtab_entry_s *func = get_func(cargv[0]);
             if(func)
             {
+
+                if(option_set('d'))
+                {
+                }
+
                 return !do_function_body(src, cargc, cargv);
             }
         }
@@ -147,15 +152,14 @@ int command_builtin(int argc, char **argv)
                         if(startup_finished && option_set('r'))
                         {
                             /* r-shells can't use this option */
-                            PRINT_ERROR("%s: restricted shells cannot use the -p option\n",
-                                        SOURCE_NAME);
+                            PRINT_ERROR(UTILITY, "restricted shells cannot use the -p option");
                             return 3;
                         }
                         use_default_path = 1;
                         break;
                         
                     default:
-                        PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, *p);
+                        OPTION_UNKNOWN_ERROR(UTILITY, *p);
                         return 2;
                 }
                 p++;
@@ -171,7 +175,7 @@ int command_builtin(int argc, char **argv)
     /* missing argument(s) */
     if(i >= argc)
     {
-        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "command name");
         return 2;
     }
     

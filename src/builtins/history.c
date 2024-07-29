@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
  * 
  *    file: history.c
  *    This file is part of the Layla Shell project.
@@ -24,12 +24,12 @@
 #include <errno.h>
 #include <ctype.h>
 #include <time.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../backend/backend.h"
 #include "builtins.h"
 #include "setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "history"
 
@@ -104,7 +104,7 @@ char *get_history_filename(void)
         filename = "~/.history";
     }
     
-    return word_expand_to_str(filename);
+    return word_expand_to_str(filename, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
 }
 
 
@@ -265,7 +265,7 @@ int history_list_add(char *cmd, time_t time)
 
         if(!cmd_history)
         {
-            PRINT_ERROR("%s: can't load history list: insufficient memory\n", SOURCE_NAME);
+            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "load history list");
             return 0;
         }
 
@@ -280,7 +280,7 @@ int history_list_add(char *cmd, time_t time)
         
         if(!new_cmd_history)
         {
-            PRINT_ERROR("%s: can't load history list: insufficient memory\n", SOURCE_NAME);
+            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "load history list");
             return 0;
         }
         
@@ -302,8 +302,8 @@ int read_history_file(char *filename)
     
     if(!path)
     {
-        PRINT_ERROR("%s: can't read history: %s\n", 
-                    SOURCE_NAME, "$HISTFILE is null or empty");
+        PRINT_ERROR(SHELL_NAME, "can't read history: %s", 
+                    "$HISTFILE is null or empty");
         return 0;
     }
     
@@ -320,8 +320,7 @@ int read_history_file(char *filename)
     /* failed to open the file */
     if(!file)
     {
-        PRINT_ERROR("%s: failed to read history file: %s\n", 
-                    SOURCE_NAME, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to read history file: %s", strerror(errno));
         return 0;
     }
     
@@ -391,7 +390,7 @@ void trunc_history_file(char *path)
         /* Open the history file */
         FILE *file = fopen(path, "r+");
         int is_timestamp;
-        off_t size;
+        off_t size = 0;
         
         /* failed to open the file */
         if(!file)
@@ -525,8 +524,8 @@ int write_history_to_file(char *filename, char *mode, int start, int end)
     
     if(!path)
     {
-        PRINT_ERROR("%s: can't write history: %s\n", 
-                    SOURCE_NAME, "$HISTFILE is null or empty");
+        PRINT_ERROR(SHELL_NAME, "can't write history: %s", 
+                    "$HISTFILE is null or empty");
         return 0;
     }
     
@@ -542,8 +541,8 @@ int write_history_to_file(char *filename, char *mode, int start, int end)
     
     if(!file)
     {
-        PRINT_ERROR("%s: failed to open or create history file: %s\n", 
-                    SOURCE_NAME, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to open or create history file: %s", 
+                    strerror(errno));
         return 0;
     }
     
@@ -1313,7 +1312,7 @@ int history_builtin(int argc, char **argv)
                     }
                     else
                     {
-                        PRINT_ERROR("%s: history exapnsion failed: %s\n", UTILITY, p);
+                        PRINT_ERROR(UTILITY, "history exapnsion failed: %s", p);
                         i = 1;
                     }
                     
@@ -1404,10 +1403,10 @@ int history_builtin(int argc, char **argv)
     return 0;
     
 invalid_off:
-    PRINT_ERROR("%s: invalid offset passed to -d option: %s\n", UTILITY, internal_optarg);
+    PRINT_ERROR(UTILITY, "invalid offset passed to -d option: %s", internal_optarg);
     return 2;
     
 missing_arg:
-    PRINT_ERROR("%s: missing argument to option -%c\n", UTILITY, c);
+    OPTION_REQUIRES_ARG_ERROR(UTILITY, c);
     return 2;
 }

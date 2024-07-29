@@ -20,7 +20,7 @@
  */    
 
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 
 #define UTILITY             "ver"
@@ -58,7 +58,7 @@ int ver_builtin(int argc, char **argv)
                         return 0;
                         
                     default:
-                        PRINT_ERROR("%s: unknown option: %s\n", UTILITY, argv[v]);
+                        OPTION_UNKNOWN_STR_ERROR(UTILITY, argv[v]);
                         return 2;
                 }
             }

@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 
 #define UTILITY         "unalias"
 
@@ -123,7 +123,7 @@ int unalias_builtin(int argc, char **argv)
         }
         else
         {
-            PRINT_ERROR("%s: unknown alias: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR(UTILITY, "unknown alias: %s", argv[v]);
             res = 2;
         }
     }

@@ -23,10 +23,10 @@
 #include <string.h>
 #include <ctype.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../scanner/scanner.h"     /* is_keyword() */
 #include "../parser/parser.h"       /* get_alias_val() */
-#include "../debug.h"
+#include "../include/debug.h"
 
 struct  alias_s aliases[MAX_ALIASES];
 
@@ -191,7 +191,7 @@ int print_alias_list(char **args)
             }
             else
             {
-                PRINT_ERROR("%s: alias `%s` is not defined\n", UTILITY, *p);
+                PRINT_ERROR(UTILITY, "alias `%s` is not defined", *p);
                 res = 1;
             }
         }
@@ -256,7 +256,7 @@ int set_alias(char *name, char *val)
     {
         if(first_free == -1)
         {
-            PRINT_ERROR("%s: couldn't set alias `%s`: full buffers\n", UTILITY, name);
+            PRINT_ERROR(UTILITY, "couldn't set alias `%s`: full buffers", name);
             return 1;
         }
         index = first_free;
@@ -293,7 +293,7 @@ int set_alias(char *name, char *val)
     return 0;
     
 memerr:
-    PRINT_ERROR("%s: couldn't set alias `%s`: insufficient memory\n", UTILITY, name);
+    PRINT_ERROR(UTILITY, "couldn't set alias `%s`: insufficient memory", name);
     return 1;
 }
 
@@ -369,7 +369,7 @@ char *get_alias_val(char *cmd)
 
 
 /*
- * Run the given alias as a command. used to implement tcsh's "Special Aliases"
+ * Run the given alias as a command. Used to implement tcsh's "Special Aliases"
  * functionality, where special aliases get processed and executed as commands
  * under specific conditions. Only "cd" does its own thing by processing its alias
  * command "cwdcmd", as it needs to handle some gray cases which we won't bother
@@ -380,7 +380,7 @@ void run_alias_cmd(char *alias)
     char *cmd = get_alias_val(alias);
     if(cmd && cmd != alias)
     {
-        cmd = word_expand_to_str(cmd);
+        cmd = word_expand_to_str(cmd, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
         if(cmd)
         {
             do_builtin_internal(eval_builtin, 2, (char *[]){ "eval", cmd, NULL });
@@ -463,7 +463,7 @@ int alias_builtin(int argc, char **argv)
             }
             else
             {
-                PRINT_ERROR("%s: alias `%s` is not defined\n", UTILITY, str);
+                PRINT_ERROR(UTILITY, "alias `%s` is not defined", str);
                 res = 1;
             }
         }
@@ -481,7 +481,7 @@ int alias_builtin(int argc, char **argv)
              */
             if(is_keyword(tmp) >= 0 || strcmp(tmp, "alias") == 0 || strcmp(tmp, "unalias") == 0)
             {
-                PRINT_ERROR("%s: cannot alias shell keyword: %s\n", UTILITY, tmp);
+                PRINT_ERROR(UTILITY, "cannot alias shell keyword: %s", tmp);
                 res = 2;
             }
             else

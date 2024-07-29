@@ -26,9 +26,9 @@
 #include <errno.h>
 #include <sys/resource.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "nice"
 
@@ -54,7 +54,7 @@ int get_niceval(char *str)
     int i = strtol(str, &strend, 10);
     if(strend == str)
     {
-        PRINT_ERROR("%s: invalid nice value: %s\n", UTILITY, str);
+        PRINT_ERROR(UTILITY, "invalid nice value: %s", str);
         errno = EINVAL;
         return DEFAULT_NICEVAL;
     }
@@ -163,7 +163,7 @@ int nice_builtin(int argc, char **argv)
             niceval = getpriority(PRIO_PROCESS, 0);
             if(niceval == -1 && errno)
             {
-                PRINT_ERROR("%s: failed to get nice value: %s\n", UTILITY, strerror(errno));
+                PRINT_ERROR(UTILITY, "failed to get nice value: %s", strerror(errno));
                 return 3;
             }
             printf("%d\n", niceval);
@@ -173,7 +173,7 @@ int nice_builtin(int argc, char **argv)
         {
             if(setpriority(PRIO_PROCESS, 0, niceval) == -1)
             {
-                PRINT_ERROR("%s: failed to set nice value to %d: %s\n", UTILITY, niceval, strerror(errno));
+                PRINT_ERROR(UTILITY, "failed to set nice value to %d: %s", niceval, strerror(errno));
                 return 2;
             }
             return 0;

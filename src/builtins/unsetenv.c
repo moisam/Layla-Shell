@@ -29,9 +29,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 extern char **environ;
 

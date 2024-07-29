@@ -24,7 +24,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 
 #define UTILITY         "umask"
 
@@ -110,7 +110,7 @@ int get_perm(char **str, int *perm)
 
     if(op != '+' && op != '-' && op != '=')
     {
-        PRINT_ERROR("%s: unknown operator -- `%c`\n", UTILITY, op);
+        PRINT_ERROR(UTILITY, "unknown operator -- `%c`", op);
         return ACTION_INVALID_ACTION;
     }
 
@@ -151,7 +151,7 @@ int get_perm(char **str, int *perm)
                         break;
                         
                     default:
-                        PRINT_ERROR("%s: unknown permission bit -- `%c`\n", UTILITY, *str2);
+                        PRINT_ERROR(UTILITY, "unknown permission bit -- `%c`", *str2);
                         return ACTION_INVALID_ACTION;
                 }
                 
@@ -163,7 +163,7 @@ int get_perm(char **str, int *perm)
             break;
 
         default:
-            PRINT_ERROR("%s: unknown permission bit -- `%c`\n", UTILITY, *str2);
+            PRINT_ERROR(UTILITY, "unknown permission bit -- `%c`", *str2);
             return ACTION_INVALID_ACTION;
     }
 
@@ -320,7 +320,7 @@ int umask_builtin(int argc, char **argv)
             }
             else
             {
-                PRINT_ERROR("%s: illegal octal mode: %s\n", UTILITY, permstr);
+                PRINT_ERROR(UTILITY, "illegal octal mode: %s", permstr);
                 return 1;
             }
         } while(*++permstr);
@@ -343,7 +343,7 @@ int umask_builtin(int argc, char **argv)
             }
             else
             {
-                PRINT_ERROR("%s: unknown who/action -- `%c`\n", UTILITY, *permstr);
+                PRINT_ERROR(UTILITY, "unknown who/action -- `%c`", *permstr);
                 return 1;
             }
         

@@ -25,11 +25,11 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <signal.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "setx.h"
 #include "../backend/backend.h"
 #include "../symtab/symtab.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "coproc"
 
@@ -82,7 +82,7 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
     /* should have at least one argument */
     if(argc == 1)
     {
-        PRINT_ERROR("%s: missing arguments\n", UTILITY);
+        MISSING_ARGS_ERROR(UTILITY);
         return 2;
     }
 #endif
@@ -107,8 +107,21 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
 #endif
     
     /* create two pipes */
-    pipe(rfiledes);
-    pipe(wfiledes);
+    if(pipe(rfiledes) < 0)
+    {
+        PRINT_ERROR(UTILITY, "failed to fork: %s", strerror(errno));
+        return 1;
+    }
+
+    if(pipe(wfiledes) < 0)
+    {
+        close(rfiledes[0]);
+        close(rfiledes[1]);
+        rfiledes[0] = -1;
+        rfiledes[1] = -1;
+        PRINT_ERROR(UTILITY, "failed to fork: %s", strerror(errno));
+        return 1;
+    }
     
 #if 0
     /* if there was a coproc running, kill it before starting a new one */
@@ -148,13 +161,13 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
          */
         if(!option_set('T'))
         {
-            save_trap("DEBUG" );
-            save_trap("RETURN");
+            reset_trap("DEBUG");
+            reset_trap("RETURN");
         }
         
         if(!option_set('E'))
         {
-            save_trap("ERR");
+            reset_trap("ERR");
         }
         
         /*
@@ -174,7 +187,7 @@ int coproc_builtin(struct source_s *src, struct node_s *cmd, struct node_s *copr
     }
     else if(coproc_pid < 0)            /* error */
     {
-        PRINT_ERROR("%s: failed to fork: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to fork: %s", strerror(errno));
         return 1;
     }
     else                        /* parent process */

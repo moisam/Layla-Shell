@@ -29,11 +29,11 @@
 #include <sys/times.h>
 #include <sys/time.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY     "time"
 
@@ -112,7 +112,7 @@ int time_builtin(struct source_s *src, struct node_s *cmd)
     st_time = times(&st_cpu);
     if(st_time == -1)
     {
-        PRINT_ERROR("%s: failed to read time: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to read time: %s", strerror(errno));
         return 1;
     }
     rstart = get_cur_time();
@@ -124,7 +124,7 @@ int time_builtin(struct source_s *src, struct node_s *cmd)
     en_time = times(&en_cpu);
     if(en_time == -1)
     {
-        PRINT_ERROR("%s: failed to read time: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to read time: %s", strerror(errno));
         return 1;
     }
     rend = get_cur_time();

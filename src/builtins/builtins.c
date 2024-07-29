@@ -19,9 +19,9 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 #include "builtins.h"
 #include "setx.h"
 
@@ -146,7 +146,7 @@ struct builtin_s shell_builtins[] =
     },
     { 
         "bg", "run jobs in the background",
-        bg_builtin,       /* POSIX */
+        fg_builtin,       /* POSIX (we use one function for both fg & bg) */
         "%% [-hv] [job_id...]",
         "job_id      specify the job to run as background job\n\n"
         "Options:\n",
@@ -370,7 +370,7 @@ struct builtin_s shell_builtins[] =
     },
     {
         "fg", "run jobs in the foreground",
-        fg_builtin,       /* POSIX */
+        fg_builtin,       /* POSIX (we use one function for both fg & bg) */
         "%% [-hv] [job_id]",
         "job_id      specify the job to run as foreground job\n\n"
         "Options:\n",
@@ -678,6 +678,13 @@ struct builtin_s shell_builtins[] =
         "Options:\n"
         "  -p        print the names and values of all readonly variables\n\n",
         BUILTIN_SPECIAL_BUILTIN | BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
+    },
+    {
+        "recho", "echo arguments enclosed in <> and show invisible characters",
+        recho_builtin,       /* non-POSIX */
+        "%% [args...]",
+        "args        strings to echo\n\n",
+        BUILTIN_ENABLED,      /* don't print neither the -v nor the -h options */
     },
     {
         "repeat", "repeat a command count times",
@@ -1424,7 +1431,7 @@ int builtin_builtin(int argc, char **argv)
     {
         if(!do_builtin(argc, &argv[v], 0))
         {
-            PRINT_ERROR("%s: not a shell builtin: %s\n", UTILITY, argv[v]);
+            PRINT_ERROR(UTILITY, "not a shell builtin: %s", argv[v]);
             return 2;
         }
     }

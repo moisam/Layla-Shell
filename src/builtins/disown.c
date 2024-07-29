@@ -19,19 +19,55 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
+/* required macro definition for sig*() functions */
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/sig.h"
+#include "../include/debug.h"
 
 #define UTILITY             "disown"
+
+#define DISOWN_RUNNING      (1 << 0)
+#define DISOWN_STOPPED      (1 << 1)
+#define DISOWN_ALL          (DISOWN_RUNNING | DISOWN_STOPPED)
 
 /* defined in ../jobs.c */
 extern struct job_s jobs_table[];
 
-/* define below */
-void disown_job(struct job_s *job, int nohup);
+
+/*
+ * Disown the given job.
+ */
+void disown_job(struct job_s *job, int nohup, int filter)
+{
+    /* disown only running jobs */
+    if(filter == DISOWN_RUNNING && !RUNNING(job->status))
+    {
+        return;
+    }
+    
+    /* disown only stopped jobs */
+    if(filter == DISOWN_STOPPED && !STOPPED(job->status))
+    {
+        return;
+    }
+    
+    if(nohup)
+    {
+        /* don't remove the job, just mark it as disowned */
+        job->flags |= JOB_FLAG_DISOWNED;
+    }
+    else
+    {
+        /* disown this b&^%$ */
+        remove_job(job);
+    }
+}
 
 
 /*
@@ -47,17 +83,16 @@ void disown_job(struct job_s *job, int nohup);
 
 int disown_builtin(int argc, char **argv)
 {
-    struct job_s *job;
     int v = 1, c;
-    int all_jobs     = 0;
-    int running_only = 0;
-    int stopped_only = 0;
-    int nohup        = 0;
+    int filter = 0;
+    int nohup = 0;
+    sigset_t sigset;
+    struct job_s *job;
     
     /****************************
      * process the options
      ****************************/
-    while((c = parse_args(argc, argv, "ahrsv", &v, FLAG_ARGS_ERREXIT|FLAG_ARGS_PRINTERR)) > 0)
+    while((c = parse_args(argc, argv, "ahrsv", &v, FLAG_ARGS_PRINTERR)) > 0)
     {
         switch(c)
         {
@@ -73,17 +108,17 @@ int disown_builtin(int argc, char **argv)
                 
             /* -a : disown all jobs */
             case 'a':
-                all_jobs = 1;
+                filter = DISOWN_ALL;
                 break;
                 
             /* -r : disown only running jobs */
             case 'r':
-                running_only = 1;
+                filter = DISOWN_RUNNING;
                 break;
                 
             /* -s : disown only stopped jobs */
             case 's':
-                stopped_only = 1;
+                filter = DISOWN_STOPPED;
                 break;
         }
     }
@@ -104,46 +139,54 @@ int disown_builtin(int argc, char **argv)
     if(v >= argc)
     {
         /* use the current job */
-        if(!all_jobs && !running_only && !stopped_only)
+        if(filter == 0)
         {
+            SIGNAL_BLOCK(SIGCHLD, sigset);
+
             job = get_job_by_jobid(get_jobid("%%"));
+            
             if(!job)
             {
-                PRINT_ERROR("%s: unknown job: %%%%\n", UTILITY);
+                INVALID_JOB_ERROR(UTILITY, "%%%%");
+
+                SIGNAL_UNBLOCK(sigset);
+
                 return 1;
             }
-            disown_job(job, nohup);
+            
+            disown_job(job, nohup, 0);
+
+            SIGNAL_UNBLOCK(sigset);
+
+            return 0;
         }
+        
+        SIGNAL_BLOCK(SIGCHLD, sigset);
         
         /* disown all jobs */
         for(job = &jobs_table[0]; job < &jobs_table[MAX_JOBS]; job++)
         {
             if(job->job_num != 0)
             {
-                /* disown only running jobs */
-                if(running_only && NOT_RUNNING(job->status))
-                {
-                    continue;
-                }
-                
-                /* disown only stopped jobs */
-                if(stopped_only && !WIFSTOPPED(job->status))
-                {
-                    continue;
-                }
-                disown_job(job, nohup);
+                disown_job(job, nohup, filter);
             }
         }
         
+        SIGNAL_UNBLOCK(sigset);
+
         return 0;
     }
     
     /* process the arguments */
+    int res = 0;
+    
     for( ; v < argc; v++)
     {
+        SIGNAL_BLOCK(SIGCHLD, sigset);
+
         /* first try POSIX-style job ids */
         job = get_job_by_jobid(get_jobid(argv[v]));
-
+        
         /* maybe we have a process pid? */
         if(!job)
         {
@@ -154,45 +197,22 @@ int disown_builtin(int argc, char **argv)
                 job = get_job_by_any_pid(pgid);
             }
         }
-
+        
         /* still nothing? */
         if(!job)
         {
-            PRINT_ERROR("%s: unknown job: %s\n", UTILITY, argv[v]);
-            return 1;
-        }
-        
-        /* disown only running jobs */
-        if(running_only && NOT_RUNNING(job->status))
-        {
+            INVALID_JOB_ERROR(UTILITY, argv[v]);
+            res = 1;
+            
+            SIGNAL_UNBLOCK(sigset);
+
             continue;
         }
+
+        disown_job(job, nohup, filter);
         
-        /* disown only stopped jobs */
-        if(stopped_only && !WIFSTOPPED(job->status))
-        {
-            continue;
-        }
-        disown_job(job, nohup);
+        SIGNAL_UNBLOCK(sigset);
     }
     
-    return 1;
-}
-
-
-/*
- * Disown the given job.
- */
-void disown_job(struct job_s *job, int nohup)
-{
-    if(nohup)
-    {
-        /* don't remove the job, just mark it as disowned */
-        job->flags |= JOB_FLAG_DISOWNED;
-    }
-    else
-    {
-        /* disown this b&^%$ */
-        remove_job(job);
-    }
+    return res;
 }

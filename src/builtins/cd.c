@@ -33,11 +33,11 @@
 #include <pwd.h>
 #include <sys/stat.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 #include "../parser/parser.h"
 #include "setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY             "cd"
 
@@ -64,7 +64,7 @@ void do_cwdcmd(void)
     if(cmd && *cmd)
     {
         /* perform word expansion on the alias value */
-        cmd = word_expand_to_str(cmd);
+        cmd = word_expand_to_str(cmd, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
         if(cmd)
         {
             /* prevent an infinite loop by checking for the 'prohibited' words */
@@ -104,7 +104,7 @@ int cd_hyphen(void)
     struct symtab_entry_s *entry2 = get_symtab_entry("PWD");
     if(!entry || !entry->val)
     {
-        PRINT_ERROR("%s: $OLDPWD is not set\n", UTILITY);
+        PRINT_ERROR(UTILITY, "$OLDPWD is not set");
         return 3;
     }
     
@@ -112,14 +112,14 @@ int cd_hyphen(void)
     char *pwd = __get_malloced_str(entry->val);
     if(!pwd)
     {
-        PRINT_ERROR("%s: error: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "error: %s", strerror(errno));
         return 3;
     }
     
     /* change directory to the $OLDPWD */
     if(chdir(pwd) != 0)
     {
-        PRINT_ERROR("%s: cannot cd to `%s`: %s\n", UTILITY, pwd, strerror(errno));
+        PRINT_ERROR(UTILITY, "cannot cd to `%s`: %s", pwd, strerror(errno));
         free(pwd);
         return 3;
     }
@@ -312,7 +312,7 @@ int absolute_pathname(char *curpath)
                         prev[l] = '\0';
                         if(stat(prev, &st) != 0 || !S_ISDIR(st.st_mode))
                         {
-                            PRINT_ERROR("%s: not a directory: %s\n", UTILITY, prev);
+                            PRINT_ERROR(UTILITY, "not a directory: %s", prev);
                             return 0;
                         }
                         
@@ -444,7 +444,7 @@ int shorten_path(char *curpath, char *pwd, size_t pwdlen)
         int can_do = 0;
         if(!pwd || !*pwd)
         {
-            PRINT_ERROR("%s: $PWD is not set\n", UTILITY);
+            PRINT_ERROR(UTILITY, "$PWD is not set");
             return 0;
         }
         
@@ -510,7 +510,7 @@ int do_cd(int v, int argc, char **argv, int print_dirstack, int dirstack_flags, 
         directory = get_home(0);
         if(!directory)
         {
-            PRINT_ERROR("%s: $HOME is not set\n", argv[0]);
+            PRINT_ERROR(argv[0], "$HOME is not set");
             return 1;
         }
         
@@ -605,7 +605,7 @@ start:
             }
         }
 
-        PRINT_ERROR("%s: cannot cd to `%s`: %s\n", argv[0], curpath, strerror(errno));
+        PRINT_ERROR(argv[0], "cannot cd to `%s`: %s", curpath, strerror(errno));
         free(curpath);
         return 1;
     }
@@ -671,7 +671,7 @@ int cd_builtin(int argc, char **argv)
     /* is this shell restricted? */
     if(startup_finished && option_set('r'))
     {
-        PRINT_ERROR("%s: cannot change directory: restricted shell", UTILITY);
+        PRINT_ERROR(UTILITY, "cannot change directory: restricted shell");
         return 3;
     }
     
@@ -736,7 +736,7 @@ int cd_builtin(int argc, char **argv)
                         break;
                         
                     default:
-                        PRINT_ERROR("%s: unknown option: -%c\n", UTILITY, *p);
+                        OPTION_UNKNOWN_ERROR(UTILITY, *p);
                         return 2;
                 }
                 p++;

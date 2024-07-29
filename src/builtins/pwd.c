@@ -25,7 +25,7 @@
 #include <string.h>
 #include <errno.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
 
 #define UTILITY         "pwd"
@@ -131,7 +131,7 @@ int pwd_builtin(int argc, char **argv)
     cwd = getcwd(NULL, 0);
     if(!cwd)
     {
-        PRINT_ERROR("%s: failed to read current working directory: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to read current working directory: %s", strerror(errno));
         return 1;
     }
     

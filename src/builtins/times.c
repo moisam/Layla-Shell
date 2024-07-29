@@ -26,7 +26,7 @@
 #include <errno.h>
 #include <sys/times.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 
 #define UTILITY     "times"
 
@@ -48,7 +48,7 @@ void start_clock(void)
     /* can't do without the clock tick count */
     if(CLK_TCK <= 0)
     {
-        PRINT_ERROR("%s: failed to init internal clock\n", UTILITY);
+        PRINT_ERROR(UTILITY, "failed to init internal clock");
         exit(EXIT_FAILURE);
     }
 
@@ -81,14 +81,14 @@ int times_builtin(int argc, char **argv __attribute__((unused)))
     /* we accept no arguments */
     if(option_set('P') && argc > 1)
     {
-        PRINT_ERROR("%s: should be called with no arguments\n", UTILITY);
+        PRINT_ERROR(UTILITY, "should be called with no arguments");
         return 1;
     }
     
     /* get the usage times */
     if(times(&en_cpu) == -1)
     {
-        PRINT_ERROR("%s: failed to read time: %s\n", UTILITY, strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to read time: %s", strerror(errno));
         return 1;
     }
 

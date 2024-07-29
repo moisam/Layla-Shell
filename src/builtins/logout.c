@@ -21,8 +21,8 @@
 
 #include <stdlib.h>
 #include "builtins.h"
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/debug.h"
 
 
 /*
@@ -39,7 +39,7 @@ int logout_builtin(int argc, char **argv)
 {
     if(!option_set('L'))
     {
-        PRINT_ERROR("logout: this is not a login shell: use `exit`\n");
+        PRINT_ERROR("logout", "this is not a login shell: use `exit`");
         return 1;
     }
     

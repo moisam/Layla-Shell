@@ -22,8 +22,8 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <errno.h>
-#include "../cmd.h"
-#include "../debug.h"
+#include "../include/cmd.h"
+#include "../include/debug.h"
 
 char *get_hist_cmd(int index);
 char *get_hist_cmdp(char *s, int anchor);
@@ -50,7 +50,7 @@ char *backup_cmdbuf(void)
     if(!backup)
     {
         beep();
-        PRINT_ERROR("%s: history expansion failed: %s\n", SOURCE_NAME, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "history expansion failed: %s", strerror(errno));
         return NULL;
     }
     
@@ -117,17 +117,6 @@ char *hist_expand(int quotes, int flags)
      * so that cmdline() can do its own thing, like erasing the previous command
      * from the screen before outputting our expanded version, for example.
      */
-#if 0
-    char *backup = malloc(cmdbuf_end+1);
-    if(!backup)
-    {
-        beep();
-        PRINT_ERROR("%s: history expansion failed: %s\n", SOURCE_NAME, strerror(errno));
-        return INVALID_HIST_EXPAND;
-    }
-    strcpy(backup, cmdbuf);
-#endif
-    
     char *backup = NULL;
     if(do_backup)
     {
@@ -191,7 +180,7 @@ char *hist_expand(int quotes, int flags)
                 
                 if(!p2)
                 {
-                    PRINT_ERROR("%s: history command not found: !!\n", SOURCE_NAME);
+                    PRINT_ERROR(SHELL_NAME, "history command not found: !!");
                     p = INVALID_HIST_EXPAND;
                     goto fin;
                 }
@@ -215,8 +204,8 @@ char *hist_expand(int quotes, int flags)
                 char *modif = malloc(j+4);
                 if(!modif)
                 {
-                    PRINT_ERROR("%s: failed to expand history at '^': %s\n", 
-                                SOURCE_NAME, strerror(errno));
+                    PRINT_ERROR(SHELL_NAME, "failed to expand history at '^': %s", 
+                                strerror(errno));
                     p = INVALID_HIST_EXPAND;
                     goto fin;
                 }
@@ -264,7 +253,7 @@ char *hist_expand(int quotes, int flags)
                 }
                 else
                 {
-                    PRINT_ERROR("%s: failed to expand history at '^'\n", SOURCE_NAME);
+                    PRINT_ERROR(SHELL_NAME, "failed to expand history at '^'");
                     p = INVALID_HIST_EXPAND;
                     goto fin;
                 }
@@ -308,7 +297,7 @@ char *hist_expand(int quotes, int flags)
                         p2 = get_hist_cmd(-1);
                         if(!p2)
                         {
-                            PRINT_ERROR("%s: history command not found: !!\n", SOURCE_NAME);
+                            PRINT_ERROR(SHELL_NAME, "history command not found: !!");
                             p = INVALID_HIST_EXPAND;
                             goto fin;
                         }
@@ -322,7 +311,7 @@ char *hist_expand(int quotes, int flags)
                         }
                         
                         j += 2;
-                        sprintf(errmsg, "%s: history command not found: !!", SOURCE_NAME);
+                        sprintf(errmsg, "history command not found: !!");
                         
                         break;
                         
@@ -331,7 +320,7 @@ char *hist_expand(int quotes, int flags)
                         p2 = p+2;
                         if(!*p2 || !isdigit(*p2))
                         {
-                            PRINT_ERROR("%s: missing numeric argument to !-\n", SOURCE_NAME);
+                            PRINT_ERROR(SHELL_NAME, "missing numeric argument to !-");
                             p = INVALID_HIST_EXPAND;
                             goto fin;
                         }
@@ -357,7 +346,7 @@ char *hist_expand(int quotes, int flags)
                         }
                         
                         j += i;
-                        sprintf(errmsg, "%s: history command not found: !%d", SOURCE_NAME, k);
+                        sprintf(errmsg, "history command not found: !%d", k);
                         
                         break;
                         
@@ -366,7 +355,7 @@ char *hist_expand(int quotes, int flags)
                         p2 = p+2;
                         if(!*p2 || *p2 == '?')
                         {
-                            PRINT_ERROR("%s: missing string argument to !?\n", SOURCE_NAME);
+                            PRINT_ERROR(SHELL_NAME, "missing string argument to !?");
                             p = INVALID_HIST_EXPAND;
                             goto fin;
                         }
@@ -383,7 +372,7 @@ char *hist_expand(int quotes, int flags)
                         p3 = get_malloced_strl(p+2, 0, j);
                         if(!p3)
                         {
-                            PRINT_ERROR("%s: history expansion failed: %s\n", SOURCE_NAME, strerror(errno));
+                            PRINT_ERROR(SHELL_NAME, "history expansion failed: %s", strerror(errno));
                             p = INVALID_HIST_EXPAND;
                             goto fin;
                         }
@@ -415,7 +404,7 @@ char *hist_expand(int quotes, int flags)
                         }
                         
                         j += i;
-                        sprintf(errmsg, "%s: history command not found: !?%s", SOURCE_NAME, p3);
+                        sprintf(errmsg, "history command not found: !?%s", p3);
                         
                         break;
                         
@@ -436,7 +425,7 @@ char *hist_expand(int quotes, int flags)
                         p2 = get_hist_cmd(-1);
                         if(!p2)
                         {
-                            PRINT_ERROR("%s: history command not found: !!\n", SOURCE_NAME);
+                            PRINT_ERROR(SHELL_NAME, "history command not found: !!");
                             p = INVALID_HIST_EXPAND;
                             goto fin;
                         }
@@ -451,7 +440,7 @@ char *hist_expand(int quotes, int flags)
                         }
                         
                         j = 2;
-                        sprintf(errmsg, "%s: history command not found: !!", SOURCE_NAME);
+                        sprintf(errmsg, "history command not found: !!");
                         break;
                         
                     default:
@@ -474,7 +463,7 @@ char *hist_expand(int quotes, int flags)
                             p2 = get_hist_cmd(k);
                             if(!p2)
                             {
-                                PRINT_ERROR("%s: history command not found: !%d\n", SOURCE_NAME, k);
+                                PRINT_ERROR(SHELL_NAME, "history command not found: !%d", k);
                                 p = INVALID_HIST_EXPAND;
                                 goto fin;
                             }
@@ -489,7 +478,7 @@ char *hist_expand(int quotes, int flags)
                             }
                             
                             j += i;
-                            sprintf(errmsg, "%s: history command not found: !%d", SOURCE_NAME, k);
+                            sprintf(errmsg, "history command not found: !%d", k);
                         }
                         else if(isalpha(p[1]))          /* !string */
                         {
@@ -506,8 +495,8 @@ char *hist_expand(int quotes, int flags)
                             p3 = get_malloced_strl(p+1, 0, j);
                             if(!p3)
                             {
-                                PRINT_ERROR("%s: history expansion failed: %s\n", 
-                                            SOURCE_NAME, strerror(errno));
+                                PRINT_ERROR(SHELL_NAME, "history expansion failed: %s", 
+                                            strerror(errno));
                                 p = INVALID_HIST_EXPAND;
                                 goto fin;
                             }
@@ -515,8 +504,7 @@ char *hist_expand(int quotes, int flags)
                             /* get the history command containing the string */
                             p2 = get_hist_cmdp(p3, 1);
                             j++;                        /* add 1 for the '!' */
-                            sprintf(errmsg, "%s: history command not found: !%s", 
-                                    SOURCE_NAME, p3);
+                            sprintf(errmsg, "history command not found: !%s", p3);
                             free_malloced_str(p3);
                             i = get_hist_words(p2, p+j, &p3);
                             
@@ -596,7 +584,7 @@ char *hist_expand(int quotes, int flags)
                 else
                 {
                     /* print error and bail out */
-                    PRINT_ERROR("%s\n", errmsg);
+                    PRINT_ERROR(SHELL_NAME, "%s", errmsg);
                     p = INVALID_HIST_EXPAND;
                     goto fin;
                 }
@@ -895,7 +883,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
         case '%':           /* get the word matching the last !?string[?] search */
             if(!query_str || !(p = strstr(cmd, query_str)))
             {
-                PRINT_ERROR("%s: no match found for word: %s\n", SOURCE_NAME, 
+                PRINT_ERROR(SHELL_NAME, "no match found for word: %s", 
                             query_str ? : "(null)");
                 errexp = 1;
                 return i+1;
@@ -918,7 +906,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
         case '-':           /* -y is a shorthand for 0-y */
             if(!isdigit(*++wdesig))
             {
-                PRINT_ERROR("%s: invalid word index: %c\n", SOURCE_NAME, *wdesig);
+                PRINT_ERROR(SHELL_NAME, "invalid word index: %c", *wdesig);
                 errexp = 1;
                 return i;
             }
@@ -940,7 +928,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
             p = get_word_start(cmd, n);     /* get the start of the second word */
             if(!p)
             {
-                PRINT_ERROR("%s: invalid word index: %d\n", SOURCE_NAME, n);
+                PRINT_ERROR(SHELL_NAME, "invalid word index: %d", n);
                 errexp = 1;
                 return i;
             }
@@ -972,7 +960,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
                 p = get_word_start(cmd, n);
                 if(!p)
                 {
-                    PRINT_ERROR("%s: invalid word index: %d\n", SOURCE_NAME, n);
+                    PRINT_ERROR(SHELL_NAME, "invalid word index: %d", n);
                     errexp = 1;
                     return j+i;
                 }
@@ -996,7 +984,7 @@ int get_hist_words(char *cmd, char *wdesig, char **res)
                         p = get_word_start(cmd, n);     /* get start of 2nd word */
                         if(!p)
                         {
-                            PRINT_ERROR("%s: invalid word index: %d\n", SOURCE_NAME, n);
+                            PRINT_ERROR(SHELL_NAME, "invalid word index: %d", n);
                             errexp = 1;
                             return i;
                         }
@@ -1132,7 +1120,7 @@ loop:
     if(!*p)
     {
         errexp = 1;
-        PRINT_ERROR("%s: unknown modifier letter: %c\n", SOURCE_NAME, *hmod);
+        PRINT_ERROR(SHELL_NAME, "unknown modifier letter: %c", *hmod);
         if(cmd && cmd != origcmd)
         {
             free(cmd);
@@ -1513,8 +1501,7 @@ loop:
             if(!p)
             {
                 errexp = 1;
-                PRINT_ERROR("%s: failed to apply modifier: %s\n", 
-                            SOURCE_NAME, strerror(errno));
+                PRINT_ERROR(SHELL_NAME, "failed to apply modifier: %s", strerror(errno));
                 if(cmd && cmd != origcmd)
                 {
                     free(cmd);
@@ -1592,7 +1579,7 @@ loop:
             if(*hmod != 's')
             {
                 errexp = 1;
-                PRINT_ERROR("%s: missing 's' after modifier: %c\n", SOURCE_NAME, *p);
+                PRINT_ERROR(SHELL_NAME, "missing 's' after modifier: %c", *p);
                 if(cmd && cmd != origcmd)
                 {
                     free(cmd);
@@ -1692,8 +1679,7 @@ loop:
             if(hmod < orighmod)
             {
                 errexp = 1;
-                PRINT_ERROR("%s: invalid application of the '&' modifier\n", 
-                            SOURCE_NAME);
+                PRINT_ERROR(SHELL_NAME, "invalid application of the '&' modifier");
                 if(cmd && cmd != origcmd)
                 {
                     free(cmd);
@@ -1736,7 +1722,7 @@ loop:
     
 invalid_s:
     errexp = 1;
-    PRINT_ERROR("%s: invalid usage of the 's' modifier\n", SOURCE_NAME);
+    PRINT_ERROR(SHELL_NAME, "invalid usage of the 's' modifier");
     if(cmd && cmd != origcmd)
     {
         free(cmd);

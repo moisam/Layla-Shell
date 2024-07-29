@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
  * 
  *    file: exec.c
  *    This file is part of the Layla Shell project.
@@ -27,9 +27,9 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../symtab/symtab.h"
-#include "../sig.h"
+#include "../include/sig.h"
 #include "setx.h"
 
 #define UTILITY             "exec"
@@ -94,7 +94,7 @@ int exec_builtin(int argc, char **argv)
                 case 'a':
                     if(!internal_optarg || internal_optarg == INVALID_OPTARG)
                     {
-                        PRINT_ERROR("%s: missing argument to option -%c\n", UTILITY, c);
+                        OPTION_REQUIRES_ARG_ERROR(UTILITY, c);
                         return 2;
                     }
                     arg0 = internal_optarg;
@@ -119,7 +119,7 @@ int exec_builtin(int argc, char **argv)
     if(startup_finished && option_set('r'))
     {
         /* bash & zsh say r-shells can't use exec to replace the shell */
-        PRINT_ERROR("%s: can't execute command: restricted shell\n", UTILITY);
+        PRINT_ERROR(UTILITY, "can't execute command: restricted shell");
         return 2;
     }
     
@@ -139,7 +139,7 @@ int exec_builtin(int argc, char **argv)
         char *l = malloc(strlen(argv[v])+2);
         if(!l)
         {
-            PRINT_ERROR("%s: failed to exec `%s`: insufficient memory\n", UTILITY, argv[v]);
+            PRINT_ERROR(UTILITY, "failed to exec `%s`: insufficient memory", argv[v]);
             if(cmd)
             {
                 free_malloced_str(cmd);
@@ -228,7 +228,7 @@ int exec_builtin(int argc, char **argv)
 
     /* NOTE: we should NEVER come back here, unless there is an error, of course! */
     int err = errno;
-    PRINT_ERROR("%s: failed to exec `%s`: %s\n", UTILITY,
+    PRINT_ERROR(UTILITY, "failed to exec `%s`: %s", 
                 cmd ? cmd : argv[v], strerror(errno));
     
     /*

@@ -26,9 +26,9 @@
 #include <errno.h>
 #include <sys/resource.h>
 #include "builtins.h"
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../backend/backend.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 #define UTILITY         "repeat"
 
@@ -75,7 +75,7 @@ int repeat_builtin(int argc, char **argv)
     /* missing arguments */
     if(v >= argc)
     {
-        PRINT_ERROR("%s: missing argument: count\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "count");
         return 2;
     }
 
@@ -84,14 +84,14 @@ int repeat_builtin(int argc, char **argv)
     count = strtol(argv[v], &strend, 10);
     if(strend == argv[v] || count < 0)
     {
-        PRINT_ERROR("%s: missing argument: invalid count: %s\n", UTILITY, argv[v]);
+        PRINT_ERROR(UTILITY, "invalid count: %s", argv[v]);
         return 2;
     }
 
     /* we should have at least one command to execute */
     if(++v >= argc)
     {
-        PRINT_ERROR("%s: missing argument: command name\n", UTILITY);
+        MISSING_ARG_ERROR(UTILITY, "command name");
         return 2;
     }
     

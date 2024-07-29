@@ -1,8 +1,8 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2020 (c)
  * 
- *    file: true.c
+ *    file: recho.c
  *    This file is part of the Layla Shell project.
  *
  *    Layla Shell is free software: you can redistribute it and/or modify
@@ -19,27 +19,56 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-#include "../include/cmd.h"
+#include <stdio.h>
 
-#define UTILITY             "true"
+#define UTILITY             "recho"
+
+
+void print_arg(char *arg)
+{
+    char *p = arg;
+    
+    while(*p)
+    {
+        if(*p < ' ')
+        {
+            printf("^%c", *p+64);
+        }
+        else if(*p == 127)
+        {
+            printf("^?");
+        }
+        else
+        {
+            putchar(*p);
+        }
+        
+        p++;
+    }
+}
 
 
 /*
- * The true builtin utility (POSIX).
+ * The recho builtin utility (non-POSIX). Prints back the arguments passed to it,
+ * each argument enclosed in <>, with invisible chars made visible.
  *
- * Returns 0.
+ * Returns 0 invariably.
  *
  * See the manpage for the list of options and an explanation of what each option does.
- * You can also run: `help true` from lsh prompt to see a short
+ * You can also run: `help recho` from lsh prompt to see a short
  * explanation on how to use this utility.
  */
 
-int true_builtin(int argc __attribute__((unused)), char **argv __attribute__((unused)))
+int recho_builtin(int argc, char **argv)
 {
-    /*
-     * NOTE: ksh, bash and other major shells implement a true builtin
-     *       that accepts no options, not even the '--' option.
-     */
+    int i;
+    
+    for(i = 1; i < argc; i++)
+    {
+        printf("arg[%d] = <", i);
+        print_arg(argv[i]);
+        printf(">\n");
+    }
+    
     return 0;
 }
-
