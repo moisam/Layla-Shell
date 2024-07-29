@@ -1,6 +1,6 @@
 # 
-#    Copyright 2019 (c)
-#    Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
+#    Copyright 2019, 2024 (c)
+#    Mohammed Isam [mohammed_isam1984@yahoo.com]
 # 
 #    file: Makefile
 #    This file is part of the Layla shell project.
@@ -24,7 +24,7 @@
 TARGET=lsh
 
 # version (for the distro target)
-PKG_VERSION=1.1-2
+PKG_VERSION=1.2-1
 
 # directory definitions
 SRCDIR=src
