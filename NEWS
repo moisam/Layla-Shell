@@ -1,5 +1,5 @@
 # 
-#    Copyright 2019 (c)
+#    Copyright 2019, 2020, 2024 (c)
 #    Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
 # 
 #    file: NEWS
@@ -19,11 +19,21 @@
 #    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
 #    
 
+Jul 29 2024 Mohammed Isam:
+- Bugfixes
+
+Aug 18 2020 Mohammed Isam:
+- Fixed the pattern matching functions
+- Fixed the following builtins: jobs, wait, kill, fg, bg, disown
+- Moved header files to the include/ directory
+
+Jan 12 2020 Mohammed Isam:
+- Bugfixes
+
 Sep 24 2019 Mohammed Isam:
 - Bugfixes
 - Fixed the code formatting
 - Added the --posix option
-
 
 Jul 05 2019 - Mohammed Isam:
 - First release
