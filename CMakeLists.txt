@@ -1,6 +1,6 @@
 #  
 #     Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
-#     Copyright 2016, 2017, 2018, 2019 (c)
+#     Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
 #  
 #     file: CMakeLists.txt
 #     This file is part of the Layla Shell project.
@@ -27,13 +27,13 @@
 # then open Eclipse and select File -> Import... -> General -> Existing Projects into Workspace
 # and select the source directory.
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8)
 project(shell)
 
 # we set the debug mode so that we can easily use gdb and valgrind later.
 # don't forget to turn off in the release version!
 
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 # gcc flags (add -g if you want debugging info)
 
@@ -45,7 +45,8 @@ add_executable(lsh  main.c      wordexp.c   cmdline.c    helpfunc.c      initsh.
                     jobs.c      prompt.c    args.c       params.c        sig.c
                     tab.c       debug.c     kbdevent2.c  shunt.c         alphalist.c
                     braceexp.c  vars.c      vi.c         vi_keys.c       strbuf.c
-                    popen.c     functab.c   strings.c    terminal.c
+                    popen.c     functab.c   strings.c    terminal.c      utf.c
+                    heredoc.c   dstring.c
                     scanner/lexical.c       scanner/source.c
                     parser/node.c           parser/parser.c         parser/conditionals.c
                     parser/loops.c          parser/redirect.c
@@ -69,7 +70,7 @@ add_executable(lsh  main.c      wordexp.c   cmdline.c    helpfunc.c      initsh.
                     builtins/unset.c        builtins/ver.c          builtins/dump.c
                     builtins/test.c         builtins/disown.c       builtins/echo.c
                     builtins/let.c          builtins/whence.c       builtins/local.c
-                    builtins/setx.c         builtins/coproc.c
+                    builtins/setx.c         builtins/coproc.c       builtins/recho.c
                     builtins/caller.c       builtins/declare.c      builtins/enable.c
                     builtins/logout.c       builtins/memusage.c     builtins/dirstack.c
                     builtins/suspend.c      builtins/hist_expand.c  builtins/bugreport.c
@@ -80,7 +81,12 @@ add_executable(lsh  main.c      wordexp.c   cmdline.c    helpfunc.c      initsh.
                     )
                      
 # librt is needed for timer_create() and timer_settime()
-target_link_libraries (lsh rt)
+
+target_link_libraries(lsh rt)
+
+if("x${CMAKE_BUILD_TYPE}x" STREQUAL "xDebugx")
+	target_compile_definitions(lsh PRIVATE __DEBUG__)
+endif()
 
 # compile and install
 
