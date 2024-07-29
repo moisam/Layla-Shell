@@ -1,8 +1,8 @@
-This is lsh.info, produced by makeinfo version 6.6 from lsh.texi.
+This is lsh.info, produced by makeinfo version 6.8 from lsh.texi.
 
-This manual is for lsh - the Layla shell (version 1.0).
+This manual is for lsh - the Layla shell (version 1.2-1).
 
-   Copyright (C) 2016, 2017, 2018, 2019 Mohammed Isam.
+   Copyright (C) 2016, 2017, 2018, 2019, 2020, 2024 Mohammed Isam.
 
      Permission is granted to copy, distribute and/or modify this
      document under the terms of the GNU Free Documentation License,
@@ -22,7 +22,7 @@ File: lsh.info,  Node: Top,  Next: Introduction,  Up: (dir)
 lsh
 ***
 
-This manual is for lsh - the Layla shell (version 1.0).
+This manual is for lsh - the Layla shell (version 1.2-1).
 
 * Menu:
 
@@ -93,7 +93,10 @@ directly at my email address, the one you will find in the beginning of
 this file.  If you have any bugfixes, patches or feature improvements
 you want to add to the code, feel free to send me your code at the email
 address above, or through the Linux Shell Internals repository at
-GitHub: <https://github.com/moisam/Linux-Shell-Internals-book/>
+GitHub: <https://github.com/moisam/Layla-Shell/>
+
+   The simplified (and tuned-down) version of Layla shell is available
+from: <https://github.com/moisam/Linux-Shell-Internals-book/>
 
 1.3 Options
 ===========
@@ -111,8 +114,11 @@ GitHub: <https://github.com/moisam/Linux-Shell-Internals-book/>
      Do not read login startup scripts '/etc/profile' and '~/.profile'.
 '--norc'
      Do not read the startup script files '/etc/lshrc' and '~/.lshrc'.
+'--posix'
+     Run the shell in the POSIX mode (see *Note The POSIX shell::).
 '--restricted'
-     Start the shell in the restricted mode.
+     Start the shell in the restricted mode (see *Note The restricted
+     shell::).
 '--verbose'
      Turn on the '-v' option, so commands are printed as they are read.
 '--version'
@@ -168,26 +174,50 @@ directory where you downloaded the tarball:
 The following files are used by the shell:
 
 '/etc/profile'
-     The system initialization file (executed by a login shell).
+     Global (or system-wide) initialization file, executed by the login
+     shell.
+
+'~/.profile'
+     Local (or user-specific) initialization file, executed by the login
+     shell after it executes '/etc/profile'.
+
+'/etc/lshlogin'
+     Global initialization file, executed by the login shell after it
+     has read and executed '/etc/profile' and '~/.profile'.
+
+'~/.lshlogin'
+     Local initialization file, executed by the login shell after it has
+     read and executed '/etc/profile', '~/.profile' and '/etc/lshlogin'.
+
 '/etc/lshrc'
-     The system-wide startup file (executed by an interactive shell).
-'$HOME/.profile'
-     The personal initialization file (executed by a login shell after
-     executing '/etc/profile').
-'$HOME/.lshrc'
-     The default personal initialization file (executed after
-     '/etc/lshrc' by an interactive shell).
-'$HOME/.lsh_history'
-     The default personal initialization file (executed after
-     '/etc/lshrc').
-'/dev/null'
-     The NULL device.
+     Global startup file, executed by the interactive shell.
+
+'~/.lshrc'
+     Local startup file, executed by the interactive shell after
+     '/etc/lshrc'.
+
+'/etc/lshlogout'
+     Global logout script, executed by the login shell on logout.
+
 '/etc/logout'
-     Shell script executed on logout.
-'$HOME/logout'
-     Shell script executed on logout after '/etc/logout'.
+     Global logout script, executed by the login shell on logout, only
+     if '/etc/lshlogout' was not executed.
+
+'~/.lshlogout'
+     Local logout script, executed by the login shell on logout.
+
+'~/.logout'
+     Local logout script, executed by the login shell on logout, only if
+     '~/.lshlogout' was not executed.
+
+'~/.lsh_history'
+     The default file for saving history commands.
+
 '/etc/passwd'
-     Default file used to perform ~user substitutions.
+     Default file used to perform ~username substitutions.
+
+'/dev/null'
+     The NULL device.  Opened as input for background jobs.
 
 1.7 Features
 ============
@@ -226,48 +256,74 @@ returns an exit status to the shell.  An exit status of zero is
 considered success (or true, when used as a value for logical testing).
 A non-zero exit status is considered failure (or false).
 
-   A simple command is a list of variable assignments and words
+   A *simple command* is a list of variable assignments and words
 separated by whitespace.  The first word usually specifies the name of
 the command to be executed, the remaining words are word-expanded and
-passed as arguments to the command.  The command name is passed as
-argument number 0.  If the command exits normally, the exit status is
-0-128.  If it terminates abnormally, the exit status is 128+signum
-(similar to bash, but not ksh).  The name of the signal can be obtained
-by passing the -l option to the kill builtin utility.
+passed as arguments to the command.  For example, the following is a
+simple command with two arguments:
 
-   A pipeline is a sequence of one or more commands separated by the
+     echo Hello World
+
+   The command name is passed as argument number 0.  If the command
+exits normally, the exit status is 0-128.  If it terminates abnormally,
+the exit status is 128+signum (similar to bash, but not ksh).  The name
+of the signal can be obtained by passing the -l option to the kill
+builtin utility.
+
+   A *pipeline* is a sequence of one or more commands separated by the
 pipe operator '|'.  The standard output (stdout) of each command except
 the last is connected by a pipe to the standard input (stdin) of the
-next command.  Each command is run in a separate process.  The shell
-waits for all commands to terminate.  The exit status of a pipeline is
-the exit status of the last command unless the pipefail '-l' option is
-enabled, in which case it is the exit status of the rightmost command
-with non- zero exit status.  Each pipeline can be preceded by the bang
-reserved word '!'.  This causes the exit status of the pipeline to be
-inverted, i.e.  an exit status of zero becomes 1, otherwise it becomes
-zero.
+next command.  For example, the following is a pipeline with two
+commands:
 
-   A list is a sequence of one or more pipelines separated by ';', '&',
-'|&', '&&', or '|'.  The ';' causes sequential (foreground) execution of
-the preceding pipeline.  The shell waits for foreground pipelines to
-finish execution.  The '&' causes asynchronous (background) execution of
-the preceding pipeline.  The shell does not wait for background
-pipelines to finish execution.  The '|&' causes asynchronous execution
-of the preceding pipeline, redirecting both stdout and stderr to the
-pipe.  This is similar to bash behavior, while ksh uses this operator to
-establish a two-way pipe between the command and the parent shell.  The
-symbols '&&' and '||' cause the list following it to be executed only if
-the preceding pipeline returns a zero or non-zero value, respectively.
-Semicolons ';' can be substituted by newlines in lists.
+     cat file | less
 
-   Compound commands include *for*, *select*, *until* and *while* loops;
-*case* and *if* conditionals; subshells and brace groups.  The exit
-status of a compound command is that of the last simple command executed
-in the compound.  All loops conform to the POSIX standard, except when
-it says otherwise.
+   Each command is run in a separate process.  The shell waits for all
+commands to terminate.  The exit status of a pipeline is the exit status
+of the last command unless the pipefail '-l' option is enabled, in which
+case it is the exit status of the rightmost command with non- zero exit
+status.  Each pipeline can be preceded by the bang reserved word '!'.
+This causes the exit status of the pipeline to be inverted, i.e.  an
+exit status of zero becomes 1, otherwise it becomes zero.
+
+   A *list* is a sequence of one or more pipelines separated by ';',
+'&', '|&', '&&', or '|'.  The ';' causes sequential (foreground)
+execution of the preceding pipeline.  The shell waits for foreground
+pipelines to finish execution.  The '&' causes asynchronous (background)
+execution of the preceding pipeline.  The shell does not wait for
+background pipelines to finish execution.  The '|&' causes asynchronous
+execution of the preceding pipeline, redirecting both stdout and stderr
+to the pipe.  This is similar to bash and zsh behavior, while ksh uses
+this operator to establish a two-way pipe between the command and the
+parent shell.  The symbols '&&' and '||' cause the list following it to
+be executed only if the preceding pipeline returns a zero or non-zero
+value, respectively.  Semicolons ';' can be substituted by newlines in
+lists.
+
+Compound commands
+=================
+
+These include *for*, *select*, *until* and *while* loops; *case* and
+*if* conditionals; subshells and brace groups.  The exit status of a
+compound command is that of the last simple command executed in the
+compound.  All loops conform to the POSIX standard, except when it says
+otherwise.
+
+case word in [ [(] pattern [ | pattern ] ... ) list ;; ] ... esac
+-----------------------------------------------------------------
+
+The *case* conditional executes the 'list' associated with the first
+pattern that matches the given word.  The form of the patterns is the
+same as that used for file name generation (i.e.  can contain the
+wildcards '*', '?' and '[]').  The ';;' operator causes execution of the
+case to terminate.  If ';&' is used instead, the next subsequent list,
+if any, is executed.  If ';;&' is used (as in bash and ksh), or ';|' is
+used (as in zsh), the shell tries to match and execute another case in
+the list.  All of ';&', ';|' and ';;&' are non-POSIX extensions used by
+shells like ksh, bash and zsh.
 
 for name [ in word ... ]; do list; done
-=======================================
+---------------------------------------
 
 Each time the *for* loop is executed, 'name' is set to the next 'word'
 taken from the word list.  If the word list is omitted, the *for* loop
@@ -275,8 +331,8 @@ behaves as if 'in "$@"' was provided (which loops on positional
 parameters, starting from 1).  The loop exits when there are no more
 words in the list.
 
-(( [expr1] ; [expr2] ; [expr3] )); do list; done
-================================================
+for (( [expr1] ; [expr2] ; [expr3] )); do list; done
+----------------------------------------------------
 
 The arithmetic expression 'expr1' is evaluated.  Arithmetic expression
 'expr2' is then evaluated repeatedly until it evaluates to zero.  Every
@@ -284,8 +340,17 @@ time 'expr2' evaluates to non-zero, 'list' is executed and arithmetic
 expression 'expr3' is evaluated.  If any expression is omitted, it
 behaves as if it evaluated to 1.  This loop is a non-POSIX extension.
 
+if list1; then cmd-list1 [; elif list2; then cmd-list2 ] ... [; else cmd-list3 ]; fi
+------------------------------------------------------------------------------------
+
+'list1' is executed and if it returns zero exit status, 'cmd-list1' is
+executed.  Otherwise, 'list2' is executed and if its value is zero,
+'cmd-list2' is executed.  If all *elif* lists fail, the *else*'s
+'cmd-list3' is executed.  If 'list1' has non-zero exit status and there
+is no *else* clause, the *if* command returns zero exit status.
+
 select name [ in word ... ]; do list; done
-==========================================
+------------------------------------------
 
 The *select* loop prints the set of words on stderr, each preceded by
 its numeric index.  If the list of words is omitted, the loop behaves as
@@ -300,34 +365,13 @@ null.  The contents of the read line is saved in the shell variable
 encountered.  If the '$REPLY' variable is set to null as a side effect
 of executing list, the selection list is printed again before displaying
 the '$PS3' prompt and waiting for the next selection.  This loop is a
-non-POSIX extension used by bash and ksh.
-
-case word in [ [(] pattern [ | pattern ] ... ) list ;; ] ... esac
-=================================================================
-
-The *case* conditional executes the 'list' associated with the first
-pattern that matches the given word.  The form of the patterns is the
-same as that used for file name generation (i.e.  can contain the
-wildcards '*', '?' and '[]').  The ';;' operator causes execution of the
-case to terminate.  If ';&' is used instead, the next subsequent list,
-if any, is executed.  If ';;&' is used, the shell tries to match and
-execute another case in the list.  Both ';&' and ';;&' are non-POSIX
-extensions used by shells like ksh and bash.
-
-if list1; then cmd-list1 [; elif list2; then cmd-list2 ] ... [; else cmd-list3 ]; fi
-====================================================================================
-
-'list1' is executed and if it returns zero exit status, 'cmd-list1' is
-executed.  Otherwise, 'list2' is executed and if its value is zero,
-'cmd-list2' is executed.  If all *elif* lists fail, the *else*'s
-'cmd-list3' is executed.  If 'list1' has non-zero exit status and there
-is no *else* clause, the *if* command returns zero exit status.
+non-POSIX extension used by bash, zsh and ksh.
 
 while conditional-list; do cmd-list; done
-=========================================
+-----------------------------------------
 
 until conditional-list; do cmd-list; done
-=========================================
+-----------------------------------------
 
 The *while* loop repeatedly executes the 'conditional-list' and if the
 exit status of the last command in the list is zero, it executes
@@ -337,14 +381,14 @@ from the 'cmd-list', the *while* loop returns a zero exit status.
 test (i.e.  execute until 'conditional-list' has zero exit status).
 
 (( expression ))
-================
+----------------
 
 'expression' is evaluated as an arithmetic expression.  If the value is
 non-zero, the exit status is 0.  Otherwise the exit status is 1.  This
 is a non-POSIX extension.
 
 ( list; )
-=========
+---------
 
 Execute 'list' in a separate environment, i.e.  a subshell.  If two
 adjacent open parentheses are needed (for nesting subshells), a space
@@ -354,17 +398,17 @@ occur at the beginning of a line (after a newline character) or after a
 ';' to be recognized.
 
 [[ expression ]]
-================
+----------------
 
 Evaluate 'expression' and return a zero exit status if 'expression'
 evalues to true (zero exit status).  See *Note Conditional Expressions::
 for a description of what 'expression' can be.
 
 function funcname { list ; }
-============================
+----------------------------
 
 funcname () { list ; }
-======================
+----------------------
 
 Define a function named 'funcname'.  The body of the function is the
 list of commands between '{' and '}'.  The body is executed when the
@@ -375,21 +419,86 @@ that of the last command executed in the function, or the value passed
 to the 'return' builtin.  The first syntax using the 'function' keyword
 is a non-POSIX extension used by bash and ksh.
 
-time [ pipeline ]
+Command modifiers
 =================
 
+In most major shells, the shell recognizes some keywords that can be
+introduced before a command name to alter how the shell interprets that
+command.  For example, we can tell the shell we want to know how long it
+takes a certain command to run by preceding the command line with the
+'time' keyword.  For example, the following command times and prints the
+time it takes the echo command to print a simple message:
+
+     $ time echo Hello World
+     Hello World
+
+     real	0m0.002s
+     user	0m0.000s
+     sys	0m0.000s
+
+   The following command modifiers are recognized by lsh.  Each modifier
+is recognized when it appears as the first word in the command line,
+which is equivalent to 'argv[0]' in the C programming language.  When
+the shell executes the command, the modifier word is typically not
+included in the list of arguments that is passed to the command.
+
+- command [arguments ...]
+-------------------------
+
+When the shell executes 'command', it passes the command the optional
+list of 'arguments' after adding a - character to the start of the
+zeroth argument, 'argv[0]'.  This is a zsh extension, which provides a
+similar functionality to the 'exec' command when its passed the '-l'
+option in bash.
+
+builtin command [arguments ...]
+-------------------------------
+
+The shell treats 'command' as the name of a shell builtin utility.  The
+shell executes the command, passing it the optional list of 'arguments'
+(See the *Note Builtin Utilities:: section for more information).
+
+command name [arguments ...]
+----------------------------
+
+The shell treats 'name' as the name of an external command or a shell
+builtin utility.  If there is a function defined with the given 'name',
+it will not be executed.  The shell executes the external command or
+builtin utility, passing it the optional list of 'arguments' (See the
+*Note Builtin Utilities:: section for more information).
+
+exec command [arguments ...]
+----------------------------
+
+The shell executes 'command' in the shell's process, thereby replacing
+the shell's executable code with that of the command (See the *Note
+Builtin Utilities:: section for more information).
+
+noglob command [arguments ...]
+------------------------------
+
+The shell does not perform filename expansion (also known as globbing)
+on the command name or the arguments list.  This is a non-POSIX
+extension defined by zsh.
+
+time [ pipeline ]
+-----------------
+
 If 'pipeline' is omitted, the user and system time for the current shell
-and completed child processes is printed on stderr.  Otherwise, the
-'pipeline' is executed and the elapsed real time, as well as the user
-and system times are printed on stderr.  The '$TIMEFORMAT' variable
-controls how the timing information should be displayed (See the *Note
-Shell Variables:: section for a description of '$TIMEFORMAT').
+and completed child processes is printed on stderr (which is similar to
+invoking the 'times' builtin utility.  Otherwise, the 'pipeline' is
+executed and the elapsed real time, as well as the user and system times
+are printed on stderr.  The '$TIMEFORMAT' variable controls how the
+timing information should be displayed (See the *Note Shell Variables::
+section for a description of '$TIMEFORMAT').  This is the same variable
+used by bash and ksh (zsh alternatively uses the '$TIMEFMT' variable,
+which we won't be using here).
 
 2.2 Reserved words
 ==================
 
 The following reserved words are recognized as reserved only when they
-are the first unquoted word of a command:
+are the first unquoted word of a command line:
 
    * 'case'
    * 'do'
@@ -401,15 +510,17 @@ are the first unquoted word of a command:
    * 'fi'
    * 'function'
    * 'if'
+   * 'in'
    * 'select'
    * 'then'
+   * 'time'
    * 'until'
    * 'while'
    * '{' '}'
    * '!'
 
    All reserved words (or keywords) are defined by POSIX, except
-'function' and 'select'.
+'function', 'time' and 'select'.
 
 2.3 Variable assignments
 ========================
@@ -581,8 +692,16 @@ can be created and listed using the 'alias' command.  They can be
 removed with the unalias command.
 
    Aliasing is performed when scripts are read, not while they are
-executed.  The following aliases are defined by default by the shell,
-but can be unset or redefined if the user wishes:
+executed.  That means the following command
+
+     $ alias echofoo='echo foo'; echofoo
+
+   Would result in an error similar to the following:
+
+     lsh: Error: failed to exec echofoo: No such file or directory
+
+   The following aliases are defined by default by the shell, but can be
+unset or redefined if the user wishes:
 
       ls="ls --color=auto"
       ll="ls -la"
@@ -600,7 +719,6 @@ but can be unset or redefined if the user wishes:
       stop="kill -s STOP"
       suspend="kill -s STOP $$"
       hist="fc"
-      typeset="declare"
       shopt="setx"
       reboot="sudo /sbin/reboot"
       poweroff="sudo /sbin/poweroff"
@@ -629,15 +747,27 @@ lsh.
 
 'beepcmd'
      command to be run when the shell wants to ring the bell
+'cwdcmd'
+     command to be run when the current working directory is changed
+     (similar to 'zsh''s 'chpwd' hook function)
 'jobcmd'
      command to be run before executing commands and when a job changes
-     its state
+     its state or is brought to the foreground
 'periodic'
      command to be run every '$TPERIOD' minutes
 'precmd'
      command to be run before printing the next command prompt
+'preexec'
+     command to be run before executing commands.  This is not a special
+     alias in tcsh.  Instead, it is a hook function defined by zsh, but
+     we define it as a special alias for conformity with the other items
+     in this list
 'postcmd'
-     command to be run before executing commands
+     command to be run after executing commands
+'shell'
+     name of the interpreter program to run when the shell wants to
+     execute an external file as a shell script.  If not set, lsh uses
+     the value of 'argv[0]' passed to it when it was invoked.
 
 3.2 Tilde expansion
 ===================
@@ -694,17 +824,57 @@ dollar sign (non-POSIX extension):
 expression inside the parentheses.
 
    Arithmetic valuations are performed using long integer arithmetic,
-the only format required by POSIX, although other shells (e.g.  bash and
-ksh) perform double or long double precision arithmetic.  Numeric
-constants can be of the form '[base#]n', where 'base' is a decimal
-number between 2 and 36 (ksh and bash allow bases up to 64) representing
-the arithmetic base.  'n' is a number in the given base.  Digits greater
-than 9 are represented by lowercase or uppercase letters.
+the only format required by POSIX, although other shells (e.g.  bash,
+ksh and zsh) perform double or long double precision arithmetic.
+Numeric constants can be of the form '[base#]n', where 'base' is a
+decimal number between 2 and 36 (same as zsh, while ksh and bash allow
+bases up to 64) representing the arithmetic base.  'n' is a number in
+the given base.  Digits greater than 9 are represented by lowercase or
+uppercase letters.
 
-   Only the basic arithmetic operations are currently supported in Layla
-shell.  Specifically, floating point arithmetic and braced expressions
-are not supported.  Also, the use of mathmetical functions (including
-'pow()' for exponentiation) is not supported.
+   Only long integer arithmetic operations are currently supported in
+Layla shell.  Specifically, floating point arithmetic and braced
+expressions are not supported.  Also, the use of mathmetical functions
+(including 'pow()' for exponentiation) is not supported.
+
+   The following operators are supported by lsh (they are listed in
+decreasing order of precedence):
+
+'++, --'
+     post increment and decrement
+'++, --, -, +, !, ~'
+     pre increment and decrement, unary minus, unary plus, logical NOT,
+     bitwise NOT
+'**'
+     exponentiation
+'*, /, %'
+     multiplication, division, modulus
+'+, -'
+     addition and subtraction
+'<<, >>'
+     left shift and right shift
+'>, >=, <, <='
+     logical comparisons greater than, greater than or equals, less
+     than, less than or equals)
+'==, !='
+     logical comparisons equal to and not equal to
+'&'
+     bitwise AND
+'^'
+     bitwise eXclusive OR (XOR)
+'|'
+     bitwise OR
+'&&'
+     logical AND
+'||'
+     logical OR
+'=, +=, -=, *=, /=, %=, <<=, >>=, &=, ^=, |='
+     different assignment operators
+'(, )'
+     grouping braces
+
+   You should note that the comma operator and C language's ternary
+operator ?: are not currently supported in lsh.
 
 3.5 Process substitution
 ========================
@@ -1329,6 +1499,8 @@ File: lsh.info,  Node: The Execution Environment,  Next: Command History and Edi
 
 * Menu:
 
+* The POSIX shell::
+* The restricted shell::
 * Jobs::
 
 5.1 Shell Invocation
@@ -1369,7 +1541,115 @@ recognized by the shell upon startup:
    The remaining options and arguments are recognized as described for
 the 'set' builtin utility.
 
-5.2 The restricted shell
+
+File: lsh.info,  Node: The POSIX shell,  Next: The restricted shell,  Up: The Execution Environment
+
+5.2 The POSIX shell
+===================
+
+When the shell is started in the POSIX mode, it tries to abide as
+strictly as possible with the POSIX standard.  That means certain
+features (such as extended shell language constructs, as well as some of
+the builtin utilties) are disabled.  The following happens when lsh is
+running in the POSIX mode:
+
+   * The 'noglob' and the '-' command modifiers have no effect on
+     executed commands.
+
+   * The arithmetic version of the *for* loop is not recognized by the
+     parser.
+
+   * The following special builtin utilities are disabled by default
+     (they can be enabled by running 'enable -s utility', replacing
+     'utility' with the utility's name): 'local', 'logout', 'repeat',
+     'setx', 'suspend'.
+
+   * The following regular builtin utilities are disabled by default
+     (they can be enabled by running 'enable -r utility', replacing
+     'utility' with the utility's name): 'bugreport', 'builtin',
+     'caller', 'coproc', 'declare', 'dirs', 'disown', 'dump', 'echo',
+     'glob', 'history', 'hup', 'let', 'mail', 'memusage', 'nice',
+     'nohup', 'notify', 'popd', 'printenv', 'pushd', 'setenv', 'stop',
+     'typeset', 'unlimit', 'unsetenv', 'ver', 'whence'.
+
+   * The *select* keyword is not recognized by the parser.
+
+   * The ';&' and ';|' case conditional terminators are not recognized
+     by the parser.
+
+   * The *function* keyword is not recognized as a keyword.  Functions
+     cannot be defined as:
+
+            function fname { list; }
+
+     Instead, function definitions must take the form defined by POSIX,
+     which is:
+            fname () { list; }
+
+   * Dot files with no slashes in their names are searched for in the
+     '$PATH' and, if not found, an error message is printed and the
+     'dot' utility returns with non-zero exit status.  When in non-POSIX
+     mode, dot files with no slashes in their names are searched for in
+     the '$PATH' only if the extended option 'sourcepath' is set (using
+     'setx -s sourcepath') and, if not found, such files are searched
+     for in the current working directory by appending ''./'' to the dot
+     file name.
+
+   * The 'read' builtin utility doesn't use the '$REPLY' variable by
+     default.  It requires at least one argument specifying the shell
+     variable to use to store read input.
+
+   * The non-interactive shell exits if a special builtin returns
+     non-zero exit status.
+
+   * The 'return', 'shift' and 'times' special builtin utilities each
+     print an error message if it is passed more than one argument.  In
+     non-POSIX mode, these utilities just ignore the extra arguments.
+
+   * The regular and special builtin utilities recognize only the
+     command line options defined by POSIX for each utility.  The table
+     below shows the options recognized and unrecognized by each utility
+     when the shell is in the POSIX mode.  Options that are not
+     recognized result in error:
+
+     Utility        Recognized options            Unrecognized options
+     ---------------------------------------------------------------------------
+     alias          -                             h, p, v
+     break          -                             -
+     colon          -                             -
+     continue       -                             -
+     dot            -                             -
+     eval           -                             -
+     exec           -                             a, c, h, l, v
+     exit           -                             -
+     export         p                             f, h, n, v
+     hash           r                             a, d, h, l, p, t, v
+     pwd            L, P                          h, v
+     readonly       p                             h, v
+     return         -                             -
+     set            all set options are
+                    recognized in -posix mode
+     shift          -                             -
+     test           -                             -
+     times          -                             -
+     trap           -                             h, l, p, v
+     ulimit         f                             a, c, d, e, h, i, l, m, n,
+                                                  p, q, r, s, t, u, v, x, T,
+                                                  H, S
+     umask          S                             h, p, v
+     unalias        a                             h, v
+     unset          f, v                          h
+
+   * The following extended shell options are turned off (they can be
+     turned on by invoking the 'set' builtin utility): 'braceexpand',
+     'dumpast', 'errtrace', 'histexpand', 'keyword', 'pipefail',
+     'braceexpand', 'quit', 'restricted', 'onecmd', 'functrace',
+     'history', 'privileged'.
+
+
+File: lsh.info,  Node: The restricted shell,  Prev: The POSIX shell,  Up: The Execution Environment
+
+5.3 The restricted shell
 ========================
 
 The restricted shell is used to set up and execution environment more
@@ -1385,7 +1665,7 @@ are not permitted:
    * Redirecting output using '>', '>|', '<>', or '>>'
    * Using 'command -p' to invoke a command
 
-5.3 Exit status
+5.4 Exit status
 ===============
 
 The shell's exit status can be one of:
@@ -1398,7 +1678,7 @@ The shell's exit status can be one of:
 *Other values*
      The exit status of last command executed is returned on exit.
 
-5.4 Input and Output
+5.5 Input and Output
 ====================
 
 Command input and output can be redirected using special shell
@@ -1422,6 +1702,8 @@ operator and its operands.
 '>|word'
      Similar to '>', except that it overrides the 'noclobber' ''-C''
      option.
+'>!word'
+     Similar to '>|'.  This is a zsh extension.
 '>>word'
      Redirect output to the file indicated by 'word'.  If the file
      exists, append output to the end-of-file.  Otherwise, create the
@@ -1469,14 +1751,22 @@ operator and its operands.
      (stdin) offset to the resulting bytes from the start of the file.
 '>#((expr))'
      The same as '<#' for file descriptor 1 (stdout).
+'{var}<&digit'
+     Duplicate file descriptor number 'digit' for reading on a new file
+     descriptor that is greater than or equal to 10, and save the new
+     file descriptor number in the '$var' shell variable.
+'{var}>&digit'
+     Duplicate file descriptor number 'digit' for writing on a new file
+     descriptor that is greater than or equal to 10, and save the new
+     file descriptor number in the '$var' shell variable.
 
    If a redirection operator is preceded by a digit, the file descriptor
 to be redirected is that referred to by the digit (instead of the
-default 0 or 1).  If a redirection operator is preceded by '{varname}'
-with no intervening spaces, a file descriptor greater than 10 is
-selected by the shell and stored in the variable named varname.
+default 0 or 1).  If a redirection operator is preceded by '{var}' with
+no intervening spaces, a file descriptor greater than 10 is selected by
+the shell and stored in the variable named 'var'.
 
-5.5 The environment
+5.6 The environment
 ===================
 
 The environment is a list of name-value string pairs that is passed down
@@ -1490,7 +1780,7 @@ assignments occurring before the command name are added to the command's
 environment, while those occuring after the command name are only
 considered if the 'keyword' ''-k'' option is set.
 
-5.6 The shell prompt
+5.7 The shell prompt
 ====================
 
 When running interactively, the shell prompts the user by prinintg the
@@ -1502,7 +1792,7 @@ command.  Each command is not considered complete, the secondary prompt
 
 File: lsh.info,  Node: Jobs,  Up: The Execution Environment
 
-5.7 Jobs
+5.8 Jobs
 ========
 
 If the 'monitor' ''-m'' option is set, an interactive shell associates a
@@ -1558,7 +1848,7 @@ shell exits.  When a login shell receives a 'HUP' signal, it re-sends
 the 'HUP' signal to all job that have not been disowned with the
 'disown' builtin utility.
 
-5.8 Signals
+5.9 Signals
 ===========
 
 The interactive shell ignores the 'TERM' and 'QUIT' signals.  If the
@@ -1571,8 +1861,8 @@ are ignored if the 'monitor' ''-m'' option is not active.  In all other
 cases, signals have the values inherited by the shell from its parent
 upon startup.
 
-5.9 Command execution
-=====================
+5.10 Command execution
+======================
 
 Commands that doesn't contain slashes are looked up.  If the command
 name matches the name of a special builtin utility, the utility is
@@ -1935,13 +2225,16 @@ option prints the utility (i.e.  the shell)'s version.
      parameters for the command.  The exit status is the exit status of
      the last command executed.
 
-'alias [-hv] [name[=value]] ...'
+'alias [-hpv] [name[=value]] ...'
      With no arguments, prints the list of aliases in the form of
      'name=value' on stdout.  When one or more arguments are specified,
      an alias is defined for each 'name' whose value is specified.  For
      each 'name' in the argument list for which no value is specified,
      the name and value of the alias is printed.  The exit status is
      non-zero if a 'name' is specified for which no alias is defined.
+     The '-p' option prints all the defined aliases and their values,
+     which is similar to calling 'alias' with no options at all
+     (provided for compatibility with other shells).
 
 'bg [-hv] [job...]'
      If job control is on (the 'monitor' option is set), put each
@@ -2021,7 +2314,7 @@ option prints the utility (i.e.  the shell)'s version.
 
           $ cmd <&p
 
-'declare [-hvfFgrxlut] [-p] [name=[value]...]'
+'declare [-fFghilrtuvx] [-p] [name=[value]...]'
      Declare variables and give them attributes.  'name' is the name of
      the variable to which an attribute or value is set, and 'value' is
      the value to give to the variable.  The '-f' option restricts
@@ -2033,9 +2326,12 @@ option prints the utility (i.e.  the shell)'s version.
      marks each 'name' as readonly.  The '-t' option gives functions the
      'trace' attribute (doesn't work on variables).  The '-u' option
      converts all characters in variable's value to uppercase on
-     assignment.  The '-x' option marks each 'name' for export.
+     assignment.  The '-x' option marks each 'name' for export.  The
+     '-i' option performs arithmetic expansion when the variable is
+     assigned a value and stores the result of the expansion in the
+     variable.
 
-'dirs [-hclpv] [+N | -N]'
+'dirs [-hclpvw] [+N | -N]'
 'dirs -S|-L [filename]'
      Display the contents of the directory stack.  The '+N' argument
      prints the N-th directory from the top (the left side of the
@@ -2048,7 +2344,7 @@ option prints the utility (i.e.  the shell)'s version.
      prints full pathnames, it doesn't use ~ to indicate the home
      directory.  The '-L' option loads the directory stack from the
      given filename.  If no filename is supplied, uses '$DIRSFILE' or
-     defaults to '~/.lshdirs'.  The '-n' option wraps entries before
+     defaults to '~/.lshdirs'.  The '-w' option wraps entries before
      they reach edge of the screen.  The '-p' option prints each
      directory on a separate line.  The '-S' option saves the directory
      stack to the given filename.  If no filename is supplied, uses
@@ -2174,21 +2470,23 @@ option prints the utility (i.e.  the shell)'s version.
      allow escaped characters in arguments.  This utility doesn't
      recognize the '-n' option as does 'echo'.
 
-'hash [-hvld] [-p path] [-r] utility...'
+'hash [-hvldt] [-p path] [-r] utility...'
 'hash -a'
      Remembers/reports utility locations.  'utility' is the name of a
      utility to search and add to the hashtable.  The '-a' option
      forgets, then re-searches and re-hashes all utilities whose names
      are currently in the hashtable.  The '-d' option forgets the
-     location of each passed 'utility'.  The '-l' option prints the list
-     of hashed utilities and their paths.  The '-p' option performs
-     utility search using 'path' instead of the '$PATH' variable.  The
-     '-r' option forgets all previously remembered utility locations.
+     location of each passed 'utility'.  The '-l' and '-t' options each
+     print the hashed utilities and their paths.  The '-p' option
+     performs utility search using 'path' instead of the '$PATH'
+     variable.  The '-r' option forgets all previously remembered
+     utility locations.
 
-'help [-ds] [command]'
+'help [-dms] [command]'
      Shows help for builtin utilities and commands.  The '-d' option
      prints a short description of each 'command'.  The '-s' option
-     prints the usage or synopsis of each 'command'.
+     prints the usage or synopsis of each 'command'.  The '-m' option
+     prints a manpage-like help page for each command.
 
 'history [-hR] [n]'
 'history -c'
@@ -2322,16 +2620,16 @@ option prints the utility (i.e.  the shell)'s version.
      of the job to mark for immediate notification.  See *Note Jobs::
      for a description of the format of 'job'.
 
-'popd [-chlnpsv] [+N | -N]'
+'popd [-hlnpsvw] [+N | -N]'
      Pop directories off the stack and 'cd' to them.  If 'N' is
      positive, it removes the N-th directory, counting from 0 from the
      left.  If it is negative, it removes the N-th directory, counting
      from 0 from the right.  If called without arguments, 'popd' removes
      the top directory from the stack and calls 'cd' to change the
      current working directory to the new top directory (equivalent to
-     'popd +0'.  The '-c' option manipulates the stack without 'cd'ing
+     'popd +0'.  The '-n' option manipulates the stack without 'cd'ing
      to the directory.  The '-s' option suppresses the output the
-     dirstack after popping off it.  The '-l', '-n', '-v', and '-p'
+     dirstack after popping off it.  The '-l', '-w', '-v', and '-p'
      options have the same meaning as for the 'dirs' builtin.
 
 'printenv [-hv0] [name ...]'
@@ -2339,7 +2637,7 @@ option prints the utility (i.e.  the shell)'s version.
      each 'name'.  The '-0' option terminates each entry with NULL
      instead of a newline character.
 
-'pushd [-chlnpsv] [+N | -N | dir]'
+'pushd [-hlnpsvw] [+N | -N | dir]'
      Push directories on the stack and 'cd' to them.  If 'N' is
      positive, it rotates the stack and bring the N-th directory,
      counting from 0 from the left, to the top of the stack.  If it is
@@ -2348,9 +2646,9 @@ option prints the utility (i.e.  the shell)'s version.
      is supplied, it is pushed on the stack and 'cd' is called to change
      the working directory to 'dir'.  If 'dir' is dash '-', this equals
      the previous working directory, as stored in the '$PWD' variable.
-     The '-c' option manipulates the stack without 'cd'ing to the
+     The '-n' option manipulates the stack without 'cd'ing to the
      directory.  The '-s' option suppresses the output the dirstack
-     after popping off it.  The '-l', '-n', '-v', and '-p' options have
+     after popping off it.  The '-l', '-w', '-v', and '-p' options have
      the same meaning as for the 'dirs' builtin.
 
      If called without arguments, 'pushd' exchanges the top two
@@ -2542,6 +2840,11 @@ option prints the utility (i.e.  the shell)'s version.
      'autocd'
           dirs passed as single-word commands are passed to 'cd' (bash
           int)
+     'caller_verbose'
+          allow the 'caller' builtin to output error messages (similar
+          to 'shift-verbose' - see below)
+     'caller-verbose'
+          same as the above
      'cdable_vars'
           'cd' arguments can be variable names (bash)
      'cdable-vars'
@@ -2652,6 +2955,20 @@ option prints the utility (i.e.  the shell)'s version.
           (bash)
      'promptvars'
           perform word expansion on prompt strings (bash)
+     'prompt_bang'
+          expand bang '!' in prompt strings to the current history list
+          number (zsh).  A single bang mush be entered as a double bang
+          '!!' in the prompt string.  This option is enabled by default,
+          to allow lsh to display POSIX-compliant behaviour unless the
+          option is explicitly disabled
+     'prompt-bang'
+          same as the above
+     'prompt_percent'
+          recognize and expand the escape sequences introduced by the
+          percent sign '%' when used in prompt strings (zsh).  As its a
+          non-POSIX extension, this option is disabled by default
+     'prompt-percent'
+          same as the above
      'pushdtohome'
           pushd without arguments pushed '~' on the stack (tcsh)
      'recognize_only_executables'
@@ -2722,14 +3039,31 @@ option prints the utility (i.e.  the shell)'s version.
      and the first 'sig' is a number, or if 'action' is a hyphen '-',
      traps for each 'sig' are reset to their original values.  If
      'action' is a null string, the signal is ignored by the shell and
-     its children.  If 'sig' is 'ERR', action is executed whenever a
-     command returns non- zero exit status.  If sig is 'DEBUG', action
-     is executed before each command is executed.  If sig is '0' or
-     'EXIT', 'action' is executed on exit from the shell.  If no
-     arguments are supplied, 'trap' prints the traps associated with
-     each signal number.  The '-l' option lists all conditions and their
-     signal numbers.  The '-p' option prints the trap actions associated
-     with each 'sig'.
+     its children.
+
+     If 'sig' is 'ERR', 'action' is executed whenever a command returns
+     non- zero exit status, provided the command is not following
+     *while* or *until*, is not part of an *if* test clause, is not
+     preceded by '&&' or '||' (except for the last command in the AND-OR
+     list), is not part of a pipeline, except for the last command in
+     the pipeline, and the command's exit status is not inverted with
+     '!'.
+
+     If 'sig' is 'DEBUG', 'action' is executed before each simple
+     command, 'for' (regular and arithmetic), 'case', 'select', and the
+     first command in a shell function is executed.
+
+     If 'sig' is 'RETURN', 'action' is executed whenever a shell
+     function or script finishes execution.
+
+     If 'sig' is '0' or 'EXIT', 'action' is executed on exit from the
+     shell.
+
+     If no arguments are supplied, 'trap' prints the traps associated
+     with each signal number.
+
+     The '-l' option lists all conditions and their signal numbers.  The
+     '-p' option prints the trap actions associated with each 'sig'.
 
 'true'
      Return true result (zero exit status).
@@ -2737,7 +3071,11 @@ option prints the utility (i.e.  the shell)'s version.
 'type command ...'
      Write a description of 'command' type.
 
-'ulimit [-h] [-acdflmnpstuvHS] [limit]'
+'typeset [-fFghilrtuvx] [-p] [name=[value]...]'
+     This is a synonym to 'declare'.  Provided for compatibility with
+     *ksh* and *bash*.
+
+'ulimit [-h] [-acdflmnpstuvPTHS] [limit]'
      Set or display resource limits.  The limit for a specified resource
      is set when 'limit' is specified.  The value of 'limit' can be
      numeric, or one of the special values 'unlimited', 'soft' or
@@ -2753,6 +3091,9 @@ option prints the utility (i.e.  the shell)'s version.
           Set or display the soft limit for the specified resource.
      *-a*
           List all the current resource limits.
+     *-b*
+          The maximum socket receive buffer (bytes, if the system
+          supports it).
      *-c*
           The size of core dumps (512-byte blocks).
      *-d*
@@ -2760,6 +3101,8 @@ option prints the utility (i.e.  the shell)'s version.
      *-f*
           The max size of files written by the current process (512-byte
           blocks).
+     *-k*
+          The maximum number of kqueues (if the system supports it).
      *-l*
           The max size of memory a process may lock.
      *-m*
@@ -2774,6 +3117,13 @@ option prints the utility (i.e.  the shell)'s version.
           The number of CPU seconds to be used by each process.
      *-v*
           The size of virtual memory (Kbytes).
+     *-B*
+          The maximum socket send buffer (bytes, if the system supports
+          it).
+     *-P*
+          The maximum number of pseudoterminals.
+     *-T*
+          The maximum number of threads.
 
 'umask [-hvp] [-S] [mask]'
      The file creation mask (umask) is set to 'mask', which can be
@@ -3372,84 +3722,96 @@ Index
                                                               (line   9)
 * Command History and Editing:           Command History and Editing.
                                                               (line   5)
+* Command modifiers:                     The Shell Command Language.
+                                                              (line 185)
 * Command substitution:                  Expansions and Substitutions.
-                                                              (line 111)
+                                                              (line 130)
 * Commands:                              The Shell Command Language.
                                                               (line  13)
 * Comments:                              The Shell Command Language.
-                                                              (line 222)
+                                                              (line 303)
+* Compound commands:                     The Shell Command Language.
+                                                              (line  66)
 * Conditional Expressions:               Conditional Expressions.
                                                               (line   6)
-* Exit status:                           The Execution Environment.
-                                                              (line  67)
+* Exit status:                           The restricted shell.
+                                                              (line  22)
 * Expansions and Substitutions:          Expansions and Substitutions.
                                                               (line   5)
-* Features:                              Introduction.        (line 156)
+* Features:                              Introduction.        (line 186)
 * Field splitting:                       Arithmetic expansion.
-                                                              (line 155)
-* Files:                                 Introduction.        (line 129)
-* How to compile and install:            Introduction.        (line 108)
-* Input and Output:                      The Execution Environment.
-                                                              (line  80)
+                                                              (line 195)
+* Files:                                 Introduction.        (line 135)
+* How to compile and install:            Introduction.        (line 114)
+* Input and Output:                      The restricted shell.
+                                                              (line  35)
 * Introduction:                          Introduction.        (line   5)
 * Jobs:                                  Jobs.                (line   6)
-* Options:                               Introduction.        (line  62)
-* Package dependencies:                  Introduction.        (line  91)
+* Options:                               Introduction.        (line  65)
+* Package dependencies:                  Introduction.        (line  97)
 * Parameter expansion:                   Arithmetic expansion.
-                                                              (line  42)
+                                                              (line  82)
 * Pathname expansion:                    Arithmetic expansion.
-                                                              (line 172)
+                                                              (line 212)
 * Process substitution:                  Arithmetic expansion.
-                                                              (line  35)
+                                                              (line  75)
 * Quoting:                               Quoting.             (line   6)
 * Reserved words:                        The Shell Command Language.
-                                                              (line 181)
+                                                              (line 260)
 * Shell Invocation:                      The Execution Environment.
-                                                              (line  13)
+                                                              (line  15)
 * Shell variables:                       Shell Variables.     (line   6)
 * Shell Variables and Parameters:        Shell Variables and Parameters.
                                                               (line   5)
 * Signals:                               Jobs.                (line  62)
 * Special aliases:                       Expansions and Substitutions.
-                                                              (line  65)
+                                                              (line  72)
 * Special parameters:                    Shell Variables and Parameters.
                                                               (line  13)
 * Synopsis:                              Introduction.        (line   9)
-* The environment:                       The Execution Environment.
-                                                              (line 158)
+* The environment:                       The restricted shell.
+                                                              (line 123)
 * The Execution Environment:             The Execution Environment.
                                                               (line   5)
-* The restricted shell:                  The Execution Environment.
-                                                              (line  51)
+* The POSIX shell:                       The POSIX shell.     (line   6)
+* The restricted shell:                  The restricted shell.
+                                                              (line   6)
 * The Shell Command Language:            The Shell Command Language.
                                                               (line   5)
-* The shell prompt:                      The Execution Environment.
-                                                              (line 172)
+* The shell prompt:                      The restricted shell.
+                                                              (line 137)
 * Tilde expansion:                       Expansions and Substitutions.
-                                                              (line  90)
-* TODO:                                  Introduction.        (line 164)
+                                                              (line 109)
+* TODO:                                  Introduction.        (line 194)
 * Variable assignments:                  The Shell Command Language.
-                                                              (line 207)
+                                                              (line 288)
 * Vi editing mode:                       Command History and Editing.
                                                               (line  29)
 
 
 
 Tag Table:
-Node: Top723
-Node: Introduction1107
-Node: The Shell Command Language7585
-Node: Conditional Expressions17445
-Node: Expansions and Substitutions21262
-Node: Arithmetic expansion25833
-Node: Quoting33941
-Node: Shell Variables and Parameters35477
-Node: Shell Variables37270
-Node: The Execution Environment54052
-Node: Jobs61395
-Node: Command History and Editing68253
-Node: Builtin Utilities76619
-Node: GNU Free Documentation License119988
-Node: Index145136
+Node: Top737
+Node: Introduction1123
+Node: The Shell Command Language8447
+Node: Conditional Expressions21218
+Node: Expansions and Substitutions25035
+Node: Arithmetic expansion30396
+Node: Quoting39460
+Node: Shell Variables and Parameters40996
+Node: Shell Variables42789
+Node: The Execution Environment59571
+Node: The POSIX shell61489
+Node: The restricted shell66390
+Node: Jobs72444
+Node: Command History and Editing79304
+Node: Builtin Utilities87670
+Node: GNU Free Documentation License133426
+Node: Index158574
 
 End Tag Table
+
+
+Local Variables:
+coding: utf-8
+End:
