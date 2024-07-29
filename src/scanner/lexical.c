@@ -24,11 +24,11 @@
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "keywords.h"
 #include "scanner.h"
 #include "../builtins/setx.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 char *tok_buf = NULL;             /* the buffer we'll use while parsing a token */
 int   tok_bufsize = 0;            /* the size of memory alloc'd for the buffer */
@@ -531,6 +531,23 @@ void set_current_token(struct token_s *tok)
 void set_previous_token(struct token_s *tok)
 {
     prev_tok = tok;
+}
+
+
+/* 
+ * Free the current and previous tokens and set the pointers to those in the 
+ * arguments.
+ */
+void restore_tokens(struct token_s *old_current_token,
+                    struct token_s *old_previous_token)
+{
+    /* free current pointers */
+    free_token(get_current_token());
+    free_token(get_previous_token());
+    
+    /* restore token pointers */
+    set_current_token(old_current_token);
+    set_previous_token(old_previous_token);
 }
 
 
@@ -1071,8 +1088,7 @@ struct token_s *tokenize(struct source_s *src)
     tok = create_token(tok_buf);
     if(!tok)
     {
-        PRINT_ERROR("%s: failed to alloc buffer: %s\n", 
-                    SOURCE_NAME, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to alloc buffer: %s", strerror(errno));
         return &eof_token;
     }
     

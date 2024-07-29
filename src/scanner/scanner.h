@@ -120,6 +120,7 @@ struct token_s *get_previous_token(void);
 struct token_s *dup_token(struct token_s *tok);
 void   set_current_token(struct token_s *tok);
 void   set_previous_token(struct token_s *tok);
+void   restore_tokens(struct token_s *old_current_token, struct token_s *old_previous_token);
 void   free_token(struct token_s *tok);
 int    is_token_of_type(struct token_s *tok, enum token_type_e type);
 int    is_keyword(char *str);

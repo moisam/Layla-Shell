@@ -20,7 +20,7 @@
  */    
 
 #include <errno.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "source.h"
 
 /*
