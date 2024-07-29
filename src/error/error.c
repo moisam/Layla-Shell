@@ -23,9 +23,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "error.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 /*
  * POSIX's Consequences of Shell Errors table:
