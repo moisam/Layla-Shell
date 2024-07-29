@@ -28,12 +28,12 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/wait.h>
-#include "cmd.h"
-#include "sig.h"
+#include "include/cmd.h"
+#include "include/sig.h"
 #include "builtins/builtins.h"
 #include "builtins/setx.h"
 #include "backend/backend.h"
-#include "debug.h"
+#include "include/debug.h"
 
 #define CLOCKID CLOCK_REALTIME
 
@@ -202,7 +202,7 @@ void set_SIGALRM_handler(void)
     sigemptyset(&sa.sa_mask);
     if(sigaction(SIGALRM, &sa, NULL) == -1)
     {
-        PRINT_ERROR("%s: failed to catch SIGALRM: %s\n", SHELL_NAME, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to catch SIGALRM: %s", strerror(errno));
     }
 
     /* create the timer */
@@ -211,7 +211,7 @@ void set_SIGALRM_handler(void)
     sev.sigev_value.sival_ptr = &timerid;
     if(timer_create(CLOCKID, &sev, &timerid) == -1)
     {
-        PRINT_ERROR("%s: failed to create timer: %s\n", SHELL_NAME, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to create timer: %s", strerror(errno));
     }
         
     /* start the timer ($TPERIOD is in minutes) */
@@ -223,7 +223,7 @@ void set_SIGALRM_handler(void)
         its.it_interval.tv_nsec = its.it_value.tv_nsec;
         if(timer_settime(timerid, 0, &its, NULL) == -1)
         {
-            PRINT_ERROR("%s: failed to start timer: %s\n", SHELL_NAME, strerror(errno));
+            PRINT_ERROR(SHELL_NAME, "failed to start timer: %s", strerror(errno));
         }
     }
 }
@@ -279,7 +279,10 @@ void SIGWINCH_handler(int signum)
 void SIGCHLD_handler(int signum)
 {
     int pid, status, save_errno = errno;
+    struct job_s *job, *last_stopped = NULL;
+
     status = 0;
+    
     while(1)
     {
         status = 0;
@@ -290,21 +293,45 @@ void SIGCHLD_handler(int signum)
         {
             break;
         }
+        
         notice_termination(pid, status, 1);
-
-        /* tcsh extensions */
-        if(optionx_set(OPTION_LIST_JOBS_LONG))
+        job = get_job_by_any_pid(pid);
+        
+        if(job)
         {
-            jobs_builtin(2, (char *[]){ "jobs", "-l" });
+            if(WIFSTOPPED(job->status))
+            {
+                last_stopped = job;
+            }
+            else if(job->child_exits == job->proc_count && last_stopped == job)
+            {
+                last_stopped = NULL;
+            }
         }
-        else if(optionx_set(OPTION_LIST_JOBS))
-        {
-            jobs_builtin(1, (char *[]){ "jobs"       });
-        }
-
-        /* in tcsh, special alias jobcmd is run before running commands and when jobs change state */
-        run_alias_cmd("jobcmd");
     }
+    
+    if(last_stopped)
+    {
+        set_cur_job(last_stopped);
+    }
+    else
+    {
+        reset_cur_job();
+    }
+    
+    /* tcsh extensions */
+    if(optionx_set(OPTION_LIST_JOBS_LONG))
+    {
+        jobs_builtin(2, (char *[]){ "jobs", "-l", NULL });
+    }
+    else if(optionx_set(OPTION_LIST_JOBS))
+    {
+        jobs_builtin(1, (char *[]){ "jobs", NULL });
+    }
+    
+    /* in tcsh, special alias jobcmd is run before running commands and when jobs change state */
+    run_alias_cmd("jobcmd");
+
     errno = save_errno;
     signal_received = signum;
 }
@@ -321,7 +348,7 @@ void SIGHUP_handler(int signum)
 
 
 /*
- * Set the signal handler function for signal number signum to sa_handler().
+ * Set the signal handler function for signal number signum to handler.
  */
 int set_signal_handler(int signum, void (handler)(int))
 {

@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
  * 
  *    file: params.c
  *    This file is part of the Layla Shell project.
@@ -22,9 +22,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "symtab/symtab.h"
-#include "debug.h"
+#include "include/debug.h"
 
 /* the exit status of the last command executed */
 int exit_status = 0;
@@ -67,6 +67,7 @@ void set_exit_status(int status)
     {
         status = WSTOPSIG(status) + 128;
     }
+    
     set_internal_exit_status(status & 0xff);
 }
 
@@ -80,12 +81,14 @@ void set_exit_status(int status)
 void set_internal_exit_status(int status)
 {
     char status_str[16];
-    sprintf(status_str, "%u", status);
     struct symtab_entry_s *entry = get_symtab_entry("?");
+    
     if(entry)
     {
+        sprintf(status_str, "%u", status);
         symtab_entry_setval(entry, status_str);
     }
+
     exit_status = status;
 }
 
@@ -98,23 +101,28 @@ void reset_pos_params(void)
 {
     /* unset all positional params */
     struct symtab_entry_s *hash = get_symtab_entry("#");
+
     if(hash && hash->val)
     {
         int params = atoi(hash->val);
+
         if(params != 0)
         {
-            int  j = 1;
+            int  j;
             char buf[32];
-            for( ; j <= params; j++)
+
+            for(j = 1; j <= params; j++)
             {
                 sprintf(buf, "%d", j);
                 struct symtab_entry_s *entry = get_symtab_entry(buf);
+
                 if(entry && entry->val)
                 {
                     symtab_entry_setval(entry, NULL);
                 }
             }
         }
+
         symtab_entry_setval(hash, "0");
     }
 }
@@ -149,18 +157,23 @@ int is_pos_param(char *name)
         {
             return 1;
         }
+    
         return 0;
     }
+
     /* multi-digit positional parameter names must consist solely of digits */
     char *p = name;
+    
     while(*p >= '0' && *p <= '9')
     {
         p++;
     }
+    
     if(*p == '\0')
     {
         return 1;
     }
+    
     return 0;
 }
 
@@ -233,10 +246,12 @@ char *get_all_pos_params_str(char which, int quoted)
 {
     /* get the count of positional parameters */
     int pos_params_count = get_shell_varl("#", 0);
+
     if(pos_params_count <= 0)
     {
         return NULL;
     }
+
     return get_pos_params_str(which, quoted, 1, pos_params_count);
 }
 
@@ -280,6 +295,7 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
         {
             separator = ' ';
         }
+        
         quoted = 0;
     }
     else
@@ -295,20 +311,25 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
 
     /* get the total length */
     i = offset;
+    
     while(i < last)
     {
         sprintf(buf, "%d", i);
+        
         size_t len2 = strlen(get_shell_varp(buf, ""));
+        
         if(quoted)
         {
             len2 += 2;          /* 2 for the quotes */
         }
+        
         len += len2+1; /* 1 for the separator */
         i++;
     }
 
     /* allocate memory */
     params = malloc(len+1);
+    
     if(!params)
     {
         return NULL;
@@ -316,11 +337,14 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
 
     p1 = params;
     i = offset;
+    
     while(i < last)
     {
         sprintf(buf, "%d", i);
+        
         char *p2 = get_shell_varp(buf, "");
         len = strlen(p2);
+        
         while((*p1++ = *p2++))
         {
             ;
@@ -343,9 +367,12 @@ char *get_pos_params_str(char which, int quoted, int offset, int count)
                 *p1++ = separator;
             }
         }
+        
         i++;
     }
+    
     *p1 = '\0';
+    
     return params;
 }
 
@@ -376,6 +403,7 @@ void set_local_pos_params(int count, char **params)
     {
         sprintf(buf, "%d", i);
         entry = add_to_any_symtab(buf, st);
+        
         if(entry)
         {
             symtab_entry_setval(entry, params[i-1]);
@@ -391,12 +419,14 @@ void set_local_pos_params(int count, char **params)
     if(entry && entry->val)
     {
         int old_count = atoi(entry->val);
+        
         if(old_count > 0)
         {
             for( ; i <= old_count; i++)
             {
                 sprintf(buf, "%d", i);
                 entry = add_to_any_symtab(buf, st);
+                
                 if(entry)
                 {
                     entry->flags = FLAG_LOCAL | FLAG_READONLY;
@@ -407,6 +437,7 @@ void set_local_pos_params(int count, char **params)
     
     /* set our new param $# */
     entry = add_to_any_symtab("#", st);
+    
     if(entry)
     {
         sprintf(buf, "%d", count);
@@ -424,8 +455,9 @@ void set_local_pos_params(int count, char **params)
 void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
 {
     struct symtab_entry_s *entry;
-    char buf[12];
+    char buf[32];
     char *strend;
+    
     /* $? is the exit status of the most recent pipeline */
     entry = add_to_symtab("?");
     symtab_entry_setval(entry, "0");
@@ -435,9 +467,11 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
     entry = add_to_symtab("$");
     symtab_entry_setval(entry, buf);
   
+#if 0
     /* $! is the decimal process ID of the most recent background command */
     entry = add_to_symtab("!");
     symtab_entry_setval(entry, "0");
+#endif
   
     entry = add_to_symtab("OPTIND");
     symtab_entry_setval(entry, "1");
@@ -465,7 +499,7 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
      * tcsh also resets $SHLVL it to 1 in login shells.
      */
     entry = add_to_symtab("SHLVL");
-    l = (entry->val) ? strtol(entry->val, &strend, 10) : 0;
+    l = (entry->val) ? strtol(entry->val, &strend, 10) : -1;
     if(option_set('L') || l < 0 || *strend)    /* login shell or invalid value */
     {
         l = 0;
@@ -477,7 +511,7 @@ void init_shell_vars(char *pw_name, gid_t pw_gid, char *fullpath)
 
     /* incremented for each subshell invocation (similar to $BASH_SUBSHELL) */
     entry = add_to_symtab("SUBSHELL");
-    l = (entry->val) ? strtol(entry->val, &strend, 10) : 0;
+    l = (entry->val) ? strtol(entry->val, &strend, 10) : -1;
     if(l < 0 || *strend)    /* invalid value */
     {
         l = 0;

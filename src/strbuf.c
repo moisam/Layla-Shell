@@ -21,9 +21,9 @@
 
 #include <stdlib.h>
 #include <stddef.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "symtab/string_hash.h"
-#include "debug.h"
+#include "include/debug.h"
 
 /*
  * The string buffer aims to create a pool of the frequently used strings, instead

@@ -25,13 +25,13 @@
 #include <netdb.h>
 #include <time.h>
 #include <sys/stat.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "builtins/builtins.h"
 #include "builtins/setx.h"
 #include "symtab/symtab.h"
 #include "backend/backend.h"
-#include "vi.h"
-#include "debug.h"
+#include "include/vi.h"
+#include "include/debug.h"
 
 #define MAX_CMDS    2048
 
@@ -746,29 +746,15 @@ int do_tab(char *cmdbuf, size_t *__cmdbuf_index, size_t *__cmdbuf_end)
         {
             *slash = '\0';
             /* perform word expansion */
-            char *dir = word_expand_to_str(tmp);
+            char *dir = word_expand_to_str(tmp, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
             if(dir)
             {
-                if(*dir)
-                {
-                    matches = get_name_matches(dir, slash+1, &glob);
-                }
-                else
-                {
-                    matches = get_name_matches("/", slash+1, &glob);
-                }
+                matches = get_name_matches(*dir ? dir : "/", slash+1, &glob);
                 free(dir);
             }
             else
             {
-                if(*tmp)
-                {
-                    matches = get_name_matches(tmp, slash+1, &glob);
-                }
-                else
-                {
-                    matches = get_name_matches("/", slash+1, &glob);
-                }
+                matches = get_name_matches(*tmp ? tmp : "/", slash+1, &glob);
             }
             *slash = '/';
         }

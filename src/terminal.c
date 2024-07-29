@@ -19,6 +19,9 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/* Macro definitions needed to use sig*() */
+#define _POSIX_C_SOURCE 200112L
+
 #include <unistd.h>
 #include <signal.h>
 #include <termios.h>
@@ -26,11 +29,11 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/kd.h>
-#include "cmd.h"
-#include "sig.h"
+#include "include/cmd.h"
+#include "include/sig.h"
 #include "backend/backend.h"
-#include "debug.h"
-#include "kbdevent.h"
+#include "include/debug.h"
+#include "include/kbdevent.h"
 
 /****************************************
  *
@@ -163,7 +166,39 @@ int set_tty_attr(int tty, struct termios *attr)
         res = tcsetattr(tty, TCSAFLUSH, attr);
     } while (res == -1 && errno == EINTR);
     
+    if(res == -1)
+    {
+        PRINT_ERROR(SHELL_NAME, "failed to set terminal attributes: %s", 
+                    strerror(errno));
+    }
+    
     return !(res == -1);
+}
+
+
+void set_term_pgid(int tty, pid_t pid)
+{
+    if(tty == -1)
+    {
+        return;
+    }
+    
+    if(option_set('m'))
+    {
+        sigset_t sigset, old_sigset;
+        
+        sigemptyset(&sigset);
+        sigemptyset(&old_sigset);
+        sigaddset(&sigset, SIGCHLD);
+        sigaddset(&sigset, SIGTTIN);
+        sigaddset(&sigset, SIGTTOU);
+        sigaddset(&sigset, SIGTSTP);
+        sigprocmask(SIG_BLOCK, &sigset, &old_sigset);
+
+        tcsetpgrp(tty, pid);
+
+        sigprocmask(SIG_SETMASK, &old_sigset, (sigset_t *)NULL);
+    }
 }
 
 

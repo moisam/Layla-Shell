@@ -23,8 +23,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include "cmd.h"
-#include "debug.h"
+#include "include/cmd.h"
+#include "include/debug.h"
 
 /****************************************
  *
@@ -90,14 +90,17 @@ inline void strcat_c(char *str, int pos, char chr)
  */
 char *strchr_any(char *string, char *chars)
 {
+    char *s = string;
+
     if(!string || !chars)
     {
         return NULL;
     }
-    char *s = string;
+    
     while(*s)
     {
         char *c = chars;
+
         while(*c)
         {
             if(*s == *c)
@@ -108,7 +111,29 @@ char *strchr_any(char *string, char *chars)
         }
         s++;
     }
+
     return NULL;
+}
+
+
+/*
+ * Compare the given char to all chars in the given string.
+ * 
+ * Returns 1 if the char is found in the string, 0 otherwise.
+ */
+int chrcmp(char c, char *s)
+{
+    while(*s)
+    {
+        if(c == *s)
+        {
+            return 1;
+        }
+        
+        s++;
+    }
+    
+    return 0;
 }
 
 
@@ -275,6 +300,7 @@ char *list_to_str(char **list)
     {
         return NULL;
     }
+    
     *p = 0;
     p2 = p;
     
@@ -284,7 +310,12 @@ char *list_to_str(char **list)
         sprintf(p, "%s ", list[i]);
         p += lens[i];
     }
-    p[-1]= '\0';
+
+    /* make sure we don't write before the beginning of the string */
+    if(p != p2)
+    {
+        p[-1]= '\0';
+    }
     
     return p2;
 }

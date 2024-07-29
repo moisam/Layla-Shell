@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdarg.h>
-#include "debug.h"
+#include "include/debug.h"
 
 /*
  * Print a debug message, preceded by the filename and function name from which

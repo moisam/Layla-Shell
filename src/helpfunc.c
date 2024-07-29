@@ -34,10 +34,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
-#include "cmd.h"
-#include "sig.h"
-#include "debug.h"
-#include "kbdevent.h"
+#include "include/cmd.h"
+#include "include/sig.h"
+#include "include/debug.h"
+#include "include/kbdevent.h"
 #include "backend/backend.h"
 #include "builtins/builtins.h"
 
@@ -207,7 +207,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         {
             if(setpriority(PRIO_PROCESS, 0, flagarg) == -1)
             {
-                PRINT_ERROR("%s: failed to set nice value to %d: %s\n", UTILITY, flagarg, strerror(errno));
+                PRINT_ERROR(UTILITY, "failed to set nice value to %d: %s", flagarg, strerror(errno));
             }
         }
         /* request to ignore SIGHUP (by the nohup builtin) */
@@ -216,7 +216,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
             /* tcsh ignores the HUP signal here */
             if(set_signal_handler(SIGHUP, SIG_IGN) != 0)
             {
-                PRINT_ERROR("%s: failed to ignore SIGHUP: %s\n", UTILITY, strerror(errno));
+                PRINT_ERROR(UTILITY, "failed to ignore SIGHUP: %s", strerror(errno));
             }
             /*
              * ... and GNU coreutils nohup modifies the standard streams if they are
@@ -256,7 +256,7 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         do_exec_cmd(argc, argv, use_path, NULL);
 
         /* NOTE: we should NEVER come back here, unless there is error of course!! */
-        PRINT_ERROR("%s: failed to exec `%s`: %s\n", UTILITY, argv[0], strerror(errno));
+        PRINT_ERROR(UTILITY, "failed to exec `%s`: %s", argv[0], strerror(errno));
         if(errno == ENOEXEC)
         {
             exit(EXIT_ERROR_NOEXEC);
@@ -288,8 +288,6 @@ int fork_command(int argc, char **argv, char *use_path, char *UTILITY, int flags
         {
             add_pid_to_job(job, child_pid);
             add_job(job);
-            /* add_job() only sets the current job if it's in the background */
-            set_cur_job(job);
             free(job);
         }
         notice_termination(child_pid, status, 1);

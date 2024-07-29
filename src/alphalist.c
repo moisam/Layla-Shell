@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include "cmd.h"
+#include "include/cmd.h"
 
 /*
  * This file provides implementation to alphabetically-sorted lists. Each list is

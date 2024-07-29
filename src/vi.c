@@ -26,16 +26,16 @@
 #include <ctype.h>
 #include <signal.h>
 #include <sys/types.h>
-#include "cmd.h"
-#include "vi.h"
-#include "kbdevent.h"
+#include "include/cmd.h"
+#include "include/vi.h"
+#include "include/kbdevent.h"
 #include "scanner/scanner.h"
 #include "scanner/source.h"
 #include "parser/parser.h"
 #include "parser/node.h"
 #include "backend/backend.h"
 #include "builtins/builtins.h"
-#include "debug.h"
+#include "include/debug.h"
 
 /* defined in cmdline.c */
 extern size_t CMD_BUF_SIZE;

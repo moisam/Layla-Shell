@@ -19,7 +19,7 @@
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
  */    
 
-#include "utf.h"
+#include "include/utf.h"
 
 const char trailing_utf8_bytes[256] =
 {

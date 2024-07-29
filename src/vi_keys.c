@@ -22,9 +22,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "cmd.h"
-#include "vi.h"
-#include "debug.h"
+#include "include/cmd.h"
+#include "include/vi.h"
+#include "include/debug.h"
 
 /* defined in cmdline.c */
 extern size_t    CMD_BUF_SIZE;
@@ -513,7 +513,7 @@ void yank(int start, int end)
         savebuf = malloc(savebuf_size);
         if(!savebuf)
         {
-            PRINT_ERROR("ERROR: insufficient memory for the yank buffer");
+            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "the yank buffer");
             return;
         }
         savebuf[0] = '\0';

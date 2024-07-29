@@ -21,8 +21,8 @@
 
 #include <ctype.h>
 #include <stdlib.h>
-#include "cmd.h"
-#include "debug.h"
+#include "include/cmd.h"
+#include "include/debug.h"
 
 char *add_pre_post(char *str, char *pre, char *post);
 char **get_brace_list(char *str, size_t end, size_t *count);

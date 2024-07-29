@@ -26,10 +26,10 @@
 #include <ctype.h>
 #include <signal.h>
 #include <sys/types.h>
-#include "cmd.h"
-#include "vi.h"
-#include "kbdevent.h"
-#include "utf.h"
+#include "include/cmd.h"
+#include "include/vi.h"
+#include "include/kbdevent.h"
+#include "include/utf.h"
 #include "scanner/scanner.h"
 #include "scanner/source.h"
 #include "parser/parser.h"
@@ -37,7 +37,7 @@
 #include "backend/backend.h"
 #include "builtins/builtins.h"
 #include "builtins/setx.h"
-#include "debug.h"
+#include "include/debug.h"
 
 
 /* we will save incomplete commands here until being processed */
@@ -1009,7 +1009,7 @@ int is_incomplete_cmd(int first_time)
                     
                     if(cmd[i] == '\0')
                     {
-                        PRINT_ERROR("%s: missing heredoc delimiter word after << or <<-\n", SHELL_NAME);
+                        PRINT_ERROR(SHELL_NAME, "missing heredoc delimiter word after << or <<-");
                         return -1;
                     }
                     
@@ -1024,7 +1024,7 @@ int is_incomplete_cmd(int first_time)
                         
                         if(!heredoc_mark[__heredocs])
                         {
-                            PRINT_ERROR("%s: insufficient memory to save heredoc delimiter word\n", SHELL_NAME);
+                            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "save heredoc delimiter word");
                             return -1;
                         }
                         

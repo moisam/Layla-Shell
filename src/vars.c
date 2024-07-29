@@ -28,8 +28,8 @@
 #include <signal.h>
 #include <time.h>
 #include <errno.h>
-#include "cmd.h"
-#include "debug.h"
+#include "include/cmd.h"
+#include "include/debug.h"
 #include "builtins/builtins.h"
 
 /*
@@ -224,7 +224,7 @@ int set_special_var(char *name, char *val)
         
         if(timer_settime(timerid, 0, &its, NULL) == -1)
         {
-            PRINT_ERROR("%s: failed to start timer: %s\n", SHELL_NAME, strerror(errno));
+            PRINT_ERROR(SHELL_NAME, "failed to start timer: %s", strerror(errno));
         }
     }
     

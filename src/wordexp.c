@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019, 2020 (c)
+ *    Copyright 2019, 2020, 2024 (c)
  * 
  *    file: wordexp.c
  *    This file is part of the Layla Shell project.
@@ -31,14 +31,14 @@
 #include <errno.h>
 #include <ctype.h>
 #include <sys/types.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "builtins/builtins.h"
 #include "builtins/setx.h"
 #include "symtab/symtab.h"
 #include "backend/backend.h"
 #include "parser/parser.h"      /* next_cmd_word() */
 #include "error/error.h"
-#include "debug.h"
+#include "include/debug.h"
 
 
 /* special value to represent an invalid variable */
@@ -55,15 +55,18 @@ struct word_s *make_word(char *str)
 {
     /* alloc struct memory */
     struct word_s *word = malloc(sizeof(struct word_s));
+    
     if(!word)
     {
         return NULL;
     }
+    
     memset(word, 0, sizeof(struct word_s));
     
     /* alloc string memory */
     size_t  len  = strlen(str);
     char   *data = malloc(len+1);
+    
     if(!data)
     {
         free(word);
@@ -77,6 +80,56 @@ struct word_s *make_word(char *str)
 
     /* return struct */
     return word;
+}
+
+
+/*
+ * If the word linked list contains empty words, remove them and return a
+ * pointer to the first non-empty word in the list. This should be done
+ * before quote removal, otherwise we might remove empty words that contained
+ * quoted characters.
+ */
+struct word_s *remove_empty_words(struct word_s *w)
+{
+    struct word_s *cur = w, *prev = NULL;
+    
+    while(cur)
+    {
+        struct word_s *next = cur->next;
+        
+        /* 
+         * POSIX says we should delete an empty word, unless the
+         * original word had quoted characters.
+         */
+        if(cur->data[0] == '\0')
+        {
+            if(prev)
+            {
+                prev->next = next;
+            }
+            else
+            {
+                w = next;
+            }
+            
+            /* free the word text */
+            if(cur->data)
+            {
+                free(cur->data);
+            }
+            
+            /* free the word */
+            free(cur);
+        }
+        else
+        {
+            prev = cur;
+        }
+        
+        cur = next;
+    }
+    
+    return w;
 }
 
 
@@ -114,21 +167,26 @@ char *wordlist_to_str(struct word_s *word, int add_spaces)
     {
         return NULL;
     }
+    
     size_t len = 0;
     struct word_s *w = word;
+    
     while(w)
     {
         /* add extra spaces without checking add_spaces (to simplify this code) */
         len += w->len+1;
         w    = w->next;
     }
+    
     char *str = malloc(len+1);
     if(!str)
     {
         return NULL;
     }
+    
     char *str2 = str;
     w = word;
+    
     while(w)
     {
         if(add_spaces)
@@ -141,13 +199,16 @@ char *wordlist_to_str(struct word_s *word, int add_spaces)
             sprintf(str2, "%s", w->data);
             str2 += w->len;
         }
+
         w = w->next;
     }
+
     /* remove the last separator */
     if(add_spaces)
     {
         str2[-1] = '\0';
     }
+
     return str;
 }
 
@@ -498,8 +559,8 @@ size_t find_closing_brace(char *data, int in_double_quotes)
                     char *delim_end;
                     if(heredoc_count >= MAX_NESTED_HEREDOCS)
                     {
-                        PRINT_ERROR("%s: maximum number of heredocs reached (%d)\n",
-                                    SOURCE_NAME, MAX_NESTED_HEREDOCS);
+                        PRINT_ERROR(SHELL_NAME, "maximum number of heredocs reached (%d)",
+                                    MAX_NESTED_HEREDOCS);
                         return 0;
                     }
                     else if(!heredoc_delim(p, &skip, &heredoc_delims[heredoc_count], &delim_end))
@@ -573,6 +634,10 @@ size_t find_closing_brace(char *data, int in_double_quotes)
                     {
                         unescaped = (data[i-2] != '\\');
                     }
+                    else
+                    {
+                        break;
+                    }
                     
                     /* skip to the next newline */
                     if(unescaped)
@@ -627,8 +692,7 @@ char *substitute_str(char *s1, char *s2, size_t start, size_t end)
     char *final = malloc(totallen+1);
     if(!final)
     {
-        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
-                    "performing variable substitution");
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "performing variable substitution");
         /* POSIX says non-interactive shell should exit on expansion errors */
         if(!interactive_shell)
         {
@@ -896,8 +960,7 @@ char *command_substitute(char *orig_cmd)
     char *cmd2 = cmd;
     if(!cmd)
     {
-        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
-                    "command substitution");
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "command substitution");
         return NULL;
     }
 
@@ -935,6 +998,8 @@ char *command_substitute(char *orig_cmd)
     }
 
     FILE *fp = NULL;
+    pid_t pid = 0;
+    
     if(!backquoted && cmd2[0] == '<')
     {
         /*
@@ -942,15 +1007,26 @@ char *command_substitute(char *orig_cmd)
          * this is a common non-POSIX extension seen in bash, ksh...
          */
         cmd = cmd2+1;
+        
         while(isspace(*cmd))
         {
             cmd++;
         }
+        
         if(!*cmd)
         {
             return NULL;
         }
-        fp = fopen(cmd, "r");
+        
+        char *catfile = word_expand_to_str(cmd, FLAG_WORDEXP_ALL);
+        
+        if(!catfile)
+        {
+            return NULL;
+        }
+        
+        fp = fopen(catfile, "r");
+        free(catfile);
     }
     else if(!backquoted && isdigit(cmd2[0]))
     {
@@ -959,18 +1035,21 @@ char *command_substitute(char *orig_cmd)
          * current byte offset for file descriptor n.
          * this is another non-POSIX extension from ksh.
          */
-        cmd = cmd2;
         int n = 0;
+        cmd = cmd2;
+
         while(isdigit(*cmd))
         {
             n = (n*10) + ((*cmd)-'0');
             cmd++;
         }
+
         if(!*cmd)
         {
             free(cmd2);
             return NULL;
         }
+        
         if(cmd[0] == '<' && cmd[1] == '#')
         {
             n = lseek(n, 0, SEEK_CUR);
@@ -978,19 +1057,21 @@ char *command_substitute(char *orig_cmd)
             b[0] = '\0';        /* just in case sprintf() fails for some reason */
             sprintf(b, "%d", n);
             buf = malloc(strlen(b)+1);
+            
             if(!buf)
             {
-                PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
-                            "command substitution");
+                INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "command substitution");
                 return NULL;
             }
+            
             strcpy(buf, b);
             return buf;
         }
+        
         /*
          * open a pipe for all other (normal) commands.
          */
-        fp = popenr(cmd2);
+        fp = popenr(cmd2, &pid);
         //fp = popen(cmd2, "r");
     }
     else
@@ -998,14 +1079,15 @@ char *command_substitute(char *orig_cmd)
         /*
          * open a pipe for all other (normal) commands.
          */
-        fp = popenr(cmd2);
+        fp = popenr(cmd2, &pid);
         //fp = popen(cmd2, "r");
     }
+
     /* check if we have opened the pipe */
     if(!fp)
     {
         free(cmd2);
-        PRINT_ERROR("%s: failed to open pipe: %s\n", SOURCE_NAME, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to open pipe: %s", strerror(errno));
         return NULL;
     }
 
@@ -1013,6 +1095,7 @@ char *command_substitute(char *orig_cmd)
     while(!feof(fp))
     {
         i = fread(b, 1, 1024, fp);
+        
         if(i == 0)
         {
             continue;
@@ -1023,10 +1106,12 @@ char *command_substitute(char *orig_cmd)
         {
             /* add 1 for the null terminating byte */
             buf = malloc(i+1);
+            
             if(!buf)
             {
                 goto fin;
             }
+            
             p   = buf;
         }
         /* extend buffer */
@@ -1034,16 +1119,20 @@ char *command_substitute(char *orig_cmd)
         {
             char *buf2 = realloc(buf, bufsz+i+1);
             //if(buf != buf2) free(buf);
+            
             if(!buf2)
             {
                 free(buf);
                 buf = NULL;
                 goto fin;
             }
+            
             buf = buf2;
             p   = buf+bufsz;
         }
+        
         bufsz += i;
+        
         /* copy the input and add the null terminating byte */
         memcpy(p, b, i);
         p[i] = '\0';
@@ -1081,8 +1170,16 @@ fin:
     free(cmd2);
     if(!buf)
     {
-        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
-                    "command substitution");
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "command substitution");
+    }
+    
+    /* 
+     * If we opened a pipe using popenr(), remove the subshell's pid from 
+     * our deadlist, as no one will claim the pid after we return.
+     */
+    if(pid)
+    {
+        rip_dead(pid);
     }
 
     return buf;
@@ -1137,7 +1234,7 @@ char *var_info_expand(char op, char *orig_val, char *var_name, int name_len)
             {
                 return NULL;
             }
-            sprintf(sub, "let %s=%s", var_name, tmp);
+            sprintf(sub, "let %s=%s", var_name, tmp ? tmp : "");
             if(tmp)
             {
                 free(tmp);
@@ -1246,6 +1343,42 @@ char *get_stdin_var(int get_length)
 }
 
 
+#define CHECK_NOUNSET_OPTION()                                          \
+if(tmp == NULL && option_set('u') && !pos_params)                       \
+{                                                                       \
+    PRINT_ERROR(SHELL_NAME, "%s: %s", var_name, "parameter not set");   \
+    if(!interactive_shell)                                              \
+    {                                                                   \
+        exit_gracefully(EXIT_FAILURE, NULL);                            \
+    }                                                                   \
+    return INVALID_VAR;                                                 \
+}
+
+
+/*
+ * Print an error message if the given variable name is null/undefined.
+ * var_name contains the variable's name, while msg contains the optional error 
+ * message (the part that comes after ? in the ${var?msg} expansion). If the
+ * message is empty, a default message string is printed. The shell exits if
+ * non-interactive.
+ */
+void print_unset_var_error(char *var_name, char *msg)
+{
+    /*
+     * TODO: we should use the EXPANSION OF the string starting at (sub+1),
+     *       not the original word itself as passed to us.
+     */
+    PRINT_ERROR(SHELL_NAME, "%s: %s", var_name, (msg && *msg) ?
+                                                msg : "parameter not set");
+    
+    /* exit if non-interactive */
+    if(!interactive_shell)
+    {
+        exit_gracefully(EXIT_FAILURE, NULL);
+    }
+}
+
+
 /*
  * Perform variable (parameter) expansion.
  *
@@ -1254,7 +1387,7 @@ char *get_stdin_var(int get_length)
  */
 char *var_expand(char *orig_var_name)
 {
-    /* sanity check */
+    /* Sanity check */
     if(!orig_var_name)
     {
        return NULL;
@@ -1265,36 +1398,36 @@ char *var_expand(char *orig_var_name)
      *  If it's in the ${var} format, remove the ${}.
      */
 
-    /* skip the $ */
+    /* Skip the $ */
     orig_var_name++;
     size_t len = strlen(orig_var_name);
     if(*orig_var_name == '{')
     {
-        /* remove the } */
+        /* Remove the } */
         orig_var_name[len-1] = '\0';
         orig_var_name++;
     }
 
-    /* check we don't have an empty varname */
+    /* Check we don't have an empty varname */
     if(!*orig_var_name)
     {
        return NULL;
     }
     int get_length = 0;
 
-    /* if varname starts with #, we need to get the string length */
+    /* If varname starts with #, we need to get the string length */
     if(*orig_var_name == '#')
     {
-        /* use of '#' should come with omission of ':' */
+        /* Use of '#' should come with omission of ':' */
         if(strchr(orig_var_name, ':'))
         {
-            PRINT_ERROR("%s: invalid substitution at: %s\n", SOURCE_NAME, orig_var_name);
+            PRINT_ERROR(SHELL_NAME, "invalid substitution at: %s", orig_var_name);
             /* POSIX says non-interactive shell should exit on expansion errors */
             EXIT_IF_NONINTERACTIVE();
             return INVALID_VAR;
         }
         /* 
-         * make sure the caller meant ${#parameter}, which gets string length,
+         * Make sure the caller meant ${#parameter}, which gets string length,
          * and it didn't mean ${#}, which gets # of positional parameters.
          */
         char c = orig_var_name[1];
@@ -1305,63 +1438,64 @@ char *var_expand(char *orig_var_name)
         }
     }
 
-    /* check we don't have an empty varname */
+    /* Check we don't have an empty varname */
     if(!*orig_var_name)
     {
         return NULL;
     }
 
     /*
-     * search for a colon, which we use to separate the variable name from the
+     * Search for a colon, which we use to separate the variable name from the
      * value or substitution we are going to perform on the variable.
      */
-    //int   colon = 0;
+    int colon = 0;
     char *sub = strchr(orig_var_name, ':');
-    if(sub)     /* we have a colon + substitution */
+
+    if(sub)     /* We have a colon + substitution */
     {
-        /* colon = 1 */ ;
+        colon = 1;
     }
-    else        /* we have a substitution without a colon */
+    else        /* We have a substitution without a colon */
     {
         char *v = orig_var_name;
-        /* don't mistake a '#' variable name for a #var length substitution */
+        /* Don't mistake a '#' variable name for a #var length substitution */
         if(*v == '#' && v[1] == '\0')
         {
-            /* skip the '#' so we won't entertain it again */
+            /* Skip the '#' so we won't entertain it again */
             v++;
         }
-        /* make sure we don't mistake a special var for a substitution string */
+        /* Make sure we don't mistake a special var for a substitution string */
         else if(*v == '-' || *v == '=' || *v == '?' || *v == '+' || *v == '@')
         {
-            /* skip the '-', '=', '?', '+', or '@' so we won't entertain it again */
+            /* Skip the '-', '=', '?', '+', or '@' so we won't entertain it again */
             v++;
         }
-        /* search for the char that indicates what type of substitution we need to do */
+        /* Search for the char that indicates what type of substitution we need to do */
         sub = strchr_any(v, "-=?+%#@");
     }
 
-    /* get the length of the variable name (without the substitution part) */
+    /* Get the length of the variable name (without the substitution part) */
     len = sub ? (size_t)(sub-orig_var_name) : strlen(orig_var_name);
 
-    /* if we have a colon+substitution, skip the colon */
+    /* If we have a colon+substitution, skip the colon */
     if(sub && *sub == ':')
     {
         sub++;
     }
 
-    /* copy the varname to a buffer */
+    /* Copy the varname to a buffer */
     char var_name[len+1];
     strncpy(var_name, orig_var_name, len);
     var_name[len]   = '\0';
 
     /*
-     * sanity-check the name. it should only include alphanumeric chars, or one of
+     * Sanity-check the name. It should only include alphanumeric chars, or one of
      * the special parameter names, such as !, ?, # and so on.
      */
     char *p = var_name;
     if(!is_name(p) && !is_pos_param(p) && !is_special_param(p) && strcmp(p, "<"))
     {
-        PRINT_ERROR("%s: invalid substitution at: %s\n", SOURCE_NAME, orig_var_name);
+        PRINT_ERROR(SHELL_NAME, "invalid substitution at: %s", orig_var_name);
         /* POSIX says non-interactive shell should exit on expansion errors */
         EXIT_IF_NONINTERACTIVE();
         return INVALID_VAR;
@@ -1375,32 +1509,33 @@ char *var_expand(char *orig_var_name)
      */
     if(var_name[0] == '!' && (var_name[len-1] == '*' || var_name[len-1] == '@'))
     {
-        /* remove the trailing '*' or '@' */
+        /* Remove the trailing '*' or '@' */
         var_name[len-1] = '\0';
-        /* get all shell variables whose name starts with varname */
+        /* Get all shell variables whose name starts with varname */
         return get_all_vars(var_name+1);
     }
 
     /*
-     * commence variable substitution.
+     * Commence variable substitution.
      */
     char *empty_val  = "";
     char *tmp        = NULL;
     char  setme      = 0;
     char *orig_val   = NULL;
     int   pos_params = 0;
+    int   test;
     char  buf[32];
 
-    /* handle the $@ and $* special parameters as a special case */
+    /* Handle the $@ and $* special parameters as a special case */
     if(strcmp(var_name, "@") == 0 || strcmp(var_name, "*") == 0)
     {
-        /* return the array length of $@ or $* */
+        /* Return the array length of $@ or $* */
         if(get_length)
         {
             sprintf(buf, "%d", pos_param_count());
             return __get_malloced_str(buf);
         }
-        /* return the contents of $* or $@ */
+        /* Return the contents of $* or $@ */
         return pos_params_expand(var_name, 0);
     }
 
@@ -1410,37 +1545,27 @@ char *var_expand(char *orig_var_name)
         return get_stdin_var(get_length);
     }
 
-    /* save a pointer to the variable's value (we'll use it below) */
-    tmp = get_shell_varp(var_name, empty_val);
+    /* Save a pointer to the variable's value (we'll use it below) */
+    struct symtab_entry_s *entry = get_symtab_entry(var_name);
+    tmp = (entry && entry->val) ? entry->val : NULL;
     orig_val = tmp;
-
+    
     /*
-     * first case: variable is unset or empty.
+     * If we have a colon, test for variable existence and non-empty value.
+     * Otherwise, test only for existence.
      */
-    if(!tmp || tmp == empty_val)
+    test = colon ? (tmp && *tmp) : (tmp != NULL);
+    debug ("tmp = '%s', test = %d\n", tmp, test);
+    
+    /*
+     * First case: variable is unset or empty.
+     */
+    if(!test)
     {
-        /* no unset parameters are accepted */
-        if(option_set('u') && !pos_params)
-        {
-            PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME, var_name, "parameter not set");
-            if(!interactive_shell)
-            {
-                exit_gracefully(EXIT_FAILURE, NULL);
-            }
-            return INVALID_VAR;
-        }
-
-        /* do we have a substitution clause? */
+        /* Do we have a substitution clause? */
         if(sub && *sub)
         {
-            /* no colon, no substitution and variable unset/empty */
-            /*
-            if(!colon && tmp == empty_val)
-            {
-                return NULL;
-            }
-            */
-            /* check the substitution operation we need to perform */
+            /* Check the substitution operation we need to perform */
             switch(sub[0])
             {
                 case '-':
@@ -1454,8 +1579,8 @@ char *var_expand(char *orig_var_name)
                      */
                     if(is_pos_param(var_name) || is_special_param(var_name))
                     {
-                        PRINT_ERROR("%s: invalid variable assignment: %s\n", 
-                                    SOURCE_NAME, orig_var_name);
+                        PRINT_ERROR(SHELL_NAME, "invalid variable assignment: %s", 
+                                    orig_var_name);
                         /* NOTE: this is not strict POSIX behaviour. see the table above */
                         if(!interactive_shell)
                         {
@@ -1478,30 +1603,14 @@ char *var_expand(char *orig_var_name)
                     setme = 1;
                     break;
                 
-                case '?':          /* print error msg if variable is null/unset */
-                    /*
-                     * TODO: we should use the EXPANSION OF the string starting at (sub+1),
-                     *       not the original word itself as passed to us.
-                     */
-                    if(sub[1] == '\0')
-                    {
-                        PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME, var_name, "parameter not set");
-                    }
-                    else
-                    {
-                        PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME, var_name, sub+1);
-                    }
-                    /* exit if non-interactive */
-                    if(!interactive_shell)
-                    {
-                        exit_gracefully(EXIT_FAILURE, NULL);
-                    }
-                    return INVALID_VAR;
-                
                 /* use alternative value (we don't have alt. value here) */
                 case '+':
                     return NULL;
-
+                
+                case '?':          /* print error msg if variable is null/unset */
+                    print_unset_var_error(var_name, sub+1);
+                    return INVALID_VAR;
+                
                 /*
                  * pattern matching notation. can't match anything
                  * if the variable is not defined, now can we?
@@ -1510,6 +1619,8 @@ char *var_expand(char *orig_var_name)
                 case '/':
                 case '%':
                 case '@':
+                    /* No unset parameters are accepted */
+                    CHECK_NOUNSET_OPTION();
                     break;
                     
                 default:                /* unknown operator */
@@ -1519,11 +1630,13 @@ char *var_expand(char *orig_var_name)
         /* no substitution clause. return NULL as the variable is unset/null */
         else
         {
+            /* No unset parameters are accepted */
+            CHECK_NOUNSET_OPTION();
             tmp = empty_val;
         }
     }
     /*
-     * second case: variable is set/not empty.
+     * Second case: variable is set/not empty.
      */
     else
     {
@@ -1571,64 +1684,47 @@ char *var_expand(char *orig_var_name)
                  * the same (as far as the manpage is concerned). we follow ksh.
                  */
                 case '%':       /* match suffix */
-                    sub++;
-                    /* perform word expansion on the value */
-                    p = word_expand_to_str(tmp);
-                    
-                    /* word expansion failed */
-                    if(!p)
-                    {
-                        EXIT_IF_NONINTERACTIVE();
-                        return INVALID_VAR;
-                    }
-                    
-                    /* match the longest or shortest suffix */
-                    int longest = 0;
-                    if(*sub == '%')
-                    {
-                        longest = 1;
-                        sub++;
-                    }
-                    
-                    /* perform the match */
-                    if((len = match_suffix(sub, p, longest)) == 0)
-                    {
-                        return p;
-                    }
-                    
-                    /* return the match */
-                    char *p2 = get_malloced_strl(p, 0, len);
-                    free(p);
-                    return p2;
-
                 case '#':       /* match prefix */
-                    sub++;
                     /* perform word expansion on the value */
-                    p = word_expand_to_str(tmp);
-
+                    p = word_expand_to_str(tmp, FLAG_WORDEXP_ALL);
+                    
                     /* word expansion failed */
                     if(!p)
                     {
                         EXIT_IF_NONINTERACTIVE();
                         return INVALID_VAR;
                     }
-
+                    
                     /* match the longest or shortest suffix */
-                    longest = 0;
-                    if(*sub == '#')
+                    char *p2;
+                    int longest = 0;
+                    int (*f)(char *, char *, int) = (*sub == '%') ? 
+                                        match_suffix : match_prefix;
+                    
+                    if(*sub == sub[1])
                     {
                         longest = 1;
                         sub++;
                     }
-
+                    
+                    sub++;
+                    
                     /* perform the match */
-                    if((len = match_prefix(sub, p, longest)) == 0)
+                    if((len = f(sub, p, longest)) == 0)
                     {
                         return p;
                     }
                     
                     /* return the match */
-                    p2 = get_malloced_strl(p, len, strlen(p)-len);
+                    if(f == match_suffix)
+                    {
+                        p2 = get_malloced_strl(p, 0, len);
+                    }
+                    else
+                    {
+                        p2 = get_malloced_strl(p, len, strlen(p)-len);
+                    }
+
                     free(p);
                     return p2;
 
@@ -1690,9 +1786,11 @@ char *var_expand(char *orig_var_name)
      * we have substituted the variable's value. now go POSIX style on it.
      */
     int expanded = 0;
-    if(tmp && tmp != orig_val)
+
+    if(tmp && *tmp && tmp != orig_val)
     {
-        struct word_s *w = word_expand(tmp, 0);
+        struct word_s *w = word_expand(tmp, /* FLAG_REMOVE_QUOTES */ 0);
+        
         if(!w)
         {
             tmp = NULL;
@@ -1742,10 +1840,11 @@ char *var_expand(char *orig_var_name)
     else
     {
         /* "normal" variable value */
-        p = __get_malloced_str(tmp);
+        p = tmp ? __get_malloced_str(tmp) : __get_malloced_str("");
+        debug ("^^^^^^^^^^^^^^^^^ tmp = '%s', p = '%s'\n", tmp, p);
     }
 
-    /* free the expanded word list */
+    /* Free the expanded word list */
     if(expanded)
     {
         free(tmp);
@@ -1758,7 +1857,7 @@ err:
         exit_gracefully(EXIT_FAILURE, NULL);
     }
 
-    /* return the result */
+    /* Return the result */
     return p ? p : INVALID_VAR;
 }
 
@@ -1772,9 +1871,11 @@ err:
 char *pos_params_expand(char *tmp, int in_double_quotes)
 {
     errno = 0;
+    
     /* search for a colon, which introduces a substitution */
     char *sub = strchr(tmp, ':');
-    char *p;
+    char *p = NULL;
+    
     /* do we have a substitution? */
     if(sub)
     {
@@ -1787,16 +1888,18 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
         {
             sub++;
         }
+        
         /* get the second (optional) colon */
         char *tmp2 = strchr(sub, ':');
         long off, len;
         long sublen = strlen(sub);
         long count = pos_param_count()+1;
+        
         if(count <= 0)          /* no positional parameters */
         {
-            //return NULL;
-            return __get_malloced_str("");
+            goto fin;
         }
+        
         /* we have two colons in the substitution (so we have offset and length) */
         if(tmp2)
         {
@@ -1809,23 +1912,28 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
             off = extract_num(sub, 0, sublen);
             len = count-off;
         }
+        
         /* negative offsets count from the end of the array */
         if(off < 0)
         {
             off += count;
         }
+        
         if(len < 0)
         {
             /* both are offsets now */
             len += count;
+            
             if(len < off)
             {
                 long j = len;
                 len = off;
                 off = j;
             }
+            
             len -= off;
         }
+        
         p = get_pos_params_str(*tmp, in_double_quotes, off, len);
     }
     else if((sub = strchr(tmp+1, '@')))
@@ -1839,22 +1947,29 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
         char *subs[count+1];
         char op = *++sub;
         int  k, l;
+        
         for(k = 1, l = 0; k <= count; k++)
         {
             struct symtab_entry_s *p = get_pos_param(k);
+            
             if(!p || !p->val)
             {
                 continue;
             }
+            
             sub = var_info_expand(op, p->val, p->name, strlen(p->name));
+            
             if(sub)
             {
                 subs[l++] = sub;
             }
         }
+        
         subs[l++] = NULL;
+        
         /* convert the list to a string */
         p = list_to_str(subs);
+        
         /* free the memory used by the list strings */
         for(k = 0; subs[k]; k++)
         {
@@ -1874,10 +1989,12 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
          * the same (as far as the manpage is concerned). We follow ksh.
          */
         sub = strchr(tmp, '#');
+        
         if(!sub)
         {
             sub = strchr(tmp, '%');
         }
+        
         if(!sub)
         {
             p = get_all_pos_params_str(*tmp, in_double_quotes);
@@ -1890,17 +2007,21 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
             int  longest = 0, k, l;
             int  (*func)(char *, char *, int) = (op == '#') ? match_prefix : match_suffix;
             int len;
+            
             if(*sub == op)
             {
                 longest = 1, sub++;
             }
+            
             for(k = 1, l = 0; k <= count; k++)
             {
                 struct symtab_entry_s *p = get_pos_param(k);
+                
                 if(!p || !p->val)
                 {
                     continue;
                 }
+                
                 if((len = func(sub, p->val, longest)) == 0)
                 {
                     subs[l++] = __get_malloced_str(p->val);
@@ -1910,9 +2031,12 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
                     subs[l++] = get_malloced_strl(p->val, len, strlen(p->val)-len);
                 }
             }
+            
             subs[l++] = NULL;
+            
             /* convert the list to a string */
             p = list_to_str(subs);
+            
             /* free the memory used by the list strings */
             for(k = 0; subs[k]; k++)
             {
@@ -1920,8 +2044,17 @@ char *pos_params_expand(char *tmp, int in_double_quotes)
             }
         }
     }
+    
+fin:
+    if(p == NULL)
+    {
+        char buf[2] = { *tmp, '\0' };
+        print_unset_var_error(buf, strrchr(tmp, '?'));
+        return __get_malloced_str("");
+    }
+
     /* return the result */
-    return p ? : __get_malloced_str("");
+    return p;
 }
 
 
@@ -2138,7 +2271,7 @@ char *ansic_expand(char *str)
                         char *s2 = realloc(str, l+j-i+1);
                         if(!s2)
                         {
-                            PRINT_ERROR("%s: insufficient memory to parse ANSI-C string\n", SOURCE_NAME);
+                            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "parsing ANSI-C string");
                             free(str);
                             return NULL;
                         }
@@ -2513,7 +2646,7 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
                 tmp = malloc(len+1);
                 if(!tmp)
                 {
-                    PRINT_ERROR("%s: insufficient memory for internal buffers\n", SOURCE_NAME);
+                    INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "internal buffers");
                     break;
                 }
                 strncpy(tmp, pstart, len);
@@ -2852,6 +2985,7 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
     
     /* if we performed word expansion, do field splitting */
     struct word_s *words = NULL;
+
     if(expanded && fsplit)
     {
         words = field_split(pstart);
@@ -2864,11 +2998,11 @@ struct word_s *word_expand_one_word(char *orig_word, int flags)
         /* error making word struct */
         if(!words)
         {
-            PRINT_ERROR("%s: insufficient memory\n", SOURCE_NAME);
-            free(pstart);
-            return NULL;
+            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "word expansion");
+            /* fall through, we'll return NULL eventually */
         }
     }
+    
     free(pstart);
     return words;
 }
@@ -2893,22 +3027,26 @@ struct word_s *word_expand(char *orig_word, int flags)
     if(!list)
     {
         list = malloc(sizeof(char *));
+        
         if(!list)
         {
             return NULL;
         }
+
         list[0] = get_malloced_str(orig_word);
         count = 1;
     }
 
     /* expand the braces and do word expansion on each resultant field */
-    struct word_s *wordlist = NULL, *listtail = NULL;
+    struct word_s *wordlist = NULL, *listtail = NULL, *w;
+
     for(i = 0; i < count; i++)
     {
-        struct word_s *w = word_expand_one_word(list[i], flags);
+        w = word_expand_one_word(list[i], flags);
+
         if(w)
         {
-            /* add the words list */
+            /* add the words to the final list */
             if(wordlist)
             {
                 listtail->next = w;
@@ -2918,6 +3056,7 @@ struct word_s *word_expand(char *orig_word, int flags)
                 wordlist = w;
                 listtail = w;
             }
+            
             /* go to the last word */
             while(listtail->next)
             {
@@ -2931,6 +3070,7 @@ struct word_s *word_expand(char *orig_word, int flags)
     {
         free_malloced_str(list[i]);
     }
+    
     free(list);
     
     if(!wordlist)
@@ -2949,7 +3089,7 @@ struct word_s *word_expand(char *orig_word, int flags)
     {
         remove_quotes(wordlist);
     }
-
+    
     /* return the expanded list */
     return wordlist;
 }
@@ -2977,9 +3117,11 @@ struct word_s *pathnames_expand(struct word_s *words)
 
     struct word_s *w = words;
     struct word_s *pw = NULL;
+    
     while(w)
     {
         char *p = w->data;
+        
         /* check if we should perform filename globbing */
         if(!has_glob_chars(p, strlen(p)))
         {
@@ -2987,12 +3129,15 @@ struct word_s *pathnames_expand(struct word_s *words)
             w = w->next;
             continue;
         }
+        
         glob_t glob;
         char **matches = get_filename_matches(p, &glob);
+        
         /* no matches found */
         if(!matches || !matches[0])
         {
             globfree(&glob);
+            
             /* remove the word (bash extension) */
             if(optionx_set(OPTION_NULL_GLOB))
             {
@@ -3010,14 +3155,18 @@ struct word_s *pathnames_expand(struct word_s *words)
                     free_all_words(w);
                     w = pw->next;
                 }
+                
                 continue;
             }
+            
             /* print error and bail out (bash extension) */
             if(optionx_set(OPTION_FAIL_GLOB))
             {
-                PRINT_ERROR("%s: file globbing failed for %s\n", SOURCE_NAME, p);
+                PRINT_ERROR(SHELL_NAME, "file globbing failed for %s", p);
+                
                 /* restore the flag to its saved value */
                 set_optionx(OPTION_ADD_SUFFIX, save_addsuffix);
+                
                 /* return failure */
                 return NULL;
             }
@@ -3026,8 +3175,9 @@ struct word_s *pathnames_expand(struct word_s *words)
         {
             /* save the matches */
             struct word_s *head = NULL, *tail = NULL;
-            size_t j = 0;
-            for( ; j < glob.gl_pathc; j++)
+            size_t j;
+
+            for(j = 0; j < glob.gl_pathc; j++)
             {
                 /* skip '..' and '.' */
                 if(matches[j][0] == '.' &&
@@ -3035,6 +3185,7 @@ struct word_s *pathnames_expand(struct word_s *words)
                 {
                     continue;
                 }
+                
                 /* add the path to the list */
                 if(!head)
                 {
@@ -3052,6 +3203,7 @@ struct word_s *pathnames_expand(struct word_s *words)
                     }
                 }
             }
+
             /* add the new list to the existing list */
             if(w == words)
             {
@@ -3061,21 +3213,28 @@ struct word_s *pathnames_expand(struct word_s *words)
             {
                 pw->next = head;
             }
+            
             pw = tail;
             tail->next = w->next;
+            
             /* free the word we've just globbed */
             w->next = NULL;
             free_all_words(w);
             w = tail;
+            
             /* free the matches list */
             globfree(&glob);
+            
             /* finished globbing this word */
         }
+
         pw = w;
         w = w->next;
     }
+    
     /* restore the flag to its saved value */
     set_optionx(OPTION_ADD_SUFFIX, save_addsuffix);
+    
     /* return the extended wordlist */
     return words;
 }
@@ -3094,9 +3253,11 @@ void remove_quotes(struct word_s *wordlist)
     int in_double_quotes = 0;
     struct word_s *word = wordlist;
     char *p;
+
     while(word)
     {
         p = word->data;
+
         while(*p)
         {
             switch(*p)
@@ -3205,22 +3366,26 @@ void remove_quotes(struct word_s *wordlist)
 
 /*
  * A simple shortcut to perform word-expansions on a string,
- * returning the result as a string.
+ * returning the result as a string. The flags field determines
+ * whether we should perform pathname expansion, quote removal
+ * and field splitting on the expanded word(s).
  */
-char *word_expand_to_str(char *word)
+char *word_expand_to_str(char *word, int flags)
 {
-    struct word_s *w = word_expand(word,
-                        FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES|FLAG_FIELD_SPLITTING);
+    struct word_s *w = word_expand(word, flags);
     if(!w)
     {
         return NULL;
     }
+
     char *res = wordlist_to_str(w, WORDLIST_ADD_SPACES);
     free_all_words(w);
+    
     return res;
 }
 
 
+#if 0
 /*
  * Check if char c is a valid $IFS character.
  *
@@ -3241,15 +3406,26 @@ int is_IFS_char(char c, char *IFS)
     } while(*++IFS);
     return 0;
 }
+#endif
 
 
 /*
- * Skip all whitespace characters that are part of $IFS.
+ * Skip all whitespace characters that are part of the $IFS.
+ * It is the caller's responsibility to make sure this function is called only
+ * with the "whitespace" part of the $IFS, i.e. that the IFS argument doesn't
+ * include any non-whitespace characters.
  */
-void skip_IFS_whitespace(char **str, char *IFS)
+char *skip_IFS_whitespace(char *str, char *IFS)
+// void skip_IFS_whitespace(char **str, char *IFS)
 {
-    char *IFS2 = IFS;
-    char *s2   = *str;
+#if 0
+    char *s2 = str;
+    
+    while(strchr_any(s2, IFS))
+    {
+        s2++;
+    }
+    
     do
     {
         if(*s2 == *IFS2)
@@ -3258,29 +3434,152 @@ void skip_IFS_whitespace(char **str, char *IFS)
             IFS2 = IFS-1;
         }
     } while(*++IFS2);
-    *str = s2;
+    
+    (*str) = s2;
+#endif
+    
+    while(*str && chrcmp(*str, IFS))
+    {
+        str++;
+    }
+    
+    return str;
+}
+
+
+/*
+ * Skip all trailing whitespace characters that are part of $IFS. The function
+ * compares characters starting at *strend, going back upto *str, and stops
+ * when it hits a character that is not part of the $IFS.
+ * It is the caller's responsibility to make sure this function is called only
+ * with the "whitespace" part of the $IFS, i.e. that the IFS argument doesn't
+ * include any non-whitespace characters.
+ */
+char *skip_trailing_IFS_whitespace(char *str, char *strend, char *IFS)
+{
+    while(strend > str && chrcmp(*strend, IFS))
+    {
+        strend--;
+    }
+    
+    return strend;
 }
 
 
 /*
  * Skip $IFS delimiters, which can be whitespace characters as well as other chars.
  */
+#if 0
 void skip_IFS_delim(char *str, char *IFS_space, char *IFS_delim, size_t *_i, size_t len)
 {
     size_t i = *_i;
+
     while((i < len) && is_IFS_char(str[i], IFS_space))
     {
         i++;
     }
+
     while((i < len) && is_IFS_char(str[i], IFS_delim))
     {
         i++;
     }
+    
     while((i < len) && is_IFS_char(str[i], IFS_space))
     {
         i++;
     }
+    
     *_i = i;
+}
+#endif
+
+char *skip_IFS_delim(char *str, char *IFS_space, char *IFS_delim)
+{
+    while(*str && chrcmp(*str, IFS_space))
+    {
+        str++;
+    }
+    
+    if(*str && chrcmp(*str, IFS_delim))
+    {
+        str++;
+    }
+    
+    while(*str && chrcmp(*str, IFS_space))
+    {
+        str++;
+    }
+    
+    return str;
+}
+
+
+/*
+ * Skip all trailing characters that are part of $IFS. The function
+ * compares characters starting at *strend, going back upto *str, and stops
+ * when it hits a character that is not part of the $IFS. That is, the return
+ * result points to the first $IFS char minus 1.
+ */
+char *skip_trailing_IFS_delim(char *str, char *strend, char *IFS_space, char *IFS_delim)
+{
+    while(strend >= str && chrcmp(*strend, IFS_space))
+    {
+        strend--;
+    }
+    
+    if(strend >= str && chrcmp(*strend, IFS_delim))
+    {
+        strend--;
+    }
+    
+    while(strend >= str && chrcmp(*strend, IFS_space))
+    {
+        strend--;
+    }
+    
+    return strend;
+}
+
+
+/*
+ * Given an $IFS, break the string down to retrieve the space and delimiter
+ * characters we will use later on to perform field splitting.
+ */
+void get_IFS_spaces_and_delims(char *IFS, char *IFS_space, char *IFS_delim)
+{
+    char *p;
+
+    if(strcmp(IFS, " \t\n") == 0)   /* "standard" IFS */
+    {
+        IFS_space[0] = ' ' ;
+        IFS_space[1] = '\t';
+        IFS_space[2] = '\n';
+        IFS_space[3] = '\0';
+        
+        IFS_delim[0] = '\0';
+    }
+    else                            /* "custom" IFS */
+    {
+        p  = IFS;
+        char *sp = IFS_space;
+        char *dp = IFS_delim;
+        
+        do
+        {
+            if(isspace(*p))
+                //if(*p == ' ' || *p == '\t' || *p == '\n')
+            {
+                *sp++ = *p++;
+            }
+            else
+            {
+                *dp++ = *p++;
+            }
+        } while(*p);
+        
+        *sp = '\0';
+        *dp = '\0';
+    }
 }
 
 
@@ -3294,54 +3593,36 @@ struct word_s *field_split(char *str)
     struct symtab_entry_s *entry = get_symtab_entry("IFS");
     char *IFS = entry ? entry->val : NULL;
     char *p;
+
     /* POSIX says no IFS means: "space/tab/NL" */
     if(!IFS)
     {
         IFS = " \t\n";
     }
+
     /* POSIX says empty IFS means no field splitting */
     if(IFS[0] == '\0')
     {
         return NULL;
     }
+    
     /* get the IFS spaces and delimiters separately */
     char IFS_space[64];
     char IFS_delim[64];
-    if(strcmp(IFS, " \t\n") == 0)   /* "standard" IFS */
-    {
-        IFS_space[0] = ' ' ;
-        IFS_space[1] = '\t';
-        IFS_space[2] = '\n';
-        IFS_space[3] = '\0';
-        IFS_delim[0] = '\0';
-    }
-    else                            /* "custom" IFS */
-    {
-        p  = IFS;
-        char *sp = IFS_space;
-        char *dp = IFS_delim;
-        do
-        {
-            if(isspace(*p))
-            //if(*p == ' ' || *p == '\t' || *p == '\n')
-            {
-                *sp++ = *p++;
-            }
-            else
-            {
-                *dp++ = *p++;
-            }
-        } while(*p);
-        *sp = '\0';
-        *dp = '\0';
-    }
 
+    get_IFS_spaces_and_delims(IFS, IFS_space, IFS_delim);
+
+    /* skip any leading whitespaces in the string */
+    str = skip_IFS_whitespace(str, IFS_space);
+    
     size_t len    = strlen(str);
     size_t i      = 0, j = 0, k;
-    int    fields = 1;
     char   quote  = 0;
-    /* skip any leading whitespaces in the string */
-    skip_IFS_whitespace(&str, IFS_space);
+    
+#if 0
+    int    fields = 1;
+    int    splitting = 0;
+    
     /* estimate the needed number of fields */
     do
     {
@@ -3376,9 +3657,12 @@ struct word_s *field_split(char *str)
                 {
                     break;
                 }
+    
                 if(is_IFS_char(str[i], IFS_space) || is_IFS_char(str[i], IFS_delim))
                 {
+                    splitting = 1;
                     skip_IFS_delim(str, IFS_space, IFS_delim, &i, len);
+                
                     if(i < len)
                     {
                         fields++;
@@ -3389,17 +3673,20 @@ struct word_s *field_split(char *str)
     } while(++i < len);
 
     /* we have only one field. no field splitting needed */
-    if(fields == 1)
+    if(fields == 1 && !splitting)
     {
         return NULL;
     }
+#endif
 
     struct word_s *first_field = NULL;
     struct word_s *cur         = NULL;
+
     /* create the fields */
     i     = 0;
     j     = 0;
     quote = 0;
+
     do
     {
         switch(str[i])
@@ -3442,39 +3729,46 @@ struct word_s *field_split(char *str)
                 {
                     break;
                 }
+                
                 /*
                  * delimit the field if we have an IFS space or delimiter char, or if
                  * we reached the end of the input string.
                  */
-                if(is_IFS_char(str[i], IFS_space) ||
-                        is_IFS_char(str[i], IFS_delim) || (i == len))
+                if(chrcmp(str[i], IFS_space) ||
+                   chrcmp(str[i], IFS_delim) || (i == len))
                 {
                     /* copy the field text */
                     char *tmp = malloc(i-j+1);
+
                     /* TODO: do something better than bailing out here */
                     if(!tmp)
                     {
-                        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
-                                    "making fields");
+                        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "making fields");
                         return first_field;
                     }
+
                     strncpy(tmp, str+j, i-j);
                     tmp[i-j] = '\0';
+                    
                     /* create a new struct for the field */
                     struct word_s *fld = malloc(sizeof(struct word_s));
+                    
                     /* TODO: do something better than bailing out here */
                     if(!fld)
                     {
                         free(tmp);
                         return first_field;
                     }
+                    
+                    memset(fld, 0, sizeof(struct word_s));
                     fld->data = tmp;
                     fld->len  = i-j;
-                    fld->next = 0;
+                    
                     if(!first_field)
                     {
                         first_field = fld;
                     }
+                    
                     if(!cur)
                     {
                         cur  = fld;
@@ -3484,10 +3778,14 @@ struct word_s *field_split(char *str)
                         cur->next = fld;
                         cur       = fld;
                     }
+                    
                     k = i;
+                    
                     /* skip trailing IFS spaces/delimiters */
-                    skip_IFS_delim(str, IFS_space, IFS_delim, &i, len);
+                    p = skip_IFS_delim(str+i, IFS_space, IFS_delim);
+                    i = p-str;
                     j = i;
+                    
                     if(i != k && i < len)
                     {
                         i--;     /* go back one step so the loop will work correctly */
@@ -3496,5 +3794,6 @@ struct word_s *field_split(char *str)
                 break;
         }
     } while(++i <= len);
+    
     return first_field;
 }

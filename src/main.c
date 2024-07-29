@@ -30,10 +30,10 @@
 #include <errno.h>
 #include <locale.h>
 #include <sys/wait.h>
-#include "cmd.h"
-#include "sig.h"
-#include "debug.h"
-#include "utf.h"
+#include "include/cmd.h"
+#include "include/sig.h"
+#include "include/debug.h"
+#include "include/utf.h"
 #include "backend/backend.h"
 #include "symtab/symtab.h"
 #include "builtins/builtins.h"
@@ -90,6 +90,9 @@ int main(int argc, char **argv)
     shell_argc = argc;
     shell_argv = argv;
     shell_pid  = getpid();
+
+    /* make sure our process group id is the same as our pid */
+    setpgid(0, shell_pid);
     
     /* init shell variables from the environment */
     initsh(argv);
@@ -144,12 +147,16 @@ int main(int argc, char **argv)
 
         if(euid != ruid)
         {
-            seteuid(ruid);
+            if(seteuid(ruid) < 0)
+            {
+            }
         }
 
         if(egid != rgid)
         {
-            setegid(rgid);
+            if(setegid(rgid) < 0)
+            {
+            }
         }
         
         /* bash doesn't read startup files in this case */
@@ -285,7 +292,8 @@ int main(int argc, char **argv)
     {
         parse_and_execute(&src);
     }
-
+    
+    
     /* the exit builtin will execute any EXIT traps */
     do_builtin_internal(exit_builtin, 1, (char *[]){ "exit", NULL });
 }
@@ -423,11 +431,8 @@ int parse_and_execute(struct source_s *src)
     if(tok->type == TOKEN_EOF)
     {
         /* don't leave any hanging token structs */
-        free_token(get_current_token());
-        free_token(get_previous_token());
-        /* restore token pointers */
-        set_current_token(old_current_token);
-        set_previous_token(old_previous_token);
+        restore_tokens(old_current_token, old_previous_token);
+
         return 0;
     }
 
@@ -462,7 +467,6 @@ int parse_and_execute(struct source_s *src)
         /* parse the next command */
         struct node_s *cmd = parse_list(tok);
         struct node_s *cmd2 = cmd;
-        dump_node_tree(cmd, 0);
 
         /* parser encountered an error */
         if(parser_err)
@@ -680,11 +684,11 @@ int parse_and_execute(struct source_s *src)
         term_canon(0);
         update_row_col();
     }
-
+    
     /* epilogue */
     set_current_token(old_current_token);
     set_previous_token(old_previous_token);
-
+    
     return res;
 }
 
@@ -708,7 +712,7 @@ int read_file(char *filename, struct source_s *src)
         return 0;
     }
     
-    char *filename2 = word_expand_to_str(filename);
+    char *filename2 = word_expand_to_str(filename, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
     if(!filename2)
     {
         errno = EINVAL;
@@ -831,8 +835,7 @@ read:
         {
             if(++nulls == 256)
             {
-                PRINT_ERROR("%s: cannot read `%s`: binary file\n", 
-                            SOURCE_NAME, filename);
+                PRINT_ERROR(SHELL_NAME, "cannot read `%s`: binary file", filename);
                 free(tmpbuf);
                 free(filename2);
                 errno = ENOEXEC;
@@ -879,8 +882,7 @@ long read_pipe(FILE *f, char **str)
     
     if(!buf)
     {
-        PRINT_ERROR("%s: failed to allocate buffer: %s\n", SOURCE_NAME,
-                    strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to allocate buffer: %s", strerror(errno));
         return 0;
     }
 
@@ -896,8 +898,7 @@ long read_pipe(FILE *f, char **str)
         
         if(!may_extend_string_buf(&buf, &buf_end, &b, &buf_size))
         {
-            PRINT_ERROR("%s: failed to allocate buffer: %s\n", SOURCE_NAME,
-                        strerror(errno));
+            PRINT_ERROR(SHELL_NAME, "failed to allocate buffer: %s", strerror(errno));
             return 0;
         }
         

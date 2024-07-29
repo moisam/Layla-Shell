@@ -26,9 +26,9 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <string.h>
-#include "cmd.h"
-#include "kbdevent.h"
-#include "debug.h"
+#include "include/cmd.h"
+#include "include/kbdevent.h"
+#include "include/debug.h"
 
 /* original terminal attributes (when the shell started) */
 struct termios tty_attr_old;
@@ -107,6 +107,7 @@ int rawon(void)
     {
         return 0;
     }
+
     return 1;
 }
 

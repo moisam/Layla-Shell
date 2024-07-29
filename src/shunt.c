@@ -25,7 +25,7 @@
  * Retrieved from: http://en.literateprograms.org/Shunting_yard_algorithm_(C)?oldid=12454
  * 
  * 
- * Copyright (c) 2019 Mohammed Isam [mohammed_isam1984@yahoo.com]
+ * Copyright (c) 2019, 2024 Mohammed Isam [mohammed_isam1984@yahoo.com]
  * 
  * Extensive modifications have been applied to this file to include most of the C
  * language operators and to make this file usable as part of the Layla shell.
@@ -43,9 +43,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "symtab/symtab.h"
-#include "debug.h"
+#include "include/debug.h"
 
 /* max stack capacities */
 #define MAXOPSTACK          64
@@ -295,7 +295,7 @@ long eval_div(struct stack_item_s *a1, struct stack_item_s *a2)
     long n2 = long_value(a2);
     if(!n2)
     {
-        PRINT_ERROR("%s: division by zero\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "division by zero");
         error = 1;
         return 0;
     }
@@ -308,7 +308,7 @@ long eval_mod(struct stack_item_s *a1, struct stack_item_s *a2)
     long n2 = long_value(a2);
     if(!n2)
     {
-        PRINT_ERROR("%s: division by zero\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "division by zero");
         error = 1;
         return 0;
     }
@@ -362,7 +362,7 @@ long eval_assign_val(struct stack_item_s *a1, long val)
     else
     {
         /* assignment to non-variable */
-        PRINT_ERROR("%s: assignment to non-variable: %ld\n", SOURCE_NAME, long_value(a1));
+        PRINT_ERROR(SHELL_NAME, "assignment to non-variable: %ld", long_value(a1));
         error = 1;
         val = 0;
     }
@@ -438,14 +438,14 @@ long eval_assign_or(struct stack_item_s *a1, struct stack_item_s *a2)
 long do_eval_inc_dec(int pre, int add, struct stack_item_s *a1)
 {
     long val = long_value(a1);
-    char buf[16];
+    char buf[32];
     int diff = add ? 1 : -1;
     
     if(a1->type != ITEM_VAR_PTR)
     {
         /* assignment to non-variable */
-        PRINT_ERROR("%s: expected operand for operator: %s\n", 
-                    SOURCE_NAME, add ? "++" : "--");
+        PRINT_ERROR(SHELL_NAME, "expected operand for operator: %s", 
+                    add ? "++" : "--");
         error = 1;
         return 0;
     }
@@ -667,7 +667,7 @@ void push_opstack(struct op_s *op)
 {
     if(nopstack > MAXOPSTACK-1)
     {
-        PRINT_ERROR("%s: operator stack overflow\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "operator stack overflow");
         error = 1;
         return;
     }
@@ -682,8 +682,7 @@ struct op_s *pop_opstack(void)
 {
     if(!nopstack)
     {
-        PRINT_ERROR("%s: operator stack is empty: operator expected\n", 
-                    SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "operator stack is empty: operator expected");
         error = 1;
         return NULL;
     }
@@ -698,7 +697,7 @@ void push_numstackl(long val)
 {
     if(nnumstack > MAXNUMSTACK-1)
     {
-        PRINT_ERROR("%s: number stack overflow\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "number stack overflow");
         error = 1;
         return;
     }
@@ -715,7 +714,7 @@ void push_numstackv(struct symtab_entry_s *val)
 {
     if(nnumstack > MAXNUMSTACK-1)
     {
-        PRINT_ERROR("%s: number stack overflow\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "number stack overflow");
         error = 1;
         return;
     }
@@ -732,8 +731,7 @@ struct stack_item_s pop_numstack(void)
 {
     if(!nnumstack)
     {
-        PRINT_ERROR("%s: number stack is empty: operand expected\n", 
-                    SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "number stack is empty: operand expected");
         error = 1;
         return (struct stack_item_s) { };
     }
@@ -797,7 +795,7 @@ void shunt_op(struct op_s *op)
         {
             if(!(pop = pop_opstack()) || pop->op != '(')
             {
-                PRINT_ERROR("%s: stack error: no matching \'(\'\n", SOURCE_NAME);
+                PRINT_ERROR(SHELL_NAME, "stack error: no matching \'(\'");
                 error = 1;
             }
         }
@@ -941,8 +939,7 @@ int get_ndigit(char c, int base, int *result)
 
 invalid:
     /* invalid digit */
-    PRINT_ERROR("%s: digit (%c) exceeds the value of the base (%d)\n", 
-                SOURCE_NAME, c, base);
+    PRINT_ERROR(SHELL_NAME, "digit (%c) exceeds the value of the base (%d)", c, base);
     error = 1;
     return 0;
 }
@@ -1140,7 +1137,7 @@ long get_num(char *s, int *char_count)
                 }
                 else
                 {
-                    PRINT_ERROR("%s: invalid number near: %s\n", SOURCE_NAME, s);
+                    PRINT_ERROR(SHELL_NAME, "invalid number near: %s", s);
                     error = 1;
                     return 0;
                 }
@@ -1179,7 +1176,7 @@ long get_num(char *s, int *char_count)
         if(num < MINBASE || num > MAXBASE)
         {
             /* invalid base */
-            PRINT_ERROR("%s: invalid arithmetic base: %ld\n", SOURCE_NAME, num);
+            PRINT_ERROR(SHELL_NAME, "invalid arithmetic base: %ld", num);
             error = 1;
             return 0;
         }
@@ -1203,7 +1200,7 @@ long get_num(char *s, int *char_count)
         /* check the number is not attached to non-digit chars */
         if(*s2 && !isspace(*s2))
         {
-            PRINT_ERROR("%s: invalid number near: %s\n", SOURCE_NAME, s);
+            PRINT_ERROR(SHELL_NAME, "invalid number near: %s", s);
             error = 1;
             return 0;
         }
@@ -1352,8 +1349,7 @@ char *arithm_expand(char *orig_expr)
     char *baseexp = malloc(baseexp_len+1);
     if(!baseexp)
     {
-        PRINT_ERROR("%s: insufficient memory for arithmetic expansion\n", 
-                    SOURCE_NAME);
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "arithmetic expansion");
         return NULL;
     }
 
@@ -1433,8 +1429,8 @@ char *arithm_expand(char *orig_expr)
                             }
                             else if(op->op != '(' && !op->unary)
                             {
-                                PRINT_ERROR("%s: illegal use of binary operator near: %s\n", 
-                                            SOURCE_NAME, expr);
+                                PRINT_ERROR(SHELL_NAME, 
+                                            "illegal use of binary operator near: %s", expr);
                                 goto err;
                             }
                         }
@@ -1510,7 +1506,7 @@ char *arithm_expand(char *orig_expr)
                 if(i == 0)
                 {
                     /* closing brace not found */
-                    PRINT_ERROR("%s: syntax error near: %s\n", SOURCE_NAME, expr);
+                    PRINT_ERROR(SHELL_NAME, "syntax error near: %s", expr);
                     goto err;
                 }
                 
@@ -1520,8 +1516,7 @@ char *arithm_expand(char *orig_expr)
                 
                 if(!sub_expr)
                 {
-                    PRINT_ERROR("%s: insufficient memory to parse arithmetic expression\n", 
-                                SOURCE_NAME);
+                    INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "parsing arithmetic expression");
                     goto err;
                 }
 
@@ -1552,8 +1547,7 @@ char *arithm_expand(char *orig_expr)
                 struct symtab_entry_s *n1 = get_var(tstart, &n2);
                 if(!n1)
                 {
-                    PRINT_ERROR("%s: failed to add symbol near: %s\n", 
-                                SOURCE_NAME, tstart);
+                    PRINT_ERROR(SHELL_NAME, "failed to add symbol near: %s", tstart);
                     goto err;
                 }
                 DISCARD_COMMA();
@@ -1635,7 +1629,7 @@ char *arithm_expand(char *orig_expr)
          */
         if(op->op == '(')
         {
-            PRINT_ERROR("%s: error: missing \')\'\n", SOURCE_NAME);
+            PRINT_ERROR(SHELL_NAME, "error: missing \')\'");
             goto err;
         }
         
@@ -1666,8 +1660,9 @@ char *arithm_expand(char *orig_expr)
     /* we must have only 1 item on the stack now */
     if(nnumstack != 1)
     {
-        PRINT_ERROR("%s: number stack has %d elements after evaluation (should be 1)\n", 
-                    SOURCE_NAME, nnumstack);
+        PRINT_ERROR(SHELL_NAME,
+                    "number stack has %d elements after evaluation (should be 1)", 
+                    nnumstack);
         goto err;
     }
 

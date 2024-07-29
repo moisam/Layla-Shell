@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
  * 
  *    file: initsh.c
  *    This file is part of the Layla Shell project.
@@ -43,11 +43,11 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <linux/kd.h>
-#include "early_environ.h"
-#include "cmd.h"
+#include "include/early_environ.h"
+#include "include/cmd.h"
 #include "builtins/setx.h"
-#include "kbdevent.h"
-#include "debug.h"
+#include "include/kbdevent.h"
+#include "include/debug.h"
 #include "symtab/symtab.h"
 #include "parser/parser.h"
 #include "backend/backend.h"
@@ -101,7 +101,7 @@ int check_env_file(void)
     struct source_s src;
     if(!read_file(ENV, &src))
     {
-        PRINT_ERROR("%s: failed to read `%s`: %s\n", SHELL_NAME, ENV, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to read `%s`: %s", ENV, strerror(errno));
         return 0;
     }
     /* and execute it */
@@ -288,7 +288,7 @@ void initsh(char **argv)
                 cwd = malloc(len);
                 if(!cwd)
                 {
-                    PRINT_ERROR("%s: FATAL ERROR: insufficient memory for cwd string\n", SHELL_NAME);
+                    INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "cwd string");
                     exit(EXIT_FAILURE);
                 }
                 memset(cwd, 0, len);
@@ -508,7 +508,7 @@ void init_tty(void)
      * make sure our process group id is the same as our pid, and that the terminal
      * knows we are the forground process.
      */
-    setpgid(0, shell_pid);
+    //setpgid(0, shell_pid);
     tcsetpgrp(tty, shell_pid);
     
     /* get the current terminal attributes */
@@ -520,8 +520,8 @@ void init_tty(void)
     /* get screen size */
     if(!get_screen_size())
     {
-        PRINT_ERROR("%s: ERROR: failed to read screen size\n", SHELL_NAME);
-        PRINT_ERROR("       Assuming 80x25...\n");
+        PRINT_ERROR(SHELL_NAME, "ERROR: failed to read screen size");
+        PRINT_ERROR(SHELL_NAME, "       Assuming 80x25...");
         /* update the value of terminal columns in the symbol table */
         VGA_WIDTH = 0;
         entry = add_to_symtab("COLUMNS");
@@ -562,7 +562,8 @@ void init_tty(void)
     /* init terminal device to raw mode */
     if(!rawon())
     {
-        PRINT_ERROR("%s: FATAL ERROR: failed to set terminal attributes (errno = %d)\n", SHELL_NAME, errno);
+        PRINT_ERROR(SHELL_NAME, "FATAL ERROR: failed to set terminal attributes "
+        						"(errno = %d, %s)", errno, strerror(errno));
         exit(EXIT_FAILURE);
     }
 }
@@ -662,6 +663,91 @@ void init_rc(void)
 
 
 /*
+ * Parse and set/unset options passed to the shell in the commandline. This is
+ * similar to the set builtin, except it handles commandline options such as -c,
+ * -i, -l.
+ * 
+ * Returns 1 if the option needs an argument (happens with the -o option), 0 if
+ * the option doesn't need an argument (most options), and exits the shell on error.
+ */
+int parse_cmdline_options(char *ops, char *arg, int *expect_cmdstr, int *islogin)
+{
+    char buf[4] = { *ops, 0, 0, 0 };
+    char onoff = (*ops++ == '-') ? 1 : 0;
+    int  i, res = 0;
+    char end_loop = 0;
+    
+    while(*ops)
+    {
+        switch(*ops)
+        {
+            case 'c':
+                *expect_cmdstr = onoff;
+                break;
+            
+            case 's':
+                read_stdin = onoff;
+                break;
+            
+            case 'i':
+                if((getuid() != geteuid()) || (getgid() != getegid()))
+                {
+                    PRINT_ERROR(SHELL_NAME, "cannot set interactive flag: insufficient permissions");
+                }
+                else
+                {
+                    interactive_shell = onoff;
+                }
+                break;
+                
+            case 'l':
+                *islogin = onoff;
+                break;
+                
+            case 'o':
+                buf[1] = 'o';
+                end_loop = 1;
+                
+                if(ops[1])
+                {
+                    i = do_options(buf, &ops[1]);
+                }
+                else
+                {
+                    i = do_options(buf, arg);
+                    res = arg ? 1 : 0;
+                }
+                
+                if(i < 0)
+                {
+                    exit(EXIT_FAILURE);
+                }
+                break;
+                
+            default:
+                /* normal, set-like options */
+                buf[1] = *ops;
+
+                if(do_options(buf, NULL) < 0)
+                {
+                    exit(EXIT_FAILURE);
+                }
+                break;
+        }
+        
+        if(end_loop)
+        {
+            break;
+        }
+        
+        ops++;
+    }
+    
+    return res;
+}
+
+
+/*
  * Parse command-line arguments and set the shell
  * options accordingly.
  */
@@ -710,13 +796,17 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
     set_optionx(OPTION_PROMPT_PERCENT      , 1);
     /* enable extended ksh-like pattern matching */
     set_optionx(OPTION_EXT_GLOB            , 1);
+
+#ifdef DEBUG_MODE
+#endif
+
     
     /* now read command-line options */
     struct symtab_entry_s *entry;
     int    i             = 1;
     int    param         = 0;
     int    expect_cmdstr = 0;
-    char   islogin       = 0;
+    int    islogin       = 0;
     char   end_loop      = 0;
 
     /* if argv[0] starts with '-', we are a login shell */
@@ -728,40 +818,11 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
     /* parse the command line options */
     for( ; i < argc; i++)
     {
-        int skip;
         char *arg = argv[i];
+
         switch(arg[0])
         {
             case '-':
-                /* check for the '-c' option */
-                if(strcmp(arg, "-c") == 0)
-                {
-                    expect_cmdstr = 1;
-                    break;
-                }
-
-                /* check for the '-s' option */
-                if(strcmp(arg, "-s") == 0)
-                {
-                    read_stdin = 1;
-                    break;
-                }
-    
-                /* check for the '-i' option */
-                if(strcmp(arg, "-i") == 0)
-                {
-                    if((getuid() != geteuid()) || (getgid() != getegid()))
-                    {
-                        PRINT_ERROR("%s: cannot set interactive flag: insufficient permissions\n",
-                                    SHELL_NAME);
-                    }
-                    else
-                    {
-                        interactive_shell = 1;
-                    }
-                    break;
-                }
-    
                 if(arg[1] == '\0' || strcmp(arg, "--") == 0)    /* the -- and - special options */
                 {
                     end_loop = 1;
@@ -769,92 +830,98 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                     break;
                 }
                 
-                if(strcmp(arg, "--dirsfile") == 0 || strcmp(arg, "--dirs-file") == 0) /* bash */
+                if(arg[1] == '-')
                 {
-                    read_dirsfile = 1;
-                    char *file = argv[i+1];
-                    struct symtab_entry_s *entry = add_to_symtab("DIRSFILE");
-                    if(file == NULL || *file == '-')       /* without argument, read the default file */
+                    if(strcmp(arg, "--dirsfile") == 0 || strcmp(arg, "--dirs-file") == 0) /* bash */
                     {
-                        symtab_entry_setval(entry, DIRSTACK_FILE);
+                        read_dirsfile = 1;
+                        char *file = argv[i+1];
+                        struct symtab_entry_s *entry = add_to_symtab("DIRSFILE");
+                        if(file == NULL || *file == '-')       /* without argument, read the default file */
+                        {
+                            symtab_entry_setval(entry, DIRSTACK_FILE);
+                        }
+                        else
+                        {
+                            symtab_entry_setval(entry, file);
+                            i++;
+                        }
+                        break;
                     }
-                    else
+                    
+                    if(strcmp(arg, "--help") == 0)                                          /* bash, csh */
                     {
-                        symtab_entry_setval(entry, file);
+                        do_builtin_internal(help_builtin, 1, (char *[]){ "help", NULL });
+                        //exit_gracefully(EXIT_SUCCESS, NULL);
+                        exit(EXIT_SUCCESS);
+                    }
+                    
+                    if(strcmp(arg, "--init-file") == 0 || strcmp(arg, "--rcfile") == 0)     /* bash */
+                    {
+                        if(argv[++i] == NULL)
+                        {
+                            MISSING_ARG_ERROR(SHELL_NAME, "init/rc file name");
+                            //exit_gracefully(EXIT_FAILURE, NULL);
+                            exit(EXIT_FAILURE);
+                        }
+                        rcfile = argv[i];
+                        break;
+                    }
+                    
+                    if(strcmp(arg, "--login") == 0)                                         /* bash, csh */
+                    {
+                        islogin = 1;
+                        break;
+                    }
+                    
+                    if(strcmp(arg, "--noprofile") == 0)                                     /* bash */
+                    {
+                        noprofile = 1;
+                        break;
+                    }
+                    
+                    if(strcmp(arg, "--norc") == 0)                                          /* bash */
+                    {
+                        norc = 1;
+                        break;
+                    }
+                    
+                    if(strcmp(arg, "--posix") == 0)
+                    {
+                        /* enable POSIX strict behavior */
+                        do_posix(1);
+                        /* stop parsing the other options */
+                        end_loop = 1;
                         i++;
+                        break;
                     }
-                    break;
-                }
-                
-                if(strcmp(arg, "--help") == 0)                                          /* bash, csh */
-                {
-                    do_builtin_internal(help_builtin, 1, (char *[]){ "help", NULL });
-                    //exit_gracefully(EXIT_SUCCESS, NULL);
-                    exit(EXIT_SUCCESS);
-                }
-                
-                if(strcmp(arg, "--init-file") == 0 || strcmp(arg, "--rcfile") == 0)     /* bash */
-                {
-                    if(argv[++i] == NULL)
+                    
+                    if(strcmp(arg, "--restricted") == 0)                                    /* bash */
                     {
-                        PRINT_ERROR("%s: missing argument: init/rc file name\n", SHELL_NAME);
-                        //exit_gracefully(EXIT_FAILURE, NULL);
-                        exit(EXIT_FAILURE);
+                        set_option('r', 1);
+                        set_optionx(OPTION_RESTRICTED_SHELL, 1);
+                        break;
                     }
-                    rcfile = argv[i];
-                    break;
+                    
+                    if(strcmp(arg, "--verbose") == 0)                                       /* bash */
+                    {
+                        set_option('v', 1);
+                        break;
+                    }
+                    
+                    if(strcmp(arg, "--version") == 0)                                       /* bash, csh */
+                    {
+                        printf("version %s running on %s %s\n", shell_ver, CPU_ARCH, OS_TYPE);
+                        //exit_gracefully(EXIT_SUCCESS, NULL);
+                        exit(EXIT_SUCCESS);
+                    }
+                    
+                    OPTION_UNKNOWN_STR_ERROR(SHELL_NAME, arg);
+                    exit(EXIT_FAILURE);
                 }
                 
-                if(strcmp(arg, "--login") == 0 || strcmp(arg, "-l") == 0)               /* bash, csh */
-                {
-                    islogin = 1;
-                    break;
-                }
-                
-                if(strcmp(arg, "--noprofile") == 0)                                     /* bash */
-                {
-                    noprofile = 1;
-                    break;
-                }
-                
-                if(strcmp(arg, "--norc") == 0)                                          /* bash */
-                {
-                    norc = 1;
-                    break;
-                }
-                
-                if(strcmp(arg, "--posix") == 0)
-                {
-                    /* enable POSIX strict behavior */
-                    do_posix(1);
-                    /* stop parsing the other options */
-                    end_loop = 1;
-                    i++;
-                    break;
-                }
-                
-                if(strcmp(arg, "--restricted") == 0)                                    /* bash */
-                {
-                    set_option('r', 1);
-                    set_optionx(OPTION_RESTRICTED_SHELL, 1);
-                    break;
-                }
-                
-                if(strcmp(arg, "--verbose") == 0)                                       /* bash */
-                {
-                    set_option('v', 1);
-                    break;
-                }
-                
-                if(strcmp(arg, "--version") == 0)                                       /* bash, csh */
-                {
-                    printf("version %s running on %s %s\n", shell_ver, CPU_ARCH, OS_TYPE);
-                    //exit_gracefully(EXIT_SUCCESS, NULL);
-                    exit(EXIT_SUCCESS);
-                }
-                
-                /* NOTE: fall through to the next case */
-                __attribute__((fallthrough));
+                i += parse_cmdline_options(arg, argv[i+1], &expect_cmdstr, &islogin);
+                break;
                 
             case '+':
                 if(strcmp(arg, "+O") == 0 || strcmp(arg, "-O") == 0)                    /* bash */
@@ -871,13 +938,13 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                     
                     if((c = optionx_index(arg)) < 0)
                     {
-                        PRINT_ERROR("%s: invalid option: %s\n", SHELL_NAME, arg);
+                        OPTION_UNKNOWN_STR_ERROR(SHELL_NAME, arg);
                         break;
                     }
                     
                     if(!set_optionx(c, arg[0] == '-' ? 1 : 0))
                     {
-                        PRINT_ERROR("%s: error setting: %s\n", SHELL_NAME, arg);
+                        PRINT_ERROR(SHELL_NAME, "error setting: %s", arg);
                     }
                     break;
                 }
@@ -890,12 +957,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
                 }
                 
                 /* normal, set-like options */
-                skip = do_options(argv[i], argv[i+1]);
-                if(skip < 0)    /* error parsing option */
-                {
-                    exit(EXIT_FAILURE);
-                }
-                i += skip;
+                i += parse_cmdline_options(arg, argv[i+1], &expect_cmdstr, &islogin);
                 break;
                 
             default:
@@ -916,7 +978,7 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
     {
         if(i >= argc)
         {
-            PRINT_ERROR("%s: missing command string\n", SHELL_NAME);
+            PRINT_ERROR(SHELL_NAME, "missing command string");
             exit(EXIT_FAILURE);
         }
         
@@ -976,8 +1038,8 @@ int parse_shell_args(int argc, char **argv, struct source_s *src)
             char *cmdfile = argv[i++];
             if(!read_file(cmdfile, src))
             {
-                PRINT_ERROR("%s: failed to read '%s': %s\n", 
-                            SHELL_NAME, cmdfile, strerror(errno));
+                PRINT_ERROR(SHELL_NAME, "failed to read '%s': %s", 
+                            cmdfile, strerror(errno));
                 exit(errno == ENOENT ? EXIT_ERROR_NOENT : EXIT_ERROR_NOEXEC);
             }
             

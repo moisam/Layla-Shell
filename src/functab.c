@@ -20,7 +20,7 @@
  */    
 
 #include <stdlib.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "symtab/symtab.h"
 #include "builtins/builtins.h"
 

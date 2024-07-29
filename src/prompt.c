@@ -33,12 +33,12 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/param.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "symtab/symtab.h"
 #include "backend/backend.h"
 #include "builtins/builtins.h"
 #include "builtins/setx.h"
-#include "debug.h"
+#include "include/debug.h"
 
 /* buffer to use when processing a prompt string */
 char prompt[DEFAULT_LINE_MAX];
@@ -203,7 +203,7 @@ int get_date(char *fmt, struct tm *now)
     }
     else
     {
-        PRINT_ERROR("%s: strftime failed\n", SHELL_NAME);
+        PRINT_ERROR(SHELL_NAME, "strftime failed");
         return 0;
     }
 }

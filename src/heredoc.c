@@ -22,12 +22,12 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "scanner/scanner.h"
 #include "parser/node.h"
 #include "parser/parser.h"
 #include "error/error.h"
-#include "debug.h"
+#include "include/debug.h"
 
 /* max allowed length for heredoc delimiter words */
 #define MAX_DELIM_LEN       512
@@ -55,8 +55,7 @@ char *get_heredoc(char *start, char *end, int strip)
     char *heredoc = malloc(heredoc_len+1);
     if(!heredoc)        /* insufficient memory */
     {
-        PRINT_ERROR("%s: insufficient memory for %s\n", SOURCE_NAME, 
-                    "storing here-document");
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "storing here-document");
         return NULL;
     }
 
@@ -205,7 +204,7 @@ char *heredoc_end(char *start, char *delim, char last_char)
     struct word_s *word = make_word(delim);
     if(!word)
     {
-        PRINT_ERROR("%s: insufficient memory\n", SOURCE_NAME);
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "heredoc parsing");
         return NULL;
     }
     remove_quotes(word);
@@ -217,7 +216,7 @@ char *heredoc_end(char *start, char *delim, char last_char)
     /* empty heredoc delimiter word */
     if(!delim_word || *delim_word == '\0')
     {
-        PRINT_ERROR("%s: expected heredoc delimiter\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "expected heredoc delimiter");
         free_all_words(word);
         return NULL;
     }
@@ -336,12 +335,12 @@ char *heredoc_end(char *start, char *delim, char last_char)
         /* have we reached input's end? */
         if(!*start || *start == last_char)
         {
-            PRINT_ERROR("%s: heredoc delimited by EOF\n", SOURCE_NAME);
+            PRINT_ERROR(SHELL_NAME, "heredoc delimited by EOF");
             end = start;
         }
         else
         {
-            PRINT_ERROR("%s: expected heredoc delimiter: %s\n", SOURCE_NAME, delim);
+            PRINT_ERROR(SHELL_NAME, "expected heredoc delimiter: %s", delim);
         }
     }
     
@@ -389,8 +388,8 @@ int heredoc_delim(char *orig_cmd, int *expand, char **__delim, char **__delim_en
         /* make sure we don't overflow our buffer */
         if(chars == MAX_DELIM_LEN)
         {
-            PRINT_ERROR("%s: heredoc delimiter too long (max length %d)\n",
-                        SOURCE_NAME, MAX_DELIM_LEN);
+            PRINT_ERROR(SHELL_NAME, "heredoc delimiter too long (max length %d)",
+                        MAX_DELIM_LEN);
             return 0;
         }
             
@@ -454,7 +453,7 @@ int heredoc_delim(char *orig_cmd, int *expand, char **__delim, char **__delim_en
     /* empty heredoc delimiter word */
     if(*delim == '\0')
     {
-        PRINT_ERROR("%s: expected heredoc delimiter\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "expected heredoc delimiter");
         return 0;
     }
 

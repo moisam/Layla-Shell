@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2019, 2020 (c)
+ *    Copyright 2019, 2020, 2024 (c)
  * 
  *    file: popen.c
  *    This file is part of the Layla Shell project.
@@ -27,12 +27,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include "cmd.h"
-#include "sig.h"
+#include "include/cmd.h"
+#include "include/sig.h"
 #include "builtins/builtins.h"
 #include "builtins/setx.h"
 #include "backend/backend.h"
-#include "debug.h"
+#include "include/debug.h"
 
 
 /*
@@ -75,13 +75,13 @@ void init_subshell(void)
      */
     if(!option_set('T'))
     {
-        save_trap("DEBUG" );
-        save_trap("RETURN");
+        reset_trap("DEBUG");
+        reset_trap("RETURN");
     }
 
     if(!option_set('E'))
     {
-        save_trap("ERR");
+        reset_trap("ERR");
     }
     
     /*
@@ -106,7 +106,7 @@ void inc_subshell_var(void)
         entry = add_to_symtab("SUBSHELL");
     }
 
-    char buf[8];
+    char buf[16];
     sprintf(buf, "%d", ++executing_subshell);
     symtab_entry_setval(entry, buf);
 
@@ -142,17 +142,18 @@ void inc_shlvl_var(int amount)
 
 
 /*
- * This call is similar to popen(), except it sets the environment in the subshell
- * by exporting variables and function definitions. The 'r' suffix is because we
- * open the pipe for reading, equivalent to calling pipe(cmd, "r").
+ * This function is similar to popen(), except it sets the environment in the 
+ * subshell by exporting variables and function definitions. The 'r' suffix is 
+ * because we open the pipe for reading, equivalent to calling pipe(cmd, "r").
+ * The process id of the subshell is stored in procid if that is not NULL.
  */
-
-FILE *popenr(char *cmd)
+FILE *popenr(char *cmd, pid_t *procid)
 {
     if(!cmd)
     {
         return NULL;
     }
+
     int filedes[2] = { -1, -1 };
     pid_t pid;
     
@@ -174,7 +175,7 @@ FILE *popenr(char *cmd)
         close(filedes[1]);
 
         /*
-         * Execute the command. we imitate POSIX's definition of popen(), where the call to popen()
+         * Execute the command. We imitate POSIX's definition of popen(), where the call to popen()
          * results in behaviour akin to:
          * 
          *      execl(shell path, "sh", "-c", command, (char *)0);
@@ -192,22 +193,26 @@ FILE *popenr(char *cmd)
         
         /* execute the EXIT trap (if any) */
         trap_handler(0);
+        
         exit(exit_status);
     }
     else if(pid < 0)            /* error */
     {
-        PRINT_ERROR("%s: failed to fork subshell: %s\n", SOURCE_NAME, strerror(errno));
+        PRINT_ERROR(SHELL_NAME, "failed to fork subshell: %s", strerror(errno));
         return NULL;
     }
     else
     {
         close(filedes[1]);                 /* close the other end, we will not use it */
+        
         /*
          * set the close-on-exec flag. we could've used pipe2() to set this flag when we
          * created the pipe, but this would have caused the coprocess to fail after fork,
          * when it calls calls execl().
          */
         fcntl(filedes[0], F_SETFD, FD_CLOEXEC);
+        (*procid) = pid;
+
         return fdopen(filedes[0], "r");
     }
 }

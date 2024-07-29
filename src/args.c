@@ -22,9 +22,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include "cmd.h"
+#include "include/cmd.h"
 #include "symtab/symtab.h"
-#include "debug.h"
+#include "include/debug.h"
 
 /* Original argv passed to the shell on startup */
 char **shell_argv;
@@ -71,6 +71,7 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int flags)
 
     if(internal_argi < 1 || internal_argi > __argc)
     {
+        (*__argi) = __argc;
         return 0;
     }
     
@@ -117,7 +118,7 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int flags)
 
         if(flag_set(flags, FLAG_ARGS_PRINTERR))
         {
-            PRINT_ERROR("%s: unknown option: %c%c\n", __argv[0], minus_plus, *p);
+            PRINT_ERROR(__argv[0], "unknown option: %c%c", minus_plus, *p);
         }
         
         if(p[1] == '\0')
@@ -177,6 +178,10 @@ int parse_args(int __argc, char **__argv, char *__ops, int *__argi, int flags)
         else
         {
             internal_optarg = __argv[internal_argi];
+            
+            /* assign argi so that we can move on to the next argument */
+            (*__argi) = internal_argi++;
+            return (int)c;
         }
     }
     else if(p[1] == '\0')
