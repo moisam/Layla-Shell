@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
  * 
  *    file: node.c
  *    This file is part of the Layla Shell project.
@@ -23,10 +23,11 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "node.h"
 #include "parser.h"
-#include "../debug.h"
+#include "../include/debug.h"
+#include "../include/dstring.h"
 
 
 /*
@@ -366,6 +367,7 @@ void free_node_tree(struct node_s *node)
  */
 
 
+#if 0
 #define INIT_NODETREE_BUF_SIZE      2048
 
 #define CHECKED_NODETREE_APPEND(str, len)   \
@@ -383,8 +385,24 @@ if(!buf_append(&heredoc_buf, &heredoc_ptr,  \
 {                                           \
     return 0;                               \
 }
-    
+#endif
 
+#define CHECKED_NODETREE_APPEND(str, len)   \
+if(!str_append(&nodetree_buf, (str), (len)))\
+{                                           \
+    return 0;                               \
+}
+
+#define CHECKED_HEREDOCS_APPEND(str, len)   \
+if(!str_append(&heredoc_buf, (str), (len))) \
+{                                           \
+    return 0;                               \
+}
+
+struct dstring_s nodetree_buf = { NULL, NULL, 0, 0 };
+struct dstring_s heredoc_buf  = { NULL, NULL, 0, 0 };
+
+#if 0
 char  *nodetree_buf = NULL;
 char  *nodetree_ptr = NULL;
 size_t nodetree_buf_size = 0;
@@ -394,8 +412,12 @@ char  *heredoc_buf = NULL;
 char  *heredoc_ptr = NULL;
 size_t heredoc_buf_size = 0;
 size_t heredoc_buf_len  = 0;
+#endif
+
+int io_redirect_tree_to_str(struct node_s *node);
 
 
+#if 0
 static inline int buf_append(char **buf, char **buf_ptr,
                              size_t *buf_size, size_t *buf_len,
                              char *str, size_t str_len)
@@ -426,41 +448,39 @@ static inline int buf_append(char **buf, char **buf_ptr,
     
     return 1;
 }
+#endif
 
 
 void add_heredocs_to_tree(void)
 {
-    if(heredoc_buf_len == 0)
+    if(heredoc_buf.buf_len == 0)
     {
         return;
     }
     
-    if(nodetree_ptr[-1] != '\n')
+    if(nodetree_buf.buf_ptr[-1] != '\n')
     {
-        if(!buf_append(&nodetree_buf, &nodetree_ptr,
-            &nodetree_buf_size, &nodetree_buf_len, "\n", 1))
+        if(!str_append(&nodetree_buf, "\n", 1))
         {
             return;
         }
     }
     
-    if(!buf_append(&nodetree_buf, &nodetree_ptr,
-        &nodetree_buf_size, &nodetree_buf_len, heredoc_buf, heredoc_buf_len))
+    if(!str_append(&nodetree_buf, heredoc_buf.buf_base, heredoc_buf.buf_len))
     {
         return;
     }
     
-    if(nodetree_ptr[-1] != '\n')
+    if(nodetree_buf.buf_ptr[-1] != '\n')
     {
-        if(!buf_append(&nodetree_buf, &nodetree_ptr,
-            &nodetree_buf_size, &nodetree_buf_len, "\n", 1))
+        if(!str_append(&nodetree_buf, "\n", 1))
         {
             return;
         }
     }
     
-    heredoc_buf_len = 0;
-    heredoc_buf[0] = '\0';
+    heredoc_buf.buf_len = 0;
+    heredoc_buf.buf_base[0] = '\0';
 }
 
 
@@ -509,25 +529,32 @@ int list_tree_to_str(struct node_s *node)
         /* make sure we don't have heredocs from the last command */
         add_heredocs_to_tree();
 
-        if(nodetree_ptr[-1] != '\n')
+#if 0
+        if(nodetree_buf.buf_ptr[-1] != '\n')
         {
             CHECKED_NODETREE_APPEND("\n", 1);
         }
-
+#endif
+        
+        if(node->val_type == VAL_CHR)
+        {
+            if(node->val.chr == '&' && nodetree_buf.buf_ptr[-1] != '\n')
+            {
+                CHECKED_NODETREE_APPEND(" & ", 3);
+            }
+            else if(child->next_sibling)
+            {
+                CHECKED_NODETREE_APPEND("; ", 2);
+            }
+        }
+        /*
+        else if(child->next_sibling)
+        {
+            CHECKED_NODETREE_APPEND("; ", 2);
+        }
+        */
+        
         child = child->next_sibling;
-    }
-    
-    if(node->val_type == VAL_CHR)
-    {
-        if(node->val.chr == '&' && nodetree_ptr[-1] != '\n')
-        {
-            CHECKED_NODETREE_APPEND(" &", 2);
-        }
-
-        if(nodetree_ptr[-1] != '\n')
-        {
-            CHECKED_NODETREE_APPEND("\n", 1);
-        }
     }
     
     return 1;
@@ -648,7 +675,7 @@ int io_redirect_tree_to_str(struct node_s *node)
 {
     if(node->val.sint > 2)
     {
-        char buf[8];
+        char buf[32];
         sprintf(buf, "%ld", node->val.sint);
         CHECKED_NODETREE_APPEND(buf, strlen(buf));
     }
@@ -782,7 +809,7 @@ int do_done_to_str(struct node_s *child)
         add_heredocs_to_tree();
         
         /* the DONE keyword */
-        if(nodetree_ptr[-1] != '\n')
+        if(nodetree_buf.buf_ptr[-1] != '\n')
         {
             CHECKED_NODETREE_APPEND("\n", 1);
         }
@@ -804,7 +831,7 @@ int do_done_to_str(struct node_s *child)
         CHECKED_NODETREE_APPEND("done", 4);
     }
     
-    if(nodetree_ptr[-1] != '\n')
+    if(nodetree_buf.buf_ptr[-1] != '\n')
     {
         CHECKED_NODETREE_APPEND("\n", 1);
     }
@@ -922,6 +949,13 @@ int for_tree_to_str(struct node_s *node)
 }
 
 
+static void free_bufs(void)
+{
+    free_str(&nodetree_buf);
+    free_str(&heredoc_buf);
+}
+
+
 char *cmd_nodetree_to_str(struct node_s *node, int is_root)
 {
     if(!node)
@@ -932,19 +966,37 @@ char *cmd_nodetree_to_str(struct node_s *node, int is_root)
     /* clear buf */
     if(is_root)
     {
+#if 0
         if(nodetree_buf)
         {
             nodetree_buf[0] = '\0';
             nodetree_buf_len = 0;
             nodetree_ptr = nodetree_buf;
         }
-
+        
         if(heredoc_buf)
         {
             heredoc_buf[0] = '\0';
             heredoc_buf_len = 0;
             heredoc_ptr = heredoc_buf;
         }
+#endif
+      
+#if 0
+        if(nodetree_buf.buf_base)
+        {
+            nodetree_buf.buf_base[0] = '\0';
+            nodetree_buf.buf_len = 0;
+            nodetree_buf.buf_ptr = nodetree_buf.buf_base;
+        }
+        
+        if(heredoc_buf.buf_base)
+        {
+            heredoc_buf.buf_base[0] = '\0';
+            heredoc_buf.buf_len = 0;
+            heredoc_buf.buf_ptr = heredoc_buf.buf_base;
+        }
+#endif
         
         /* empty command tree */
         /*
@@ -995,6 +1047,9 @@ char *cmd_nodetree_to_str(struct node_s *node, int is_root)
         case NODE_FOR:
             func = for_tree_to_str;
             break;
+            
+        default:
+            break;
     }
 
     if(!func || !func(node))
@@ -1002,32 +1057,34 @@ char *cmd_nodetree_to_str(struct node_s *node, int is_root)
         return NULL;
     }
     
-    if(nodetree_ptr[-1] != '\n')
-    {
-        CHECKED_NODETREE_APPEND("\n", 1);
-    }
-    
     if(is_root)
     {
+        if(nodetree_buf.buf_ptr[-1] != '\n')
+        {
+            CHECKED_NODETREE_APPEND("\n", 1);
+        }
+        
         /* add 2 for '\0' and possible '\n' before the heredocs */
-        char *str = malloc(nodetree_buf_len+heredoc_buf_len+2);
+        char *str = malloc(nodetree_buf.buf_len + heredoc_buf.buf_len + 2);
         if(!str)
         {
+            free_bufs();
             return NULL;
         }
         
-        strcpy(str, nodetree_buf);
+        strcpy(str, nodetree_buf.buf_base);
 
-        if(heredoc_buf_len)
+        if(heredoc_buf.buf_len)
         {
-            str[nodetree_buf_len] = '\n';
-            strcpy(str+nodetree_buf_len+1, heredoc_buf);
+            str[nodetree_buf.buf_len] = '\n';
+            strcpy(str + nodetree_buf.buf_len + 1, heredoc_buf.buf_base);
         }
-        
+
+        free_bufs();
         return str;
     }
     else
     {
-        return nodetree_buf;
+        return nodetree_buf.buf_base;
     }
 }

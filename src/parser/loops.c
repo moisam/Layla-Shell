@@ -22,12 +22,12 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../scanner/scanner.h"
 #include "node.h"
 #include "parser.h"
 #include "../error/error.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 
 /*

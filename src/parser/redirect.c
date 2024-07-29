@@ -22,12 +22,12 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../scanner/scanner.h"
 #include "node.h"
 #include "parser.h"
 #include "../error/error.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 
 /**********************************************
@@ -170,7 +170,7 @@ struct node_s *parse_file_redirect(struct token_s *tok)
     if(tok->type == TOKEN_EOF || tok->text[0] == '\n')
     {
         /* free the partially parsed nodetree */
-        PRINT_ERROR("%s: missing or invalid redirected filename\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "missing or invalid redirected filename");
         free_node_tree(file);
         return NULL;
     }
@@ -201,8 +201,8 @@ struct node_s *parse_file_redirect(struct token_s *tok)
         strtol(name->val.str , &strend, 10);
         if(strend == name->val.str)     /* error parsing number means we've got a file name */
         {
-            PRINT_ERROR("%s: cannot redirect output to file `%s`: restricted shell\n", 
-                        SOURCE_NAME, name->val.str);
+            PRINT_ERROR(SHELL_NAME, "cannot redirect output to file `%s`: restricted shell", 
+                        name->val.str);
             free_node_tree(file);
             return NULL;
         }

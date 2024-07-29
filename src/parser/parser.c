@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020 (c)
+ *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
  * 
  *    file: parser.c
  *    This file is part of the Layla Shell project.
@@ -22,10 +22,10 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../scanner/scanner.h"
 #include "../error/error.h"
-#include "../debug.h"
+#include "../include/debug.h"
 #include "../builtins/builtins.h"
 #include "../builtins/setx.h"
 #include "node.h"
@@ -157,8 +157,7 @@ char *get_alias_recursive(char *orig_name)
 
             if(!p2)
             {
-                PRINT_ERROR("%s: insufficient memory for alias substitution\n",
-                            SOURCE_NAME);
+                INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "alias substitution");
                 free_malloced_str(name);
                 return NULL;
             }
@@ -189,8 +188,7 @@ char *get_alias_recursive(char *orig_name)
         name = get_malloced_strl(p, start, end-start);
         if(!name)
         {
-            PRINT_ERROR("%s: insufficient memory for alias substitution\n", 
-                        SOURCE_NAME);
+            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "alias substitution");
             free(val);
             return NULL;
         }
@@ -236,8 +234,7 @@ char *do_alias_substitution(char *orig_cmd)
         word = get_malloced_strl(start, 0, len);
         if(!word)
         {
-            PRINT_ERROR("%s: insufficient memory for alias substitution\n", 
-                        SOURCE_NAME);
+            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "alias substitution");
             return NULL;
         }
         
@@ -321,7 +318,7 @@ char *do_alias_substitution(char *orig_cmd)
                                  stringify(MAX_NESTED_HEREDOCS) ")";
                         goto err;
                     }
-                    else if(!heredoc_delim(p2, &skip, &heredoc_delims[heredoc_count], &delim_end))
+                    else if(!heredoc_delim(p, &skip, &heredoc_delims[heredoc_count], &delim_end))
                     {
                         errmsg = NULL;
                         goto err;
@@ -431,7 +428,7 @@ heredoc_err:
 err:
     if(errmsg)
     {
-        PRINT_ERROR("%s: %s\n", SOURCE_NAME, errmsg);
+        PRINT_ERROR(SHELL_NAME, "%s", errmsg);
     }
     free_malloced_str(word);
     return NULL;
@@ -1203,7 +1200,7 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
     /* special builtin utility names cannot be used as function names */
     if(is_special_builtin(tok->text))
     {
-        PRINT_ERROR("%s: invalid function name: %s\n", SOURCE_NAME, tok->text);
+        PRINT_ERROR(SHELL_NAME, "invalid function name: %s", tok->text);
         set_internal_exit_status(1);
         EXIT_IF_NONINTERACTIVE();
         return NULL;
@@ -1262,7 +1259,7 @@ struct node_s *parse_function_definition(struct token_s *tok, int using_keyword)
     }
     else
     {
-        PRINT_ERROR("%s: failed to parse function definition\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "failed to parse function definition");
         EXIT_IF_NONINTERACTIVE();
         free_node_tree(func);
         return NULL;
@@ -1407,7 +1404,7 @@ int read_complete_line(struct source_s *src, char **cmd /* , char **heredocs */)
                         p2 = herestr_end(p2+3);
                         if(!p2)
                         {
-                            PRINT_ERROR("%s: empty here-string\n", SOURCE_NAME);
+                            PRINT_ERROR(SHELL_NAME, "empty here-string");
                             FREE_HEREDOC_DELIMS();
                             (*cmd) = NULL;
                             return 0;
@@ -1429,8 +1426,8 @@ int read_complete_line(struct source_s *src, char **cmd /* , char **heredocs */)
                     char *delim_end;
                     if(heredoc_count >= MAX_NESTED_HEREDOCS)
                     {
-                        PRINT_ERROR("%s: maximum number of heredocs reached (%d)\n",
-                                    SOURCE_NAME, MAX_NESTED_HEREDOCS);
+                        PRINT_ERROR(SHELL_NAME, "maximum number of heredocs reached (%d)",
+                                    MAX_NESTED_HEREDOCS);
                         FREE_HEREDOC_DELIMS();
                         (*cmd) = NULL;
                         return 0;
@@ -1478,7 +1475,7 @@ int read_complete_line(struct source_s *src, char **cmd /* , char **heredocs */)
         char *nl = strchr(p2, '\n');
         if(!nl)
         {
-            PRINT_ERROR("%s: unexpected token: end-of-file\n", SOURCE_NAME);
+            PRINT_ERROR(SHELL_NAME, "unexpected token: end-of-file");
             FREE_HEREDOC_DELIMS();
             (*cmd) = NULL;
             return 0;
@@ -1516,7 +1513,7 @@ int read_complete_line(struct source_s *src, char **cmd /* , char **heredocs */)
 
         if(!buf)
         {
-            PRINT_ERROR("%s: insufficient memory\n", SOURCE_NAME);
+            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "parsing");
             (*cmd) = NULL;
             return 0;
         }
@@ -1555,7 +1552,7 @@ int read_complete_line(struct source_s *src, char **cmd /* , char **heredocs */)
         
         if(!buf)
         {
-            PRINT_ERROR("%s: insufficient memory\n", SOURCE_NAME);
+            INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "parsing");
             (*cmd) = NULL;
             return 0;
         }
@@ -1608,6 +1605,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
     src->curpos = (src->curpos_old < 0) ? 0 : src->curpos_old;
     src->curchar = tok->charno;
     src->curlinestart = tok->linestart;
+
     while(isspace(src->buffer[src->curpos]))
     {
         src->curpos++;
@@ -1617,6 +1615,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
     size_t len = read_complete_line(src, &cmd_line);
     if(len == 0)
     {
+        restore_tokens(old_current_token, old_previous_token);
         return NULL;
     }
     
@@ -1631,6 +1630,7 @@ struct node_s *parse_simple_command(struct token_s *tok)
         
         if(!p)
         {
+            restore_tokens(old_current_token, old_previous_token);
             return NULL;
         }
 
@@ -1644,6 +1644,9 @@ struct node_s *parse_simple_command(struct token_s *tok)
     src2.bufsize = len;
     src2.srctype = SOURCE_EXTERNAL_FILE;
     src2.curpos = INIT_SRC_POS;
+    src2.curline = 1;
+    src2.curchar = 1;
+    src2.curlinestart = 0;
 
     tok = tokenize(&src2);
     
@@ -1862,7 +1865,7 @@ loop:
             struct node_s *list2 = new_node(NODE_LIST);
             if(!list2)
             {
-                PRINT_ERROR("%s: insufficient memory\n", SOURCE_NAME);
+                INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "parsing");
                 free_node_tree(root);
                 root = NULL;
                 goto fin;
@@ -1890,7 +1893,7 @@ loop:
                 cmd = new_node(NODE_COMMAND);
                 if(!cmd)
                 {
-                    PRINT_ERROR("%s: insufficient memory\n", SOURCE_NAME);
+                    INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "parsing");
                     free_node_tree(root);
                     root = NULL;
                     goto fin;
@@ -1912,12 +1915,7 @@ fin:
     free(cmd_line);
     
     /* don't leave any hanging token structs */
-    free_token(get_current_token());
-    free_token(get_previous_token());
-
-    /* restore token pointers */
-    set_current_token(old_current_token);
-    set_previous_token(old_previous_token);
+    restore_tokens(old_current_token, old_previous_token);
 
     /* make sure our cur_token is synced to the new src position */
     tok = tokenize(src);
@@ -2083,7 +2081,7 @@ struct node_s *parse_command(struct token_s *tok)
         struct node_s *cmd = parse_command(tok);
         if(!cmd)
         {
-            PRINT_ERROR("%s: unexpected token: end-of-file\n", SOURCE_NAME);
+            PRINT_ERROR(SHELL_NAME, "unexpected token: end-of-file");
             if(name_node)
             {
                 free_node_tree(name_node);
@@ -2134,16 +2132,20 @@ struct node_s *parse_command(struct token_s *tok)
     if(tok2->type == TOKEN_KEYWORD_FUNCTION && !option_set('P'))
     {
         /* get rid of the (optional) opening brace */
-        free(tok2);
+        free_token(tok2);
+        
         tok2 = dup_token(tok);
         if(!tok2)
         {
             return NULL;
         }
+        
         tok = tokenize(tok->src);
+        
         /* parse the function definition */
         struct node_s *func = parse_function_definition(tok2, 1);
         free_token(tok2);
+        
         /* return the parsed nodetree */
         return func;
     }
@@ -2154,6 +2156,7 @@ struct node_s *parse_command(struct token_s *tok)
         /* parse the function definition */
         struct node_s *func = parse_function_definition(tok2, 0);
         free_token(tok2);
+
         /* return the parsed nodetree */
         return func;
     }
@@ -2166,6 +2169,7 @@ struct node_s *parse_command(struct token_s *tok)
     
     /* we have a simple command */
     struct node_s *cmd = parse_simple_command(tok2);
+    free_token(tok2);
     
     /* return the parsed nodetree */
     return cmd;
