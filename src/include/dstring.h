@@ -1,8 +1,8 @@
-/* 
+/*
  *    Programmed By: Mohammed Isam Mohammed [mohammed_isam1984@yahoo.com]
- *    Copyright 2016, 2017, 2018, 2019, 2020, 2024 (c)
- * 
- *    file: debug.h
+ *    Copyright 2020 (c)
+ *
+ *    file: dstring.h
  *    This file is part of the Layla Shell project.
  *
  *    Layla Shell is free software: you can redistribute it and/or modify
@@ -17,35 +17,24 @@
  *
  *    You should have received a copy of the GNU General Public License
  *    along with Layla Shell.  If not, see <http://www.gnu.org/licenses/>.
- */    
-
-#ifndef DEBUG_H
-#define DEBUG_H
-
-/* if you don't want to define the debug function, build with CMAKE_BUILD_TYPE=Release */
-#ifdef __DEBUG__
-# define DEBUG_MODE
-#else
-# undef  DEBUG_MODE
-#endif
-
-/*
- * Depending on whether you commented the line above or not, the debug function
- * will either be defined as a null macro, or as a function that outputs debug 
- * messages.
  */
-#ifndef DEBUG_MODE
 
-#define debug(...)	if(0) { }
+#ifndef DSTRING_H
+#define DSTRING_H
 
-#else
 
-void __debug(const char *file, const char *function, char *format, ...);
+struct dstring_s
+{
+    char  *buf_base;    /* ptr to buffer base */
+    char  *buf_ptr;     /* ptr to cur pos in buffer */
+    size_t buf_size;    /* total allocated buffer size */
+    size_t buf_len;     /* length of string in buffer */
+};
 
-#define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
-#define debug(...)  __debug(__FILENAME__, __FUNCTION__, __VA_ARGS__)
+int  init_str(struct dstring_s *string, size_t init_buf_size);
+int  str_append(struct dstring_s *string, char *str, size_t str_len);
+void free_str(struct dstring_s *string);
 
-#endif  /* DEBUG_MODE */
 
-#endif  /* DEBUG_H */
+#endif
