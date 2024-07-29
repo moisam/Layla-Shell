@@ -1,10 +1,11 @@
-Content-type: text/html
+Content-type: text/html; charset=UTF-8
 
-<HTML><HEAD><TITLE>Manpage of lsh</TITLE>
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML><HEAD><TITLE>Man page of lsh</TITLE>
 </HEAD><BODY>
 <H1>lsh</H1>
-Section: Layla shell man page (1)<BR>Updated: JUNE 2019<BR><A HREF="#index">Index</A>
-<A HREF="/man/man2html">Return to Main Contents</A><HR>
+Section: Layla shell man page (1)<BR>Updated: JULY 2024<BR><A HREF="#index">Index</A>
+<A HREF="/cgi-bin/man/man2html">Return to Main Contents</A><HR>
 
 <A NAME="lbAB">&nbsp;</A>
 <H2>NAME</H2>
@@ -76,7 +77,7 @@ code at the email address above, or through the Linux Shell Internals
 repository at GitHub:
 <P>
 
-<I><A HREF="https://github.com/moisam/Linux-Shell-Internals-book/">https://github.com/moisam/Linux-Shell-Internals-book/</A></I>
+<I><A HREF="https://github.com/moisam/Layla-Shell/">https://github.com/moisam/Layla-Shell/</A></I>
 <BR>
 
 <A NAME="lbAE">&nbsp;</A>
@@ -107,10 +108,16 @@ Do not read login startup scripts <I>/etc/profile</I> and <I>~/.profile</I>.
 
 <DD>
 Do not read the startup script files <I>/etc/lshrc</I> and <I>~/.lshrc</I>.
+<DT><B>--posix</B>
+
+<DD>
+Start the shell in the POSIX mode (see the <I>THE POSIX SHELL</I>
+section below).
 <DT><B>--restricted</B>
 
 <DD>
-Start the shell in the restricted mode.
+Start the shell in the restricted mode (see the <I>THE RESTRICTED SHELL</I>
+section below).
 <DT><B>--verbose</B>
 
 <DD>
@@ -216,19 +223,39 @@ an exit status to the shell. An exit status of zero is considered success
 status is considered failure (or false).
 <P>
 
-A simple command is a list of variable assignments and words separated by
+A <B>simple command</B> is a list of variable assignments and words separated by
 whitespace. The first word usually specifies the name of the command to be
 executed, the remaining words are word-expanded and passed as arguments to
-the command. The command name is passed as argument number 0. If the command
+the command. For example, the following is a simple command with two arguments:
+<P>
+
+<PRE>
+<DL COMPACT><DT><DD>echo Hello World
+</DL>
+</PRE>
+
+<P>
+
+The command name is passed as argument number 0. If the command
 exits normally, the exit status is 0-128. If it terminates abnormally, the
 exit status is 128+signum (similar to bash, but not ksh). The name of the
 signal can be obtained by passing the -l option to the kill builtin utility.
 <P>
 
-A pipeline is a sequence of one or more commands separated by the pipe
+A <B>pipeline</B> is a sequence of one or more commands separated by the pipe
 operator '|'. The standard output (stdout) of each command except the last is
-connected by a pipe to the standard input (stdin) of the next command. Each
-command is run in a separate process. The shell waits for all commands to
+connected by a pipe to the standard input (stdin) of the next command.
+For example, the following is a pipeline with two commands:
+<P>
+
+<PRE>
+<DL COMPACT><DT><DD>cat file | less
+</DL>
+</PRE>
+
+<P>
+
+Each command is run in a separate process. The shell waits for all commands to
 terminate. The exit status of a pipeline is the exit status of the last
 command unless the pipefail '-l' option is enabled, in which case it is the
 exit status of the rightmost command with non-zero exit status. Each pipeline
@@ -237,51 +264,66 @@ the pipeline to be inverted, i.e. an exit status of zero becomes 1, otherwise
 it becomes zero.
 <P>
 
-A list is a sequence of one or more pipelines separated by ';', '&amp;', '|&amp;', '&amp;&amp;',
+A <B>list</B> is a sequence of one or more pipelines separated by ';', '&amp;', '|&amp;', '&amp;&amp;',
 or '|'. The ';' causes sequential (foreground) execution of the
 preceding pipeline. The shell waits for foreground pipelines to finish
 execution. The '&amp;' causes asynchronous (background) execution of the preceding
 pipeline. The shell does not wait for background pipelines to finish execution.
 The '|&amp;' causes asynchronous execution of the preceding pipeline, redirecting
-both stdout and stderr to the pipe. This is similar to bash behavior, while ksh
+both stdout and stderr to the pipe. This is similar to bash and zsh behavior, while ksh
 uses this operator to establish a two-way pipe between the command and the
 parent shell. The symbols '&amp;&amp;' and '||' cause the list following it to be
 executed only if the preceding pipeline returns a zero or non-zero value,
 respectively. Semicolons ';' can be substituted by newlines in lists.
+<A NAME="lbAH">&nbsp;</A>
+<H2>Compound commands</H2>
+
 <P>
 
-Compound commands include <B>for</B>, <B>select</B>, <B>until</B> and <B>while</B>
+These include <B>for</B>, <B>select</B>, <B>until</B> and <B>while</B>
 loops; <B>case</B> and <B>if</B> conditionals; subshells and brace groups. The
 exit status of a compound command is that of the last simple command executed
 in the compound. All loops conform to the POSIX standard, except when it says
 otherwise.
-<P>
+<DL COMPACT>
+<DT><B>case </B><I>word </I><B>in</B> [ [(] <I>pattern</I> [ | <I>pattern</I> ] ... ) <I>list</I> ;; ] ... <B>esac</B>
 
-<B>for name [ in word ... ]; do list; done</B>
+<DD>
+The <B>case</B> conditional executes the <B>list</B> associated with the first
+<B>pattern</B> that matches the given <B>word</B>. The form of the patterns is
+the same as that used for file name generation (i.e. can contain the wildcards
+*, ? and []). The ';;' operator causes execution of the <B>case</B> to terminate.
+If ';&amp;' is used instead, the next subsequent list, if any, is executed. If ';;&amp;'
+is used (as in bash and ksh), or ';|' is used (as in zsh),
+the shell tries to match and execute another <B>case</B> in the
+list. All of ';&amp;', ';|' and ';;&amp;' are non-POSIX extensions used by shells like ksh,
+bash and zsh.
+<DT><B>for </B><I>name</I> [<B>in </B><I>word</I> ... ]; <B>do </B><I>list</I>; <B>done</B>
 
-<P>
-
+<DD>
 Each time the <B>for</B> loop is executed, <B>name</B> is set to the next word
 taken from the <B>word</B> list. If the word list is omitted, the for loop
 behaves as if <B>in &quot;$@&quot;</B> was provided (which loops on positional parameters,
 starting from 1). The loop exits when there are no more words in the list.
-<P>
+<DT><B>for</B> (( [<I>expr1</I>] ; [<I>expr2</I>] ; [<I>expr3</I>] )); <B>do </B><I>list</I>; <B>done</B>
 
-<B>(( [expr1] ; [expr2] ; [expr3] )); do list; done</B>
-
-<P>
-
+<DD>
 The arithmetic expression <B>expr1</B> is evaluated. Arithmetic expression
 <B>expr2</B> is then evaluated repeatedly until it evaluates to zero. Every
 time <B>expr2</B> evaluates to non-zero, <B>list</B> is executed and arithmetic
 expression <B>expr3</B> is evaluated. If any expression is omitted, it behaves
 as if it evaluated to 1. This loop is a non-POSIX extension.
-<P>
+<DT><B>if </B><I>list1</I>; <B>then </B><I>cmd-list1</I> [; <B>elif </B><I>list2</I>; <B>then </B><I>cmd-list2</I> ] ... [; <B>else </B><I>cmd-list3</I> ]; <B>fi</B>
 
-<B>select name [ in word ... ]; do list; done</B>
+<DD>
+<B>list1</B> is executed and if it returns zero exit status, <B>cmd-list1</B> is
+executed. Otherwise, <B>list2</B> is executed and if its value is zero,
+<B>cmd-list2</B> is executed. If all <B>elif</B> lists fail, the <B>else</B>'s
+<B>cmd-list3</B> is executed. If <B>list1</B> has non-zero exit status and there
+is no <B>else</B> clause, the <B>if</B> command returns zero exit status.
+<DT><B>select </B><I>name</I> [<B>in </B><I>word</I> ... ]; <B>do </B><I>list</I>; <B>done</B>
 
-<P>
-
+<DD>
 The <B>select</B> loop prints the set of <B>word</B>s on stderr, each preceded
 by its numeric index. If the list of <B>word</B>s is omitted, the loop behaves
 as if <B>in &quot;$@&quot;</B> was provided (which loops on positional parameters,
@@ -294,89 +336,45 @@ is saved in the shell variable <B>$REPLY</B>. The list is executed repeatedly
 until a break or EOF is encountered. If the <B>$REPLY</B> variable is set to
 null as a side effect of executing <B>list</B>, the selection list is printed
 again before displaying the PS3 prompt and waiting for the next selection. This
-loop is a non-POSIX extension used by bash and ksh.
-<P>
+loop is a non-POSIX extension used by bash, zsh and ksh.
+<DT><B>while </B><I>conditional-list</I>; <B>do </B><I>cmd-list</I>; <B>done</B>
 
-<B>case word in [ [(] pattern [ | pattern ] ... ) list ;; ] ... esac</B>
+<DD>
+<DT><B>until </B><I>conditional-list</I>; <B>do </B><I>cmd-list</I>; <B>done</B>
 
-<P>
-
-The <B>case</B> conditional executes the <B>list</B> associated with the first
-<B>pattern</B> that matches the given <B>word</B>. The form of the patterns is
-the same as that used for file name generation (i.e. can contain the wildcards
-*, ? and []). The ';;' operator causes execution of the <B>case</B> to terminate.
-If ';&amp;' is used instead, the next subsequent list, if any, is executed. If ';;&amp;'
-is used, the shell tries to match and execute another <B>case</B> in the
-list. Both ';&amp;' and ';;&amp;' are non-POSIX extensions used by shells like ksh and
-bash.
-<P>
-
-<B>if list1; then cmd-list1 [; elif list2; then cmd-list2 ] ... </B>
-
-<B>[; else cmd-list3 ]; fi</B>
-
-<P>
-
-<B>list1</B> is executed and if it returns zero exit status, <B>cmd-list1</B> is
-executed. Otherwise, <B>list2</B> is executed and if its value is zero,
-<B>cmd-list2</B> is executed. If all <B>elif</B> lists fail, the <B>else</B>'s
-<B>cmd-list3</B> is executed. If <B>list1</B> has non-zero exit status and there
-is no <B>else</B> clause, the <B>if</B> command returns zero exit status.
-<P>
-
-<B>while conditional-list; do cmd-list; done</B>
-
-<BR>
-
-<B>until conditional-list; do cmd-list; done</B>
-
-<P>
-
+<DD>
 The <B>while</B> loop repeatedly executes the <B>conditional-list</B> and if the
 exit status of the last command in the list is zero, it executes <B>cmd-list</B>,
 otherwise the loop terminates. If no commands are executed from the
 <B>cmd-list</B>, the <B>while</B> loop returns a zero exit status. <B>until</B>
 can be used instead of <B>while</B> to negate the loop termination test (i.e.
 execute until <B>conditional-list</B> has zero exit status).
-<P>
+<DT><B>(( </B><I>expression</I><B> ))</B>
 
-<B>(( expression ))</B>
-
-<P>
-
+<DD>
 <B>expression</B> is evaluated as an arithmetic expression. If the value is
-non-zero, the exit status is 0. Otherwise the exit status is 1. This is a non-
-POSIX extension.
-<P>
+non-zero, the exit status is 0. Otherwise the exit status is 1. This is a non-POSIX
+extension.
+<DT><B>( </B><I>list</I>; <B>)</B>
 
-<B>( list; )</B>
-
-<P>
-
+<DD>
 Execute <B>list</B> in a separate environment, i.e. a subshell. If two adjacent
 open parentheses are needed (for nesting subshells), a space must be inserted
 between the two open parentheses to avoid evaluation as an arithmetic
 expression. '{' and '}' are reserved words; they must occur at the beginning
 of a line (after a newline character) or after a ';' to be recognized.
-<P>
+<DT><B>[[ </B><I>expression</I><B> ]]</B>
 
-<B>[[ expression ]]</B>
-
-<P>
-
+<DD>
 Evaluate <B>expression</B> and return a zero exit status if <B>expression</B>
 evalues to true (zero exit status). See <I>Conditional Expressions</I> for a
 description of what <B>expression</B> can be.
-<P>
+<DT><B>function </B><I>funcname</I> { <I>list</I> ; }
 
-<B>function funcname { list ; }</B>
+<DD>
+<DT><B>funcname</B> () { <I>list</I> ; }
 
-<BR>
-
-<B>funcname () { list ; }</B>
-
-<P>
-
+<DD>
 Define a function named <I>funcname</I>. The body of the function is the list
 of commands between '{' and '}'. The body is executed when the function is
 called, not when its defined. The exit status of the function definition
@@ -385,25 +383,86 @@ table. The exit status of a function call is that of the last command executed
 in the function, or the value passed to the <B>return</B> builtin. The first
 syntax using the <B>function</B> keyword is a non-POSIX extension used by bash
 and ksh.
+</DL>
+<A NAME="lbAI">&nbsp;</A>
+<H2>Command modifiers</H2>
+
 <P>
 
-<B>time [ pipeline ]</B>
+In most major shells, the shell recognizes some keywords that can be introduced
+before a command name to alter how the shell interprets that command. For example,
+we can tell the shell we want to know how long it takes a certain command to run
+by preceding the command line with the <B>time</B> keyword. For example, the following
+command times and prints the time it takes the echo command to print a simple message:
+<P>
+
+<PRE>
+<DL COMPACT><DT><DD>$ time echo Hello World
+Hello World
+
+real    0m0.002s
+user    0m0.000s
+sys     0m0.000s
+</DL>
+</PRE>
 
 <P>
 
+The following command modifiers are recognized by lsh. Each modifier is recognized
+when it appears as the first word in the command line, which is equivalent to argv[0]
+in the C programming language. When the shell executes the command, the modifier
+word is typically not included in the list of arguments that is passed to the command.
+<DL COMPACT>
+<DT><B>- command</B> [<I>arguments</I> ...]
+
+<DD>
+When the shell executes <B>command</B>, it passes the command the optional list of <I>arguments</I> after
+adding a - character to the start of the zeroth argument, argv[0]. This is a zsh
+extension, which provides a similar functionality to the <B>exec</B> command when its
+passed the <B>-l</B> option in bash.
+<DT><B>builtin command</B> [<I>arguments</I> ...]
+
+<DD>
+The shell treats <B>command</B> as the name of a shell builtin utility. The shell executes
+the command, passing it the optional list of <I>arguments</I>
+(See the <I>BUILTIN UTILITIES</I> section for more information).
+<DT><B>command name</B> [<I>arguments</I> ...]
+
+<DD>
+The shell treats <B>name</B> as the name of an external command or a shell builtin utility.
+If there is a function defined with the given <B>name</B>, it will not be executed. The shell executes
+the external command or builtin utility, passing it the optional list of <I>arguments</I>
+(See the <I>BUILTIN UTILITIES</I> section for more information).
+<DT><B>exec command</B> [<I>arguments</I> ...]
+
+<DD>
+The shell executes <B>command</B> in the shell's process, thereby replacing the shell's executable
+code with that of the command (See the <I>BUILTIN UTILITIES</I> section for more information).
+<DT><B>noglob command</B> [<I>arguments</I> ...]
+
+<DD>
+The shell does not perform filename expansion (also known as globbing) on the command name or the
+arguments list. This is a non-POSIX extension defined by zsh.
+<DT><B>time</B> [ <I>pipeline</I> ]
+
+<DD>
 If <B>pipeline</B> is omitted, the <I>user</I> and <I>system</I> time for the
-current shell and completed child processes is printed on stderr. Otherwise,
+current shell and completed child processes is printed on stderr (which is similar to invoking
+the <B>times</B> builtin utility. Otherwise,
 the <B>pipeline</B> is executed and the elapsed <I>real</I> time, as well as the
 <I>user</I> and <I>system</I> times are printed on stderr. The <B>$TIMEFORMAT</B>
 variable controls how the timing information should be displayed (See the
 <I>Shell Variables</I> section for a description of <B>$TIMEFORMAT</B>).
-<A NAME="lbAH">&nbsp;</A>
+This is the same variable used by bash and ksh
+(zsh alternatively uses the <B>$TIMEFMT</B> variable, which we won't be using here).
+</DL>
+<A NAME="lbAJ">&nbsp;</A>
 <H2>RESERVED WORDS</H2>
 
 <P>
 
 The following reserved words are recognized as reserved only when they are the
-first unquoted word of a command:
+first unquoted word of a command line:
 <P>
 
 <PRE>
@@ -427,9 +486,13 @@ function
 <BR>
 if
 <BR>
+in
+<BR>
 select
 <BR>
 then
+<BR>
+time
 <BR>
 until
 <BR>
@@ -443,9 +506,9 @@ while
 
 <P>
 
-All reserved words (or keywords) are defined by POSIX, except <B>function</B>
+All reserved words (or keywords) are defined by POSIX, except <B>function</B>, <B>time</B>
 and <B>select</B>.
-<A NAME="lbAI">&nbsp;</A>
+<A NAME="lbAK">&nbsp;</A>
 <H2>VARIABLE ASSIGNMENTS</H2>
 
 <P>
@@ -459,15 +522,15 @@ The syntax for an assignment takes the form of:
 
 <B>varname=value</B>
 
-<BR>
+<P>
 
 No space is permitted between <B>varname</B> and the '=', or between the '='
 and <B>value</B>.
 <BR>
 
-Layla shell currently does not support the '+=' operator for variable
+Currently, Layla shell currently does not support the '+=' operator for variable
 assignents.
-<A NAME="lbAJ">&nbsp;</A>
+<A NAME="lbAL">&nbsp;</A>
 <H2>COMMENTS</H2>
 
 <P>
@@ -477,7 +540,7 @@ character to be commented, or ignored. Interactive shells recognize comment
 characters when the extended option <B>interactive-comments</B> (or
 <B>interactive_comments</B>) is set by calling the <B>setx</B> builtin (which
 behaves similar to bash's <B>shopt</B>).
-<A NAME="lbAK">&nbsp;</A>
+<A NAME="lbAM">&nbsp;</A>
 <H2>ALIASING</H2>
 
 <P>
@@ -497,8 +560,28 @@ created and listed using the <B>alias</B> command. They can be removed with
 the <B>unalias</B> command.
 <P>
 
-Aliasing is performed when scripts are read, not while they are executed. The
-following aliases are defined by default by the shell, but can be unset or
+Aliasing is performed when scripts are read, not while they are executed.
+That means the following command
+<P>
+
+<PRE>
+<DL COMPACT><DT><DD>$ alias echofoo='echo foo'; echofoo
+</DL>
+</PRE>
+
+<P>
+
+Would result in an error similar to the following:
+<P>
+
+<PRE>
+<DL COMPACT><DT><DD>lsh: Error: failed to exec echofoo: No such file or directory
+</DL>
+</PRE>
+
+<P>
+
+The following aliases are defined by default by the shell, but can be unset or
 redefined if the user wishes:
 <P>
 
@@ -535,8 +618,6 @@ suspend=&quot;kill -s STOP $$&quot;
 <BR>
 hist=&quot;fc&quot;
 <BR>
-typeset=&quot;declare&quot;
-<BR>
 shopt=&quot;setx&quot;
 <BR>
 reboot=&quot;sudo /sbin/reboot&quot;
@@ -561,11 +642,11 @@ memuse=&quot;memusage&quot;
 
 Some of the above aliases are defined by shells like bash and ksh, while
 others are lsh-specific, included for convenience.
-<A NAME="lbAL">&nbsp;</A>
+<A NAME="lbAN">&nbsp;</A>
 <H2>SPECIAL ALIASES</H2>
 
 The tcsh shell has a useful feature where a special group of aliases contain commands which
-the shell executes at certain times. For example, the @code{beepcmd} special alias can be defined
+the shell executes at certain times. For example, the <B>beepcmd</B> special alias can be defined
 to contain a command line the shell executes when it wants to ring the bell. As this feature can
 be very handy to shell users, we include it here, despite the fact it is not described by POSIX.
 <P>
@@ -576,10 +657,14 @@ The following table describes the special aliases and their uses in lsh.
 
 <DD>
 command to be run when the shell wants to ring the bell
+<DT><B>cwdcmd</B>
+
+<DD>
+command to be run when the current working directory is changed (similar to <B>zsh</B>'s <B>chpwd</B> hook function)
 <DT><B>jobcmd</B>
 
 <DD>
-command to be run before executing commands and when a job changes its state
+command to be run before executing commands and when a job changes its state or is brought to the foreground
 <DT><B>periodic</B>
 
 <DD>
@@ -588,12 +673,23 @@ command to be run every <B>TPERIOD</B> minutes
 
 <DD>
 command to be run before printing the next command prompt
+<DT><B>preexec</B>
+
+<DD>
+command to be run before executing commands. This is not a special alias in tcsh. Instead, it is
+a hook function defined by zsh, but we define it as a special alias for conformity with the other
+items in this list
 <DT><B>postcmd</B>
 
 <DD>
-command to be run before executing commands
+command to be run after executing commands
+<DT><B>shell</B>
+
+<DD>
+name of the interpreter program to run when the shell wants to execute an external file as a
+shell script. If not set, lsh uses the value of <B>argv[0]</B> passed to it when it was invoked.
 </DL>
-<A NAME="lbAM">&nbsp;</A>
+<A NAME="lbAO">&nbsp;</A>
 <H2>TILDE EXPANSION</H2>
 
 <P>
@@ -615,7 +711,7 @@ stack entry, as if by calling the <B>dirs</B> builtin with '+N', '-N' or 'N'
 
 Tilde expansion is also attempted during variable assignment if the value of
 the assignment begins with a '~', and when a '~' appears after a colon ':'.
-<A NAME="lbAN">&nbsp;</A>
+<A NAME="lbAP">&nbsp;</A>
 <H2>COMMAND SUBSTITUTION</H2>
 
 <P>
@@ -630,7 +726,7 @@ The special command substitution <I>$(cat file)</I> can be replaced by the
 equivalent but faster <I>$(&lt;file)</I> (non-POSIX ksh and bash extension).
 The command substitution <I>$(n&lt;#)</I> expands to the current byte offset for
 file descriptor <I>n</I> (non-POSIX ksh extension).
-<A NAME="lbAO">&nbsp;</A>
+<A NAME="lbAQ">&nbsp;</A>
 <H2>ARITHMETIC EXPANSION</H2>
 
 <P>
@@ -662,25 +758,95 @@ expression inside the parentheses.
 <P>
 
 Arithmetic valuations are performed using long integer arithmetic, the only
-format required by POSIX, although other shells (e.g. bash and ksh) perform
+format required by POSIX, although other shells (e.g. bash, ksh and zsh) perform
 double or long double precision arithmetic. Numeric constants can be of the
 form <I>[base#]n</I>, where <I>base</I> is a decimal number between 2 and 36
-(ksh and bash allow bases up to 64) representing the arithmetic base. <I>n</I>
+(same as zsh, while ksh and bash allow bases up to 64) representing the arithmetic base. <I>n</I>
 is a number in the given base. Digits greater than 9 are represented by
 lowercase or uppercase letters.
 <P>
 
-Only the basic arithmetic operations are currently supported in Layla shell.
+Only long integer arithmetic operations are currently supported in Layla shell.
 Specifically, floating point arithmetic and braced expressions are not
 supported. Also, the use of mathmetical functions (including <B>pow()</B> for
 exponentiation) is not supported.
-<A NAME="lbAP">&nbsp;</A>
+<P>
+
+The following operators are supported by lsh (they are listed in decreasing
+order of precedence):
+<DL COMPACT>
+<DT><B>++</B>,<B>--</B>
+
+<DD>
+post increment and decrement
+<DT><B>++</B>,<B>--</B>,<B>-</B>,<B>+</B>,<B>!</B>,<B>~</B>
+
+<DD>
+pre increment and decrement, unary minus, unary plus, logical NOT, bitwise NOT
+<DT><B>**</B>
+
+<DD>
+exponentiation
+<DT><B>*</B>,<B>/</B>,<B>%</B>
+
+<DD>
+multiplication, division, modulus
+<DT><B>+</B>,<B>-</B>
+
+<DD>
+addition and subtraction
+<DT><B>&lt;&lt;</B>,<B>&gt;&gt;</B>
+
+<DD>
+left shift and right shift
+<DT><B>&gt;</B>,<B>&gt;=</B>,<B>&lt;</B>,<B>&lt;=</B>
+
+<DD>
+logical comparisons greater than, greater than or equals, less than, less than or equals)
+<DT><B>==</B>,<B>!=</B>
+
+<DD>
+logical comparisons equal to and not equal to
+<DT><B>&amp;</B>
+
+<DD>
+bitwise AND
+<DT><B>^</B>
+
+<DD>
+bitwise eXclusive OR (XOR)
+<DT><B>|</B>
+
+<DD>
+bitwise OR
+<DT><B>&amp;&amp;</B>
+
+<DD>
+logical AND
+<DT><B>||</B>
+
+<DD>
+logical OR
+<DT><B>=</B>,<B>+=</B>,<B>-=</B>,<B>*=</B>,<B>/=</B>,<B>%=</B>,<B>&lt;&lt;=</B>,<B>&gt;&gt;=</B>,<B>&amp;=</B>,<B>^=</B>,<B>|=</B>
+
+<DD>
+different assignment operators
+<DT><B>(</B>,<B>)</B>
+
+<DD>
+grouping braces
+</DL>
+<P>
+
+You should note that the comma operator and C language's ternary operator ?: are
+not currently supported in lsh.
+<A NAME="lbAR">&nbsp;</A>
 <H2>PROCESS SUBSTITUTION</H2>
 
 ksh, bash and other shells support process substitution on some UNIX operating
 systems that support the <I>/dev/fd</I> directory scheme for naming open files.
 Layla shell currently doesn't support process substitution.
-<A NAME="lbAQ">&nbsp;</A>
+<A NAME="lbAS">&nbsp;</A>
 <H2>PARAMETER EXPANSION</H2>
 
 <P>
@@ -822,7 +988,7 @@ and bash extension).
 
 These are non-POSIX extensions and are not currently implemented in the Layla
 shell.
-<A NAME="lbAR">&nbsp;</A>
+<A NAME="lbAT">&nbsp;</A>
 <H2>FIELD SPLITTING</H2>
 
 <P>
@@ -840,7 +1006,7 @@ where '*' means any character; 'l1' and 'l2' are letters and 'n1' and 'n2' are
 signed numbers. Fields are generated by prepending the characters before the
 opening brace and appending the characters after the closing brace to each of
 the strings generated by the characters between the braces.
-<A NAME="lbAS">&nbsp;</A>
+<A NAME="lbAU">&nbsp;</A>
 <H2>PATHNAME EXPANSION</H2>
 
 <BR>
@@ -883,7 +1049,7 @@ Character classes can be specified with the syntax [:class:] where class is
 one of the following ANSI-C classes: <B>alnum alpha blank cntrl digit graph
 lower print punct space upper word xdigit</B>.
 </DL>
-<A NAME="lbAT">&nbsp;</A>
+<A NAME="lbAV">&nbsp;</A>
 <H2>QUOTING</H2>
 
 <P>
@@ -928,7 +1094,7 @@ and '$'.
 
 The special meaning of reserved words (keywords) and aliases can be
 removed by quoting any character of the reserved word or alias.
-<A NAME="lbAU">&nbsp;</A>
+<A NAME="lbAW">&nbsp;</A>
 <H2>SPECIAL PARAMETERS</H2>
 
 <P>
@@ -987,7 +1153,7 @@ in the background with the <B>bg</B> builtin utility.
 <DD>
 The name of this shell or script.
 </DL>
-<A NAME="lbAV">&nbsp;</A>
+<A NAME="lbAX">&nbsp;</A>
 <H2>SHELL VARIABLES</H2>
 
 <P>
@@ -1482,7 +1648,7 @@ If the value of this variable matches the pattern *[Vv][Ii]*, the <B>vi</B>
 option is turned on. Currently, no other patterns are recognized by the Layla
 shell. The value of <B>$VISUAL</B> overrides the value of <B>$EDITOR</B>.
 </DL>
-<A NAME="lbAW">&nbsp;</A>
+<A NAME="lbAY">&nbsp;</A>
 <H2>THE SHELL PROMPT</H2>
 
 <P>
@@ -1494,7 +1660,7 @@ substitution, and arithmetic expansion, before reading the next command. Each
 
 command is not considered complete, the secondary prompt <B>$PS2</B> is expanded
 and printed to stderr.
-<A NAME="lbAX">&nbsp;</A>
+<A NAME="lbAZ">&nbsp;</A>
 <H2>CONDITIONAL EXPRESSIONS</H2>
 
 <P>
@@ -1701,7 +1867,7 @@ True if <I>expression1</I> and <I>expression2</I> are both true.
 <DD>
 True if either <I>expression1</I> or <I>expression2</I> is true.
 </DL>
-<A NAME="lbAY">&nbsp;</A>
+<A NAME="lbBA">&nbsp;</A>
 <H2>INPUT AND OUTPUT</H2>
 
 <P>
@@ -1732,6 +1898,10 @@ to zero length.
 <DD>
 Similar to <B>&gt;</B>, except that it overrides the <B>noclobber</B> '<B>-C</B>'
 option.
+<DT><B>&gt;!word</B>
+
+<DD>
+Similar to <B>&gt;|</B>. This is a zsh extension.
 <DT><B>&gt;&gt;word</B>
 
 <DD>
@@ -1802,15 +1972,25 @@ offset to the resulting bytes from the start of the file.
 
 <DD>
 The same as <I>&lt;#</I> for file descriptor 1 (stdout).
+<DT><B>{var}&lt;&amp;digit</B>
+
+<DD>
+Duplicate file descriptor number <B>digit</B> for reading on a new file descriptor that is greater than
+or equal to 10, and save the new file descriptor number in the <B>$var</B> shell variable.
+<DT><B>{var}&gt;&amp;digit</B>
+
+<DD>
+Duplicate file descriptor number <B>digit</B> for writing on a new file descriptor that is greater than
+or equal to 10, and save the new file descriptor number in the <B>$var</B> shell variable.
 </DL>
 <P>
 
 If a redirection operator is preceded by a digit, the file descriptor to be
 redirected is that referred to by the digit (instead of the default 0 or 1).
-If a redirection operator is preceded by {<B>varname</B>} with no intervening
+If a redirection operator is preceded by <B>var</B> with no intervening
 spaces, a file descriptor greater than 10 is selected by the shell and stored
-in the variable named <B>varname</B>.
-<A NAME="lbAZ">&nbsp;</A>
+in the variable named <B>var</B>.
+<A NAME="lbBB">&nbsp;</A>
 <H2>THE ENVIRONMENT</H2>
 
 <P>
@@ -1824,7 +2004,7 @@ If the user modifies the values of these variables or creates new ones by using 
 Variable assignments occurring before the command name are added to the command's
 environment, while those occuring after the command name are only considered if the
 <B>keyword</B> '<B>-k</B>' option is set.
-<A NAME="lbBA">&nbsp;</A>
+<A NAME="lbBC">&nbsp;</A>
 <H2>JOBS</H2>
 
 <P>
@@ -1902,7 +2082,7 @@ stopped jobs, the shell prints a warning message. If another attempt is made at
 exit, the jobs are sent a HUP signal before the shell exits. When a login shell
 receives a HUP signal, it re-sends the HUP signal to all job that have not been
 disowned with the <B>disown</B> builtin utility.
-<A NAME="lbBB">&nbsp;</A>
+<A NAME="lbBD">&nbsp;</A>
 <H2>SIGNALS</H2>
 
 <P>
@@ -1917,7 +2097,7 @@ For background (asynchronous) pipelines, the <B>INT</B> and <B>QUIT</B> signals
 are ignored if the <B>monitor</B> '<B>-m</B>' option is not active. In all other
 cases, signals have the values inherited by the shell from its parent upon
 startup.
-<A NAME="lbBC">&nbsp;</A>
+<A NAME="lbBE">&nbsp;</A>
 <H2>COMMAND EXECUTION</H2>
 
 <P>
@@ -1974,7 +2154,7 @@ f1 ()
 <P>
 
 Another side effect is that empty function bodies are permissible in lsh, while they
-are not so in bash. For example, in the following script, @code{echo} will be executed
+are not so in bash. For example, in the following script, <B>echo</B> will be executed
 in lsh, while it a syntax error will result in bash:
 <P>
 
@@ -2019,7 +2199,7 @@ f2    # works in both bash and lsh
 </DL>
 </PRE>
 
-<A NAME="lbBD">&nbsp;</A>
+<A NAME="lbBF">&nbsp;</A>
 <H2>COMMAND HISTORY</H2>
 
 <P>
@@ -2041,7 +2221,7 @@ this fails, the default value <B>/bin/ed</B> is used. The edited commands
 are printed and executed upon leaving the editor. The <B>-s</B> option
 causes <B>fc</B> to skip the editing phase and to re-execute the commands
 directly.
-<A NAME="lbBE">&nbsp;</A>
+<A NAME="lbBG">&nbsp;</A>
 <H2>VI EDITING MODE</H2>
 
 <P>
@@ -2418,7 +2598,7 @@ found, insert its value on the input buffer.
 <DD>
 Display the version of the shell.
 </DL>
-<A NAME="lbBF">&nbsp;</A>
+<A NAME="lbBH">&nbsp;</A>
 <H2>BUILTIN UTILITIES</H2>
 
 <P>
@@ -2443,7 +2623,7 @@ shell environment. If <B>name</B> refers to a file, the file is read and the
 commands are executed in the current shell environment. If any arguments are
 specified, they become the positional parameters for the command. The exit
 status is the exit status of the last command executed.
-<DT><B>alias [-hv</B>] [<I>name</I>[<I>=value</I>]] ...
+<DT><B>alias [-hpv</B>] [<I>name</I>[<I>=value</I>]] ...
 
 <DD>
 With no arguments, prints the list of aliases in the form of
@@ -2451,7 +2631,9 @@ With no arguments, prints the list of aliases in the form of
 is defined for each <B>name</B> whose <B>value</B> is specified. For each name in
 the argument list for which no value is specified, the name and value of the
 alias is printed. The exit status is non-zero if a <B>name</B> is specified for which
-no alias is defined.
+no alias is defined. The <B>-p</B> option prints all the defined aliases and their values,
+which is similar to calling <B>alias</B> with no options at all (provided for compatibility
+with the other shells).
 <DT><B>bg [-hv</B>] [<I>job</I> ...]
 
 <DD>
@@ -2554,7 +2736,7 @@ Similarly, you can read the process's output by invoking:
 </PRE>
 
 <DL COMPACT>
-<DT><B>declare</B> [<B>-hvfFgrxlut</B>] [<B>-p</B>] [<I>name</I>=[<I>value</I>]...]
+<DT><B>declare</B> [<B>-fFghilrtuvx</B>] [<B>-p</B>] [<I>name</I>=[<I>value</I>]...]
 
 <DD>
 Declare variables and give them attributes. <I>name</I> is the name of the variable
@@ -2567,8 +2749,10 @@ attributes and values of each <I>name</I>. The <B>-r</B> option marks each
 <I>name</I> as readonly. The <B>-t</B> option gives functions the <B>trace</B>
 attribute (doesn't work on variables). The <B>-u</B> option converts all characters
 in variable's value to uppercase on assignment. The <B>-x</B> option marks each
-<I>name</I> for export.
-<DT><B>dirs</B> [<B>-hclpv</B>] [<I>+N</I> | <I>-N</I>]
+<I>name</I> for export. The <B>-i</B> option performs arithmetic expansion when
+the variable is assigned a value and stores the result of the expansion in the
+variable.
+<DT><B>dirs</B> [<B>-hclpvw</B>] [<I>+N</I> | <I>-N</I>]
 
 <DD>
 <DT><B>dirs -S|-L</B> [<I>filename</I>]
@@ -2583,7 +2767,7 @@ is the file to save/load the directory stack to/from. The <B>-c</B> option
 clears the stack, i.e. removes all directories. The <B>-l</B> option prints
 full pathnames, it doesn't use ~ to indicate the home directory. The <B>-L</B>
 option loads the directory stack from the given filename. If no filename is
-supplied, uses <B>$DIRSFILE</B> or defaults to <I>~/.lshdirs</I>. The <B>-n</B>
+supplied, uses <B>$DIRSFILE</B> or defaults to <I>~/.lshdirs</I>. The <B>-w</B>
 option wraps entries before they reach edge of the screen. The <B>-p</B> option
 prints each directory on a separate line. The <B>-S</B> option saves the
 directory stack to the given filename. If no filename is supplied, uses <B>$DIRSFILE</B>
@@ -2724,7 +2908,7 @@ Echoes <I>args</I>, delimited by NULL characters.
 The <B>-e</B> option allows escaped characters in arguments. The <B>-E</B> option
 doesn't allow escaped characters in arguments. This utility doesn't recognize
 the <B>-n</B> option as does <B>echo</B>.
-<DT><B>hash</B> [<B>-hvld</B>] [<B>-p</B><I> path</I>] [<B>-r</B>] <I>utility</I> ...
+<DT><B>hash</B> [<B>-hvldt</B>] [<B>-p</B><I> path</I>] [<B>-r</B>] <I>utility</I> ...
 
 <DD>
 <DT><B>hash -a</B>
@@ -2734,7 +2918,7 @@ Remembers/reports utility locations. <I>utility</I> is the name of a utility to
 search and add to the hashtable. The <B>-a</B> option forgets, then re-searches
 and re-hashes all utilities whose names are currently in the hashtable.
 The <B>-d</B> option forgets the location of each passed <I>utility</I>.
-The <B>-l</B> option prints the list of hashed utilities and their paths.
+The <B>-l</B> and <B>-t</B> options each prints the hashed utilities and their paths.
 The <B>-p</B> option performs utility search using <I>path</I> instead of
 the <B>$PATH</B> variable. The <B>-r</B> option forgets all previously
 remembered utility locations.
@@ -2743,7 +2927,8 @@ remembered utility locations.
 <DD>
 Shows help for builtin utilities and commands. The <B>-d</B> option prints a
 short description of each <I>command</I>. The <B>-s</B> option prints the
-usage or synopsis of each <I>command</I>.
+usage or synopsis of each <I>command</I>. The <B>-m</B> option prints a manpage-like
+help page for each command.
 <DT><B>history</B> [<B>-hR</B>] [<I>n</I>]
 
 <DD>
@@ -2902,7 +3087,7 @@ an external command.
 Notify immediately when jobs change status. <B>job</B> is the job id of the job
 to mark for immediate notification. See the <I>Jobs</I> section for a description
 of the format of <B>job</B>.
-<DT><B>popd</B> [<B>-chlnpsv</B>] [<I>+N</I> | <I>-N</I>]
+<DT><B>popd</B> [<B>-hlnpsvw</B>] [<I>+N</I> | <I>-N</I>]
 
 <DD>
 Pop directories off the stack and <B>cd</B> to them. If <I>N</I> is positive, it removes
@@ -2910,16 +3095,16 @@ the N-th directory, counting from 0 from the left. If it is negative, it removes
 N-th directory, counting from 0 from the right. If called without arguments, <B>popd</B>
 removes the top directory from the stack and calls <B>cd</B> to change the current
 working directory to the new top directory (equivalent to `popd +0`.
-The <B>-c</B> option manipulates the stack without <B>cd</B>ing to the directory.
+The <B>-n</B> option manipulates the stack without <B>cd</B>ing to the directory.
 The <B>-s</B> option suppresses the output the dirstack after popping off it.
-The <B>-l</B>, <B>-n</B>, <B>-v</B>, and <B>-p</B> options have the same meaning as for
+The <B>-l</B>, <B>-w</B>, <B>-v</B>, and <B>-p</B> options have the same meaning as for
 the <B>dirs</B> builtin.
 <DT><B>printenv</B> [<B>-hv0</B>] [<I>name</I> ...]
 
 <DD>
 Print the names and values of environment variables identified by each <I>name</I>.
 The <B>-0</B> option terminates each entry with NULL instead of a newline character.
-<DT><B>pushd</B> [<B>-chlnpsv</B>] [<I>+N</I> | <I>-N</I> | <I>dir</I>]
+<DT><B>pushd</B> [<B>-hlnpsvw</B>] [<I>+N</I> | <I>-N</I> | <I>dir</I>]
 
 <DD>
 Push directories on the stack and <B>cd</B> to them. If <I>N</I> is positive, it
@@ -2929,9 +3114,9 @@ directory, counting from 0 from the right, to the top of the stack. If <B>dir</B
 is supplied, it is pushed on the stack and <B>cd</B> is called to change the working
 directory to <B>dir</B>. If <B>dir</B> is dash <B>-</B>, this equals the previous
 working directory, as stored in the <B>$PWD</B> variable.
-The <B>-c</B> option manipulates the stack without <B>cd</B>ing to the directory.
+The <B>-n</B> option manipulates the stack without <B>cd</B>ing to the directory.
 The <B>-s</B> option suppresses the output the dirstack after popping off it.
-The <B>-l</B>, <B>-n</B>, <B>-v</B>, and <B>-p</B> options have the same meaning as for
+The <B>-l</B>, <B>-w</B>, <B>-v</B>, and <B>-p</B> options have the same meaning as for
 the <B>dirs</B> builtin.
 <DT><B></B>
 
@@ -3150,7 +3335,7 @@ printed on stdout.
 <DD>
 Set the value of environment variable <I>name</I> to <I>value</I>, or NULL if
 no <I>value</I> is given. This utility sets both the environment variable
-and the shell variable with the same @code{name}. If no arguments are given,
+and the shell variable with the same <I>name</I>. If no arguments are given,
 it prints the names and values of all the set environment variables.
 <DT><B>setx</B> [<B>-hvpsuqo</B>] <I>option</I>
 
@@ -3167,6 +3352,15 @@ means non-interactive shell):
 <BR>
 
 <B>autocd </B> - dirs passed as single-word commands are passed to <B>cd</B> (bash int)
+
+<BR>
+
+<B>caller_verbose </B> - allow the <B>caller</B> builtin to output error messages (similar
+
+to <I>shift-verbose</I> -- see below)
+<BR>
+
+<B>caller-verbose </B> - same as the above
 
 <BR>
 
@@ -3362,6 +3556,25 @@ means non-interactive shell):
 
 <BR>
 
+<B>prompt_bang </B> - expand bang <B>!</B> in prompt strings to the current history list number (zsh). A single bang
+
+mush be entered as a double bang <B>!!</B> in the prompt string. This option is enabled by
+default, to allow lsh to display POSIX-compliant behaviour unless the option is explicitly disabled
+<BR>
+
+<B>prompt-bang </B> - same as the above
+
+<BR>
+
+<B>prompt_percent </B> - recognize and expand the escape sequences introduced by the percent sign <B>%</B> when used
+
+in prompt strings (zsh). As its a non-POSIX extension, this option is disabled by default
+<BR>
+
+<B>prompt-percent </B> - same as the above
+
+<BR>
+
 <B>pushdtohome </B> - <B>pushd</B> without arguments pushed <B>~</B> on the stack (tcsh)
 
 <BR>
@@ -3467,11 +3680,36 @@ signal number or a symbolic name. Signals ingored on shell startup cannot be
 trapped or reset. If <I>action</I> is omitted and the first <I>sig</I> is
 a number, or if <I>action</I> is a hyphen '-', traps for each <I>sig</I> are
 reset to their original values. If <I>action</I> is a null string, the
-signal is ignored by the shell and its children. If <I>sig</I> is <B>ERR</B>,
-<I>action</I> is executed whenever a command returns non-zero exit status.
-If <I>sig</I> is <I>DEBUG</I>, <I>action</I> is executed before each command is
-executed. If <I>sig</I> is <B>0</B> or <B>EXIT</B>, <I>action</I> is executed on
-exit from the shell. If no arguments are supplied, <B>trap</B> prints the traps
+signal is ignored by the shell and its children.
+<DT><B></B>
+
+<DD>
+If <I>sig</I> is <B>ERR</B>, <I>action</I> is executed whenever a command
+returns non-zero exit status, provided the command is not following <B>while</B>
+or <B>until</B>, is not part of an <B>if</B> test clause, is not preceded 
+by <B>&amp;&amp;</B> or <B>||</B> (except for the last command in the AND-OR list), is
+not part of a pipeline, except for the last command in the pipeline, and the
+command's exit status is not inverted with <B>!</B>.
+<DT><B></B>
+
+<DD>
+If <I>sig</I> is <B>RETURN</B>, <I>action</I> is executed whenever a shell
+function or script finishes execution.
+<DT><B></B>
+
+<DD>
+If <I>sig</I> is <B>DEBUG</B>, <I>action</I> is executed before each simple
+command, <B>for</B> (regular and arithmetic), <B>case</B>, <B>select</B>, and
+the first command in a shell function is executed.
+<DT><B></B>
+
+<DD>
+If <I>sig</I> is <B>0</B> or <B>EXIT</B>, <I>action</I> is executed on
+exit from the shell.
+<DT><B></B>
+
+<DD>
+If no arguments are supplied, <B>trap</B> prints the traps
 associated with each signal number.
 The <B>-l</B> option lists all conditions and their signal numbers.
 The <B>-p</B> option prints the trap actions associated with each <I>sig</I>.
@@ -3479,11 +3717,16 @@ The <B>-p</B> option prints the trap actions associated with each <I>sig</I>.
 
 <DD>
 Write a description of <B>command</B> type.
+<DT><B>typeset</B> [<B>-fFghilrtuvx</B>] [<B>-p</B>] [<I>name</I>=[<I>value</I>]...]
+
+<DD>
+This is a synonym to <B>declare</B>. Provided for compatibility with <B>ksh</B>
+and <B>bash</B>.
 <DT><B>true</B>
 
 <DD>
 Return true result (zero exit status).
-<DT><B>ulimit</B> [<B>-h</B>] [<B>-acdflmnpstuvHS</B>] [<I>limit</I>]
+<DT><B>ulimit</B> [<B>-h</B>] [<B>-acdflmnpstuvPTHS</B>] [<I>limit</I>]
 
 <DD>
 Set or display resource limits. The limit for a specified resource is set when
@@ -3494,7 +3737,7 @@ the limit's value. If no option is specified, <B>-f</B> is assumed.
 <DT><B></B>
 
 <DD>
-<BR>&nbsp;The&nbsp;following&nbsp;are&nbsp;the&nbsp;available&nbsp;resource&nbsp;limits:
+The following are the available resource limits:
 </DL>
 <P>
 
@@ -3502,16 +3745,21 @@ the limit's value. If no option is specified, <B>-f</B> is assumed.
 <DL COMPACT><DT><DD><B>-H</B> 	 Set or display the hard limit for the specified resource.
 <B>-S</B> 	 Set or display the soft limit for the specified resource.
 <B>-a</B> 	 List all the current resource limits.
+<B>-b</B> 	 The maximum socket receive buffer (bytes, if the system supports it).
 <B>-c</B> 	 The size of core dumps (512-byte blocks).
 <B>-d</B> 	 The size of the data segment (Kbytes).
-<B>-f</B> 	 The max size of files written by the current process (512-byte blocks).
-<B>-l</B> 	 The max size of memory a process may lock.
+<B>-f</B> 	 The maximum size of files written by the current process (512-byte blocks).
+<B>-k</B> 	 The maximum number of kqueues (if the system supports it).
+<B>-l</B> 	 The maximum size of memory a process may lock.
 <B>-m</B> 	 The the size of physical memory (Kbytes).
 <B>-n</B> 	 The number of file descriptors.
 <B>-p</B> 	 The size of pipe buffers (512-byte blocks).
 <B>-s</B> 	 The the size of the stack (Kbytes).
 <B>-t</B> 	 The number of CPU seconds to be used by each process.
 <B>-v</B> 	 The size of virtual memory (Kbytes).
+<B>-B</B> 	 The maximum socket send buffer (bytes, if the system supports it).
+<B>-P</B> 	 The maximum number of pseudoterminals.
+<B>-T</B> 	 The maximum number of threads.
 </DL>
 </PRE>
 
@@ -3621,7 +3869,7 @@ option does a path search for each <I>name</I> even if it was an alias,
 a function, or a reserved word. The <B>-a</B> option is similar to <B>-v</B>,
 but causes all interpretations of the specified name to be printed.
 </DL>
-<A NAME="lbBG">&nbsp;</A>
+<A NAME="lbBI">&nbsp;</A>
 <H2>SHELL INVOCATION</H2>
 
 <P>
@@ -3671,7 +3919,113 @@ stdin.
 
 The remaining options and arguments are recognized as described for the <B>set</B>
 builtin utility.
-<A NAME="lbBH">&nbsp;</A>
+<A NAME="lbBJ">&nbsp;</A>
+<H2>THE POSIX SHELL</H2>
+
+<P>
+
+When the shell is started in the POSIX mode, it tries to abide as strictly as
+possible with the POSIX standard. That means certain features (such as extended
+shell language constructs, as well as some of the builtin utilties) are disabled.
+The following happens when lsh is running in the POSIX mode:
+<P>
+
+* The <B>noglob</B> and the <B>-</B> command modifiers have no effect on
+executed commands.
+<P>
+
+* The arithmetic version of the <B>for</B> loop is not recognized by the parser.
+<P>
+
+* The following special builtin utilities are disabled by default (they can
+be enabled by running `enable -s utility`, replacing <B>utility</B> with the
+utility's name): <I>local</I>, <I>logout</I>, <I>repeat</I>, <I>setx</I>, <I>suspend</I>.
+<P>
+
+* The following regular builtin utilities are disabled by default (they can
+be enabled by running `enable -r utility`, replacing <B>utility</B> with the
+utility's name): <I>bugreport</I>, <I>builtin</I>, <I>caller</I>, <I>coproc</I>,
+<I>declare</I>, <I>dirs</I>, <I>disown</I>, <I>dump</I>, <I>echo</I>, <I>glob</I>,
+<I>history</I>, <I>hup</I>, <I>let</I>, <I>mailcheck</I>, <I>memusage</I>, <I>nice</I>,
+<I>nohup</I>, <I>notify</I>, <I>popd</I>, <I>printenv</I>, <I>pushd</I>, <I>setenv</I>,
+<I>stop</I>, <I>typeset</I>, <I>unlimit</I>, <I>unsetenv</I>, <I>ver</I>, <I>whence</I>.
+<P>
+
+* The <B>select</B> keyword is not recognized by the parser.
+<P>
+
+* The <I>;&amp;</I> and <I>;|</I> case conditional terminators are not recognized
+by the parser.
+<P>
+
+* The <B>function</B> keyword is not recognized as a keyword. Functions cannot
+be defined as: <B>function</B> <I>fname</I> { <I>list</I>; }.
+Instead, function definitions must take the form defined by POSIX, which is:
+<B>fname</B> () { <I>list</I>; }
+<P>
+
+* Dot files with no slashes in their names are searched for in the <B>$PATH</B>
+and, if not found, an error message is printed and the <B>dot</B> utility returns
+with non-zero exit status. When in non-POSIX mode, dot files with no slases in
+their names are searched for in the <B>$PATH</B> only if the extended option <I>sourcepath</I>
+is set (using `setx -s sourcepath`) and, if not found, such files are searched
+for in the current working directory by appending './' to the dot file name.
+<P>
+
+* The <B>read</B> builtin utility doesn't use the <B>$REPLY</B> variable by
+default. It requires at least one argument specifying the shell variable to use
+to store read input.
+<P>
+
+* The non-interactive shell exits if a special builtin returns non-zero exit status.
+<P>
+
+* The <B>return</B>, <B>shift</B> and <B>times</B> special builtin utilities each
+print an error message if it is passed more than one argument. In non-POSIX mode,
+these utilities just ignore the extra arguments.
+<P>
+
+* The regular and special builtin utilities recognize only the command line
+options defined by POSIX for each utility. The table below shows the options
+recognized and unrecognized by each utility when the shell is in the POSIX mode.
+Options that are not recognized result in error:
+<P>
+
+<PRE>
+<DL COMPACT><DT><DD><B>Utility 	 Recognized options 	 Unrecognized options</B>
+<B></B> alias 	 - 					 h, p, v
+<B></B> break 	 - 					 -
+<B></B> colon 	 - 					 -
+<B></B> continue 	 - 					 -
+<B></B> dot 		 - 					 -
+<B></B> eval 	 - 					 -
+<B></B> exec 	 - 					 a, c, h, l, v
+<B></B> exit 	 - 					 -
+<B></B> export 	 p 					 f, h, n, v
+<B></B> hash 	 r 					 a, d, h, l, p, t, v
+<B></B> pwd 		 L, P 				 h, v
+<B></B> readonly 	 p 					 h, v
+<B></B> return 	 - 					 -
+<B></B> set 		 [[ all set options are recognized in --posix mode ]]
+<B></B> shift 	 - 					 -
+<B></B> test 	 - 					 -
+<B></B> times 	 - 					 -
+<B></B> trap 	 - 					 h, l, p, v
+<B></B> ulimit 	 f 					 a, c, d, e, h, i, l, m, n, p, q, r, s, t, u, v, x, T, H, S
+<B></B> umask 	 S 					 h, p, v
+<B></B> unalias 	 a 					 h, v
+<B></B> unset 	 f, v 				 h
+</DL>
+</PRE>
+
+<P>
+
+* The following extended shell options are turned off (they can be turned on
+by invoking the `set` builtin utility): <I>braceexpand</I>, <I>dumpast</I>,
+<I>errtrace</I>, <I>histexpand</I>, <I>keyword</I>, <I>pipefail</I>, <I>braceexpand</I>,
+<I>quit</I>, <I>restricted</I>, <I>onecmd</I>, <I>functrace</I>, <I>history</I>,
+<I>privileged</I>.
+<A NAME="lbBK">&nbsp;</A>
 <H2>THE RESTRICTED SHELL</H2>
 
 <P>
@@ -3699,7 +4053,7 @@ or <B>$PATH</B>
 <BR>
 
 * Using <B>command -p</B> to invoke a command
-<A NAME="lbBI">&nbsp;</A>
+<A NAME="lbBL">&nbsp;</A>
 <H2>EXIT STATUS</H2>
 
 <P>
@@ -3720,50 +4074,67 @@ If no commands were executed.
 <DD>
 The exit status of last command executed is returned on exit.
 </DL>
-<A NAME="lbBJ">&nbsp;</A>
+<A NAME="lbBM">&nbsp;</A>
 <H2>FILES</H2>
 
 <DL COMPACT>
 <DT><I>/etc/profile</I>
 
 <DD>
-The system initialization file (executed by a login shell).
+Global (or system-wide) initialization file, executed by the login shell.
+<DT><I>~/.profile</I>
+
+<DD>
+Local (or user-specific) initialization file, executed by the login shell
+after it executes <I>/etc/profile</I>.
+<DT><I>/etc/lshlogin</I>
+
+<DD>
+Global initialization file, executed by the login shell after it has read and
+executed <I>/etc/profile</I> and <I>~/.profile</I>.
+<DT><I>~/.lshlogin</I>
+
+<DD>
+Local initialization file, executed by the login shell after it has read and
+executed <I>/etc/profile</I>, <I>~/.profile</I> and <I>/etc/lshlogin</I>.
 <DT><I>/etc/lshrc</I>
 
 <DD>
-The system-wide startup file (executed by an interactive shell).
-<DT><I>$HOME/.profile</I>
+Global startup file, executed by the interactive shell.
+<DT><I>~/.lshrc</I>
 
 <DD>
-The personal initialization file (executed by a login shell after executing
-<I>/etc/profile</I>).
-<DT><I>$HOME/.lshrc</I>
+Local startup file, executed by the interactive shell after <I>/etc/lshrc</I>.
+<DT><I>/etc/lshlogout</I>
 
 <DD>
-The default personal initialization file (executed after <I>/etc/lshrc</I>
-by an interactive shell).
-<DT><I>$HOME/.lsh_history</I>
-
-<DD>
-The default personal initialization file (executed after <I>/etc/lshrc</I>
-<DT><I>/dev/null</I>
-
-<DD>
-The NULL device.
+Global logout script, executed by the login shell on logout.
 <DT><I>/etc/logout</I>
 
 <DD>
-Shell script executed on logout.
-<DT><I>$HOME/logout</I>
+Global logout script, executed by the login shell on logout, only if <I>/etc/lshlogout</I> was not executed.
+<DT><I>~/.lshlogout</I>
 
 <DD>
-Shell script executed on logout after <I>/etc/logout</I>.
+Local logout script, executed by the login shell on logout.
+<DT><I>~/.logout</I>
+
+<DD>
+Local logout script, executed by the login shell on logout, only if <I>~/.lshlogout</I> was not executed.
+<DT><I>~/.lsh_history</I>
+
+<DD>
+The default file for saving history commands.
 <DT><I>/etc/passwd</I>
 
 <DD>
-Default file used to perform ~user substitutions.
+Default file used to perform ~username substitutions.
+<DT><I>/dev/null</I>
+
+<DD>
+The NULL device. Opened as input for background jobs.
 </DL>
-<A NAME="lbBK">&nbsp;</A>
+<A NAME="lbBN">&nbsp;</A>
 <H2>FEATURES</H2>
 
 <P>
@@ -3780,7 +4151,7 @@ Default file used to perform ~user substitutions.
 - Well documented source code
 <BR>
 
-<A NAME="lbBL">&nbsp;</A>
+<A NAME="lbBO">&nbsp;</A>
 <H2>TODO</H2>
 
 <P>
@@ -3795,11 +4166,11 @@ Default file used to perform ~user substitutions.
 <BR>
 
 - Testing, bug reporting, debugging and improving the shell
-<A NAME="lbBM">&nbsp;</A>
+<A NAME="lbBP">&nbsp;</A>
 <H2>SEE ALSO</H2>
 
-<I>info lsh</I>
-<A NAME="lbBN">&nbsp;</A>
+<I>info lsh</I>, <I>man bash</I>, <I>man tcsh</I>, <I>man ksh</I>, <I>man zsh</I>
+<A NAME="lbBQ">&nbsp;</A>
 <H2>AUTHOR</H2>
 
 Mohammed Isam &lt;<A HREF="mailto:mohammed_isam1984@yahoo.com">mohammed_isam1984@yahoo.com</A>&gt;
@@ -3814,44 +4185,47 @@ Mohammed Isam &lt;<A HREF="mailto:mohammed_isam1984@yahoo.com">mohammed_isam1984
 <DT><A HREF="#lbAE">OPTIONS</A><DD>
 <DT><A HREF="#lbAF">INSTALLATION</A><DD>
 <DT><A HREF="#lbAG">COMMANDS</A><DD>
-<DT><A HREF="#lbAH">RESERVED WORDS</A><DD>
-<DT><A HREF="#lbAI">VARIABLE ASSIGNMENTS</A><DD>
-<DT><A HREF="#lbAJ">COMMENTS</A><DD>
-<DT><A HREF="#lbAK">ALIASING</A><DD>
-<DT><A HREF="#lbAL">SPECIAL ALIASES</A><DD>
-<DT><A HREF="#lbAM">TILDE EXPANSION</A><DD>
-<DT><A HREF="#lbAN">COMMAND SUBSTITUTION</A><DD>
-<DT><A HREF="#lbAO">ARITHMETIC EXPANSION</A><DD>
-<DT><A HREF="#lbAP">PROCESS SUBSTITUTION</A><DD>
-<DT><A HREF="#lbAQ">PARAMETER EXPANSION</A><DD>
-<DT><A HREF="#lbAR">FIELD SPLITTING</A><DD>
-<DT><A HREF="#lbAS">PATHNAME EXPANSION</A><DD>
-<DT><A HREF="#lbAT">QUOTING</A><DD>
-<DT><A HREF="#lbAU">SPECIAL PARAMETERS</A><DD>
-<DT><A HREF="#lbAV">SHELL VARIABLES</A><DD>
-<DT><A HREF="#lbAW">THE SHELL PROMPT</A><DD>
-<DT><A HREF="#lbAX">CONDITIONAL EXPRESSIONS</A><DD>
-<DT><A HREF="#lbAY">INPUT AND OUTPUT</A><DD>
-<DT><A HREF="#lbAZ">THE ENVIRONMENT</A><DD>
-<DT><A HREF="#lbBA">JOBS</A><DD>
-<DT><A HREF="#lbBB">SIGNALS</A><DD>
-<DT><A HREF="#lbBC">COMMAND EXECUTION</A><DD>
-<DT><A HREF="#lbBD">COMMAND HISTORY</A><DD>
-<DT><A HREF="#lbBE">VI EDITING MODE</A><DD>
-<DT><A HREF="#lbBF">BUILTIN UTILITIES</A><DD>
-<DT><A HREF="#lbBG">SHELL INVOCATION</A><DD>
-<DT><A HREF="#lbBH">THE RESTRICTED SHELL</A><DD>
-<DT><A HREF="#lbBI">EXIT STATUS</A><DD>
-<DT><A HREF="#lbBJ">FILES</A><DD>
-<DT><A HREF="#lbBK">FEATURES</A><DD>
-<DT><A HREF="#lbBL">TODO</A><DD>
-<DT><A HREF="#lbBM">SEE ALSO</A><DD>
-<DT><A HREF="#lbBN">AUTHOR</A><DD>
+<DT><A HREF="#lbAH">Compound commands</A><DD>
+<DT><A HREF="#lbAI">Command modifiers</A><DD>
+<DT><A HREF="#lbAJ">RESERVED WORDS</A><DD>
+<DT><A HREF="#lbAK">VARIABLE ASSIGNMENTS</A><DD>
+<DT><A HREF="#lbAL">COMMENTS</A><DD>
+<DT><A HREF="#lbAM">ALIASING</A><DD>
+<DT><A HREF="#lbAN">SPECIAL ALIASES</A><DD>
+<DT><A HREF="#lbAO">TILDE EXPANSION</A><DD>
+<DT><A HREF="#lbAP">COMMAND SUBSTITUTION</A><DD>
+<DT><A HREF="#lbAQ">ARITHMETIC EXPANSION</A><DD>
+<DT><A HREF="#lbAR">PROCESS SUBSTITUTION</A><DD>
+<DT><A HREF="#lbAS">PARAMETER EXPANSION</A><DD>
+<DT><A HREF="#lbAT">FIELD SPLITTING</A><DD>
+<DT><A HREF="#lbAU">PATHNAME EXPANSION</A><DD>
+<DT><A HREF="#lbAV">QUOTING</A><DD>
+<DT><A HREF="#lbAW">SPECIAL PARAMETERS</A><DD>
+<DT><A HREF="#lbAX">SHELL VARIABLES</A><DD>
+<DT><A HREF="#lbAY">THE SHELL PROMPT</A><DD>
+<DT><A HREF="#lbAZ">CONDITIONAL EXPRESSIONS</A><DD>
+<DT><A HREF="#lbBA">INPUT AND OUTPUT</A><DD>
+<DT><A HREF="#lbBB">THE ENVIRONMENT</A><DD>
+<DT><A HREF="#lbBC">JOBS</A><DD>
+<DT><A HREF="#lbBD">SIGNALS</A><DD>
+<DT><A HREF="#lbBE">COMMAND EXECUTION</A><DD>
+<DT><A HREF="#lbBF">COMMAND HISTORY</A><DD>
+<DT><A HREF="#lbBG">VI EDITING MODE</A><DD>
+<DT><A HREF="#lbBH">BUILTIN UTILITIES</A><DD>
+<DT><A HREF="#lbBI">SHELL INVOCATION</A><DD>
+<DT><A HREF="#lbBJ">THE POSIX SHELL</A><DD>
+<DT><A HREF="#lbBK">THE RESTRICTED SHELL</A><DD>
+<DT><A HREF="#lbBL">EXIT STATUS</A><DD>
+<DT><A HREF="#lbBM">FILES</A><DD>
+<DT><A HREF="#lbBN">FEATURES</A><DD>
+<DT><A HREF="#lbBO">TODO</A><DD>
+<DT><A HREF="#lbBP">SEE ALSO</A><DD>
+<DT><A HREF="#lbBQ">AUTHOR</A><DD>
 </DL>
 <HR>
 This document was created by
-<A HREF="/man/man2html">man2html</A>,
+<A HREF="/cgi-bin/man/man2html">man2html</A>,
 using the manual pages.<BR>
-Time: 19:15:16 GMT, August 18, 2019
+Time: 16:00:25 GMT, July 29, 2024
 </BODY>
 </HTML>
