@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam [mohammed_isam1984@yahoo.com]
- *    Copyright 2019, 2020 (c)
+ *    Copyright 2019, 2020, 2024 (c)
  * 
  *    file: conditionals.c
  *    This file is part of the Layla Shell project.
@@ -38,8 +38,8 @@
 #include <termios.h>
 #include "backend.h"
 #include "../error/error.h"
-#include "../debug.h"
-#include "../kbdevent.h"
+#include "../include/debug.h"
+#include "../include/kbdevent.h"
 #include "../builtins/setx.h"
 
 
@@ -62,11 +62,14 @@
  */
 int do_case_item(struct source_s *src, struct node_s *node, char *word, struct node_s *redirect_list)
 {
+    int matched = 0;
+    
     /* 
      * the root node is a NODE_CASE_ITEM. we need to iterate its 
      * NODE_VAR children.
      */
     node = node->first_child;
+    
     while(node && node->type == NODE_VAR)
     {
         /* 
@@ -74,8 +77,10 @@ int do_case_item(struct source_s *src, struct node_s *node, char *word, struct n
          * substitution, and arithmetic expansion on the pattern string, but 
          * no pathname expansion or field splitting.
          */
-        char *pat_str = node->val.str;
+        char *pat_str;
         struct word_s *w = word_expand_one_word(node->val.str, 0);
+
+#if 0
         if(w)
         {
             /* Remove quoting only if there was word expansion */
@@ -92,7 +97,11 @@ int do_case_item(struct source_s *src, struct node_s *node, char *word, struct n
                 continue;
             }
         }
+#endif
         
+        pat_str = w ? w->data : node->val.str;
+        
+
         if(match_pattern(pat_str, word))
         {
             struct node_s *commands = node->next_sibling;
@@ -106,22 +115,31 @@ int do_case_item(struct source_s *src, struct node_s *node, char *word, struct n
                 int res = do_compound_list(src, commands, redirect_list);
                 ERR_TRAP_OR_EXIT();
             }
-            
-            if(pat_str != node->val.str)
-            {
-                free(pat_str);
-            }
-            return 1;
+
+            matched = 1;
         }
 
-        if(pat_str != node->val.str)
+        if(w)
+        {
+            free_all_words(w);
+        }
+
+#if 0
+        if(pat_str)
         {
             free(pat_str);
+        }
+#endif
+        
+        if(matched)
+        {
+            break;
         }
         
         node = node->next_sibling;
     }
-    return 0;
+
+    return matched;
 }
 
 
@@ -195,7 +213,7 @@ int do_case_clause(struct source_s *src, struct node_s *node, struct node_s *red
 
     if(empty_word)
     {
-        PRINT_ERROR("%s: empty case word\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "empty case word");
         if(redirect_list)
         {
             restore_stds(saved_fd);

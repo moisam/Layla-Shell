@@ -31,11 +31,11 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h> 
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "backend.h"
 #include "../parser/parser.h"
 #include "../error/error.h"
-#include "../debug.h"
+#include "../include/debug.h"
 
 
 /**********************************************
@@ -85,6 +85,14 @@ void restore_stds(int *saved_fd)
             dup2(saved_fd[i], i);
             close(saved_fd[i]);
             saved_fd[i] = -1;
+            
+            /* inform stdio lib about the change */
+            switch(i)
+            {
+                case 0: freopen(NULL, "r", stdin); break;
+                case 1: freopen(NULL, "w", stdout); break;
+                case 2: freopen(NULL, "w", stderr); break;
+            }
         }
     }
 }
@@ -171,7 +179,7 @@ char *redirect_proc(char op, char *cmdline)
                 }
                 else
                 {
-                    PRINT_ERROR("%s: error creating fifo: %s\n", SOURCE_NAME, 
+                    PRINT_ERROR(SHELL_NAME, "error creating fifo: %s", 
                                 "system doesn't support `/dev/fd` file names");
                     close(filedes[0]);
                     close(filedes[1]);
@@ -180,16 +188,14 @@ char *redirect_proc(char op, char *cmdline)
             }
             else
             {
-                PRINT_ERROR("%s: error creating fifo: %s\n", 
-                            SOURCE_NAME, strerror(errno));
+                PRINT_ERROR(SHELL_NAME, "error creating fifo: %s", strerror(errno));
                 return NULL;
             }
         }
         
         if((fd = open(tmpname, O_RDWR)) == -1)
         {
-            PRINT_ERROR("%s: failed to open fifo: %s\n", 
-                        SOURCE_NAME, strerror(errno));
+            PRINT_ERROR(SHELL_NAME, "failed to open fifo: %s", strerror(errno));
             return NULL;
         }
         
@@ -302,13 +308,13 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
         
     if(fileno < 0 || fileno >= FOPEN_MAX)
     {
-        PRINT_ERROR("%s: invalid redirected file number: %d\n", SOURCE_NAME, fileno);
+        PRINT_ERROR(SHELL_NAME, "invalid redirected file number: %d", fileno);
         return 0;
     }
     
     if((i = get_slot(fileno, io_files)) == -1)
     {
-        PRINT_ERROR("%s: too many open files\n", SOURCE_NAME);
+        PRINT_ERROR(SHELL_NAME, "too many open files");
         return 0;
     }
 
@@ -351,7 +357,7 @@ int redirect_prep_node(struct node_s *child, struct io_file_s *io_files)
                 }
                 else
                 {
-                    PRINT_ERROR("%s: failed to duplicate stdout on stderr\n", SOURCE_NAME);
+                    PRINT_ERROR(SHELL_NAME, "failed to duplicate stdout on stderr");
                     return 0;
                 }
             }
@@ -456,13 +462,13 @@ int open_special(char *path, int mode)
         char *s2 = strchr(s1, '/');
         if(!s2)
         {
-            PRINT_ERROR("%s: error opening socket: missing port number\n", SOURCE_NAME);
+            PRINT_ERROR(SHELL_NAME, "error opening socket: missing port number");
             errno = EINVAL;
             return -1;
         }
         if(!*++s2)
         {
-            PRINT_ERROR("%s: error opening socket: missing port number\n", SOURCE_NAME);
+            PRINT_ERROR(SHELL_NAME, "error opening socket: missing port number");
             errno = EINVAL;
             return -1;
         }
@@ -487,7 +493,7 @@ int open_special(char *path, int mode)
         server = gethostbyname(s1);
         if(server == NULL)
         {
-            PRINT_ERROR("%s: no such host: %s\n", SOURCE_NAME, s1);
+            PRINT_ERROR(SHELL_NAME, "no such host: %s", s1);
             s2[-1] = '/';
             return -1;
         }
@@ -544,10 +550,10 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
             }
             else if(path[0] != '\0')
             {
-                path = word_expand_to_str(path);
+                path = word_expand_to_str(path, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
                 if(!path)
                 {
-                    PRINT_ERROR("%s: failed to expand path: %s\n", SOURCE_NAME, io_files[i].path);
+                    PRINT_ERROR(SHELL_NAME, "failed to expand path: %s", io_files[i].path);
                     return 0;
                 }
 
@@ -561,7 +567,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                         {
                             if(!flag_set(io_files[i].extra_flags, NOCLOBBER_FLAG))
                             {
-                                PRINT_ERROR("%s: file already exists: %s\n", SOURCE_NAME, path);
+                                PRINT_ERROR(SHELL_NAME, "file already exists: %s", path);
                                 free(path);
                                 return 0;
                             }
@@ -603,8 +609,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                         if(pend == p2)
                         {
                             free(p2);
-                            PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME,
-                                        "invalid file offset", expr);
+                            PRINT_ERROR(SHELL_NAME, "%s: %s", "invalid file offset", expr);
                             return 0;
                         }
                         free(p2);
@@ -612,15 +617,14 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                         /* Now seek to the given offset */
                         if(lseek(i, len, SEEK_SET) < 0)
                         {
-                            PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME,
+                            PRINT_ERROR(SHELL_NAME, "%s: %s", 
                                         "failed to lseek file", strerror(errno));
                             return 0;
                         }
                     }
                     else
                     {
-                        PRINT_ERROR("%s: %s: %s\n", SOURCE_NAME,
-                                    "invalid file offset", expr);
+                        PRINT_ERROR(SHELL_NAME, "%s: %s", "invalid file offset", expr);
                         return 0;
                     }
                 }
@@ -634,8 +638,8 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
                     //errno = 0;
                     if((fd = open_special(path, io_files[i].open_mode)) < 0)
                     {
-                        PRINT_ERROR("%s: failed to open `%s`: %s\n", 
-                                    SOURCE_NAME, io_files[i].path, strerror(errno));
+                        PRINT_ERROR(SHELL_NAME, "failed to open `%s`: %s", 
+                                    io_files[i].path, strerror(errno));
                         free(path);
                         return 0;
                     }
@@ -680,7 +684,7 @@ int redirect_do(struct io_file_s *io_files, int do_savestd, int *saved_fd)
             /* If error, bail out on all redirections */
             if(err)
             {
-                PRINT_ERROR("%s: incorrect file permissions\n", SOURCE_NAME);
+                PRINT_ERROR(SHELL_NAME, "incorrect file permissions");
                 return 0;
             }
 
@@ -762,7 +766,7 @@ int file_redirect_prep(struct node_s *node, struct io_file_s *io_file)
              * NOTE: Consequences of failed redirection are handled by the caller, 
              *       i.e. do_simple_command().
              */
-            PRINT_ERROR("%s: restricted shells can't redirect output\n", SOURCE_NAME);
+            PRINT_ERROR(SHELL_NAME, "restricted shells can't redirect output");
             return 0;
         }
     }
@@ -839,7 +843,7 @@ int file_redirect_prep(struct node_s *node, struct io_file_s *io_file)
             /* Get the file number from the shell variable in the >{$var} type of redirection */
             if(str[0] == '$')
             {
-                str2 = word_expand_to_str(str);
+                str2 = word_expand_to_str(str, FLAG_PATHNAME_EXPAND|FLAG_REMOVE_QUOTES);
                 if(str2)
                 {
                     str = get_malloced_str(str2);
@@ -880,7 +884,7 @@ int file_redirect_prep(struct node_s *node, struct io_file_s *io_file)
     return 1;
     
 invalid:
-    PRINT_ERROR("%s: invalid redirection file number: %d\n", SOURCE_NAME, fileno);
+    PRINT_ERROR(SHELL_NAME, "invalid redirection file number: %d", fileno);
     /*
      * NOTE: Consequences of failed redirection are handled by the caller, 
      *       i.e. do_simple_command().

@@ -38,8 +38,8 @@
 #include <termios.h>
 #include "backend.h"
 #include "../error/error.h"
-#include "../debug.h"
-#include "../kbdevent.h"
+#include "../include/debug.h"
+#include "../include/kbdevent.h"
 #include "../builtins/builtins.h"
 #include "../builtins/setx.h"
 
@@ -61,7 +61,7 @@ int break_builtin(int argc, char **argv)
 {
     if(!cur_loop_level)
     {
-        PRINT_ERROR("%s: break clause outside a loop\n", SOURCE_NAME);
+        PRINT_ERROR("break", "clause outside a loop");
         return 1;
     }
     
@@ -75,7 +75,7 @@ int break_builtin(int argc, char **argv)
         int n = strtol(argv[1], &strend, 10);
         if(*strend || n < 1)
         {
-            PRINT_ERROR("break: invalid loop count: %s\n", argv[1]);
+            PRINT_ERROR("break", "invalid loop count: %s", argv[1]);
             return 1;
         }
         req_break = n;
@@ -97,7 +97,7 @@ int continue_builtin(int argc, char **argv)
 {
     if(!cur_loop_level)
     {
-        PRINT_ERROR("%s: continue clause outside a loop\n", SOURCE_NAME);
+        PRINT_ERROR("continue", "clause outside a loop");
         return 1;
     }
 
@@ -111,7 +111,7 @@ int continue_builtin(int argc, char **argv)
         int n = strtol(argv[1], &strend, 10);
         if(*strend || n < 1)
         {
-            PRINT_ERROR("continue: invalid loop count: %s\n", argv[1]);
+            PRINT_ERROR("continue", "invalid loop count: %s", argv[1]);
             return 1;
         }
         req_continue = n;
@@ -141,8 +141,7 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
             if((w = make_word(nodelist->val.str)) == NULL)
             {
                 free_all_words(head);
-                PRINT_ERROR("%s: insufficient memory for loop's wordlist\n", 
-                            SOURCE_NAME);
+                INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "loop's wordlist");
                 return NULL;
             }
 
@@ -179,8 +178,7 @@ struct word_s *get_loop_wordlist(struct node_s *nodelist)
             if((w = make_word(p2)) == NULL)
             {
                 free_all_words(head);
-                PRINT_ERROR("%s: insufficient memory for loop's wordlist\n", 
-                            SOURCE_NAME);
+                INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "loop's wordlist");
                 return NULL;
             }
 

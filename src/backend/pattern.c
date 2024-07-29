@@ -1,6 +1,6 @@
 /* 
  *    Programmed By: Mohammed Isam [mohammed_isam1984@yahoo.com]
- *    Copyright 2018, 2019, 2020 (c)
+ *    Copyright 2018, 2019, 2020, 2024 (c)
  * 
  *    file: pattern.c
  *    This file is part of the Layla Shell project.
@@ -34,7 +34,30 @@
 #include "backend.h"
 #include "../builtins/setx.h"
 #include "../error/error.h"
-#include "../debug.h"
+#include "../include/debug.h"
+#include "../include/dstring.h"
+
+
+#define APPEND(c)                           \
+{                                           \
+    buf[0] = (c);                           \
+    buf[1] = '\0';                          \
+    if(!str_append(&pat_string, buf, 1))    \
+    {                                       \
+        goto memerr;                        \
+    }                                       \
+}
+
+#define APPEND2(c1, c2)                     \
+{                                           \
+    buf[0] = (c1);                          \
+    buf[1] = (c2);                          \
+    buf[2] = '\0';                          \
+    if(!str_append(&pat_string, buf, 2))    \
+    {                                       \
+        goto memerr;                        \
+    }                                       \
+}
 
 
 /*
@@ -72,6 +95,200 @@ int has_glob_chars(char *p, size_t len)
     }
     
     return 0;
+}
+
+
+/*
+ * Convert a shell matching pattern (such as the one used in case conditionals)
+ * to the format accepted by the regex() function. This conversion includes
+ * converting certain characters, such as:
+ * 
+ * Shell pattern            regex() pattern
+ * -------------            ---------------
+ * *                        .*
+ * ?                        .
+ * "string"                 escape some characters & remove quotes
+ * 'string'                 same as above
+ * 
+ * The following characters are escaped if they appear inside quotes, so that
+ * regex() will treat them literally:
+ * 
+ * * ? ( | & ) [ ] \
+ * 
+ */
+char *shell_pattern_to_regex(char *pat)
+{
+    struct dstring_s pat_string;
+    size_t len = strlen(pat);
+    size_t i;
+    char *p = pat;
+    char *p2;
+    char buf[4];
+    char c;
+    
+    if(!init_str(&pat_string, len+1))
+    {
+        INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "pattern matching");
+        return NULL;
+    }
+    
+    while(*p)
+    {
+        switch(*p)
+        {
+            case '"':
+            case '\'':
+                i = find_closing_quote(p, 0, 0);
+#if 0
+                for(p2 = p+1; *p2; p2++)
+                {
+                    if(*p2 == '\\')
+                    {
+                        p2++;
+                        continue;
+                    }
+                    
+                    if(*p2 == *p)
+                    {
+                        break;
+                    }
+                }
+#endif
+                
+                if(i == 0)
+                {
+                    PRINT_ERROR(SHELL_NAME, "pattern has unbalanced quotes");
+                    free_str(&pat_string);
+                    return NULL;
+                }
+                
+                c = *p;     /* remember the quote char */
+                p2 = p+i;
+                
+                while(++p < p2)
+                {
+                    switch(*p)
+                    {
+                        case '*':
+                        case '?':
+                        case '(':
+                        case '|':
+                        case '&':
+                        case ')':
+                        case '[':
+                        case ']':
+                            APPEND2('\\', *p);
+                            break;
+                        
+                        case '\\':
+                            /* quote \ if it is inside single quotes */
+                            if(c == '\'')
+                            {
+                                APPEND2('\\', *p);
+                                break;
+                            }
+                            
+                            /* otherwise fall through */
+                            __attribute__((fallthrough));
+                            
+                        default:
+                            APPEND(*p);
+                            break;
+                    }
+                }
+
+                break;
+
+#if 0
+            case '\\':
+                APPEND('\\');
+
+                /* don't leave a hanging \ at the end of the pattern */
+                if(p[1] == '\0')
+                {
+                    APPEND('\\');
+                }
+                break;
+#endif
+                
+            case '[':
+                /*
+                 * bash and ksh treat unbalanced '[' as a regular char, we need
+                 * to escape the unbalanced '['. We need to beware of the case
+                 * where a '[' is the first char in the backet list, i.e. [[].
+                 */
+                p2 = p;
+                if(p[1] == '[')
+                {
+                    p2++;
+                }
+                
+                i = find_closing_brace(p2, 0);
+                
+                if(i == 0)
+                {
+                    APPEND2('\\', *p);
+                }
+                else
+                {
+                    APPEND(*p);
+                    
+                    /*
+                     * Avoid calling find_closing_brace() again by manually 
+                     * adding the second '['.
+                     */
+                    if(p2 != p)
+                    {
+                        APPEND(*p);
+                        p++;
+                    }
+                }
+                
+                break;
+                
+            case '?':
+                APPEND('.');
+                break;
+                            
+            case '*':
+                /* add . if asterisk was not preceded by ], ), or * */
+                if((p == pat) || 
+                   (p[-1] != ']' && p[-1] != ')' && p[-1] != '*'))
+                {
+                    APPEND2('.', *p);
+                }
+                else
+                {
+                    APPEND(*p);
+                }
+                
+                /* collapse any series of asterisks into one '*' */
+                while(p[1] == '*')
+                {
+                    p++;
+                }
+                
+                break;
+                
+            default:
+                APPEND(*p);
+                break;
+        }
+        
+        p++;
+    }
+    
+    if(len)
+    {
+        APPEND('\0');
+    }
+
+    return pat_string.buf_base;
+    
+memerr:
+    INSUFFICIENT_MEMORY_ERROR(SHELL_NAME, "pattern matching");
+    free_str(&pat_string);
+    return NULL;
 }
 
 
@@ -230,7 +447,7 @@ int match_filename(char *pattern, char *str, int print_err, int ignore)
         default:
             if(print_err)
             {
-                PRINT_ERROR("%s: failed to match filename(s)\n", SOURCE_NAME);
+                PRINT_ERROR(SHELL_NAME, "failed to match filename(s)");
             }
             return 0;
     }
@@ -263,19 +480,32 @@ int match_pattern(char *pattern, char *str)
     }
 
     /* Perform the match */
+    int res;
+    
     if(optionx_set(OPTION_GLOB_ASCII_RANGES))
     {
         setlocale(LC_ALL, "C");
     }
     
-    int res = fnmatch(pattern, str, flags);
+    
+    char *p = shell_pattern_to_regex(pattern);
+    if(!p)
+    {
+        return 0;
+    }
+    
+    debug ("pattern='%s', p='%s', str='%s'\n", pattern, p, str);
+    res = match_pattern_ext(p, str);
+    free(p);
     
     if(optionx_set(OPTION_GLOB_ASCII_RANGES))
     {
         setlocale(LC_ALL, "");
     }
-
-    return (res == 0) ? 1 : 0;
+    
+    debug ("res = %d\n", res);
+    
+    return res;
 }
 
 
@@ -356,23 +586,29 @@ int match_pattern_ext(char *pattern, char *str)
         return 0;
     }
 
+    regmatch_t marr[1] = { { -1, -1 } }; /* init to shut gcc up */
     int match = 0;
-    result = regexec(&regex, str, 0, NULL, 0);
+    result = regexec(&regex, str, 1, marr, 0);
     if(!result)
     {
-        match = 1;
+        /*
+         * regexec() can return success, even if only a part of the string
+         * matched the pattern. Ensure we match the whole string by checking
+         * that the matched substring begins and ends with our original string.
+         */
+        match = (marr[0].rm_so == 0 && str[marr[0].rm_eo] == '\0');
     }
     else if(result != REG_NOMATCH)
     {
         /* function returned an error. get size of buffer required for error message. */
-        size_t length = regerror (result, &regex, NULL, 0);
+        size_t length = regerror(result, &regex, NULL, 0);
         char buffer[length];
-        (void) regerror (result, &regex, buffer, length);
+        (void) regerror(result, &regex, buffer, length);
         fprintf(stderr, "%s: regex match failed: %s\r\n", SOURCE_NAME, buffer);
     }
 
     /* Free the memory allocated from regcomp(). */
-    regfree (&regex);
+    regfree(&regex);
     return match;
 }
 
@@ -401,8 +637,7 @@ int scan_dir(char *path, int report_err)
     {
         if(report_err)
         {
-            PRINT_ERROR("%s: failed to open `%s`: %s\n", 
-                        SOURCE_NAME, path, strerror(errno));
+            PRINT_ERROR(SHELL_NAME, "failed to open `%s`: %s", path, strerror(errno));
         }
         return 0;
     }

@@ -23,7 +23,7 @@
 #define INTERPRETER_H
 
 #include <glob.h>
-#include "../cmd.h"
+#include "../include/cmd.h"
 #include "../parser/parser.h"
 #include "../symtab/symtab.h"
 #include "../parser/node.h"
